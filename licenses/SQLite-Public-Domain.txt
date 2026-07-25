@@ -1,0 +1,8 @@
+SQLite is in the public domain.
+
+The SQLite project states that all code authors and representatives have
+dedicated their copyright interest in SQLite to the public domain. Where a
+public-domain dedication is not recognized, the project provides a fallback
+license through its upstream copyright page:
+
+https://www.sqlite.org/copyright.html

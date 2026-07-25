@@ -1,0 +1,14 @@
+* text=auto eol=lf
+
+*.bat text eol=crlf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.jar binary
+
+android-app/app/src/main/assets/pi-runtime/pi-mobile.js linguist-generated=true
+android-app/app/schemas/**/*.json linguist-generated=true
+wire/fixtures/**/*.json linguist-generated=true

@@ -1,0 +1,686 @@
+package app.momoding.core.runtime.local
+
+import app.momoding.wire.CoreProtocol
+import app.momoding.wire.RawPiSnapshot
+import app.momoding.wire.ReceivedReliabilityServerFrame
+import app.momoding.wire.RecoveryState
+import app.momoding.wire.ReliabilityContractDecoder
+import app.momoding.wire.ReliableProjection
+import app.momoding.wire.StreamCursor
+import app.momoding.wire.TaskRunState
+import app.momoding.wire.TaskSnapshotFrame
+import app.momoding.core.data.MomodingDatabase
+import app.momoding.core.data.RoomProjectionTransactionStore
+import app.momoding.core.data.TaskEntity
+import app.momoding.core.policy.TaskApprovalMode
+import java.time.Instant
+import java.time.temporal.ChronoUnit
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.put
+
+data class PhoneLocalPiProjectionProof(
+    val taskId: String,
+    val streamId: String,
+    val eventCount: Int,
+    val throughSequence: Long,
+)
+
+/**
+ * Persists exact native Pi events into the existing durable task projection.
+ *
+ * This is a local event sink, not a runtime adapter: event payloads are not renamed or reshaped,
+ * and the locally serialized pi.event reliability envelope is retained byte-for-byte in Room.
+ */
+class PhoneLocalPiEventProjector(
+    private val database: MomodingDatabase,
+    private val emittedAt: () -> String = {
+        Instant.now().truncatedTo(ChronoUnit.MILLIS).toString()
+    },
+    private val nowMillis: () -> Long = System::currentTimeMillis,
+) {
+    private val store = RoomProjectionTransactionStore(database)
+    private val sessionStore = PhoneLocalPiSessionStore(database, nowMillis)
+    private val projection = ReliableProjection(store)
+    private val json = Json {
+        encodeDefaults = true
+        explicitNulls = false
+    }
+
+    fun createTask(
+        taskId: String,
+        title: String,
+        piSessionId: String,
+        streamId: String,
+        initialPrompt: String,
+        attachmentIds: List<String> = emptyList(),
+        textAttachments: List<PiRuntimeTextAttachmentInput> = emptyList(),
+        approvalMode: TaskApprovalMode = TaskApprovalMode.REQUEST_APPROVAL,
+    ) {
+        require(taskId.isNotBlank()) { "PI_MOBILE_TASK_ID_BLANK" }
+        require(title.isNotBlank()) { "PI_MOBILE_TASK_TITLE_BLANK" }
+        require(initialPrompt.isNotBlank() || attachmentIds.isNotEmpty() || textAttachments.isNotEmpty()) {
+            "PI_MOBILE_TASK_INPUT_EMPTY"
+        }
+        database.runInTransaction {
+            check(database.momodingDao().task(taskId) == null) { "PI_MOBILE_TASK_ALREADY_EXISTS" }
+            database.momodingDao().upsertTask(
+                TaskEntity(
+                    taskId = taskId,
+                    title = title,
+                    runState = TaskRunState.STARTING.name,
+                    recoveryState = RecoveryState.NORMAL.name,
+                    readState = "READ",
+                    attentionState = "NONE",
+                    streamId = null,
+                    throughSequence = 0,
+                    snapshotVersion = null,
+                    windowStart = 0,
+                    windowEndExclusive = 0,
+                    nextStageBatchOrdinal = 1,
+                    queueJson = "[]",
+                    piSessionId = piSessionId,
+                    isStreaming = true,
+                    updatedAtMillis = nowMillis(),
+                    listedByHost = true,
+                    titleSource = "PROVISIONAL",
+                    approvalMode = approvalMode,
+                ),
+            )
+        }
+        replaceSnapshot(
+            taskId = taskId,
+            piSessionId = piSessionId,
+            streamId = streamId,
+            messages = listOf(userMessage(initialPrompt, attachmentIds, textAttachments)),
+            runState = TaskRunState.STARTING,
+            isStreaming = true,
+        )
+    }
+
+    fun appendPendingPrompt(
+        taskId: String,
+        piSessionId: String,
+        streamId: String,
+        priorEntries: JsonArray,
+        prompt: String,
+        attachmentIds: List<String> = emptyList(),
+        textAttachments: List<PiRuntimeTextAttachmentInput> = emptyList(),
+    ) {
+        replaceSnapshot(
+            taskId = taskId,
+            piSessionId = piSessionId,
+            streamId = streamId,
+            messages = sessionMessages(taskId, priorEntries) +
+                userMessage(prompt, attachmentIds, textAttachments),
+            runState = TaskRunState.STARTING,
+            isStreaming = true,
+        )
+    }
+
+    fun replaceWithSessionSnapshot(
+        taskId: String,
+        piSessionId: String,
+        streamId: String,
+        snapshot: PiNativeTaskSessionSnapshot,
+        runState: TaskRunState,
+    ) {
+        check(snapshot.taskId == taskId) { "PI_MOBILE_SESSION_SNAPSHOT_TASK_MISMATCH" }
+        database.runInTransaction {
+            replaceSnapshot(
+                taskId = taskId,
+                piSessionId = piSessionId,
+                streamId = streamId,
+                messages = sessionMessages(taskId, snapshot.entries),
+                runState = runState,
+                isStreaming = false,
+            )
+            sessionStore.saveInCurrentTransaction(taskId, piSessionId, snapshot)
+        }
+    }
+
+    fun persistedSession(taskId: String): PersistedPiTaskSession? = sessionStore.load(taskId)
+
+    fun saveSessionSnapshot(
+        taskId: String,
+        piSessionId: String,
+        snapshot: PiNativeTaskSessionSnapshot,
+    ) {
+        sessionStore.save(taskId, piSessionId, snapshot)
+    }
+
+    fun stabilizeTaskTitle(taskId: String) {
+        database.runInTransaction {
+            val current = requireNotNull(database.momodingDao().task(taskId)) {
+                "PI_MOBILE_TASK_NOT_FOUND"
+            }
+            if (current.titleSource in setOf("USER", "AUTOMATIC")) return@runInTransaction
+            database.momodingDao().setAutomaticTaskTitle(
+                taskId,
+                automaticTaskTitle(current.title),
+            )
+        }
+    }
+
+    fun markRunState(
+        taskId: String,
+        runState: TaskRunState,
+        isStreaming: Boolean,
+    ) {
+        database.runInTransaction {
+            val current = requireNotNull(database.momodingDao().task(taskId)) {
+                "PI_MOBILE_TASK_NOT_FOUND"
+            }
+            database.momodingDao().upsertTask(
+                current.copy(
+                    runState = runState.name,
+                    isStreaming = isStreaming,
+                    updatedAtMillis = nowMillis(),
+                ),
+            )
+        }
+    }
+
+    fun interruptStaleLocalRuns(): Int = database.runInTransaction<Int> {
+        var interrupted = 0
+        database.momodingDao().allTasks()
+            .filter { task ->
+                task.lastListSyncGeneration == null &&
+                    task.hostUpdatedAtMillis == null &&
+                    task.piSessionId != null &&
+                    task.runState in ACTIVE_RUN_STATES
+            }
+            .forEach { task ->
+                database.momodingDao().upsertTask(
+                    task.copy(
+                        runState = TaskRunState.INTERRUPTED.name,
+                        recoveryState = RecoveryState.INTERRUPTED.name,
+                        isStreaming = false,
+                        updatedAtMillis = nowMillis(),
+                    ),
+                )
+                interrupted += 1
+            }
+        interrupted
+    }
+
+    fun append(
+        taskId: String,
+        piSessionId: String,
+        streamId: String,
+        events: List<JsonObject>,
+    ): PhoneLocalPiProjectionProof {
+        require(events.isNotEmpty()) { "PI_MOBILE_EMPTY_EVENT_BATCH" }
+        val existing = store.read(taskId)
+        check(existing?.streamId == null || existing.streamId == streamId) {
+            "PI_MOBILE_DURABLE_STREAM_MISMATCH"
+        }
+        var throughSequence = existing?.throughSequence ?: 0
+        val receivedEvents = events.map { event ->
+            throughSequence += 1
+            val rawEnvelope = buildJsonObject {
+                put("protocolVersion", CoreProtocol.PROTOCOL_VERSION)
+                put("kind", "pi.event")
+                put("taskId", taskId)
+                put("piSessionId", piSessionId)
+                put("piVersion", CoreProtocol.PI_VERSION)
+                put("streamId", streamId)
+                put("sequence", throughSequence)
+                put("emittedAt", emittedAt())
+                put("event", event)
+            }.toString().encodeToByteArray()
+            ReliabilityContractDecoder.decode(rawEnvelope)
+        }
+        val result = projection.applyEventBatch(receivedEvents)
+        check(result.ack?.throughSequence == throughSequence) {
+            "PI_MOBILE_EVENT_BATCH_NOT_DURABLE throughSequence=$throughSequence"
+        }
+        return PhoneLocalPiProjectionProof(
+            taskId = taskId,
+            streamId = streamId,
+            eventCount = events.size,
+            throughSequence = throughSequence,
+        )
+    }
+
+    private fun replaceSnapshot(
+        taskId: String,
+        piSessionId: String,
+        streamId: String,
+        messages: List<JsonElement>,
+        runState: TaskRunState,
+        isStreaming: Boolean,
+    ) {
+        val current = requireNotNull(store.read(taskId)) { "PI_MOBILE_TASK_NOT_FOUND" }
+        check(current.streamId == null || current.streamId == streamId) {
+            "PI_MOBILE_DURABLE_STREAM_MISMATCH"
+        }
+        val frame = TaskSnapshotFrame(
+            kind = "task.snapshot",
+            requestId = null,
+            taskId = taskId,
+            snapshotVersion = (current.snapshotVersion ?: 0) + 1,
+            recoveryState = RecoveryState.NORMAL,
+            runState = runState,
+            piSessionId = piSessionId,
+            pi = RawPiSnapshot(
+                messages = messages,
+                isStreaming = isStreaming,
+                queue = emptyList(),
+            ),
+            pendingAttention = emptyList(),
+            deviceCalls = emptyList(),
+            cursor = StreamCursor(
+                streamId = streamId,
+                highWatermarkSequence = current.throughSequence,
+                oldestReplayableSequence = 1,
+            ),
+        )
+        val raw = json.encodeToString(TaskSnapshotFrame.serializer(), frame).encodeToByteArray()
+        val result = projection.applyDirectSnapshot(ReceivedReliabilityServerFrame(frame, raw))
+        check(result.state.snapshotVersion == frame.snapshotVersion) {
+            "PI_MOBILE_SNAPSHOT_NOT_DURABLE"
+        }
+    }
+
+    private fun sessionMessages(taskId: String, entries: JsonArray): List<JsonElement> {
+        val implementationControls = mutableMapOf<String, PlanImplementationControl>()
+        val goalControls = mutableMapOf<String, GoalContinuationControl>()
+        val skillControls = mutableMapOf<String, SkillInvocationControl>()
+        val textAttachmentControls = mutableMapOf<String, TextAttachmentControl>()
+        return buildList {
+            entries.forEach { entry ->
+                val objectValue = entry as? JsonObject ?: return@forEach
+                when ((objectValue["type"] as? JsonPrimitive)?.content) {
+                    "custom" -> parsePlanImplementationControl(taskId, objectValue)?.let { control ->
+                        implementationControls[control.id] = control
+                    } ?: parseGoalContinuationControl(taskId, objectValue)?.let { control ->
+                        goalControls[control.id] = control
+                    } ?: parseSkillInvocationControl(objectValue)?.let { control ->
+                        skillControls[control.id] = control
+                    } ?: parseTextAttachmentControl(objectValue)?.let { control ->
+                        textAttachmentControls[control.id] = control
+                    }
+                    "message" -> {
+                        val message = objectValue["message"] as? JsonObject ?: return@forEach
+                        val parentId = (objectValue["parentId"] as? JsonPrimitive)?.contentOrNull
+                        val control = parentId?.let(implementationControls::get)
+                        val goalControl = parentId?.let(goalControls::get)
+                        val skillControl = parentId?.let(skillControls::get)
+                        val textAttachmentControl = parentId?.let(textAttachmentControls::get)
+                        add(
+                            if (control != null && message.matchesImplementationControl(control)) {
+                                implementationControlMessage(control)
+                            } else if (
+                                goalControl != null && message.matchesGoalContinuationControl(goalControl)
+                            ) {
+                                goalContinuationControlMessage(goalControl)
+                            } else if (
+                                skillControl != null && message.matchesSkillInvocationControl(skillControl)
+                            ) {
+                                userMessage(skillControl.composerText)
+                            } else if (
+                                textAttachmentControl != null &&
+                                message.matchesTextAttachmentControl(textAttachmentControl)
+                            ) {
+                                userMessage(
+                                    textAttachmentControl.originalText,
+                                    textAttachments = textAttachmentControl.attachments,
+                                )
+                            } else {
+                                message
+                            },
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private fun parsePlanImplementationControl(
+        taskId: String,
+        entry: JsonObject,
+    ): PlanImplementationControl? {
+        if ((entry["customType"] as? JsonPrimitive)?.contentOrNull != PLAN_IMPLEMENT_CONTROL_TYPE) {
+            return null
+        }
+        val id = (entry["id"] as? JsonPrimitive)?.contentOrNull?.takeIf(String::isNotBlank)
+            ?: return null
+        val data = entry["data"] as? JsonObject ?: return null
+        if (data.keys != setOf("kind", "taskId", "planDigest")) return null
+        if ((data["kind"] as? JsonPrimitive)?.contentOrNull != "implement_plan") return null
+        if ((data["taskId"] as? JsonPrimitive)?.contentOrNull != taskId) return null
+        val digest = (data["planDigest"] as? JsonPrimitive)?.contentOrNull
+            ?.takeIf { SHA256.matches(it) }
+            ?: return null
+        return PlanImplementationControl(id, digest)
+    }
+
+    private fun JsonObject.matchesImplementationControl(
+        control: PlanImplementationControl,
+    ): Boolean {
+        if ((this["role"] as? JsonPrimitive)?.contentOrNull != "user") return false
+        val content = this["content"] as? JsonArray ?: return false
+        val text = content.mapNotNull { item ->
+            val value = item as? JsonObject ?: return@mapNotNull null
+            if ((value["type"] as? JsonPrimitive)?.contentOrNull == "text") {
+                (value["text"] as? JsonPrimitive)?.contentOrNull
+            } else {
+                null
+            }
+        }.joinToString("")
+        return text.lineSequence().firstOrNull() ==
+            "[momoding:implement-plan control=${control.id}]" &&
+            text.lineSequence().lastOrNull() == "planDigest=${control.planDigest}"
+    }
+
+    private fun implementationControlMessage(control: PlanImplementationControl): JsonObject =
+        buildJsonObject {
+            put("role", "phoneLocalControl")
+            put("kind", "implement_plan")
+            put("controlId", control.id)
+            put("planDigest", control.planDigest)
+        }
+
+    private fun parseGoalContinuationControl(
+        taskId: String,
+        entry: JsonObject,
+    ): GoalContinuationControl? {
+        if ((entry["customType"] as? JsonPrimitive)?.contentOrNull != GOAL_CONTROL_TYPE) return null
+        val id = (entry["id"] as? JsonPrimitive)?.contentOrNull?.takeIf(String::isNotBlank)
+            ?: return null
+        val data = entry["data"] as? JsonObject ?: return null
+        if (data.keys != setOf("kind", "taskId", "goalId", "generation", "turnIndex", "trigger")) {
+            return null
+        }
+        if ((data["kind"] as? JsonPrimitive)?.contentOrNull != "goal_continuation") return null
+        if ((data["taskId"] as? JsonPrimitive)?.contentOrNull != taskId) return null
+        val goalId = (data["goalId"] as? JsonPrimitive)?.contentOrNull
+            ?.takeIf { GOAL_ID.matches(it) }
+            ?: return null
+        val generation = (data["generation"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
+            ?.takeIf { it > 0 }
+            ?: return null
+        val turnIndex = (data["turnIndex"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
+            ?.takeIf { it in 0..10_000 }
+            ?: return null
+        val trigger = (data["trigger"] as? JsonPrimitive)?.contentOrNull
+            ?.takeIf { it in setOf("start", "continue", "resume") }
+            ?: return null
+        return GoalContinuationControl(id, goalId, generation, turnIndex, trigger)
+    }
+
+    private fun JsonObject.matchesGoalContinuationControl(
+        control: GoalContinuationControl,
+    ): Boolean {
+        if ((this["role"] as? JsonPrimitive)?.contentOrNull != "user") return false
+        val content = this["content"] as? JsonArray ?: return false
+        val text = content.mapNotNull { item ->
+            val value = item as? JsonObject ?: return@mapNotNull null
+            if ((value["type"] as? JsonPrimitive)?.contentOrNull == "text") {
+                (value["text"] as? JsonPrimitive)?.contentOrNull
+            } else {
+                null
+            }
+        }.joinToString("")
+        val lines = text.lineSequence().toList()
+        return lines.firstOrNull() == "[momoding:goal-continuation control=${control.id}]" &&
+            "goalId=${control.goalId}" in lines &&
+            "generation=${control.generation}" in lines &&
+            lines.lastOrNull() == "turnIndex=${control.turnIndex}"
+    }
+
+    private fun goalContinuationControlMessage(control: GoalContinuationControl): JsonObject =
+        buildJsonObject {
+            put("role", "phoneLocalControl")
+            put("kind", "goal_continuation")
+            put("controlId", control.id)
+            put("goalId", control.goalId)
+            put("generation", control.generation)
+            put("turnIndex", control.turnIndex)
+            put("trigger", control.trigger)
+        }
+
+    private fun parseSkillInvocationControl(entry: JsonObject): SkillInvocationControl? {
+        if ((entry["customType"] as? JsonPrimitive)?.contentOrNull != SKILL_CONTROL_TYPE) return null
+        val id = (entry["id"] as? JsonPrimitive)?.contentOrNull?.takeIf(String::isNotBlank)
+            ?: return null
+        val data = entry["data"] as? JsonObject ?: return null
+        if (data.keys != setOf("kind", "name", "additionalInstructions")) return null
+        if ((data["kind"] as? JsonPrimitive)?.contentOrNull != "skill_invocation") return null
+        val name = (data["name"] as? JsonPrimitive)?.contentOrNull
+            ?.takeIf { SKILL_NAME.matches(it) }
+            ?: return null
+        val instructions = when (val value = data["additionalInstructions"]) {
+            JsonNull -> null
+            is JsonPrimitive -> value.contentOrNull
+                ?.takeIf { value.isString && it.length <= 65_536 && '\u0000' !in it }
+                ?: return null
+            else -> return null
+        }
+        return SkillInvocationControl(id, name, instructions)
+    }
+
+    private fun JsonObject.matchesSkillInvocationControl(
+        control: SkillInvocationControl,
+    ): Boolean {
+        if ((this["role"] as? JsonPrimitive)?.contentOrNull != "user") return false
+        val text = when (val content = this["content"]) {
+            is JsonPrimitive -> content.contentOrNull
+            is JsonArray -> content.mapNotNull { item ->
+                val value = item as? JsonObject ?: return@mapNotNull null
+                if ((value["type"] as? JsonPrimitive)?.contentOrNull == "text") {
+                    (value["text"] as? JsonPrimitive)?.contentOrNull
+                } else {
+                    null
+                }
+            }.joinToString("")
+            else -> null
+        } ?: return false
+        if (!text.contains("<skill name=\"${control.name}\"")) return false
+        return control.additionalInstructions == null || text.endsWith(control.additionalInstructions)
+    }
+
+    private val SkillInvocationControl.composerText: String
+        get() = buildString {
+            append("/skill:")
+            append(name)
+            additionalInstructions?.let {
+                append(' ')
+                append(it)
+            }
+        }
+
+    private fun parseTextAttachmentControl(entry: JsonObject): TextAttachmentControl? {
+        if ((entry["customType"] as? JsonPrimitive)?.contentOrNull != TEXT_ATTACHMENT_CONTROL_TYPE) {
+            return null
+        }
+        val id = (entry["id"] as? JsonPrimitive)?.contentOrNull?.takeIf(String::isNotBlank)
+            ?: return null
+        val data = entry["data"] as? JsonObject ?: return null
+        if (data.keys != setOf("kind", "originalText", "attachments")) return null
+        if ((data["kind"] as? JsonPrimitive)?.contentOrNull != "text_attachments") return null
+        val originalText = (data["originalText"] as? JsonPrimitive)
+            ?.takeIf(JsonPrimitive::isString)
+            ?.contentOrNull
+            ?.takeIf { it.length <= 65_536 && '\u0000' !in it }
+            ?: return null
+        val attachments = (data["attachments"] as? JsonArray)?.map { item ->
+            val value = item as? JsonObject ?: return null
+            if (value.keys != setOf("attachmentId", "displayName", "mimeType", "byteSize")) {
+                return null
+            }
+            val attachmentId = (value["attachmentId"] as? JsonPrimitive)?.contentOrNull
+                ?.takeIf { ATTACHMENT_ID.matches(it) }
+                ?: return null
+            val displayName = (value["displayName"] as? JsonPrimitive)
+                ?.takeIf(JsonPrimitive::isString)
+                ?.contentOrNull
+                ?.takeIf { it.isNotEmpty() && it.length <= 240 && '\u0000' !in it }
+                ?: return null
+            val mimeType = (value["mimeType"] as? JsonPrimitive)
+                ?.takeIf(JsonPrimitive::isString)
+                ?.contentOrNull
+                ?.takeIf { it.isNotEmpty() && it.length <= 128 && '\u0000' !in it }
+                ?: return null
+            val byteSize = (value["byteSize"] as? JsonPrimitive)
+                ?.takeUnless(JsonPrimitive::isString)
+                ?.longOrNull
+                ?.takeIf { it in 1..4L * 1024L * 1024L }
+                ?: return null
+            PiRuntimeTextAttachmentInput(attachmentId, displayName, mimeType, byteSize)
+        } ?: return null
+        if (attachments.isEmpty() || attachments.size > 5 ||
+            attachments.map { it.attachmentId }.distinct().size != attachments.size
+        ) return null
+        return TextAttachmentControl(id, originalText, attachments)
+    }
+
+    private fun JsonObject.matchesTextAttachmentControl(control: TextAttachmentControl): Boolean {
+        if ((this["role"] as? JsonPrimitive)?.contentOrNull != "user") return false
+        val content = this["content"] as? JsonArray ?: return false
+        val text = content.mapNotNull { item ->
+            val value = item as? JsonObject ?: return@mapNotNull null
+            if ((value["type"] as? JsonPrimitive)?.contentOrNull == "text") {
+                (value["text"] as? JsonPrimitive)?.contentOrNull
+            } else null
+        }.joinToString("")
+        return text.lineSequence().firstOrNull() ==
+            "[momoding:text-attachments control=${control.id}]" &&
+            text.lineSequence().lastOrNull() ==
+            "attachments=${textAttachmentManifest(control.attachments)}"
+    }
+
+    private fun textAttachmentManifest(attachments: List<PiRuntimeTextAttachmentInput>): String =
+        buildJsonArray {
+            attachments.forEach { attachment ->
+                add(buildJsonObject {
+                    put("attachmentId", attachment.attachmentId)
+                    put("displayName", attachment.displayName)
+                    put("mimeType", attachment.mimeType)
+                    put("byteSize", attachment.byteSize)
+                })
+            }
+        }.toString()
+
+    private fun userMessage(
+        prompt: String,
+        attachmentIds: List<String> = emptyList(),
+        textAttachments: List<PiRuntimeTextAttachmentInput> = emptyList(),
+    ): JsonObject = buildJsonObject {
+        put("role", "user")
+        put(
+            "content",
+            buildJsonArray {
+                add(
+                    buildJsonObject {
+                        put("type", "text")
+                        put("text", prompt)
+                    },
+                )
+                attachmentIds.forEach { attachmentId ->
+                    add(
+                        buildJsonObject {
+                            put("type", "image")
+                            put("data", "attachment:$attachmentId")
+                            put("mimeType", "image/jpeg")
+                        },
+                    )
+                }
+                textAttachments.forEach { attachment ->
+                    add(
+                        buildJsonObject {
+                            put("type", "file")
+                            put("data", "attachment:${attachment.attachmentId}")
+                            put("mimeType", attachment.mimeType)
+                            put("name", attachment.displayName)
+                            put("byteSize", attachment.byteSize)
+                        },
+                    )
+                }
+            },
+        )
+        put("timestamp", nowMillis())
+    }
+
+    private companion object {
+        const val PLAN_IMPLEMENT_CONTROL_TYPE = "pi_mobile_plan_implementation"
+        const val GOAL_CONTROL_TYPE = "pi_mobile_goal_continuation"
+        const val SKILL_CONTROL_TYPE = "pi_mobile_skill_invocation"
+        const val TEXT_ATTACHMENT_CONTROL_TYPE = "pi_mobile_text_attachments"
+        val SHA256 = Regex("^[0-9a-f]{64}$")
+        val GOAL_ID = Regex("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+        val SKILL_NAME = Regex("^[a-z0-9]+(?:-[a-z0-9]+)*$")
+        val ATTACHMENT_ID = Regex(
+            "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        )
+        val ACTIVE_RUN_STATES = setOf(
+            TaskRunState.STARTING.name,
+            TaskRunState.RUNNING.name,
+            TaskRunState.WAITING.name,
+            TaskRunState.STOPPING.name,
+        )
+    }
+
+    private data class PlanImplementationControl(
+        val id: String,
+        val planDigest: String,
+    )
+
+    private data class GoalContinuationControl(
+        val id: String,
+        val goalId: String,
+        val generation: Int,
+        val turnIndex: Int,
+        val trigger: String,
+    )
+
+    private data class SkillInvocationControl(
+        val id: String,
+        val name: String,
+        val additionalInstructions: String?,
+    )
+
+    private data class TextAttachmentControl(
+        val id: String,
+        val originalText: String,
+        val attachments: List<PiRuntimeTextAttachmentInput>,
+    )
+}
+
+internal fun automaticTaskTitle(provisionalTitle: String): String {
+    val normalized = provisionalTitle
+        .lineSequence()
+        .map(String::trim)
+        .firstOrNull(String::isNotEmpty)
+        .orEmpty()
+        .replace(Regex("\\s+"), " ")
+        .replace(
+            Regex(
+                "^(please\\s+|can you\\s+|could you\\s+|would you\\s+|" +
+                    "i need you to\\s+|i want you to\\s+|请|帮我|麻烦你)",
+                RegexOption.IGNORE_CASE,
+            ),
+            "",
+        )
+        .trim()
+    val phrase = normalized.split(Regex("[.!?。！？\\n]"), limit = 2).first()
+        .trim()
+        .ifBlank { normalized }
+        .replaceFirstChar { character ->
+            if (character.isLowerCase()) character.titlecase() else character.toString()
+        }
+    val count = phrase.codePointCount(0, phrase.length)
+    if (count <= 56) return phrase.ifBlank { "Untitled task" }
+    val end = phrase.offsetByCodePoints(0, 56)
+    return phrase.substring(0, end).trimEnd() + "…"
+}

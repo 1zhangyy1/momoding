@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!--
+      Adaptive icons are compiled only from a v26-qualified resource directory.
+      The qualifier describes the resource type; it is not an obsolete runtime guard.
+    -->
+    <issue id="ObsoleteSdkInt">
+        <ignore path="src/main/res/mipmap-anydpi-v26" />
+    </issue>
+</lint>

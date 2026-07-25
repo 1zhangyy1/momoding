@@ -1,0 +1,43 @@
+name: Bug report
+description: Report a reproducible Momoding defect using synthetic data.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include API keys, private files, diagnostics archives, device IDs, or security reports.
+        Report vulnerabilities privately using the process in SECURITY.md.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: input
+    id: revision
+    attributes:
+      label: Commit
+      description: Full commit SHA or release version.
+    validations:
+      required: true
+  - type: input
+    id: android
+    attributes:
+      label: Android version and device class
+      description: Use a generic model description if the exact device is sensitive.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Use a synthetic project and redact all account or device information.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Minimal redacted logs
+      render: shell

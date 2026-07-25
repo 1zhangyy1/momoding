@@ -1,0 +1,26 @@
+{
+  "name": "@momoding/pi-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "22.22.3",
+    "npm": "10.9.8"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "verify": "node scripts/verify-bundle.mjs",
+    "verify:reproducible": "node scripts/verify-reproducible.mjs",
+    "test": "node --test test/*.test.mjs",
+    "check": "npm run typecheck && npm run verify && npm run verify:reproducible && npm test"
+  },
+  "dependencies": {
+    "@earendil-works/pi-agent-core": "0.80.6",
+    "@earendil-works/pi-ai": "0.80.6"
+  },
+  "devDependencies": {
+    "esbuild": "0.27.2",
+    "typescript": "5.9.3"
+  }
+}

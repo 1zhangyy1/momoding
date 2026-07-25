@@ -1,0 +1,34 @@
+.DS_Store
+.idea/
+.gradle/
+**/.kotlin/
+**/build/
+*.iml
+**/__pycache__/
+*.pyc
+
+# Local Android and native toolchains
+local.properties
+.externalNativeBuild/
+.cxx/
+
+# JavaScript dependencies and local caches
+node_modules/
+.npm-cache/
+
+# Local credentials and signing material
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+*.p12
+*.pem
+*.key
+
+# Generated evidence and distributable artifacts
+artifacts/
+captures/
+reports/
+*.apk
+*.aab
