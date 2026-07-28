@@ -54,8 +54,9 @@ The debug build downloads pinned native/runtime inputs and verifies their digest
 
 - JVM/Robolectric tests cover state, policy, persistence, provider encoding, recovery, and tool
   routing.
-- Instrumentation sources compile as part of the public gate; device-dependent suites require
-  explicit emulators, physical devices, permissions, or Shizuku setup.
+- Device-dependent instrumentation suites are maintained in private validation and are not included
+  in the public source snapshot. They require explicit emulators, physical devices, permissions, or
+  Shizuku setup.
 - `lintDebug` is configured to fail on warnings.
 - `scripts/verify-release-apk.mjs` inspects the built release manifest, permissions, exported
   components, and packaged artifacts.

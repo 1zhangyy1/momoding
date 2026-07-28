@@ -10,9 +10,18 @@ Android-owned policy and permission checks.
 
 [简体中文](README.zh-CN.md)
 
+Momoding is an independent project. It is not affiliated with or endorsed by OpenAI, OpenRouter,
+Shizuku, or the upstream Pi maintainers.
+
 > **Developer preview:** this repository is suitable for source review and local development. It
 > is not yet a production or Play Store release, and it has not received an independent security
 > audit.
+
+## Who it is for
+
+Momoding is for developers who want to inspect and experiment with an AI coding workspace that runs
+its agent loop on Android, keeps the model credential under Android control, and makes device
+capabilities visible and reviewable.
 
 ## What works
 
@@ -57,8 +66,9 @@ third_party/        Reviewed patches needed to reproduce optional native compone
 ```
 
 The public repository is generated from an explicit allowlist in the private source repository.
-Internal research, device captures, credentials, remote-host code, and historical validation
-artifacts are excluded. See [Open-source scope](OPEN_SOURCE_SCOPE.md).
+Internal research, device captures, credentials, the remote-host service and internal orchestration,
+and historical validation artifacts are excluded. Public client and wire contracts needed by the
+Android application remain included. See [Open-source scope](OPEN_SOURCE_SCOPE.md).
 
 ## Prerequisites
 

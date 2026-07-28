@@ -40,6 +40,10 @@ A pull request should include:
 Maintainers may ask for a smaller change when a pull request mixes product, refactor, dependency,
 and formatting work.
 
+The public repository is an allowlisted projection of the private source of truth. When a public
+pull request is accepted, maintainers may first apply it to the private source and then publish a
+fresh export. This keeps shared files byte-identical and preserves the public security boundary.
+
 ## Dependency updates
 
 Dependencies are pinned by npm and Gradle lockfiles. Gradle also verifies downloaded artifact

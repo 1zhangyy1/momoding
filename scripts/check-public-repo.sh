@@ -139,7 +139,7 @@ scan_forbidden \
   "credential-shaped token found" \
   'sk-or-v1-[A-Za-z0-9_-]{10,}|(^|[^A-Za-z0-9_-])sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9_]{20,}|AIza[0-9A-Za-z_-]{35}|xox[baprs]-[A-Za-z0-9-]{10,}'
 milestone_matches="$(
-  git grep -nI -E 'P2-[0-9]|P3A|E5B|E6-[0-9]|E7-[0-9]|CAP-[0-9]' -- \
+  git grep -nI -E 'P0A(-[0-9]+)?|P2-[0-9]|P3A|E5B|E6-[0-9]|E7-[0-9]|CAP-[0-9]' -- \
     . \
     ':(exclude)wire/**' \
     ':(exclude)docs/design/fixtures/r0-contract-fixtures.json' \
@@ -154,7 +154,7 @@ if [[ -n "$milestone_matches" ]]; then
 fi
 source_naming_matches="$(
   git grep -nI -E \
-    'P2Dao|p2Dao|e5b-runtime|prepareE5b|task-e[567]-|session-e[67]-|goal-e6-|entry-e7-' -- \
+    'P2Dao|p2Dao|e5b-runtime|prepareE5b|task-e[567]-|session-e[67]-|goal-e6-|entry-e7-|reviewed File E2E phase|Not included in this phase|Host phase' -- \
       android-app/app/build.gradle.kts \
       android-app/app/src/main \
       android-app/app/src/test \

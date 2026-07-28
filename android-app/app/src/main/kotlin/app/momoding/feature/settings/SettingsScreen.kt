@@ -31,7 +31,6 @@ import androidx.compose.material.icons.outlined.FolderOff
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.Extension
-import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.SettingsBrightness
@@ -314,7 +313,7 @@ fun SettingsScreen(
                     detail = if (filesEnabled) {
                         "Choose and manage Android SAF folders"
                     } else {
-                        "Available in the reviewed File E2E phase"
+                        "Folder access is unavailable in this build"
                     },
                     value = if (filesEnabled) "Manage" else "Unavailable",
                     modifier = Modifier
@@ -335,8 +334,6 @@ fun SettingsScreen(
                         .contractAction(interactionPolicy, SettingsInteraction.OPEN_DEVICE_CAPABILITIES),
                     onClick = if (capabilitiesEnabled) onOpenDeviceCapabilities else null,
                 )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                SettingsRow(Icons.Outlined.PhotoLibrary, "Photos", "Not included in this phase", value = "Unavailable")
             }
         }
         item {
@@ -345,7 +342,7 @@ fun SettingsScreen(
                     DiagnosticsState.Idle -> SettingsRow(
                         Icons.Outlined.BugReport,
                         "Export diagnostics",
-                        "Sanitized app, Host phase, and version metadata only",
+                        "Sanitized app, connection state, and version metadata only",
                         modifier = Modifier
                             .testTag("action-ExportDiagnostics")
                             .contractAction(interactionPolicy, SettingsInteraction.EXPORT_DIAGNOSTICS),
