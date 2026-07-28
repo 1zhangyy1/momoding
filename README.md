@@ -4,11 +4,12 @@
 
 # Momoding
 
-<p align="center"><strong>AI coding, shaped for Android.</strong></p>
+<p align="center"><strong>A personal AI agent that lives on Android.</strong></p>
 
-Momoding turns an Android device into a local-first AI coding workspace. It gives an AI agent a
-durable place to understand a project, plan work, use tools, review changes, and continue across
-sessions—without reducing the phone to a remote control for an agent running somewhere else.
+Momoding is a local-first personal AI agent for Android. Give it a task and it can keep the context,
+make a plan, ask for the authority it needs, use approved phone capabilities, and report what
+happened. It is designed to grow from conversation into action while keeping the user and Android
+in control.
 
 [简体中文](README.zh-CN.md)
 
@@ -18,58 +19,67 @@ sessions—without reducing the phone to a remote control for an agent running s
 
 ## Positioning
 
-Momoding sits between a chat assistant and a desktop or cloud coding agent. It brings the working
-loop onto Android: the Pi agent runtime executes on the device, task and recovery state stay
-durable, and Android remains the authority for credentials, permissions, policy decisions, and
-device-side effects.
+Momoding's direction is a general-purpose personal agent for Android, not a coding-first product.
+Coding, project files, and terminal tools are one capability family alongside photos, camera,
+screen context, bounded UI actions, app information, attachments, and shared storage.
+
+It is also more than a voice-assistant entry point or a chatbot wrapper. Momoding is organized
+around durable tasks: it can plan, use tools, wait for approval, recover state, and continue work
+across sessions. The Pi agent runtime executes on the device, while Android remains the authority
+for credentials, permissions, policy decisions, and device-side effects.
 
 “Local-first” does not mean fully offline. Authorized prompts, context, and tool results are sent to
-the OpenRouter model selected by the user. It means the workspace's control plane stays on the
+the OpenRouter model selected by the user. It means the agent's control plane stays on the
 device: the API key, task state, capability state, approvals, and side-effect records are owned by
 the Android application.
 
-Momoding is built around three product principles:
+Momoding is built around four product principles:
 
-- **The phone is a workspace, not just a remote.** The agent loop and task lifecycle can run on the
-  Android device.
+- **The agent lives with the phone.** Its task loop, state, and capability model are part of the
+  Android application rather than a thin remote-control surface.
 - **Authority stays explicit.** A model request does not automatically grant file, screen,
   accessibility, package, or shared-storage access.
+- **Tasks outlive a chat turn.** Plans, goals, tool results, approvals, and recovery state can remain
+  attached to the work.
 - **The interface tells the truth.** Capabilities reflect live Android availability and permission
-  state; unavailable paths should not be presented as working.
+  state; unavailable paths are not presented as working.
 
 ```mermaid
 flowchart LR
-    user["You"] --> workspace["Momoding workspace<br/>on Android"]
-    workspace <-->|"authorized model context"| model["Your OpenRouter model"]
-    workspace -->|"reviewed access"| project["Project folders"]
-    workspace -->|"explicit permission"| device["Android capabilities"]
+    user["You"] --> agent["Momoding agent<br/>on Android"]
+    agent <-->|"authorized context"| model["Your OpenRouter model"]
+    agent -->|"explicit permission"| media["Files and media"]
+    agent -->|"explicit permission"| screen["Screen and UI"]
+    agent -->|"explicit permission"| device["Apps and device capabilities"]
+    agent -->|"reviewed access"| projects["Projects and tools"]
 ```
 
 ## Who it is for
 
-Momoding is for developers and researchers exploring what an Android-native coding agent can be,
-especially those who value bring-your-own-key model access, inspectable source, explicit permission
-boundaries, and review before side effects.
+The long-term direction is for people who want one AI agent to help across their Android device
+instead of living inside a single chat box or app silo.
 
-It is not currently a consumer-ready assistant, a hardened sandbox for hostile code, or a supported
-replacement for a production desktop IDE.
+The current open-source developer preview is best suited to Android power users, developers, and
+researchers who value bring-your-own-key model access, inspectable source, explicit permission
+boundaries, and review before side effects. It is not yet a consumer-ready assistant or a hardened
+sandbox for hostile code.
 
 Momoding is an independent project. It is not affiliated with or endorsed by OpenAI, OpenRouter,
 Shizuku, or the upstream Pi maintainers.
 
 ## What Momoding can do today
 
-- On-device Pi agent loop in QuickJS; Node.js is used to build and test the bundled runtime.
-- OpenRouter bring-your-own-key setup with Android Keystore-backed credential encryption.
 - Persistent tasks, plans, goals, child agents, skills, attachments, approvals, and recovery state.
-- User-authorized project folders, bounded content reads, prepared diffs, and explicit write
-  confirmation.
-- A phone-local Linux project runtime with model-visible command and test tools in supported debug
-  builds.
+- On-device Pi agent loop in QuickJS with a user-selected OpenRouter model.
+- Bring-your-own-key setup with Android Keystore-backed credential encryption.
 - Photo metadata, camera capture, share-sheet import, text attachments, and shared-storage tools.
 - User-started screen capture plus accessibility-based UI inspection and bounded UI actions.
 - Read-only installed-package listing and inspection through a separately installed and authorized
   Shizuku service.
+- User-authorized project folders, bounded content reads, prepared diffs, and explicit write
+  confirmation.
+- A phone-local Linux project runtime with model-visible command and test tools in supported debug
+  builds.
 
 ## How Momoding keeps authority visible
 
