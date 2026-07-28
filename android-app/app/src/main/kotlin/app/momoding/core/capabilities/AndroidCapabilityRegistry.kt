@@ -1,13 +1,19 @@
 package app.momoding.core.capabilities
 
 import android.Manifest
+import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Environment
+import android.provider.Settings
 import androidx.core.content.ContextCompat
+import app.momoding.core.accessibility.MomodingAccessibilityRuntime
+import app.momoding.core.accessibility.MomodingScreenCaptureRuntime
 import app.momoding.core.files.AuthorizedFolderStatus
 import app.momoding.core.files.AuthorizedFoldersRepository
+import app.momoding.core.shizuku.ShizukuController
+import app.momoding.core.shizuku.ShizukuLifecycleStage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -103,6 +109,7 @@ class AndroidCapabilityRegistry(
         fun create(
             context: Context,
             folders: AuthorizedFoldersRepository,
+            shizuku: ShizukuController,
             scope: CoroutineScope,
         ): AndroidCapabilityRegistry {
             val applicationContext = context.applicationContext
@@ -114,7 +121,7 @@ class AndroidCapabilityRegistry(
                         accessibilityProbe(applicationContext),
                     AndroidCapabilityId.SCREEN_CAPTURE to screenCaptureProbe(),
                     AndroidCapabilityId.ALL_FILES to allFilesProbe(applicationContext),
-                    AndroidCapabilityId.SHIZUKU_SHELL_UID to shizukuProbe(),
+                    AndroidCapabilityId.SHIZUKU_SHELL_UID to shizukuProbe(shizuku),
                 ),
                 scope = scope,
             )
@@ -205,8 +212,16 @@ private fun safFoldersProbe(folders: AuthorizedFoldersRepository) =
         }
     }
 
-private fun accessibilityProbe(@Suppress("UNUSED_PARAMETER") context: Context) =
-    AndroidCapabilityProbe { checkedAt ->
+private fun accessibilityProbe(context: Context) = AndroidCapabilityProbe { checkedAt ->
+    @Suppress("DEPRECATION")
+    val services = context.packageManager.getPackageInfo(
+        context.packageName,
+        PackageManager.GET_SERVICES or PackageManager.MATCH_DISABLED_COMPONENTS,
+    ).services.orEmpty().filter { service ->
+        service.permission == Manifest.permission.BIND_ACCESSIBILITY_SERVICE
+    }
+    val serviceInstalled = services.isNotEmpty()
+    if (!serviceInstalled) {
         AndroidCapabilityState(
             id = AndroidCapabilityId.ACCESSIBILITY_CONTROL,
             availability = CapabilityAvailability.UNSUPPORTED,
@@ -214,15 +229,76 @@ private fun accessibilityProbe(@Suppress("UNUSED_PARAMETER") context: Context) =
             checkedAtMillis = checkedAt,
             safeMessage = "Accessibility control is not installed in this build.",
         )
+    } else {
+        val installed = services.map { service ->
+            ComponentName(service.packageName, service.name).flattenToString()
+        }.toSet()
+        val enabled = Settings.Secure.getString(
+            context.contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
+        ).orEmpty().split(':').mapNotNull(ComponentName::unflattenFromString)
+            .map(ComponentName::flattenToString)
+            .toSet()
+        val settingEnabled = Settings.Secure.getInt(
+            context.contentResolver,
+            Settings.Secure.ACCESSIBILITY_ENABLED,
+            0,
+        ) == 1 && installed.any(enabled::contains)
+        val availability = accessibilityAvailability(
+            serviceInstalled = true,
+            settingEnabled = settingEnabled,
+            serviceConnected = MomodingAccessibilityRuntime.controller.state.value.connected,
+        )
+        AndroidCapabilityState(
+            id = AndroidCapabilityId.ACCESSIBILITY_CONTROL,
+            availability = availability,
+            source = "Android accessibility settings",
+            checkedAtMillis = checkedAt,
+            safeMessage = when (availability) {
+                CapabilityAvailability.READY ->
+                    "Accessibility observation is connected and ready."
+                CapabilityAvailability.SESSION_REQUIRED ->
+                    "Accessibility is enabled. Waiting for Android to connect the service."
+                else -> "Accessibility observation is not enabled."
+            },
+        )
     }
+}
+
+internal fun accessibilityAvailability(
+    serviceInstalled: Boolean,
+    settingEnabled: Boolean,
+    serviceConnected: Boolean,
+): CapabilityAvailability = when {
+    !serviceInstalled -> CapabilityAvailability.UNSUPPORTED
+    !settingEnabled -> CapabilityAvailability.NOT_GRANTED
+    serviceConnected -> CapabilityAvailability.READY
+    else -> CapabilityAvailability.SESSION_REQUIRED
+}
 
 private fun screenCaptureProbe() = AndroidCapabilityProbe { checkedAt ->
+    val accessibilityReady = MomodingAccessibilityRuntime.controller.state.value.connected
+    val projectionReady = MomodingScreenCaptureRuntime.mediaProjection.state.value.active
+    val availability = if (accessibilityReady || projectionReady) {
+        CapabilityAvailability.READY
+    } else {
+        CapabilityAvailability.SESSION_REQUIRED
+    }
     AndroidCapabilityState(
         id = AndroidCapabilityId.SCREEN_CAPTURE,
-        availability = CapabilityAvailability.UNSUPPORTED,
-        source = "App package",
+        availability = availability,
+        source = when {
+            accessibilityReady -> "Android Accessibility"
+            projectionReady -> "Android MediaProjection"
+            else -> "Android screen-capture consent"
+        },
         checkedAtMillis = checkedAt,
-        safeMessage = "Screen capture sessions are not installed in this build.",
+        safeMessage = when {
+            accessibilityReady ->
+                "Live screen images are available through Accessibility control."
+            projectionReady -> "A time-limited screen-capture session is active."
+            else -> "Enable Accessibility control or start a one-time screen-capture session."
+        },
     )
 }
 
@@ -251,39 +327,30 @@ private fun allFilesProbe(context: Context) = AndroidCapabilityProbe { checkedAt
     )
 }
 
-private fun shizukuProbe() = AndroidCapabilityProbe { checkedAt ->
-    val clazz = runCatching { Class.forName("rikka.shizuku.Shizuku") }.getOrNull()
-        ?: return@AndroidCapabilityProbe AndroidCapabilityState(
-            id = AndroidCapabilityId.SHIZUKU_SHELL_UID,
-            availability = CapabilityAvailability.MISSING_DEPENDENCY,
-            source = "App package",
-            checkedAtMillis = checkedAt,
-            safeMessage = "Shizuku support is not installed in this build.",
-        )
-    val binderRunning = clazz.getMethod("pingBinder").invoke(null) as? Boolean == true
-    val permission = if (binderRunning) {
-        clazz.getMethod("checkSelfPermission").invoke(null) as? Int
-    } else {
-        null
-    }
-    val availability = when {
-        !binderRunning -> CapabilityAvailability.SESSION_REQUIRED
-        permission == PackageManager.PERMISSION_GRANTED -> CapabilityAvailability.READY
-        else -> CapabilityAvailability.NOT_GRANTED
+// Permission names are stable platform contract strings. Literal values keep minSdk 30 builds
+// from inlining fields introduced in API 33/34 before the guarded SDK checks above.
+private const val READ_MEDIA_IMAGES_PERMISSION = "android.permission.READ_MEDIA_IMAGES"
+private const val READ_MEDIA_VISUAL_USER_SELECTED_PERMISSION =
+    "android.permission.READ_MEDIA_VISUAL_USER_SELECTED"
+
+private fun shizukuProbe(controller: ShizukuController) = AndroidCapabilityProbe { checkedAt ->
+    controller.refresh()
+    val snapshot = controller.state.value
+    val availability = when (snapshot.stage) {
+        ShizukuLifecycleStage.NOT_INSTALLED -> CapabilityAvailability.MISSING_DEPENDENCY
+        ShizukuLifecycleStage.NOT_RUNNING,
+        ShizukuLifecycleStage.CONNECTING -> CapabilityAvailability.SESSION_REQUIRED
+        ShizukuLifecycleStage.PERMISSION_REQUIRED -> CapabilityAvailability.NOT_GRANTED
+        ShizukuLifecycleStage.READY -> CapabilityAvailability.READY
+        ShizukuLifecycleStage.UNSUPPORTED_VERSION,
+        ShizukuLifecycleStage.ROOT_REJECTED -> CapabilityAvailability.UNSUPPORTED
+        ShizukuLifecycleStage.ERROR -> CapabilityAvailability.ERROR
     }
     AndroidCapabilityState(
         id = AndroidCapabilityId.SHIZUKU_SHELL_UID,
         availability = availability,
-        source = "Shizuku service",
+        source = "Shizuku shell UserService",
         checkedAtMillis = checkedAt,
-        safeMessage = when (availability) {
-            CapabilityAvailability.SESSION_REQUIRED -> "Start Shizuku before using shell access."
-            CapabilityAvailability.READY -> "Shizuku shell access is ready."
-            else -> "Shizuku permission is not granted."
-        },
+        safeMessage = snapshot.safeMessage,
     )
 }
-
-private const val READ_MEDIA_IMAGES_PERMISSION = "android.permission.READ_MEDIA_IMAGES"
-private const val READ_MEDIA_VISUAL_USER_SELECTED_PERMISSION =
-    "android.permission.READ_MEDIA_VISUAL_USER_SELECTED"

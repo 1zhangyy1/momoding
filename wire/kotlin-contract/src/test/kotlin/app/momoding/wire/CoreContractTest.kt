@@ -32,7 +32,7 @@ class CoreContractTest {
     @Test
     fun `decodes every locked native Pi event without replacing its JSON shape`() {
         val sourceEnvelopes = fixture.getValue("envelopes").jsonArray
-        val decoded = sourceEnvelopes.map(CoreServerFrameDecoder::decode)
+        val decoded = sourceEnvelopes.map(P1aServerFrameDecoder::decode)
             .map { assertIs<PiEventFrame>(it) }
 
         assertEquals(6, decoded.size)
@@ -51,7 +51,7 @@ class CoreContractTest {
 
         sourceEnvelopes.zip(decoded).forEach { (source, frame) ->
             assertEquals(source.jsonObject.getValue("event"), frame.event)
-            assertEquals(CoreProtocol.PI_VERSION, frame.piVersion)
+            assertEquals(P1aProtocol.PI_VERSION, frame.piVersion)
             assertNull(frame.requestId)
         }
 
@@ -68,7 +68,7 @@ class CoreContractTest {
     @Test
     fun `decodes the bounded Core snapshot while keeping Pi payloads raw`() {
         val source = fixture.getValue("snapshot").jsonObject
-        val snapshot = assertIs<TaskSnapshotFrame>(CoreServerFrameDecoder.decode(source))
+        val snapshot = assertIs<TaskSnapshotFrame>(P1aServerFrameDecoder.decode(source))
 
         assertEquals(RecoveryState.NORMAL, snapshot.recoveryState)
         assertEquals(TaskRunState.IDLE, snapshot.runState)
@@ -78,11 +78,11 @@ class CoreContractTest {
         assertEquals(source.getValue("pi").jsonObject.getValue("messages"), JsonArray(snapshot.pi.messages))
         assertEquals(source.getValue("pi").jsonObject.getValue("queue"), JsonArray(snapshot.pi.queue))
         assertEquals(source.getValue("pendingAttention"), JsonArray(snapshot.pendingAttention))
-        assertTrue(source.toString().encodeToByteArray().size <= CoreProtocol.MAX_SNAPSHOT_BYTES)
+        assertTrue(source.toString().encodeToByteArray().size <= P1aProtocol.MAX_SNAPSHOT_BYTES)
     }
 
     @Test
-    fun `decodes the remaining core server frame variants`() {
+    fun `decodes the remaining P1A Core server frame variants`() {
         val accepted = assertIs<HelloAcceptedFrame>(
             decode(
                 """
@@ -159,24 +159,24 @@ class CoreContractTest {
     }
 
     @Test
-    fun `accepts unknown native Pi fields but rejects Wire drift and Reliability kinds`() {
+    fun `accepts unknown native Pi fields but rejects Wire drift and P1B kinds`() {
         val source = fixture.getValue("envelopes").jsonArray.first().jsonObject
         val extendedEvent = JsonObject(source.getValue("event").jsonObject + ("futureNativeField" to JsonObject(emptyMap())))
         val extendedFrame = JsonObject(source + ("event" to extendedEvent))
-        val decoded = assertIs<PiEventFrame>(CoreServerFrameDecoder.decode(extendedFrame))
+        val decoded = assertIs<PiEventFrame>(P1aServerFrameDecoder.decode(extendedFrame))
         assertEquals(JsonObject(emptyMap()), decoded.event.getValue("futureNativeField"))
 
         assertFailsWith<SerializationException> {
-            CoreServerFrameDecoder.decode(JsonObject(source + ("protocolVersion" to Json.parseToJsonElement("2"))))
+            P1aServerFrameDecoder.decode(JsonObject(source + ("protocolVersion" to Json.parseToJsonElement("2"))))
         }
         assertFailsWith<SerializationException> {
-            CoreServerFrameDecoder.decode(JsonObject(source + ("piVersion" to Json.parseToJsonElement("\"0.80.7\""))))
+            P1aServerFrameDecoder.decode(JsonObject(source + ("piVersion" to Json.parseToJsonElement("\"0.80.7\""))))
         }
         assertFailsWith<SerializationException> {
-            CoreServerFrameDecoder.decode(JsonObject(source + ("translatedEvent" to extendedEvent)))
+            P1aServerFrameDecoder.decode(JsonObject(source + ("translatedEvent" to extendedEvent)))
         }
         assertFailsWith<SerializationException> {
-            CoreServerFrameDecoder.decode(
+            P1aServerFrameDecoder.decode(
                 buildJsonObject {
                     put("protocolVersion", 1)
                     put("kind", "pi.replay.complete")
@@ -184,11 +184,11 @@ class CoreContractTest {
             )
         }
         assertFailsWith<SerializationException> {
-            CoreServerFrameDecoder.decode(JsonObject(source + ("kind" to JsonObject(emptyMap()))))
+            P1aServerFrameDecoder.decode(JsonObject(source + ("kind" to JsonObject(emptyMap()))))
         }
         assertFailsWith<SerializationException> {
             val numericType = JsonObject(source.getValue("event").jsonObject + ("type" to JsonPrimitive(7)))
-            CoreServerFrameDecoder.decode(JsonObject(source + ("event" to numericType)))
+            P1aServerFrameDecoder.decode(JsonObject(source + ("event" to numericType)))
         }
     }
 
@@ -244,37 +244,37 @@ class CoreContractTest {
     }
 
     @Test
-    fun `enforces Core physical frame and single snapshot budgets`() {
-        val oversizedFrame = " ".repeat(CoreProtocol.MAX_FRAME_BYTES + 1)
+    fun `enforces P1A physical frame and single snapshot budgets`() {
+        val oversizedFrame = " ".repeat(P1aProtocol.MAX_FRAME_BYTES + 1)
         assertFailsWith<SerializationException> { decode(oversizedFrame) }
 
         val snapshot = fixture.getValue("snapshot").jsonObject
         val compactSnapshot = snapshot.toString()
         val compactBytes = compactSnapshot.encodeToByteArray().size
-        val exactTextSnapshot = " ".repeat(CoreProtocol.MAX_SNAPSHOT_BYTES - compactBytes) + compactSnapshot
-        assertEquals(CoreProtocol.MAX_SNAPSHOT_BYTES, exactTextSnapshot.encodeToByteArray().size)
+        val exactTextSnapshot = " ".repeat(P1aProtocol.MAX_SNAPSHOT_BYTES - compactBytes) + compactSnapshot
+        assertEquals(P1aProtocol.MAX_SNAPSHOT_BYTES, exactTextSnapshot.encodeToByteArray().size)
         assertIs<TaskSnapshotFrame>(decode(exactTextSnapshot))
 
         val oneByteOverTextSnapshot = " $exactTextSnapshot"
-        assertEquals(CoreProtocol.MAX_SNAPSHOT_BYTES + 1, oneByteOverTextSnapshot.encodeToByteArray().size)
+        assertEquals(P1aProtocol.MAX_SNAPSHOT_BYTES + 1, oneByteOverTextSnapshot.encodeToByteArray().size)
         assertFailsWith<SerializationException> { decode(oneByteOverTextSnapshot) }
 
         val oversizedPi = JsonObject(
             snapshot.getValue("pi").jsonObject +
-                ("messages" to JsonArray(listOf(JsonPrimitive("x".repeat(CoreProtocol.MAX_SNAPSHOT_BYTES))))),
+                ("messages" to JsonArray(listOf(JsonPrimitive("x".repeat(P1aProtocol.MAX_SNAPSHOT_BYTES))))),
         )
         val oversizedSnapshot = JsonObject(snapshot + ("pi" to oversizedPi))
         assertFailsWith<SerializationException> {
-            CoreServerFrameDecoder.decode(oversizedSnapshot)
+            P1aServerFrameDecoder.decode(oversizedSnapshot)
         }
     }
 
     @Test
     fun `rejects explicit null for every optional Wire string while accepting omission`() {
         val sourceEvent = fixture.getValue("envelopes").jsonArray.first().jsonObject
-        assertNull(assertIs<PiEventFrame>(CoreServerFrameDecoder.decode(sourceEvent)).requestId)
+        assertNull(assertIs<PiEventFrame>(P1aServerFrameDecoder.decode(sourceEvent)).requestId)
         assertFailsWith<SerializationException> {
-            CoreServerFrameDecoder.decode(JsonObject(sourceEvent + ("requestId" to JsonNull)))
+            P1aServerFrameDecoder.decode(JsonObject(sourceEvent + ("requestId" to JsonNull)))
         }
 
         val errorWithoutRequestId = Json.parseToJsonElement(
@@ -290,18 +290,18 @@ class CoreContractTest {
             }
             """.trimIndent(),
         ).jsonObject
-        assertNull(assertIs<WireErrorFrame>(CoreServerFrameDecoder.decode(errorWithoutRequestId)).requestId)
+        assertNull(assertIs<WireErrorFrame>(P1aServerFrameDecoder.decode(errorWithoutRequestId)).requestId)
         assertFailsWith<SerializationException> {
-            CoreServerFrameDecoder.decode(JsonObject(errorWithoutRequestId + ("requestId" to JsonNull)))
+            P1aServerFrameDecoder.decode(JsonObject(errorWithoutRequestId + ("requestId" to JsonNull)))
         }
 
         val sourceSnapshot = fixture.getValue("snapshot").jsonObject
         val snapshotWithoutRequestId = JsonObject(sourceSnapshot - "requestId")
         assertNull(
-            assertIs<TaskSnapshotFrame>(CoreServerFrameDecoder.decode(snapshotWithoutRequestId)).requestId,
+            assertIs<TaskSnapshotFrame>(P1aServerFrameDecoder.decode(snapshotWithoutRequestId)).requestId,
         )
         assertFailsWith<SerializationException> {
-            CoreServerFrameDecoder.decode(JsonObject(sourceSnapshot + ("requestId" to JsonNull)))
+            P1aServerFrameDecoder.decode(JsonObject(sourceSnapshot + ("requestId" to JsonNull)))
         }
 
         val sourceCalls = sourceSnapshot.getValue("deviceCalls").jsonArray
@@ -311,11 +311,11 @@ class CoreContractTest {
             listOf(JsonObject(callWithoutOperationId + ("operationId" to JsonNull))) + sourceCalls.drop(1),
         )
         assertFailsWith<SerializationException> {
-            CoreServerFrameDecoder.decode(
+            P1aServerFrameDecoder.decode(
                 JsonObject(sourceSnapshot + ("deviceCalls" to callsWithNullOperation)),
             )
         }
     }
 
-    private fun decode(text: String): CoreServerFrame = CoreServerFrameDecoder.decode(text)
+    private fun decode(text: String): P1aServerFrame = P1aServerFrameDecoder.decode(text)
 }

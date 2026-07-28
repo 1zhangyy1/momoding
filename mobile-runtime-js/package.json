@@ -13,7 +13,7 @@
     "verify": "node scripts/verify-bundle.mjs",
     "verify:reproducible": "node scripts/verify-reproducible.mjs",
     "test": "node --test test/*.test.mjs",
-    "check": "npm run typecheck && npm run verify && npm run verify:reproducible && npm test"
+    "check": "npm run typecheck && npm run build && npm run verify && npm run verify:reproducible && npm test"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "0.80.6",

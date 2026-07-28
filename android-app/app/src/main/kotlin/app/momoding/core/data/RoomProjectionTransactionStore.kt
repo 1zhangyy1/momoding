@@ -1,7 +1,7 @@
 package app.momoding.core.data
 
 import app.momoding.wire.DurableTaskProjection
-import app.momoding.wire.ReliabilityProtocol
+import app.momoding.wire.P1bProtocol
 import app.momoding.wire.PendingResync
 import app.momoding.wire.PiResyncReason
 import app.momoding.wire.ProjectionTransaction
@@ -37,7 +37,7 @@ class RoomProjectionTransactionStore(
     private val database: MomodingDatabase,
     private val nowMillis: () -> Long = System::currentTimeMillis,
 ) : ProjectionTransactionStore {
-    private val dao: MomodingDao = database.momodingDao()
+    private val dao: P2Dao = database.p2Dao()
     private val attentionValidator = RoomAttentionLedger(database, nowMillis)
 
     override fun read(taskId: String): DurableTaskProjection? =
@@ -109,7 +109,7 @@ class RoomProjectionTransactionStore(
         if (task.windowEndExclusive - task.windowStart != timeline.size.toLong()) {
             corrupt("Timeline rows do not match the task message window")
         }
-        if (task.nextStageBatchOrdinal !in 1 until ReliabilityProtocol.MAX_SAFE_INTEGER) {
+        if (task.nextStageBatchOrdinal !in 1 until P1bProtocol.MAX_SAFE_INTEGER) {
             corrupt("Next staged batch ordinal is invalid")
         }
         if (staged.lastOrNull()?.batchOrdinal?.let { it >= task.nextStageBatchOrdinal } == true) {
@@ -453,7 +453,7 @@ class RoomProjectionTransactionStore(
         if (next.windowEndExclusive - next.windowStart != next.messages.size.toLong()) {
             throw IllegalArgumentException("Projection messages do not match its window")
         }
-        if (next.nextStageBatchOrdinal !in 1 until ReliabilityProtocol.MAX_SAFE_INTEGER) {
+        if (next.nextStageBatchOrdinal !in 1 until P1bProtocol.MAX_SAFE_INTEGER) {
             throw IllegalArgumentException("Projection next staged batch ordinal is invalid")
         }
         if (next.rawEvents.isNotEmpty() && next.streamId == null) {
@@ -500,32 +500,42 @@ class RoomProjectionTransactionStore(
         previous: TaskEntity?,
         draftMode: TaskApprovalMode?,
         updatedAtMillis: Long,
-    ) = TaskEntity(
-        taskId = taskId,
-        title = previous?.title.orEmpty(),
-        runState = runState?.name,
-        recoveryState = recoveryState?.name,
-        readState = previous?.readState ?: "UNREAD",
-        attentionState = previous?.attentionState ?: "NONE",
-        streamId = streamId,
-        throughSequence = throughSequence,
-        snapshotVersion = snapshotVersion,
-        windowStart = windowStart,
-        windowEndExclusive = windowEndExclusive,
-        nextStageBatchOrdinal = nextStageBatchOrdinal,
-        queueJson = JsonArray(queue).toString(),
-        piSessionId = piSessionId,
-        isStreaming = isStreaming,
-        updatedAtMillis = updatedAtMillis,
-        listedByHost = previous?.listedByHost ?: true,
-        lastListSyncGeneration = previous?.lastListSyncGeneration,
-        lastListRevision = previous?.lastListRevision,
-        hostUpdatedAtMillis = previous?.hostUpdatedAtMillis,
-        titleSource = previous?.titleSource ?: "LEGACY",
-        pinnedAtMillis = previous?.pinnedAtMillis,
-        archivedAtMillis = previous?.archivedAtMillis,
-        approvalMode = previous?.approvalMode ?: draftMode ?: TaskApprovalMode.REQUEST_APPROVAL,
-    )
+    ): TaskEntity {
+        val failure = taskFailureForRunState(
+            runState = runState?.name,
+            messages = messages,
+            previous = previous?.storedTaskFailure(),
+        )
+        return TaskEntity(
+            taskId = taskId,
+            title = previous?.title.orEmpty(),
+            runState = runState?.name,
+            recoveryState = recoveryState?.name,
+            readState = previous?.readState ?: "UNREAD",
+            attentionState = previous?.attentionState ?: "NONE",
+            streamId = streamId,
+            throughSequence = throughSequence,
+            snapshotVersion = snapshotVersion,
+            windowStart = windowStart,
+            windowEndExclusive = windowEndExclusive,
+            nextStageBatchOrdinal = nextStageBatchOrdinal,
+            queueJson = JsonArray(queue).toString(),
+            piSessionId = piSessionId,
+            isStreaming = isStreaming,
+            updatedAtMillis = updatedAtMillis,
+            listedByHost = previous?.listedByHost ?: true,
+            lastListSyncGeneration = previous?.lastListSyncGeneration,
+            lastListRevision = previous?.lastListRevision,
+            hostUpdatedAtMillis = previous?.hostUpdatedAtMillis,
+            titleSource = previous?.titleSource ?: "LEGACY",
+            pinnedAtMillis = previous?.pinnedAtMillis,
+            archivedAtMillis = previous?.archivedAtMillis,
+            approvalMode = previous?.approvalMode ?: draftMode ?: TaskApprovalMode.REQUEST_APPROVAL,
+            failureKind = failure?.kind?.name,
+            failureMessage = failure?.message,
+            failureRecovery = failure?.recovery?.name,
+        )
+    }
 
     private fun RawPiEventRecord.toEntity(projection: DurableTaskProjection): RawPiEventEntity {
         val bytes = rawBytes

@@ -5,6 +5,9 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import app.momoding.core.files.AuthorizedDocumentMetadata
 import app.momoding.core.files.AuthorizedFolderListing
+import app.momoding.core.files.AuthorizedContentReadPolicy
+import app.momoding.core.files.SharedStorageRepository
+import java.nio.file.Files
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
@@ -37,8 +40,8 @@ class AttentionRepositoryTest {
             ApplicationProvider.getApplicationContext<Context>(),
             MomodingDatabase::class.java,
         ).allowMainThreadQueries().build()
-        database.momodingDao().upsertTask(task(TASK_ID))
-        database.momodingDao().upsertTask(task(OTHER_TASK_ID))
+        database.p2Dao().upsertTask(task(TASK_ID))
+        database.p2Dao().upsertTask(task(OTHER_TASK_ID))
         ledger = RoomAttentionLedger(database) { 10L }
         repository = AttentionRepository(database, Dispatchers.Unconfined)
     }
@@ -125,8 +128,8 @@ class AttentionRepositoryTest {
             repository.current(TASK_ID, FAILED_CALL_ID),
         )
 
-        val valid = database.momodingDao().pendingAttention(CALL_ID)!!
-        database.momodingDao().updatePendingAttention(
+        val valid = database.p2Dao().pendingAttention(CALL_ID)!!
+        database.p2Dao().updatePendingAttention(
             valid.copy(responseState = AttentionResponseState.RESPONDING.name),
         )
         assertEquals(AttentionRecordState.Corrupt, repository.current(TASK_ID, CALL_ID))
@@ -143,7 +146,7 @@ class AttentionRepositoryTest {
                 }
                 .first()
         }
-        database.momodingDao().insertOutboundCommand(
+        database.p2Dao().insertOutboundCommand(
             OutboundCommandEntity(
                 requestId = REQUEST_ID,
                 commandId = COMMAND_ID,
@@ -231,6 +234,48 @@ class AttentionRepositoryTest {
     }
 
     @Test
+    fun `request mode shared storage read resolves live metadata and becomes approvable`() =
+        runTest {
+            val root = Files.createTempDirectory("momoding-attention-shared").toFile()
+            try {
+                root.resolve("shared-note.txt").writeText("ready")
+                val shared = SharedStorageRepository(
+                    rootDirectories = mapOf("downloads" to root),
+                    accessReady = { true },
+                    ioDispatcher = Dispatchers.Unconfined,
+                )
+                val grantId = shared.roots().single().grantId
+                val document = shared.metadata(grantId).documents.single {
+                    it.displayName == "shared-note.txt"
+                }
+                ledger.acceptRequest(
+                    contentReadRequest(grantId = grantId, alias = document.alias),
+                    scope(),
+                )
+                repository = AttentionRepository(
+                    database = database,
+                    ioDispatcher = Dispatchers.Unconfined,
+                    contentMetadataLoader = {
+                        shared.metadata(
+                            grantId = it,
+                            maxDepth = AuthorizedContentReadPolicy.MAX_CONTENT_SCAN_DEPTH,
+                            maxItems = AuthorizedContentReadPolicy.MAX_CONTENT_SCAN_ITEMS,
+                        )
+                    },
+                )
+
+                val prompt = (
+                    repository.current(TASK_ID, CONTENT_CALL_ID) as
+                        AttentionRecordState.Available
+                    ).record.prompt as AttentionPrompt.ContentRead
+                assertTrue(prompt.filesVerified)
+                assertEquals("shared-note.txt", prompt.documents.single().displayName)
+            } finally {
+                root.deleteRecursively()
+            }
+        }
+
+    @Test
     fun `public typed records contain no transport host or file capability fields`() {
         val fieldNames = listOf(
             AttentionRecord::class.java,
@@ -254,6 +299,34 @@ class AttentionRepositoryTest {
         forbidden.forEach { token ->
             assertFalse("Typed record leaked $token", fieldNames.any { token in it })
         }
+    }
+
+    @Test
+    fun `ui action becomes an ordinary confirmation without exposing node internals`() = runTest {
+        ledger.acceptRequest(
+            AttentionRequestRecord(
+                callId = UI_CALL_ID,
+                taskId = TASK_ID,
+                piToolCallId = "pi-$UI_CALL_ID",
+                deviceId = DEVICE_ID,
+                toolName = "device_ui_action",
+                arguments = buildJsonObject {
+                    put("snapshotId", UI_SNAPSHOT_ID)
+                    put("nodeHandle", "$UI_SNAPSHOT_ID:n2")
+                    put("action", "click")
+                },
+                sideEffect = true,
+                operationId = UI_OPERATION_ID,
+                expiresAt = "2030-01-01T00:00:00.000Z",
+                capabilityVersion = 1,
+            ),
+            scope(),
+        )
+
+        val record = repository.current(TASK_ID, UI_CALL_ID) as AttentionRecordState.Available
+        val prompt = record.record.prompt as AttentionPrompt.Confirmation
+        assertEquals("Allow Momoding to click the selected control?", prompt.summary)
+        assertFalse(prompt.details.orEmpty().contains(UI_SNAPSHOT_ID))
     }
 
     private fun acceptQuestion(callId: String = CALL_ID) {
@@ -286,18 +359,21 @@ class AttentionRepositoryTest {
         capabilityVersion = 1,
     )
 
-    private fun contentReadRequest() = AttentionRequestRecord(
+    private fun contentReadRequest(
+        grantId: String = GRANT_ID,
+        alias: String = DOCUMENT_ALIAS,
+    ) = AttentionRequestRecord(
         callId = CONTENT_CALL_ID,
         taskId = TASK_ID,
         piToolCallId = "pi-$CONTENT_CALL_ID",
         deviceId = DEVICE_ID,
         toolName = "device_files_read",
         arguments = buildJsonObject {
-            put("grantId", GRANT_ID)
+            put("grantId", grantId)
             put("purpose", "Read project instructions")
             put("documents", buildJsonArray {
                 add(buildJsonObject {
-                    put("alias", DOCUMENT_ALIAS)
+                    put("alias", alias)
                     put("expectedMimeType", "text/plain")
                     put("maxBytes", 32)
                 })
@@ -338,9 +414,12 @@ class AttentionRepositoryTest {
         const val FAILED_CALL_ID = "44444444-4444-4444-8444-444444444444"
         const val REQUEST_ID = "55555555-5555-4555-8555-555555555555"
         const val COMMAND_ID = "66666666-6666-4666-8666-666666666666"
-        const val DEVICE_ID = "android-attention-device"
+        const val DEVICE_ID = "android-p2-7-device"
         const val CONTENT_CALL_ID = "77777777-7777-4777-8777-777777777777"
         const val GRANT_ID = "88888888-8888-4888-8888-888888888888"
         const val DOCUMENT_ALIAS = "doc-0123456789abcdef01234567"
+        const val UI_CALL_ID = "99999999-9999-4999-8999-999999999999"
+        const val UI_OPERATION_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        const val UI_SNAPSHOT_ID = "ui-11111111111111111111111111111111"
     }
 }

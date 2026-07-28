@@ -10,7 +10,7 @@ import app.momoding.wire.DeviceToolCancelReason
 import app.momoding.wire.DeviceToolReconcileCall
 import app.momoding.wire.DeviceToolReconcileRequestFrame
 import app.momoding.wire.DeviceToolRequestFrame
-import app.momoding.wire.ReceivedReliabilityServerFrame
+import app.momoding.wire.ReceivedP1bServerFrame
 import app.momoding.core.data.AttentionDeliveryState
 import app.momoding.core.data.AttentionLedgerState
 import app.momoding.core.data.MomodingDatabase
@@ -70,7 +70,7 @@ class AttentionApplicationCoordinatorTest {
             .allowMainThreadQueries()
             .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
             .build()
-        database.momodingDao().upsertTask(task())
+        database.p2Dao().upsertTask(task())
         ledger = RoomAttentionLedger(database) { now }
         journal = RoomCommandDraftJournal(database, nowMillis = { now })
         ids = ArrayDeque((100..180).map(::uuid))
@@ -213,7 +213,7 @@ class AttentionApplicationCoordinatorTest {
         val accepted = contentCoordinator.handleDeviceRequest(contentReadFrame(allowed))
         assertEquals("device.tool.progress", accepted.oneWayFrames.single().kind)
         assertTrue(accepted.oneWayFrames.single().canonicalPayload.contains("file content approval"))
-        database.momodingDao().insertTaskContentGrant(
+        database.p2Dao().insertTaskContentGrant(
             TaskContentGrantEntity(
                 callId = allowed,
                 taskId = TASK_ID,
@@ -242,7 +242,7 @@ class AttentionApplicationCoordinatorTest {
         assertNull(beforeDiscard.attention.terminalDisplayJson)
         contentCoordinator.discardLiveContentRead(TASK_ID, allowed)
         assertNull(ledger.record(allowed))
-        assertNull(database.momodingDao().taskContentGrant(allowed))
+        assertNull(database.p2Dao().taskContentGrant(allowed))
         assertTrue(ledger.terminalOperationsReadyForDelivery(DEVICE_ID).none { it.callId == allowed })
 
         val denied = uuid(31)
@@ -373,7 +373,7 @@ class AttentionApplicationCoordinatorTest {
         assertEquals(listOf(CALL_ID), expired.terminalCandidates.map { it.callId })
         assertEquals(AttentionLedgerState.TIMED_OUT.name, ledger.record(CALL_ID)!!.operation.ledgerState)
 
-        database.momodingDao().updateDeviceOperation(
+        database.p2Dao().updateDeviceOperation(
             ledger.record(CALL_ID)!!.operation.copy(hostObservationState = "terminal"),
         )
         coordinator.onProjectionCommitted(TASK_ID)
@@ -389,7 +389,7 @@ class AttentionApplicationCoordinatorTest {
         coordinator.handleDeviceRequest(questionFrame(CALL_ID))
         coordinator.submitDecision(AttentionUserDecision.Skip(CALL_ID))
         ledger.markSent(CALL_ID)
-        database.momodingDao().updateDeviceOperation(
+        database.p2Dao().updateDeviceOperation(
             ledger.record(CALL_ID)!!.operation.copy(hostObservationState = "terminal"),
         )
         val restarted = AttentionApplicationCoordinator(
@@ -423,7 +423,7 @@ class AttentionApplicationCoordinatorTest {
 
         val failureJson = """{"protocolVersion":1,"kind":"response","requestId":"${resumed.request.requestId}","ok":false,"error":{"code":"BAD_REQUEST","message":"expired","retryable":false}}"""
         journal.markTerminal(resumed.request.requestId, failureJson)
-        val response = ReceivedReliabilityServerFrame(
+        val response = ReceivedP1bServerFrame(
             CommandResponseFrame(
                 protocolVersion = 1,
                 kind = "response",
@@ -499,7 +499,7 @@ class AttentionApplicationCoordinatorTest {
 
         val rejected = coordinator.onCommandResponse(
             pending(refresh),
-            ReceivedReliabilityServerFrame(
+            ReceivedP1bServerFrame(
                 CommandResponseFrame(
                     protocolVersion = 1,
                     kind = "response",
@@ -648,7 +648,7 @@ class AttentionApplicationCoordinatorTest {
         journal.markTerminal(reconcile.request.requestId, failureJson)
         val failed = coordinator.onCommandResponse(
             pending(reconcile),
-            ReceivedReliabilityServerFrame(
+            ReceivedP1bServerFrame(
                 CommandResponseFrame(
                     protocolVersion = 1,
                     kind = "response",
@@ -674,7 +674,7 @@ class AttentionApplicationCoordinatorTest {
         journal.markTerminal(capability.request.requestId, responseJson)
         val result = coordinator.onCommandResponse(
             pending(capability),
-            ReceivedReliabilityServerFrame(
+            ReceivedP1bServerFrame(
                 CommandResponseFrame(
                     protocolVersion = 1,
                     kind = "response",
@@ -736,7 +736,7 @@ class AttentionApplicationCoordinatorTest {
         val responseJson = successResponseJson(capability.request.requestId)
         val acceptedOnly = coordinator.onCommandResponse(
             pending(capability),
-            ReceivedReliabilityServerFrame(
+            ReceivedP1bServerFrame(
                 CommandResponseFrame(1, "response", capability.request.requestId, true),
                 responseJson.encodeToByteArray(),
             ),
@@ -751,7 +751,7 @@ class AttentionApplicationCoordinatorTest {
         journal.markTerminal(capability.request.requestId, failureJson)
         val typedRawMismatch = coordinator.onCommandResponse(
             pending(capability),
-            ReceivedReliabilityServerFrame(
+            ReceivedP1bServerFrame(
                 CommandResponseFrame(1, "response", capability.request.requestId, true),
                 failureJson.encodeToByteArray(),
             ),
@@ -782,7 +782,7 @@ class AttentionApplicationCoordinatorTest {
         val responseJson = successResponseJson(reconcile.request.requestId)
         val acceptedOnly = coordinator.onCommandResponse(
             pending(reconcile),
-            ReceivedReliabilityServerFrame(
+            ReceivedP1bServerFrame(
                 CommandResponseFrame(1, "response", reconcile.request.requestId, true),
                 responseJson.encodeToByteArray(),
             ),
@@ -805,7 +805,7 @@ class AttentionApplicationCoordinatorTest {
         journal.markTerminal(reconcile.request.requestId, responseJson)
         val rawMismatch = restarted.onCommandResponse(
             pending(reconcile),
-            ReceivedReliabilityServerFrame(
+            ReceivedP1bServerFrame(
                 CommandResponseFrame(1, "response", reconcile.request.requestId, true),
                 "$responseJson ".encodeToByteArray(),
             ),
@@ -845,7 +845,7 @@ class AttentionApplicationCoordinatorTest {
         )
         ready(restarted, generation = 2)
         restarted.handleDeviceRequest(questionFrame(CALL_ID))
-        database.momodingDao().upsertTask(task(unknownTask))
+        database.p2Dao().upsertTask(task(unknownTask))
         val wrong = restarted.handleReconcileRequest(
             reconcileRaw(
                 requestId = "wrong-task-reconcile",
@@ -889,7 +889,7 @@ class AttentionApplicationCoordinatorTest {
         journal.markTerminal(reconcile.request.requestId, responseJson)
         val settled = coordinator.onCommandResponse(
             pending(reconcile),
-            ReceivedReliabilityServerFrame(
+            ReceivedP1bServerFrame(
                 CommandResponseFrame(
                     protocolVersion = 1,
                     kind = "response",
@@ -947,7 +947,7 @@ class AttentionApplicationCoordinatorTest {
         journal.markTerminal(failedProbe.request.requestId, failureJson)
         val failed = coordinator.onCommandResponse(
             pending(failedProbe),
-            ReceivedReliabilityServerFrame(
+            ReceivedP1bServerFrame(
                 CommandResponseFrame(
                     protocolVersion = 1,
                     kind = "response",
@@ -1067,7 +1067,7 @@ class AttentionApplicationCoordinatorTest {
         coordinator.handleDeviceRequest(questionFrame(CALL_ID))
         coordinator.submitDecision(AttentionUserDecision.Skip(CALL_ID))
         val original = ledger.record(CALL_ID)!!.operation
-        database.momodingDao().updateDeviceOperation(
+        database.p2Dao().updateDeviceOperation(
             original.copy(requestSha256 = "0".repeat(64)),
         )
         val requestCorrupt = coordinator.handleReconcileRequest(
@@ -1087,7 +1087,7 @@ class AttentionApplicationCoordinatorTest {
                 .getValue("state").jsonPrimitive.content,
         )
 
-        database.momodingDao().updateDeviceOperation(original.copy(terminalKind = "failed"))
+        database.p2Dao().updateDeviceOperation(original.copy(terminalKind = "failed"))
         val terminalCorrupt = coordinator.handleReconcileRequest(
             reconcileRaw(
                 requestId = "terminal-corrupt-reconcile",
@@ -1107,7 +1107,7 @@ class AttentionApplicationCoordinatorTest {
 
         val corruptFrame = original.terminalFrameCanonicalJson!!
             .replace("\"deviceId\":\"$DEVICE_ID\"", "\"deviceId\":\"wrong-device\"")
-        database.momodingDao().updateDeviceOperation(original.copy(
+        database.p2Dao().updateDeviceOperation(original.copy(
             terminalFrameCanonicalJson = corruptFrame,
             terminalSha256 = sha256(corruptFrame.encodeToByteArray()),
         ))
@@ -1159,7 +1159,7 @@ class AttentionApplicationCoordinatorTest {
         journal.markTerminal(command.request.requestId, json)
         return target.onCommandResponse(
             pending(command),
-            ReceivedReliabilityServerFrame(
+            ReceivedP1bServerFrame(
                 CommandResponseFrame(1, "response", command.request.requestId, true),
                 json.encodeToByteArray(),
             ),
@@ -1233,7 +1233,7 @@ class AttentionApplicationCoordinatorTest {
         requestId: String,
         taskId: String = TASK_ID,
         calls: List<DeviceToolReconcileCall>,
-    ): ReceivedReliabilityServerFrame {
+    ): ReceivedP1bServerFrame {
         val frame = DeviceToolReconcileRequestFrame(
             protocolVersion = 1,
             kind = "device.tool.reconcile.request",
@@ -1265,7 +1265,7 @@ class AttentionApplicationCoordinatorTest {
                 }
             })
         }.toString().encodeToByteArray()
-        return ReceivedReliabilityServerFrame(frame, raw)
+        return ReceivedP1bServerFrame(frame, raw)
     }
 
     private fun task(taskId: String = TASK_ID) = TaskEntity(
@@ -1296,13 +1296,13 @@ class AttentionApplicationCoordinatorTest {
         }
 
     private companion object {
-        const val DATABASE_NAME = "attention-coordinator-attention-coordinator-test.db"
+        const val DATABASE_NAME = "p2-7d-attention-coordinator-test.db"
         const val TASK_ID = "11111111-1111-4111-8111-111111111111"
         const val CALL_ID = "22222222-2222-4222-8222-222222222221"
-        const val DEVICE_ID = "android-attention-device"
+        const val DEVICE_ID = "android-p2-7-device"
         const val GRANT_ID = "33333333-3333-4333-8333-333333333333"
         const val DOCUMENT_ALIAS = "doc-0123456789abcdef01234567"
-        const val RECONCILE_REQUEST_ID = "reconcile-request-attention"
+        const val RECONCILE_REQUEST_ID = "reconcile-request-p2-7"
         val NOW = Instant.parse("2026-07-17T01:00:00.000Z").toEpochMilli()
         val EXPIRES_AT = Instant.parse("2026-07-17T01:15:00.000Z").toEpochMilli()
         const val EXPIRES_AT_TEXT = "2026-07-17T01:15:00.000Z"

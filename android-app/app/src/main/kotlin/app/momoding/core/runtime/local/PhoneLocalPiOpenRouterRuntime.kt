@@ -1036,6 +1036,8 @@ internal class OpenRouterRequestPump(
     private val cancelledRequestIds = mutableSetOf<String>()
     private val androidToolEvents = ConcurrentLinkedQueue<AndroidToolEvent>()
     private val androidToolJobs = mutableMapOf<String, Job>()
+    @Volatile
+    private var screenImageCapabilityReady: Boolean? = null
 
     suspend fun pump(): PiNativeOpenRouterScenarioStatus {
         drainCancellations()
@@ -1106,7 +1108,7 @@ internal class OpenRouterRequestPump(
     }
 
     suspend fun close() {
-        cancelAndroidTools("tool_abort")
+        cancelAndroidTools("session_close")
         jobs.values.toList().forEach { it.cancelAndJoin() }
         jobs.clear()
         networkEvents.clear()
@@ -1213,7 +1215,26 @@ internal class OpenRouterRequestPump(
             }
             androidToolJobs[request.id] = networkScope.launch {
                 try {
-                    val result = bridge.handleNativeRequest(boundTaskId, request)
+                    val result = if (
+                        request.toolName == PhoneLocalScreenCaptureToolExecutor.TOOL_NAME &&
+                        !supportsScreenToolImages()
+                    ) {
+                        val payload = buildJsonObject {
+                            put("ok", false)
+                            put("errorCode", "MODEL_IMAGE_INPUT_UNAVAILABLE")
+                            put(
+                                "errorMessage",
+                                "The active model cannot receive a live screen image.",
+                            )
+                        }
+                        PiNativeAndroidToolResult(
+                            contentPayload = payload,
+                            details = payload,
+                            isError = true,
+                        )
+                    } else {
+                        bridge.handleNativeRequest(boundTaskId, request)
+                    }
                     androidToolEvents += if (result == null) {
                         AndroidToolEvent.Accepted(request.id)
                     } else {
@@ -1266,6 +1287,7 @@ internal class OpenRouterRequestPump(
                 requestId = requestId,
                 contentPayload = result.contentPayload,
                 details = result.details,
+                content = result.content,
                 isError = result.isError,
             )
         } catch (error: Throwable) {
@@ -1282,6 +1304,18 @@ internal class OpenRouterRequestPump(
         } else {
             "OpenRouter request failed"
         }
+
+    private suspend fun supportsScreenToolImages(): Boolean {
+        screenImageCapabilityReady?.let { return it }
+        val model = runCatching { client.listModels(credential.apiKey) }
+            .getOrNull()
+            ?.singleOrNull { it.id == credential.profile.modelId }
+        return (
+            model != null &&
+                model.inputModalities.any { it.equals("image", ignoreCase = true) } &&
+                model.supportedParameters.any { it.equals("tools", ignoreCase = true) }
+            ).also { screenImageCapabilityReady = it }
+    }
 
     private companion object {
         const val CHILD_PERSISTENCE_ATTEMPTS = 2

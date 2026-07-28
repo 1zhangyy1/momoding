@@ -27,7 +27,7 @@ class PhoneLocalGoalRepositoryTest {
         database = Room.inMemoryDatabaseBuilder(context, MomodingDatabase::class.java)
             .allowMainThreadQueries()
             .build()
-        database.momodingDao().upsertTask(settledTask())
+        database.p2Dao().upsertTask(settledTask())
         repository = PhoneLocalGoalRepository(database) { now }
     }
 
@@ -162,12 +162,12 @@ class PhoneLocalGoalRepositoryTest {
             automatic = false,
         )
         assertEquals(PhoneLocalGoalState.ACTIVE, begun?.state)
-        assertEquals("STARTING", database.momodingDao().task(TASK_ID)?.runState)
+        assertEquals("STARTING", database.p2Dao().task(TASK_ID)?.runState)
 
         val pending = repository.requestPause(TASK_ID)
         assertEquals(PhoneLocalGoalState.PAUSE_PENDING, pending.state)
-        database.momodingDao().upsertTask(
-            requireNotNull(database.momodingDao().task(TASK_ID)).copy(
+        database.p2Dao().upsertTask(
+            requireNotNull(database.p2Dao().task(TASK_ID)).copy(
                 runState = "COMPLETED",
                 isStreaming = false,
             ),
@@ -193,7 +193,7 @@ class PhoneLocalGoalRepositoryTest {
                 automatic = false,
             ),
         )
-        assertEquals("COMPLETED", database.momodingDao().task(TASK_ID)?.runState)
+        assertEquals("COMPLETED", database.p2Dao().task(TASK_ID)?.runState)
     }
 
     @Test
@@ -273,8 +273,8 @@ class PhoneLocalGoalRepositoryTest {
     )
 
     private fun finishTaskTurn() {
-        database.momodingDao().upsertTask(
-            requireNotNull(database.momodingDao().task(TASK_ID)).copy(
+        database.p2Dao().upsertTask(
+            requireNotNull(database.p2Dao().task(TASK_ID)).copy(
                 runState = "COMPLETED",
                 isStreaming = false,
             ),

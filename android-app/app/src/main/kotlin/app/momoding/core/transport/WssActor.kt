@@ -8,10 +8,10 @@ import app.momoding.wire.DeviceToolReconcileRequestFrame
 import app.momoding.wire.DeviceToolRequestFrame
 import app.momoding.wire.FrameReady
 import app.momoding.wire.HelloAcceptedFrame
-import app.momoding.wire.CoreProtocol
+import app.momoding.wire.P1aProtocol
 import app.momoding.wire.ProjectionCommitted
 import app.momoding.wire.PiEventAckEncoder
-import app.momoding.wire.ReceivedReliabilityServerFrame
+import app.momoding.wire.ReceivedP1bServerFrame
 import app.momoding.wire.ReliabilityContractDecoder
 import app.momoding.wire.ReceiverAction
 import app.momoding.wire.ReceiverFailure
@@ -132,7 +132,7 @@ interface SecureTransportActor : TaskListWirePort, HostConnectionStopper {
     val status: StateFlow<WssConnectionStatus>
     suspend fun start(secret: VaultSecret)
     suspend fun retryNow()
-    suspend fun requestExact(request: OutboundWireRequest): ReceivedReliabilityServerFrame =
+    suspend fun requestExact(request: OutboundWireRequest): ReceivedP1bServerFrame =
         throw UnsupportedOperationException("Exact Wire requests are unavailable")
     suspend fun submitAttentionDecision(decision: AttentionUserDecision): Unit {
         throw UnsupportedOperationException("Attention decisions are unavailable")
@@ -247,15 +247,15 @@ class WssActor(
         completion.await()
     }
 
-    override suspend fun requestExact(request: OutboundWireRequest): ReceivedReliabilityServerFrame {
-        val completion = CompletableDeferred<ReceivedReliabilityServerFrame>()
+    override suspend fun requestExact(request: OutboundWireRequest): ReceivedP1bServerFrame {
+        val completion = CompletableDeferred<ReceivedP1bServerFrame>()
         sendCallerMessage(ActorMessage.Submit(request, completion))
         return completion.await()
     }
 
-    suspend fun request(request: OutboundWireRequest): ReceivedReliabilityServerFrame = requestExact(request)
+    suspend fun request(request: OutboundWireRequest): ReceivedP1bServerFrame = requestExact(request)
 
-    override suspend fun requestPage(cursor: String?, limit: Int): ReceivedReliabilityServerFrame {
+    override suspend fun requestPage(cursor: String?, limit: Int): ReceivedP1bServerFrame {
         val requestId = ClientWireCodec.newRequestId()
         return requestExact(
             OutboundWireRequest(
@@ -690,7 +690,7 @@ class WssActor(
 
                 override fun onText(text: String) {
                     val bytes = text.toByteArray(Charsets.UTF_8)
-                    if (bytes.size > CoreProtocol.MAX_FRAME_BYTES) {
+                    if (bytes.size > P1aProtocol.MAX_FRAME_BYTES) {
                         enqueue(ActorMessage.Oversized(currentGeneration))
                     } else {
                         enqueue(ActorMessage.Text(currentGeneration, bytes.copyOf()))
@@ -720,7 +720,7 @@ class WssActor(
             }
         }
 
-        fun handleResponse(received: ReceivedReliabilityServerFrame, currentGeneration: Long) {
+        fun handleResponse(received: ReceivedP1bServerFrame, currentGeneration: Long) {
             val frame = received.frame as CommandResponseFrame
             when (val lookup = requestTable.lookup(frame.requestId, currentGeneration)) {
                 is ResponseLookup.Pending -> {
@@ -1064,7 +1064,7 @@ class WssActor(
                     mutableStatus.value.phase in ACTIVE_TRANSPORT_PHASES
                 ) {
                     try {
-                        StrictJsonDocument.parseObject(message.bytes, CoreProtocol.MAX_FRAME_BYTES)
+                        StrictJsonDocument.parseObject(message.bytes, P1aProtocol.MAX_FRAME_BYTES)
                     } catch (_: Throwable) {
                         scheduleProtocolRecovery("Inbound JSON was not strict")
                         continue
@@ -1158,7 +1158,7 @@ class WssActor(
                             "Request timeout is invalid"
                         }
                         val payloadBytes = request.canonicalPayload.toByteArray(Charsets.UTF_8)
-                        StrictJsonDocument.parseObject(payloadBytes, CoreProtocol.MAX_FRAME_BYTES).also { objectValue ->
+                        StrictJsonDocument.parseObject(payloadBytes, P1aProtocol.MAX_FRAME_BYTES).also { objectValue ->
                             require(objectValue["requestId"]?.toString()?.trim('"') == request.requestId) {
                                 "Wire requestId differs from payload"
                             }
@@ -1325,7 +1325,7 @@ class WssActor(
         ) : ActorMessage
         data class Submit(
             val request: OutboundWireRequest,
-            val completion: CompletableDeferred<ReceivedReliabilityServerFrame>,
+            val completion: CompletableDeferred<ReceivedP1bServerFrame>,
         ) : ActorMessage
         data class Expire(
             val requestId: String,

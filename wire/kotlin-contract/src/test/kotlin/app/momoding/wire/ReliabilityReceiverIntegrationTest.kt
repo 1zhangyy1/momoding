@@ -23,10 +23,10 @@ import kotlin.test.assertTrue
 
 class ReliabilityReceiverIntegrationTest {
     private val reliabilityFixture: JsonObject by lazy {
-        fixture("/pi-0.80.6/reliability-contract.json")
+        fixture("/pi-0.80.6/p1b-reliability-contract.json")
     }
     private val byteFixture: JsonObject by lazy {
-        fixture("/pi-0.80.6/byte-domains.json")
+        fixture("/pi-0.80.6/p1b-byte-domains.json")
     }
 
     @Test
@@ -280,7 +280,7 @@ class ReliabilityReceiverIntegrationTest {
 
     @Test
     fun `aggregate and transaction failures produce typed failure with zero commit and zero ACK`() {
-        val root = Files.createTempDirectory("reliability-receiver-budget-")
+        val root = Files.createTempDirectory("p1b-receiver-budget-")
         val store = ReferenceProjectionStore()
         val receiver = ReliabilityReceiver(
             tempRoot = root,
@@ -307,7 +307,7 @@ class ReliabilityReceiverIntegrationTest {
             Files.deleteIfExists(root)
         }
 
-        val chunkRoot = Files.createTempDirectory("reliability-receiver-chunk-budget-")
+        val chunkRoot = Files.createTempDirectory("p1b-receiver-chunk-budget-")
         val chunkStore = ReferenceProjectionStore()
         val chunkReceiver = ReliabilityReceiver(
             tempRoot = chunkRoot,
@@ -339,7 +339,7 @@ class ReliabilityReceiverIntegrationTest {
             Files.deleteIfExists(chunkRoot)
         }
 
-        val overflowRoot = Files.createTempDirectory("reliability-receiver-overflow-")
+        val overflowRoot = Files.createTempDirectory("p1b-receiver-overflow-")
         val overflowStore = ReferenceProjectionStore().apply {
             seed(
                 DurableTaskProjection(
@@ -433,7 +433,7 @@ class ReliabilityReceiverIntegrationTest {
 
     @Test
     fun `close clears incomplete chunk and snapshot and is terminal`() {
-        val root = Files.createTempDirectory("reliability-receiver-close-")
+        val root = Files.createTempDirectory("p1b-receiver-close-")
         val receiver = ReliabilityReceiver(root, ReferenceProjectionStore())
         val server = reliabilityFixture.getValue("serverFrames").jsonObject
         receiver.receive(
@@ -513,7 +513,7 @@ class ReliabilityReceiverIntegrationTest {
         store: ReferenceProjectionStore = ReferenceProjectionStore(),
         block: (ReliabilityReceiver, ReferenceProjectionStore, Path) -> Unit,
     ) {
-        val root = Files.createTempDirectory("reliability-receiver-")
+        val root = Files.createTempDirectory("p1b-receiver-")
         val receiver = ReliabilityReceiver(root, store)
         try {
             block(receiver, store, root)

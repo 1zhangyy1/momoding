@@ -8,6 +8,7 @@
 *.webp binary
 *.ico binary
 *.jar binary
+*.patch whitespace=-trailing-space,-space-before-tab
 
 android-app/app/src/main/assets/pi-runtime/pi-mobile.js linguist-generated=true
 android-app/app/schemas/**/*.json linguist-generated=true

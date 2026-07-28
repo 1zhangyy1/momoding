@@ -543,7 +543,7 @@ class PhoneLocalPiEngine(
                     "${jsString(sessionId)},$planMode," +
                     "${jsString(json.encodeToString(skillResources))}," +
                     "${jsString(json.encodeToString(images))}," +
-                    "${jsString(json.encodeToString(textAttachments))},false)",
+                    "${jsString(json.encodeToString(textAttachments))})",
                 "pi-mobile-native-task-start.js",
             ),
         )
@@ -564,7 +564,7 @@ class PhoneLocalPiEngine(
                 "PiMobileRuntimeBundle.startNativeOpenRouterTaskSkillSessionJson(" +
                     "${jsString(taskId)},${jsString(skillName)},$instructions," +
                     "${jsString(modelId)},${jsString(sessionId)}," +
-                    "${jsString(json.encodeToString(skillResources))},false)",
+                    "${jsString(json.encodeToString(skillResources))})",
                 "pi-mobile-native-task-skill-start.js",
             ),
         )
@@ -702,7 +702,7 @@ class PhoneLocalPiEngine(
                     "${jsString(taskId)},${jsString(sessionId)},$turnCount," +
                     "${jsString(entries.toString())},${jsString(modelId)}," +
                     "${jsString(json.encodeToString(skillResources))}," +
-                    "${jsString(json.encodeToString(images))},false)",
+                    "${jsString(json.encodeToString(images))})",
                 "pi-mobile-native-task-restore.js",
             ),
         )
@@ -899,6 +899,7 @@ class PhoneLocalPiEngine(
         requestId: String,
         contentPayload: JsonObject,
         details: JsonObject = contentPayload,
+        content: JsonArray? = null,
         isError: Boolean = false,
     ): PiNativeOpenRouterScenarioStatus {
         checkReady()
@@ -906,7 +907,8 @@ class PhoneLocalPiEngine(
             evaluateString(
                 "PiMobileRuntimeBundle.resolveNativeProviderToolRequestJson(" +
                     "${jsString(requestId)},${jsString(contentPayload.toString())}," +
-                    "${jsString(details.toString())},$isError)",
+                    "${jsString(details.toString())},$isError," +
+                    "${content?.let { jsString(it.toString()) } ?: "undefined"})",
                 "pi-mobile-native-provider-tool-resolve.js",
             ),
         )

@@ -173,7 +173,7 @@ class NewTaskViewModelTest {
         val transport = MutableStateFlow(SecureTransportUiStatus(SecureTransportUiPhase.READY))
         val coordinator = TaskCreationCoordinator(
             transportStatus = transport,
-            submitExact = { error("Attachment gate must not submit before Attachment submission") },
+            submitExact = { error("Attachment gate must not submit before image support is ready") },
             journal = journal,
             applicationScope = applicationScope,
             ioDispatcher = dispatcher,

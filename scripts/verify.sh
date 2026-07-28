@@ -17,7 +17,20 @@ unset OPENROUTER_API_KEY
 unset OPENAI_API_KEY
 unset ANTHROPIC_API_KEY
 
-source_revision="${SOURCE_REVISION:-$(git rev-parse HEAD)}"
+if [[ -n "${SOURCE_REVISION:-}" ]]; then
+  source_revision="$SOURCE_REVISION"
+elif [[ -f .public-source.json ]]; then
+  source_revision="$(
+    node -e '
+      const fs = require("node:fs");
+      const value = JSON.parse(fs.readFileSync(".public-source.json", "utf8")).sourceRevision;
+      if (typeof value !== "string") process.exit(1);
+      process.stdout.write(value);
+    '
+  )"
+else
+  source_revision="$(git rev-parse HEAD)"
+fi
 if [[ ! "$source_revision" =~ ^[0-9a-f]{40}$ ]]; then
   printf 'SOURCE_REVISION must be a full 40-character Git SHA.\n' >&2
   exit 1

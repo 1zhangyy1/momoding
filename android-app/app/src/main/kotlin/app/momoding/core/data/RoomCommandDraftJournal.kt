@@ -72,7 +72,7 @@ class RoomCommandDraftJournal(
     private val commandIdFactory: () -> String = { UUID.randomUUID().toString() },
     private val nowMillis: () -> Long = System::currentTimeMillis,
 ) : CommandDurabilityJournal {
-    private val dao = database.momodingDao()
+    private val dao = database.p2Dao()
 
     override fun persistAccepted(
         requestId: String,

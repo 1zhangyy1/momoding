@@ -18,14 +18,14 @@ import kotlinx.serialization.json.put
 
 class DeviceClientFrameEncoderTest {
     private val fixture: JsonObject by lazy {
-        val path = Path.of("../fixtures/pi-0.80.6/attention-client-contract.json")
+        val path = Path.of("../fixtures/pi-0.80.6/p2-7-attention-client-contract.json")
         Json.parseToJsonElement(Files.readString(path)).jsonObject
     }
 
     @Test
     fun `capability encoder emits the exact metadata and attention manifest`() {
         val frame = DeviceCapabilitiesReportClientFrame(
-            requestId = "capabilities-request-attention",
+            requestId = "capabilities-request-p2-7",
             commandId = COMMAND_ID,
             deviceId = DEVICE_ID,
             expiresAt = "2026-07-17T01:15:00.000Z",
@@ -66,7 +66,7 @@ class DeviceClientFrameEncoderTest {
             DeviceClientFrameEncoder.encode(frame.copy(progressSequence = 0))
         }
         assertFailsWith<IllegalArgumentException> {
-            DeviceClientFrameEncoder.encode(frame.copy(progressSequence = ReliabilityProtocol.MAX_SAFE_INTEGER + 1))
+            DeviceClientFrameEncoder.encode(frame.copy(progressSequence = P1bProtocol.MAX_SAFE_INTEGER + 1))
         }
         assertFailsWith<IllegalArgumentException> {
             DeviceClientFrameEncoder.encode(frame.copy(summary = "x".repeat(2_049)))
@@ -111,7 +111,7 @@ class DeviceClientFrameEncoderTest {
     }
 
     @Test
-    fun `terminal encoder covers every attention terminal wire value`() {
+    fun `terminal encoder covers every P2 attention terminal wire value`() {
         val successPayloads = listOf(
             buildJsonObject {
                 put("outcome", "answered")
@@ -158,7 +158,7 @@ class DeviceClientFrameEncoderTest {
     @Test
     fun `reconcile encoder preserves all six states and rejects ambiguous ledgers`() {
         val frame = DeviceToolReconcileResultClientFrame(
-            requestId = "reconcile-request-attention",
+            requestId = "reconcile-request-p2-7",
             commandId = RECONCILE_COMMAND_ID,
             taskId = TASK_ID,
             deviceId = DEVICE_ID,
@@ -254,13 +254,13 @@ class DeviceClientFrameEncoderTest {
             }
             return value
         }
-        DeviceClientFrameEncoder.encode(base.copy(result = nested(ReliabilityProtocol.MAX_JSON_DEPTH - 1)))
+        DeviceClientFrameEncoder.encode(base.copy(result = nested(P1bProtocol.MAX_JSON_DEPTH - 1)))
         assertFailsWith<IllegalArgumentException> {
-            DeviceClientFrameEncoder.encode(base.copy(result = nested(ReliabilityProtocol.MAX_JSON_DEPTH)))
+            DeviceClientFrameEncoder.encode(base.copy(result = nested(P1bProtocol.MAX_JSON_DEPTH)))
         }
         assertFailsWith<IllegalArgumentException> {
             DeviceClientFrameEncoder.encode(
-                base.copy(result = JsonPrimitive("x".repeat(CoreProtocol.MAX_FRAME_BYTES))),
+                base.copy(result = JsonPrimitive("x".repeat(P1aProtocol.MAX_FRAME_BYTES))),
             )
         }
     }
@@ -299,7 +299,7 @@ class DeviceClientFrameEncoderTest {
         const val COMMAND_ID = "44444444-4444-4444-8444-444444444447"
         const val RECONCILE_COMMAND_ID = "66666666-6666-4666-8666-666666666667"
         const val OPERATION_ID = "77777777-7777-4777-8777-777777777777"
-        const val DEVICE_ID = "android-attention-fixture"
+        const val DEVICE_ID = "android-p2-7-fixture"
     }
 }
 

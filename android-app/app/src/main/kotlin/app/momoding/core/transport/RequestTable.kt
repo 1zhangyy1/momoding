@@ -1,6 +1,6 @@
 package app.momoding.core.transport
 
-import app.momoding.wire.ReceivedReliabilityServerFrame
+import app.momoding.wire.ReceivedP1bServerFrame
 import java.security.MessageDigest
 import kotlinx.coroutines.CompletableDeferred
 
@@ -12,7 +12,7 @@ data class PendingWireRequest(
     val commandId: String?,
     val taskId: String?,
     var deadlineAtMillis: Long,
-    val completion: CompletableDeferred<ReceivedReliabilityServerFrame>,
+    val completion: CompletableDeferred<ReceivedP1bServerFrame>,
     var generation: Long,
 )
 

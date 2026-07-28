@@ -10,6 +10,50 @@ import org.junit.Test
 
 class AndroidCapabilityRegistryTest {
     @Test
+    fun accessibilityIsReadyOnlyWhenTheDeclaredServiceIsActuallyConnected() {
+        assertEquals(
+            CapabilityAvailability.UNSUPPORTED,
+            accessibilityAvailability(
+                serviceInstalled = false,
+                settingEnabled = true,
+                serviceConnected = true,
+            ),
+        )
+        assertEquals(
+            CapabilityAvailability.NOT_GRANTED,
+            accessibilityAvailability(
+                serviceInstalled = true,
+                settingEnabled = false,
+                serviceConnected = false,
+            ),
+        )
+        assertEquals(
+            CapabilityAvailability.SESSION_REQUIRED,
+            accessibilityAvailability(
+                serviceInstalled = true,
+                settingEnabled = true,
+                serviceConnected = false,
+            ),
+        )
+        assertEquals(
+            CapabilityAvailability.READY,
+            accessibilityAvailability(
+                serviceInstalled = true,
+                settingEnabled = true,
+                serviceConnected = true,
+            ),
+        )
+        assertEquals(
+            CapabilityAvailability.NOT_GRANTED,
+            accessibilityAvailability(
+                serviceInstalled = true,
+                settingEnabled = false,
+                serviceConnected = true,
+            ),
+        )
+    }
+
+    @Test
     fun photoLibraryContractDistinguishesFullPartialDeniedAndLegacyRequests() {
         assertEquals(
             listOf(

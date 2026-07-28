@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Adaptive icons are a v26 resource type even though Momoding's minSdk is 30. -->
-<adaptive-icon
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     tools:ignore="ObsoleteSdkInt">
     <background android:drawable="@color/momoding_icon_background" />

@@ -50,11 +50,16 @@ class DeviceMediaListExecutorTest {
     @Test
     fun `denied permission fails before querying MediaStore`() = runTest {
         var queried = false
+        var requested = false
         val executor = DeviceMediaListExecutor(
             scopeProvider = PhotoLibraryScopeProvider { PhotoLibraryScope.DENIED },
             query = DevicePhotoMetadataQuery {
                 queried = true
                 emptyList()
+            },
+            permissionRequester = PhotoLibraryPermissionRequester {
+                requested = true
+                false
             },
         )
 
@@ -62,7 +67,31 @@ class DeviceMediaListExecutorTest {
 
         assertEquals(DeviceToolTerminalKind.FAILED, result.terminal)
         assertEquals("PHOTO_LIBRARY_PERMISSION_REQUIRED", result.error?.code)
+        assertEquals(true, requested)
         assertFalse(queried)
+    }
+
+    @Test
+    fun `missing permission requests Android access then rechecks live scope`() = runTest {
+        var scope = PhotoLibraryScope.DENIED
+        var queried = false
+        val executor = DeviceMediaListExecutor(
+            scopeProvider = PhotoLibraryScopeProvider { scope },
+            query = DevicePhotoMetadataQuery {
+                queried = true
+                emptyList()
+            },
+            permissionRequester = PhotoLibraryPermissionRequester {
+                scope = PhotoLibraryScope.PARTIAL
+                true
+            },
+        )
+
+        val result = executor.execute(request(buildJsonObject { put("purpose", "Inspect photos") }))
+
+        assertEquals(DeviceToolTerminalKind.SUCCEEDED, result.terminal)
+        assertEquals("partial", result.result!!.jsonObject.getValue("access").jsonPrimitive.content)
+        assertEquals(true, queried)
     }
 
     @Test

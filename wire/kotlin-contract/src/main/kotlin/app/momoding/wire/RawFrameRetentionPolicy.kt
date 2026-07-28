@@ -47,9 +47,9 @@ object RawFrameRetentionPolicy {
     const val RAW_EVENT_HARD_MAX_BYTES: Long = 8L * 1024 * 1024
     const val MAX_STAGED_AUDIT_FRAMES: Int = 4_096
     const val MAX_STAGED_AUDIT_BYTES: Long =
-        ReliabilityProtocol.SNAPSHOT_MAX_LOGICAL_BYTES.toLong() +
-            ReliabilityProtocol.SNAPSHOT_MAX_PAGES * 1024L +
-            2L * CoreProtocol.MAX_FRAME_BYTES
+        P1bProtocol.SNAPSHOT_MAX_LOGICAL_BYTES.toLong() +
+            P1bProtocol.SNAPSHOT_MAX_PAGES * 1024L +
+            2L * P1aProtocol.MAX_FRAME_BYTES
 
     fun admitEvent(
         state: DurableTaskProjection?,
@@ -58,9 +58,9 @@ object RawFrameRetentionPolicy {
         sequence: Long,
         rawByteCount: Long,
     ): RawEventAdmission {
-        if (rawByteCount !in 1..ReliabilityProtocol.CHUNK_MAX_TRANSFER_BYTES.toLong()) {
+        if (rawByteCount !in 1..P1bProtocol.CHUNK_MAX_TRANSFER_BYTES.toLong()) {
             throw RetentionPolicyException(
-                "Logical pi.event bytes must be 1-${ReliabilityProtocol.CHUNK_MAX_TRANSFER_BYTES}",
+                "Logical pi.event bytes must be 1-${P1bProtocol.CHUNK_MAX_TRANSFER_BYTES}",
             )
         }
         val records = state?.rawEvents.orEmpty().values
@@ -68,14 +68,14 @@ object RawFrameRetentionPolicy {
             throw RetentionPolicyException("Durable raw-event count exceeds the hard maximum")
         }
         val retainedBytes = records.fold(0L) { total, record ->
-            if (record.byteCount !in 1..ReliabilityProtocol.CHUNK_MAX_TRANSFER_BYTES.toLong()) {
+            if (record.byteCount !in 1..P1bProtocol.CHUNK_MAX_TRANSFER_BYTES.toLong()) {
                 throw RetentionPolicyException("Durable raw-event byte count is invalid")
             }
             checkedAdd(total, record.byteCount)
         }
         if (
             retainedBytes > RAW_EVENT_HARD_MAX_BYTES &&
-            (records.size != 1 || retainedBytes > ReliabilityProtocol.CHUNK_MAX_TRANSFER_BYTES)
+            (records.size != 1 || retainedBytes > P1bProtocol.CHUNK_MAX_TRANSFER_BYTES)
         ) {
             throw RetentionPolicyException("Durable raw-event generation exceeds its hard budget")
         }
@@ -133,7 +133,7 @@ object RawFrameRetentionPolicy {
         if (currentBytes > MAX_STAGED_AUDIT_BYTES) {
             throw RetentionPolicyException("Current staged batch exceeds the byte maximum")
         }
-        if (nextBatchOrdinal !in 1 until ReliabilityProtocol.MAX_SAFE_INTEGER) {
+        if (nextBatchOrdinal !in 1 until P1bProtocol.MAX_SAFE_INTEGER) {
             throw RetentionPolicyException("Next staged batch ordinal is exhausted")
         }
 

@@ -64,7 +64,7 @@ class TaskDetailSavedStateTest {
             .setQueryExecutor { command -> command.run() }
             .setTransactionExecutor { command -> command.run() }
             .build()
-        database.momodingDao().upsertTask(task())
+        database.p2Dao().upsertTask(task())
     }
 
     @After
@@ -106,7 +106,7 @@ class TaskDetailSavedStateTest {
 
         assertEquals(draft, recreated.state.value.composer)
         assertEquals(RunningComposerMode.FOLLOW_UP, recreated.state.value.runningMode)
-        assertEquals(null, database.momodingDao().draft("task-detail-$TASK_ID"))
+        assertEquals(null, database.p2Dao().draft("task-detail-$TASK_ID"))
         recreated.viewModelScope.cancel()
         applicationScope.cancel()
         advanceUntilIdle()
@@ -120,7 +120,7 @@ class TaskDetailSavedStateTest {
         repository.updateApprovalMode(TASK_ID, TaskApprovalMode.FULL_ACCESS)
         advanceUntilIdle()
 
-        assertEquals(TaskApprovalMode.FULL_ACCESS, database.momodingDao().task(TASK_ID)?.approvalMode)
+        assertEquals(TaskApprovalMode.FULL_ACCESS, database.p2Dao().task(TASK_ID)?.approvalMode)
         assertEquals(TaskApprovalMode.FULL_ACCESS, repository.observe(TASK_ID).first()?.approvalMode)
     }
 
@@ -159,7 +159,7 @@ class TaskDetailSavedStateTest {
         assertEquals(TaskApprovalMode.REQUEST_APPROVAL, viewModel.state.value.approvalMode)
         assertFalse(viewModel.state.value.approvalModeSaving)
         assertEquals("The approval mode could not be saved.", viewModel.state.value.approvalModeError)
-        assertEquals(TaskApprovalMode.REQUEST_APPROVAL, database.momodingDao().task(TASK_ID)?.approvalMode)
+        assertEquals(TaskApprovalMode.REQUEST_APPROVAL, database.p2Dao().task(TASK_ID)?.approvalMode)
         viewModel.viewModelScope.cancel()
         applicationScope.cancel()
         advanceUntilIdle()

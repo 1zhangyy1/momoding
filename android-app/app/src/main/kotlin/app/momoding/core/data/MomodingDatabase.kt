@@ -10,7 +10,7 @@ import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-const val MOMODING_DATABASE_SCHEMA_VERSION: Int = 15
+const val MOMODING_DATABASE_SCHEMA_VERSION: Int = 16
 
 val MIGRATION_1_2: Migration = object : Migration(1, 2) {
     override fun migrate(db: SupportSQLiteDatabase) {
@@ -428,6 +428,26 @@ private val MIGRATION_14_15_STATEMENTS = listOf(
     "CREATE UNIQUE INDEX IF NOT EXISTS index_drafts_taskId ON drafts(taskId)",
 )
 
+val MIGRATION_15_16: Migration = object : Migration(15, 16) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        MIGRATION_15_16_STATEMENTS.forEach(db::execSQL)
+    }
+
+    override fun migrate(connection: SQLiteConnection) {
+        MIGRATION_15_16_STATEMENTS.forEach { sql ->
+            connection.prepare(sql).use { statement ->
+                check(!statement.step()) { "Migration statement unexpectedly returned a row" }
+            }
+        }
+    }
+}
+
+private val MIGRATION_15_16_STATEMENTS = listOf(
+    "ALTER TABLE tasks ADD COLUMN failureKind TEXT DEFAULT NULL",
+    "ALTER TABLE tasks ADD COLUMN failureMessage TEXT DEFAULT NULL",
+    "ALTER TABLE tasks ADD COLUMN failureRecovery TEXT DEFAULT NULL",
+)
+
 @Database(
     entities = [
         TaskEntity::class,
@@ -456,7 +476,7 @@ private val MIGRATION_14_15_STATEMENTS = listOf(
 )
 @TypeConverters(TaskApprovalModeRoomCodec::class)
 abstract class MomodingDatabase : RoomDatabase() {
-    abstract fun momodingDao(): MomodingDao
+    abstract fun p2Dao(): P2Dao
     abstract fun skillDao(): SkillDao
     abstract fun attachmentDao(): AttachmentDao
 
@@ -486,6 +506,7 @@ abstract class MomodingDatabase : RoomDatabase() {
                     MIGRATION_12_13,
                     MIGRATION_13_14,
                     MIGRATION_14_15,
+                    MIGRATION_15_16,
                 )
                 .build()
     }

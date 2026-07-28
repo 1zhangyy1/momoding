@@ -1,11 +1,33 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
-val sourceRevision = providers.environmentVariable("SOURCE_REVISION").orElse(
+val repositoryRoot = rootProject.projectDir.parentFile
+val gitMetadataPresent = repositoryRoot.resolve(".git").exists()
+val gitRevision = providers.exec {
+    workingDir(repositoryRoot)
+    commandLine("git", "rev-parse", "HEAD")
+}.standardOutput.asText.map { it.trim() }
+val sourceRevision = providers.environmentVariable("SOURCE_REVISION").orElse(gitRevision)
+val declaredSourceDirty = providers.environmentVariable("SOURCE_DIRTY").map { raw ->
+    require(raw == "true" || raw == "false") { "SOURCE_DIRTY must be true or false" }
+    raw.toBooleanStrict()
+}
+val sourceDirty = if (gitMetadataPresent) {
     providers.exec {
-        workingDir(rootProject.projectDir.parentFile)
-        commandLine("git", "rev-parse", "HEAD")
-    }.standardOutput.asText.map { it.trim() },
-)
+        workingDir(repositoryRoot)
+        commandLine("git", "status", "--porcelain=v1", "--untracked-files=normal")
+    }.standardOutput.asText.map { it.isNotBlank() }
+} else {
+    declaredSourceDirty.orElse(true)
+}
+val requireCleanSource = providers.gradleProperty("requireCleanSource")
+    .orElse(providers.environmentVariable("REQUIRE_CLEAN_SOURCE"))
+    .map { raw ->
+        require(raw == "true" || raw == "false") {
+            "requireCleanSource/REQUIRE_CLEAN_SOURCE must be true or false"
+        }
+        raw.toBooleanStrict()
+    }
+    .orElse(false)
 
 plugins {
     alias(libs.plugins.android.application)
@@ -30,9 +52,21 @@ android {
 
         val resolvedSourceRevision = sourceRevision.get()
         require(Regex("^[0-9a-f]{40}$").matches(resolvedSourceRevision)) {
-            "SOURCE_REVISION must be the exact clean Git commit"
+            "SOURCE_REVISION must be an exact 40-character Git commit"
+        }
+        val resolvedSourceDirty = sourceDirty.get()
+        require(!requireCleanSource.get() || !resolvedSourceDirty) {
+            "Clean-source build requested, but the Git worktree has tracked or untracked changes"
+        }
+        require(
+            !requireCleanSource.get() ||
+                !gitMetadataPresent ||
+                resolvedSourceRevision == gitRevision.get()
+        ) {
+            "Clean-source build requested, but SOURCE_REVISION does not match Git HEAD"
         }
         buildConfigField("String", "SOURCE_REVISION", "\"$resolvedSourceRevision\"")
+        buildConfigField("boolean", "SOURCE_DIRTY", resolvedSourceDirty.toString())
     }
 
     buildTypes {
@@ -48,6 +82,7 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+        aidl = true
     }
 
     androidResources {
@@ -71,9 +106,27 @@ android {
         )
     }
 
+    packaging {
+        jniLibs {
+            // The app executes the APK-embedded PRoot binary from nativeLibraryDir. Android 10+
+            // forbids executing a copy from the writable app data directory.
+            useLegacyPackaging = true
+        }
+    }
+
     testOptions {
         unitTests.isIncludeAndroidResources = true
     }
+
+    sourceSets.getByName("debug").assets.srcDir(
+        layout.buildDirectory.get().dir("generated/p2-fixtures/debug").asFile,
+    )
+    sourceSets.getByName("debug").assets.srcDir(
+        layout.buildDirectory.get().dir("generated/e5b-runtime/assets").asFile,
+    )
+    sourceSets.getByName("debug").jniLibs.srcDir(
+        layout.buildDirectory.get().dir("generated/e5b-runtime/jniLibs").asFile,
+    )
 }
 
 room {
@@ -110,6 +163,8 @@ dependencies {
     implementation(libs.quickjs.kt)
     implementation(libs.markdown.renderer.m3)
     implementation(libs.androidx.exifinterface)
+    implementation(libs.shizuku.api)
+    implementation(libs.shizuku.provider)
 
     testImplementation(libs.junit4)
     testImplementation(libs.androidx.room.testing)
@@ -132,4 +187,50 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
     ksp(libs.androidx.room.compiler)
+}
+
+val p2FixtureSource = rootProject.layout.projectDirectory.file("../docs/design/fixtures/r0-contract-fixtures.json")
+val p2FixtureGenerator = rootProject.layout.projectDirectory.file("../scripts/generate-p2-fixtures.mjs")
+val p2FixtureLibrary = rootProject.layout.projectDirectory.file("../scripts/lib/p2-fixture-projection.mjs")
+val p2FixtureOutput = layout.buildDirectory.file("generated/p2-fixtures/debug/p2-fixtures.json")
+val e5bRuntimeBuilder = rootProject.layout.projectDirectory.file("../scripts/build-phone-local-linux-runtime.sh")
+val e5bProotPatch = rootProject.layout.projectDirectory.file("../third_party/patches/proot-5.1.107.86-android-ndk.patch")
+val e5bRuntimeRoot = layout.buildDirectory.dir("generated/e5b-runtime")
+
+val generateP2FixtureProjection by tasks.registering(Exec::class) {
+    inputs.files(p2FixtureSource, p2FixtureGenerator, p2FixtureLibrary)
+    outputs.file(p2FixtureOutput)
+    commandLine(
+        "node",
+        p2FixtureGenerator.asFile.absolutePath,
+        p2FixtureSource.asFile.absolutePath,
+        p2FixtureOutput.get().asFile.absolutePath,
+    )
+}
+
+val prepareE5bRuntime by tasks.registering(Exec::class) {
+    inputs.files(e5bRuntimeBuilder, e5bProotPatch)
+    outputs.files(
+        e5bRuntimeRoot.map { it.file("jniLibs/arm64-v8a/libmomoding_proot.so") },
+        e5bRuntimeRoot.map { it.file("jniLibs/arm64-v8a/libmomoding_proot_loader.so") },
+        e5bRuntimeRoot.map { it.file("assets/phone-local-runtime/alpine-minirootfs-3.23.5-aarch64.tgz") },
+        e5bRuntimeRoot.map { it.file("runtime-manifest.json") },
+    )
+    commandLine(e5bRuntimeBuilder.asFile.absolutePath)
+}
+
+tasks.matching {
+    it.name == "mergeDebugAssets" ||
+        (it.name.contains("Debug") && it.name.contains("lint", ignoreCase = true))
+}.configureEach {
+    dependsOn(generateP2FixtureProjection)
+}
+
+tasks.matching {
+    it.name == "mergeDebugAssets" ||
+        it.name == "mergeDebugJniLibFolders" ||
+        it.name == "mergeDebugNativeLibs" ||
+        (it.name.contains("Debug") && it.name.contains("lint", ignoreCase = true))
+}.configureEach {
+    dependsOn(prepareE5bRuntime)
 }

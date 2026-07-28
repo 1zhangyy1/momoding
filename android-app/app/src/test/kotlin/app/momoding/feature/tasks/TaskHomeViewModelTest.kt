@@ -7,6 +7,9 @@ import app.momoding.core.data.MomodingDatabase
 import app.momoding.core.data.AttentionResponseState
 import app.momoding.core.data.TaskEntity
 import app.momoding.core.data.TaskAttentionKind
+import app.momoding.core.data.TaskFailure
+import app.momoding.core.data.TaskFailureKind
+import app.momoding.core.data.TaskFailureRecovery
 import app.momoding.core.data.TaskListRow
 import app.momoding.core.data.TaskRepository
 import app.momoding.core.transport.SecureTransportUiPhase
@@ -58,7 +61,7 @@ class TaskHomeViewModelTest {
     fun `open task durably marks read before navigation and submits read-only open afterward`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         Dispatchers.setMain(dispatcher)
-        database.momodingDao().upsertTask(task("task-1", readState = "UNREAD"))
+        database.p2Dao().upsertTask(task("task-1", readState = "UNREAD"))
         val repository = TaskRepository(database, dispatcher)
         val transport = MutableStateFlow(SecureTransportUiStatus(SecureTransportUiPhase.READY))
         val opened = mutableListOf<String>()
@@ -69,7 +72,7 @@ class TaskHomeViewModelTest {
             synchronizeTaskListAction = {},
             retryConnectionAction = {},
             openTaskAction = { taskId ->
-                readBeforeOpen = database.momodingDao().task(taskId)?.readState == "READ"
+                readBeforeOpen = database.p2Dao().task(taskId)?.readState == "READ"
                 opened += taskId
             },
             nowMillis = { 1_000L },
@@ -131,7 +134,7 @@ class TaskHomeViewModelTest {
     fun `exact attention marks read emits exact route then opens the same task best effort`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         Dispatchers.setMain(dispatcher)
-        database.momodingDao().upsertTask(task("task-attention", readState = "UNREAD"))
+        database.p2Dao().upsertTask(task("task-attention", readState = "UNREAD"))
         val repository = TaskRepository(database, dispatcher)
         val transport = MutableStateFlow(SecureTransportUiStatus(SecureTransportUiPhase.READY))
         val opened = mutableListOf<String>()
@@ -142,7 +145,7 @@ class TaskHomeViewModelTest {
             synchronizeTaskListAction = {},
             retryConnectionAction = {},
             openTaskAction = { taskId ->
-                readBeforeOpen = database.momodingDao().task(taskId)?.readState == "READ"
+                readBeforeOpen = database.p2Dao().task(taskId)?.readState == "READ"
                 opened += taskId
                 error("Host open is best effort after local navigation")
             },
@@ -166,7 +169,7 @@ class TaskHomeViewModelTest {
     fun `exact attention survives a late navigation collector without replaying twice`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         Dispatchers.setMain(dispatcher)
-        database.momodingDao().upsertTask(task("task-late-attention", readState = "UNREAD"))
+        database.p2Dao().upsertTask(task("task-late-attention", readState = "UNREAD"))
         val repository = TaskRepository(database, dispatcher)
         val opened = mutableListOf<String>()
         var readBeforeOpen = false
@@ -179,7 +182,7 @@ class TaskHomeViewModelTest {
             retryConnectionAction = {},
             openTaskAction = { taskId ->
                 readBeforeOpen =
-                    database.momodingDao().task(taskId)?.readState == "READ"
+                    database.p2Dao().task(taskId)?.readState == "READ"
                 opened += taskId
             },
         )
@@ -217,7 +220,7 @@ class TaskHomeViewModelTest {
     fun `attention without an exact call falls back to detail and still opens the same task`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         Dispatchers.setMain(dispatcher)
-        database.momodingDao().upsertTask(task("task-detail", readState = "UNREAD"))
+        database.p2Dao().upsertTask(task("task-detail", readState = "UNREAD"))
         val opened = mutableListOf<String>()
         val viewModel = TaskHomeViewModel(
             repository = TaskRepository(database, dispatcher),
@@ -439,7 +442,7 @@ class TaskHomeViewModelTest {
     }
 
     @Test
-    fun `failed task row points to the available Provider recovery`() {
+    fun `failed task row does not invent a Provider failure`() {
         val state = projectTaskHomeUiState(
             rows = listOf(taskRow("failed-1", "Failed task").copy(runState = "FAILED")),
             transport = SecureTransportUiStatus(SecureTransportUiPhase.READY),
@@ -450,9 +453,38 @@ class TaskHomeViewModelTest {
         )
 
         assertEquals(
-            "Provider needs attention",
+            "Task failed — open for details",
             state.sections.single().rows.single().detail,
         )
+        assertEquals(
+            TaskRowRecoveryAction.OPEN_TASK,
+            state.sections.single().rows.single().recoveryAction,
+        )
+    }
+
+    @Test
+    fun `typed Provider failure points to Provider recovery`() {
+        val state = projectTaskHomeUiState(
+            rows = listOf(
+                taskRow("failed-provider", "Failed task").copy(
+                    runState = "FAILED",
+                    failure = TaskFailure(
+                        TaskFailureKind.PROVIDER_AUTH,
+                        "OpenRouter API key is invalid. Update it in Settings.",
+                        TaskFailureRecovery.FIX_PROVIDER,
+                    ),
+                ),
+            ),
+            transport = SecureTransportUiStatus(SecureTransportUiPhase.READY),
+            query = "",
+            searchVisible = false,
+            loadState = TaskHomeLoadState.READY,
+            nowMillis = 1L,
+        )
+
+        val row = state.sections.single().rows.single()
+        assertEquals("OpenRouter API key needs attention", row.detail)
+        assertEquals(TaskRowRecoveryAction.FIX_PROVIDER, row.recoveryAction)
     }
 
     @Test

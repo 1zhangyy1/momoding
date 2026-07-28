@@ -39,7 +39,7 @@ data class PhoneLocalCommandResult(
 )
 
 /**
- * Experimental phone-local Linux command runtime.
+ * Phone-local Linux command runtime.
  *
  * PRoot and its loader are executable only from the APK-managed nativeLibraryDir. Alpine and each
  * task workspace are data under noBackupFilesDir. No SAF path is bound into Linux; callers must

@@ -43,7 +43,7 @@ class PhoneLocalGoalRepository(
     private val database: MomodingDatabase,
     private val nowMillis: () -> Long = System::currentTimeMillis,
 ) {
-    private val dao = database.momodingDao()
+    private val dao = database.p2Dao()
 
     fun observe(taskId: String): Flow<PhoneLocalGoalRecord?> =
         dao.observeTaskGoal(taskId).map { it?.toRecord() }

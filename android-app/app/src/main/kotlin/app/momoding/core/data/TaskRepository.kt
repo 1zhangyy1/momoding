@@ -29,6 +29,7 @@ data class TaskListRow(
     val updatedAtMillis: Long,
     val pinnedAtMillis: Long? = null,
     val archivedAtMillis: Long? = null,
+    val failure: TaskFailure? = null,
 )
 
 /** The only S1 task-row read model: one observable Room query, never per-row lookups. */
@@ -37,7 +38,7 @@ class TaskRepository(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val nowMillis: () -> Long = System::currentTimeMillis,
 ) {
-    private val dao = database.momodingDao()
+    private val dao = database.p2Dao()
     private val attentionValidator = RoomAttentionLedger(database)
 
     fun observeTaskRows(): Flow<List<TaskListRow>> = dao.observeTaskListRows().map { rows ->
@@ -117,6 +118,8 @@ private fun TaskListRowEntity.toTaskListRow(
             count > 1 -> TaskAttentionKind.MULTIPLE
             primaryToolName == "request_user_question" -> TaskAttentionKind.QUESTION
             primaryToolName == "request_user_confirmation" -> TaskAttentionKind.CONFIRMATION
+            primaryToolName == "device_media_list" -> TaskAttentionKind.CONFIRMATION
+            primaryToolName == "device_ui_action" -> TaskAttentionKind.CONFIRMATION
             primaryToolName == "device_files_read" -> TaskAttentionKind.FILE_CONTENT
             else -> TaskAttentionKind.UNSUPPORTED
         },
@@ -129,6 +132,11 @@ private fun TaskListRowEntity.toTaskListRow(
         updatedAtMillis = task.hostUpdatedAtMillis ?: task.updatedAtMillis,
         pinnedAtMillis = task.pinnedAtMillis,
         archivedAtMillis = task.archivedAtMillis,
+        failure = taskFailureFromStored(
+            task.failureKind,
+            task.failureMessage,
+            task.failureRecovery,
+        ),
     )
 }
 

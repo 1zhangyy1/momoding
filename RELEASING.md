@@ -6,14 +6,14 @@ or Play Store releases.
 
 ## Initial public repository
 
-1. Create the public repository from this allowlisted tree, not from the private development
-   history.
+1. Create the public repository with `./scripts/export-public-repo.sh` from a clean reviewed private
+   commit; never copy the private development history.
 2. Use a deliberately chosen public Git author name and privacy-safe email.
-3. Keep the initial source snapshot separate from the generated Pi runtime bundle so the bundle
-   manifest can point to the exact public source commit.
-4. Run `./scripts/verify.sh` from a new `git clone --no-local` checkout.
-5. Confirm the checkout stays clean and inspect the two initial commits before pushing.
-6. Enable branch protection or repository rules, required CI, private vulnerability reporting,
+3. Confirm `./scripts/check-public-sync.sh` reports no drift against the generated public tree.
+4. Rebuild the generated Pi runtime bundle against the selected source revision.
+5. Run `./scripts/verify.sh` from a new `git clone --no-local` checkout.
+6. Confirm the checkout stays clean and inspect every public commit before pushing.
+7. Enable branch protection or repository rules, required CI, private vulnerability reporting,
    secret scanning, push protection, and Dependabot before announcing the repository.
 
 ## Source release checklist
@@ -39,5 +39,6 @@ signed release additionally requires:
 - final ABI/device coverage and upgrade/migration tests;
 - release checksums and a documented rollback process.
 
-Do not publish a PRoot/Alpine-enabled binary until the additional license, complete-source,
-sandbox, update, ABI, and security gates in [`OPEN_SOURCE_SCOPE.md`](OPEN_SOURCE_SCOPE.md) are met.
+Do not publish a PRoot/Alpine-enabled binary until the license inventory, complete corresponding
+source, notices, update, ABI, and security gates in [`OPEN_SOURCE_SCOPE.md`](OPEN_SOURCE_SCOPE.md)
+are met. PRoot is not a hostile-code sandbox.

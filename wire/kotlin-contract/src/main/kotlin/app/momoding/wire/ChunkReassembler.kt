@@ -15,7 +15,7 @@ data object ChunkTransferPending : ChunkReassemblyResult
 
 class CompletedChunkTransfer(
     val transferId: String,
-    val received: ReceivedReliabilityServerFrame,
+    val received: ReceivedP1bServerFrame,
 ) : ChunkReassemblyResult
 
 class ChunkReassemblyException(
@@ -24,7 +24,7 @@ class ChunkReassemblyException(
 ) : IllegalStateException(message, cause)
 
 /**
- * Reassembles project-owned Reliability transport chunks without interpreting Pi
+ * Reassembles project-owned P1B transport chunks without interpreting Pi
  * events. Remote identifiers are never used as paths; every artifact is a
  * locally generated file under the caller-provided private temp root.
  */
@@ -41,7 +41,7 @@ class ChunkReassembler(
         get() = active.size
 
     @Synchronized
-    fun accept(received: ReceivedReliabilityServerFrame): ChunkReassemblyResult {
+    fun accept(received: ReceivedP1bServerFrame): ChunkReassemblyResult {
         if (closed) throw ChunkReassemblyException("ChunkReassembler is closed")
         return when (val frame = received.frame) {
             is TransportChunkStartFrame -> acceptStart(frame, received.rawBytes)
@@ -135,7 +135,7 @@ class ChunkReassembler(
             ?: throw ChunkReassemblyException("Unknown chunk transfer: ${data.transferId}")
         try {
             checkDeadline(state)
-            if (data.data.length > ReliabilityProtocol.CHUNK_MAX_PHYSICAL_FRAME_BYTES) {
+            if (data.data.length > P1bProtocol.CHUNK_MAX_PHYSICAL_FRAME_BYTES) {
                 failAndCleanup(data.transferId, "Chunk data exceeds the physical encoded budget")
             }
             val decoded = try {
@@ -225,14 +225,14 @@ class ChunkReassembler(
         if (!CHUNK_SHA256_PATTERN.matches(start.sha256)) {
             throw ChunkReassemblyException("Chunk sha256 must be lowercase SHA-256 hex")
         }
-        if (start.totalBytes !in 1..ReliabilityProtocol.CHUNK_MAX_TRANSFER_BYTES.toLong()) {
+        if (start.totalBytes !in 1..P1bProtocol.CHUNK_MAX_TRANSFER_BYTES.toLong()) {
             throw ChunkReassemblyException(
-                "Chunk totalBytes must be 1-${ReliabilityProtocol.CHUNK_MAX_TRANSFER_BYTES}",
+                "Chunk totalBytes must be 1-${P1bProtocol.CHUNK_MAX_TRANSFER_BYTES}",
             )
         }
-        if (start.chunkCount !in 1..ReliabilityProtocol.CHUNK_MAX_COUNT) {
+        if (start.chunkCount !in 1..P1bProtocol.CHUNK_MAX_COUNT) {
             throw ChunkReassemblyException(
-                "Chunk count must be 1-${ReliabilityProtocol.CHUNK_MAX_COUNT}",
+                "Chunk count must be 1-${P1bProtocol.CHUNK_MAX_COUNT}",
             )
         }
         val threshold = when (start) {
@@ -243,24 +243,24 @@ class ChunkReassembler(
                 if (!CHUNK_UUID_PATTERN.matches(start.streamId)) {
                     throw ChunkReassemblyException("Pi event chunk streamId must be a UUID")
                 }
-                if (start.sequence !in 1..ReliabilityProtocol.MAX_SAFE_INTEGER) {
+                if (start.sequence !in 1..P1bProtocol.MAX_SAFE_INTEGER) {
                     throw ChunkReassemblyException("Pi event chunk sequence must be safe and positive")
                 }
-                ReliabilityProtocol.DIRECT_PI_EVENT_MAX_BYTES
+                P1bProtocol.DIRECT_PI_EVENT_MAX_BYTES
             }
             is SnapshotPageChunkStartFrame -> {
                 if (start.contentKind != "task.snapshot.page") {
                     throw ChunkReassemblyException("Snapshot page chunk has the wrong contentKind")
                 }
-                if (start.snapshotVersion !in 1..ReliabilityProtocol.MAX_SAFE_INTEGER) {
+                if (start.snapshotVersion !in 1..P1bProtocol.MAX_SAFE_INTEGER) {
                     throw ChunkReassemblyException(
                         "Snapshot page chunk version must be safe and positive",
                     )
                 }
-                if (start.pageIndex !in 0 until ReliabilityProtocol.SNAPSHOT_MAX_PAGES) {
+                if (start.pageIndex !in 0 until P1bProtocol.SNAPSHOT_MAX_PAGES) {
                     throw ChunkReassemblyException("Snapshot page chunk pageIndex is out of range")
                 }
-                ReliabilityProtocol.SNAPSHOT_PAGE_MAX_PHYSICAL_BYTES
+                P1bProtocol.SNAPSHOT_PAGE_MAX_PHYSICAL_BYTES
             }
         }
         if (start.totalBytes <= threshold) {
@@ -275,7 +275,7 @@ class ChunkReassembler(
 
     private fun validateBinding(
         start: TransportChunkStartFrame,
-        logical: ReliabilityServerFrame,
+        logical: P1bServerFrame,
     ) {
         val matches = when {
             start is PiEventChunkStartFrame && logical is PiEventFrame ->
@@ -320,11 +320,11 @@ class ChunkReassembler(
         } catch (_: ArithmeticException) {
             return true
         }
-        return elapsed >= ReliabilityProtocol.CHUNK_TIMEOUT_MS
+        return elapsed >= P1bProtocol.CHUNK_TIMEOUT_MS
     }
 
     private fun createArtifact(): Path {
-        val artifact = Files.createTempFile(canonicalTempRoot, "reliability-chunk-", ".part")
+        val artifact = Files.createTempFile(canonicalTempRoot, "p1b-chunk-", ".part")
         val realArtifact = try {
             artifact.toRealPath()
         } catch (error: Throwable) {

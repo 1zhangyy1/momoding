@@ -118,7 +118,7 @@ class ReliableProjection(
      */
     @Synchronized
     fun applyEventBatch(
-        receivedFrames: List<ReceivedReliabilityServerFrame>,
+        receivedFrames: List<ReceivedP1bServerFrame>,
     ): ProjectionApplyResult {
         require(receivedFrames.isNotEmpty()) { "applyEventBatch requires at least one pi.event" }
         val frames = receivedFrames.map { received ->
@@ -177,7 +177,7 @@ class ReliableProjection(
     }
 
     @Synchronized
-    fun applyEvent(received: ReceivedReliabilityServerFrame): ProjectionApplyResult {
+    fun applyEvent(received: ReceivedP1bServerFrame): ProjectionApplyResult {
         val event = received.frame as? PiEventFrame
             ?: throw ProjectionException("applyEvent requires pi.event")
         val raw = received.rawBytes
@@ -259,7 +259,7 @@ class ReliableProjection(
 
     @Synchronized
     fun applyReplayComplete(
-        received: ReceivedReliabilityServerFrame,
+        received: ReceivedP1bServerFrame,
     ): ProjectionApplyResult {
         val replay = received.frame as? PiReplayCompleteFrame
             ?: throw ProjectionException("applyReplayComplete requires pi.replay.complete")
@@ -286,7 +286,7 @@ class ReliableProjection(
 
     @Synchronized
     fun applyResyncRequired(
-        received: ReceivedReliabilityServerFrame,
+        received: ReceivedP1bServerFrame,
     ): ProjectionApplyResult {
         val resync = received.frame as? PiResyncRequiredFrame
             ?: throw ProjectionException("applyResyncRequired requires pi.resync_required")
@@ -319,7 +319,7 @@ class ReliableProjection(
 
     @Synchronized
     fun applyDirectSnapshot(
-        received: ReceivedReliabilityServerFrame,
+        received: ReceivedP1bServerFrame,
     ): ProjectionApplyResult {
         val snapshot = received.frame as? TaskSnapshotFrame
             ?: throw ProjectionException("applyDirectSnapshot requires task.snapshot")

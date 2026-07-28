@@ -54,7 +54,7 @@
               }
             ],
             "api": "faux",
-            "provider": "core-fixture-provider",
+            "provider": "p1a-fixture-provider",
             "model": "faux-1",
             "usage": {
               "input": 0,
@@ -87,7 +87,7 @@
             }
           ],
           "api": "faux",
-          "provider": "core-fixture-provider",
+          "provider": "p1a-fixture-provider",
           "model": "faux-1",
           "usage": {
             "input": 0,
@@ -179,7 +179,7 @@
               }
             ],
             "api": "faux",
-            "provider": "core-fixture-provider",
+            "provider": "p1a-fixture-provider",
             "model": "faux-1",
             "usage": {
               "input": 0,
@@ -208,7 +208,7 @@
             }
           ],
           "api": "faux",
-          "provider": "core-fixture-provider",
+          "provider": "p1a-fixture-provider",
           "model": "faux-1",
           "usage": {
             "input": 0,
@@ -276,7 +276,7 @@
             }
           ],
           "api": "faux",
-          "provider": "core-fixture-provider",
+          "provider": "p1a-fixture-provider",
           "model": "faux-1",
           "usage": {
             "input": 0,
@@ -322,7 +322,7 @@
             }
           ],
           "api": "faux",
-          "provider": "core-fixture-provider",
+          "provider": "p1a-fixture-provider",
           "model": "faux-1",
           "usage": {
             "input": 0,

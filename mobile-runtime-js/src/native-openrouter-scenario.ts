@@ -10,6 +10,7 @@ import {
   type AgentToolResult,
   type ExecutionEnv,
   type FileInfo,
+  type SessionMetadata,
   type SessionTreeEntry,
   type Skill,
 } from "@earendil-works/pi-agent-core";
@@ -102,6 +103,9 @@ interface NativeToolRequest {
     | "android_attention"
     | "android_file_tool"
     | "android_media_tool"
+    | "android_screen_tool"
+    | "android_ui_tool"
+    | "android_package_tool"
     | "android_project_tool"
     | "android_attachment_tool";
   toolCallId: string;
@@ -155,6 +159,8 @@ interface NativeScenarioState {
   runEventStartIndex: number;
   sessionEntries: unknown[];
   imageAttachmentIdsByData: Map<string, string[]>;
+  liveToolImagesByData: Map<string, LiveToolImageDescriptor>;
+  consumedLiveToolImageData: Set<string>;
   stopRequested: boolean;
   stopCompleted: boolean;
   promptError: string | null;
@@ -259,6 +265,11 @@ const FILES_READ_TOOL_NAME = "device_files_read";
 const FILES_PREPARE_TOOL_NAME = "device_files_prepare_changes";
 const FILES_COMMIT_TOOL_NAME = "device_files_commit_changes";
 const MEDIA_LIST_TOOL_NAME = "device_media_list";
+const SCREEN_CAPTURE_TOOL_NAME = "device_screen_capture";
+const UI_INSPECT_TOOL_NAME = "device_ui_inspect";
+const UI_ACTION_TOOL_NAME = "device_ui_action";
+const PACKAGES_LIST_TOOL_NAME = "device_packages_list";
+const PACKAGE_INSPECT_TOOL_NAME = "device_package_inspect";
 const ATTACHMENT_READ_TOOL_NAME = "attachment_read";
 const RUN_COMMAND_TOOL_NAME = "run_command";
 const RUN_TESTS_TOOL_NAME = "run_tests";
@@ -281,6 +292,7 @@ const MAX_RUNTIME_IMAGES = 5;
 const MAX_RUNTIME_TEXT_ATTACHMENTS = 5;
 const MAX_RUNTIME_IMAGE_BASE64_CHARS = 1_500_000;
 const MAX_RUNTIME_IMAGES_BASE64_CHARS = 7_500_000;
+const MAX_LIVE_TOOL_IMAGE_BASE64_CHARS = 2_800_000;
 const ATTACHMENT_IMAGE_REFERENCE = /^attachment:([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/;
 const ATTACHMENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
@@ -298,25 +310,24 @@ const PLAN_ALLOWED_TOOL_NAMES = [
   FILES_LIST_TOOL_NAME,
   FILES_READ_TOOL_NAME,
   MEDIA_LIST_TOOL_NAME,
+  SCREEN_CAPTURE_TOOL_NAME,
+  UI_INSPECT_TOOL_NAME,
+  PACKAGES_LIST_TOOL_NAME,
+  PACKAGE_INSPECT_TOOL_NAME,
   ATTACHMENT_READ_TOOL_NAME,
   TASK_PLAN_UPDATE_TOOL_NAME,
 ];
 const BASE_TASK_SYSTEM_PROMPT = [
   "You are Momoding, a coding agent running locally on Android.",
   "Use run_command and run_tests for terminal work inside the task's private project snapshot.",
-  "When either tool returns fileChanges.state=prepared, call device_files_commit_changes with the exact preparedId and planDigest so Android can show a Diff and ask the user before changing the authorized real folder.",
-  "Never claim that files in the real folder changed until device_files_commit_changes succeeds.",
+  "When either tool returns fileChanges.state=prepared, call device_files_commit_changes with the exact preparedId and planDigest so Android can apply the task approval policy before changing an authorized real folder or shared-storage root.",
+  "Never claim that Android files changed until device_files_commit_changes succeeds.",
   "Text attachments explicitly sent with a task are identified in the user message. Read their contents only with attachment_read, using nextOffset until eof when more content is needed, and never claim to have read content before the tool succeeds.",
-  "Use device_media_list only when recent photo metadata is relevant. It never returns image bytes, names, paths, location, or EXIF data.",
-].join(" ");
-const BASE_TASK_WITHOUT_SHELL_SYSTEM_PROMPT = [
-  "You are Momoding, a coding agent running locally on Android.",
-  "Terminal commands and test execution are not available in this build.",
-  "Use the Android file tools to inspect authorized folders and prepare reviewed changes. Never claim to have run a command or test.",
-  "When device_files_prepare_changes succeeds, call device_files_commit_changes with the exact preparedId and planDigest so Android can show a Diff and ask the user before changing the authorized real folder.",
-  "Never claim that files in the real folder changed until device_files_commit_changes succeeds.",
-  "Text attachments explicitly sent with a task are identified in the user message. Read their contents only with attachment_read, using nextOffset until eof when more content is needed, and never claim to have read content before the tool succeeds.",
-  "Use device_media_list only when recent photo metadata is relevant. It never returns image bytes, names, paths, location, or EXIF data.",
+  "Call device_capabilities_get before relying on Android file, media, screen, accessibility, or Shizuku capabilities; treat its current states as authoritative.",
+  "When recent photo metadata is relevant, call device_media_list even if photo-library access is not yet granted. Android will show its native permission UI at the moment of use and the user decides; never claim that you cannot open the permission prompt. The tool never returns image bytes, names, paths, location, or EXIF data.",
+  "Use device_screen_capture only when seeing the current Android screen is necessary. Its image is live for the current tool turn only and cannot be replayed from task history.",
+  "Before controlling Android UI, call device_ui_inspect, choose only an opaque nodeHandle from that exact snapshot, then call device_ui_action. Never repeat a click automatically when Android reports an unknown or stale outcome.",
+  "Use device_packages_list and device_package_inspect only for bounded installed-package facts after Shizuku is ready. They cannot install, uninstall, launch, mutate, or run shell commands.",
 ].join(" ");
 const PLAN_MODE_SYSTEM_PROMPT = [
   "PLAN MODE IS ACTIVE.",
@@ -352,6 +363,29 @@ const RECORDED_EVENT_TYPES = new Set([
 let nativeScenarioState: NativeScenarioState | null = null;
 let nextSkillParseId = 1;
 let skillParseStatus: PiMobileSkillParseStatus | null = null;
+
+interface LiveToolImageDescriptor {
+  contentSha256: string;
+  width: number;
+  height: number;
+  mimeType: "image/png" | "image/jpeg";
+}
+
+class LiveOnlySessionStorage<TMetadata extends SessionMetadata>
+  extends InMemorySessionStorage<TMetadata> {
+  constructor(
+    options: { entries?: SessionTreeEntry[]; metadata: TMetadata },
+    private readonly liveToolImagesByData: Map<string, LiveToolImageDescriptor>,
+  ) {
+    super(options);
+  }
+
+  override async appendEntry(entry: SessionTreeEntry): Promise<void> {
+    await super.appendEntry(
+      expireLiveToolImages(entry, this.liveToolImagesByData) as SessionTreeEntry,
+    );
+  }
+}
 
 class NativeAssistantMessageEventStream extends EventStream<
   AssistantMessageEvent,
@@ -705,7 +739,6 @@ export function startNativeOpenRouterTaskSession(
   skillResources: PiMobileSkillResource[] = [],
   imageInputs: PiRuntimeImageInput[] = [],
   textAttachmentInputs: PiRuntimeTextAttachmentInput[] = [],
-  projectToolsEnabled = false,
 ): Record<string, unknown> {
   requireTaskId(taskId);
   const images = requireRuntimeImageInputs(imageInputs);
@@ -726,7 +759,6 @@ export function startNativeOpenRouterTaskSession(
     requirePiMobileSkillResources(skillResources),
     images,
     textAttachments,
-    projectToolsEnabled,
   );
 }
 
@@ -738,7 +770,6 @@ export function startNativeOpenRouterTaskSkillSession(
   env: ExecutionEnv,
   sessionId = `phone-local-task-${taskId}`,
   skillResources: PiMobileSkillResource[] = [],
-  projectToolsEnabled = false,
 ): Record<string, unknown> {
   requireTaskId(taskId);
   requireSessionId(sessionId);
@@ -755,9 +786,6 @@ export function startNativeOpenRouterTaskSkillSession(
     0,
     false,
     resources,
-    [],
-    [],
-    projectToolsEnabled,
   );
   return invokeNativeOpenRouterTaskSkill(skillName, additionalInstructions);
 }
@@ -771,7 +799,6 @@ export function restoreNativeOpenRouterTaskSession(
   env: ExecutionEnv,
   skillResources: PiMobileSkillResource[] = [],
   imageInputs: PiRuntimeImageInput[] = [],
-  projectToolsEnabled = false,
 ): Record<string, unknown> {
   requireTaskId(taskId);
   requireSessionId(sessionId);
@@ -793,8 +820,6 @@ export function restoreNativeOpenRouterTaskSession(
     false,
     requirePiMobileSkillResources(skillResources),
     images,
-    [],
-    projectToolsEnabled,
   );
 }
 
@@ -1043,7 +1068,6 @@ function startNativeOpenRouterRun(
   initialSkillResources: PiMobileSkillResource[] = [],
   initialRuntimeImages: PiRuntimeImageInput[] = [],
   initialTextAttachments: PiRuntimeTextAttachmentInput[] = [],
-  projectToolsEnabled = false,
 ): Record<string, unknown> {
   if (nativeScenarioState !== null && !nativeScenarioState.terminal) {
     throw new Error("PI_MOBILE_NATIVE_PROVIDER_SCENARIO_ALREADY_RUNNING");
@@ -1092,14 +1116,19 @@ function startNativeOpenRouterRun(
         createModels: (binding) => childModelsForProvider(state, provider, binding),
         onEvent: (event) => childEventOutbox.push(event),
       });
+  const liveToolImagesByData = new Map<string, LiveToolImageDescriptor>();
+  const consumedLiveToolImageData = new Set<string>();
   const session = new Session(
-    new InMemorySessionStorage({
-      entries: restoredEntries,
-      metadata: {
-        id: sessionId,
-        createdAt: "1970-01-01T00:00:00.000Z",
+    new LiveOnlySessionStorage(
+      {
+        entries: restoredEntries,
+        metadata: {
+          id: sessionId,
+          createdAt: "1970-01-01T00:00:00.000Z",
+        },
       },
-    }),
+      liveToolImagesByData,
+    ),
   );
   const restoredPlan = restoreTaskPlanState(restoredEntries);
   const fixtureTool: AgentTool = {
@@ -1128,12 +1157,8 @@ function startNativeOpenRouterRun(
   const productTools: AgentTool[] = kind === "prompt" && taskId !== null
     ? [
         childAgents!.delegateTool(),
-        ...(projectToolsEnabled
-          ? [
-              projectCommandTool(() => state, RUN_COMMAND_TOOL_NAME, "Run project command", 120_000),
-              projectCommandTool(() => state, RUN_TESTS_TOOL_NAME, "Run project tests", 300_000),
-            ]
-          : []),
+        projectCommandTool(() => state, RUN_COMMAND_TOOL_NAME, "Run project command", 120_000),
+        projectCommandTool(() => state, RUN_TESTS_TOOL_NAME, "Run project tests", 300_000),
         {
           name: ATTACHMENT_READ_TOOL_NAME,
           label: "Read text attachment",
@@ -1167,7 +1192,7 @@ function startNativeOpenRouterRun(
         {
           name: CAPABILITIES_TOOL_NAME,
           label: "Get device capabilities",
-          description: "Return the current Android file capability manifest without host filesystem access.",
+          description: "Return the current live Android capability states, bounded tool mappings, and authorized file grants without host filesystem access.",
           parameters: { type: "object", properties: {}, additionalProperties: false } as AgentTool["parameters"],
           executionMode: "sequential",
           execute: async (toolCallId, params, signal) =>
@@ -1176,7 +1201,7 @@ function startNativeOpenRouterRun(
         {
           name: FILES_LIST_TOOL_NAME,
           label: "List authorized device files",
-          description: "List metadata inside the task's user-authorized Android SAF folder using opaque aliases.",
+          description: "List metadata in an Android-authorized SAF folder or synthetic shared-storage root using opaque grant and document aliases.",
           parameters: {
             type: "object",
             properties: {
@@ -1194,7 +1219,7 @@ function startNativeOpenRouterRun(
         {
           name: FILES_READ_TOOL_NAME,
           label: "Read authorized device files",
-          description: "Request bounded UTF-8 text for exact opaque aliases after Android-side user consent.",
+          description: "Request bounded UTF-8 text for exact opaque aliases under the current Android task approval policy.",
           parameters: {
             type: "object",
             properties: {
@@ -1227,7 +1252,7 @@ function startNativeOpenRouterRun(
         {
           name: MEDIA_LIST_TOOL_NAME,
           label: "List recent photo metadata",
-          description: "List metadata for at most 20 recent Android photos within the current photo-library grant. Returns no image bytes, names, paths, location, or EXIF data.",
+          description: "List metadata for at most 20 recent Android photos. If access is missing, Android requests photo permission at the moment of use. Returns no image bytes, names, paths, location, or EXIF data.",
           parameters: {
             type: "object",
             properties: {
@@ -1242,9 +1267,148 @@ function startNativeOpenRouterRun(
             await requestNativeTool(state, "android_media_tool", MEDIA_LIST_TOOL_NAME, toolCallId, params as Record<string, unknown>, signal),
         },
         {
+          name: SCREEN_CAPTURE_TOOL_NAME,
+          label: "Capture current Android screen",
+          description: "Capture one bounded image of the current Android screen when visual context is necessary. The image is available only in this tool turn and expires from task history.",
+          parameters: {
+            type: "object",
+            properties: {
+              purpose: { type: "string", minLength: 1, maxLength: 512 },
+              targetPackage: {
+                anyOf: [
+                  { type: "string", minLength: 1, maxLength: 255 },
+                  { type: "null" },
+                ],
+              },
+            },
+            required: ["purpose"],
+            additionalProperties: false,
+          } as AgentTool["parameters"],
+          executionMode: "sequential",
+          execute: async (toolCallId, params, signal) =>
+            await requestNativeTool(
+              state,
+              "android_screen_tool",
+              SCREEN_CAPTURE_TOOL_NAME,
+              toolCallId,
+              params as Record<string, unknown>,
+              signal,
+            ),
+        },
+        {
+          name: UI_INSPECT_TOOL_NAME,
+          label: "Inspect current Android interface",
+          description: "Inspect the current foreground Android interface as a bounded, redacted accessibility tree. Call this before every interface action and use only handles from the returned snapshot.",
+          parameters: {
+            type: "object",
+            properties: {
+              targetPackage: {
+                anyOf: [
+                  { type: "string", minLength: 1, maxLength: 255 },
+                  { type: "null" },
+                ],
+              },
+              maxNodes: { type: "integer", minimum: 1, maximum: 250, default: 250 },
+            },
+            additionalProperties: false,
+          } as AgentTool["parameters"],
+          executionMode: "sequential",
+          execute: async (toolCallId, params, signal) =>
+            await requestNativeTool(
+              state,
+              "android_ui_tool",
+              UI_INSPECT_TOOL_NAME,
+              toolCallId,
+              params as Record<string, unknown>,
+              signal,
+            ),
+        },
+        {
+          name: UI_ACTION_TOOL_NAME,
+          label: "Act on current Android interface",
+          description: "Perform exactly one locally validated click, scroll, draft input, or Back action against a fresh device_ui_inspect snapshot. Android applies task approval policy and verifies the resulting screen.",
+          parameters: {
+            type: "object",
+            properties: {
+              snapshotId: { type: "string", pattern: "^ui-[0-9a-f]{32}$" },
+              nodeHandle: { type: "string", minLength: 38, maxLength: 320 },
+              action: { type: "string", enum: ["click", "scroll", "input_draft", "back"] },
+              text: { type: "string", minLength: 1, maxLength: 4096 },
+              direction: { type: "string", enum: ["up", "down", "left", "right"] },
+            },
+            required: ["snapshotId", "action"],
+            additionalProperties: false,
+          } as AgentTool["parameters"],
+          executionMode: "sequential",
+          execute: async (toolCallId, params, signal) =>
+            await requestNativeTool(
+              state,
+              "android_ui_tool",
+              UI_ACTION_TOOL_NAME,
+              toolCallId,
+              params as Record<string, unknown>,
+              signal,
+            ),
+        },
+        {
+          name: PACKAGES_LIST_TOOL_NAME,
+          label: "List installed Android packages",
+          description: "List one bounded page of installed Android package facts through a ready Shizuku shell-UID session. This tool is read-only and cannot install, uninstall, launch, or run commands.",
+          parameters: {
+            type: "object",
+            properties: {
+              purpose: { type: "string", minLength: 1, maxLength: 512 },
+              includeSystem: { type: "boolean", default: false },
+              offset: { type: "integer", minimum: 0, maximum: 10_000, default: 0 },
+              limit: { type: "integer", minimum: 1, maximum: 100, default: 50 },
+            },
+            required: ["purpose"],
+            additionalProperties: false,
+          } as AgentTool["parameters"],
+          executionMode: "sequential",
+          execute: async (toolCallId, params, signal) =>
+            await requestNativeTool(
+              state,
+              "android_package_tool",
+              PACKAGES_LIST_TOOL_NAME,
+              toolCallId,
+              params as Record<string, unknown>,
+              signal,
+            ),
+        },
+        {
+          name: PACKAGE_INSPECT_TOOL_NAME,
+          label: "Inspect installed Android package",
+          description: "Read bounded metadata for one exact installed Android package through a ready Shizuku shell-UID session. This tool is read-only and cannot mutate the package.",
+          parameters: {
+            type: "object",
+            properties: {
+              purpose: { type: "string", minLength: 1, maxLength: 512 },
+              packageName: {
+                type: "string",
+                minLength: 3,
+                maxLength: 255,
+                pattern: "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)+$",
+              },
+            },
+            required: ["purpose", "packageName"],
+            additionalProperties: false,
+          } as AgentTool["parameters"],
+          executionMode: "sequential",
+          execute: async (toolCallId, params, signal) =>
+            await requestNativeTool(
+              state,
+              "android_package_tool",
+              PACKAGE_INSPECT_TOOL_NAME,
+              toolCallId,
+              params as Record<string, unknown>,
+              signal,
+            ),
+        },
+        {
           name: FILES_PREPARE_TOOL_NAME,
           label: "Prepare device file changes",
-          description: "Prepare and preview Android-side file changes without committing a mutation.",
+          description: "Prepare and preview changes in one Android-authorized SAF or shared-storage grant without committing a mutation.",
           parameters: filePrepareParameters() as AgentTool["parameters"],
           executionMode: "sequential",
           execute: async (toolCallId, params, signal) =>
@@ -1446,9 +1610,6 @@ function startNativeOpenRouterRun(
   if (planMode && restoredGoal?.state === "active") {
     throw new Error("PI_MOBILE_GOAL_PLAN_MODE_CONFLICT");
   }
-  const taskSystemPrompt = projectToolsEnabled
-    ? BASE_TASK_SYSTEM_PROMPT
-    : BASE_TASK_WITHOUT_SHELL_SYSTEM_PROMPT;
   const prePlanActiveToolNames = planMode
     ? restoredPlan.prePlanActiveToolNames ?? defaultActiveToolNames
     : null;
@@ -1473,10 +1634,10 @@ function startNativeOpenRouterRun(
     resources: { skills: toPiSkills(normalizedSkillResources) },
     systemPrompt: kind === "prompt"
       ? () => state.planMode
-        ? `${taskSystemPrompt} ${PLAN_MODE_SYSTEM_PROMPT}`
+        ? `${BASE_TASK_SYSTEM_PROMPT} ${PLAN_MODE_SYSTEM_PROMPT}`
         : state.goal?.state === "active"
-          ? `${taskSystemPrompt} ${GOAL_MODE_SYSTEM_PROMPT} Active goal: ${state.goal.instruction}`
-          : taskSystemPrompt
+          ? `${BASE_TASK_SYSTEM_PROMPT} ${GOAL_MODE_SYSTEM_PROMPT} Active goal: ${state.goal.instruction}`
+          : BASE_TASK_SYSTEM_PROMPT
       : "Phone-local native OpenRouter Provider bridge gate",
   });
   const releaseNativeResultHook = harness.on("tool_result", (event) => {
@@ -1487,6 +1648,13 @@ function startNativeOpenRouterRun(
       isError: envelope.isError === true,
     };
   });
+  const releaseLiveImageContextHook = harness.on("context", (event) => ({
+    messages: rehydrateLiveToolImages(
+      event.messages,
+      liveToolImagesByData,
+      consumedLiveToolImageData,
+    ) as Context["messages"],
+  }));
   state = {
     kind,
     harness,
@@ -1500,6 +1668,8 @@ function startNativeOpenRouterRun(
     runEventStartIndex: 0,
     sessionEntries: restoredEntries,
     imageAttachmentIdsByData: runtimeImageReferenceMap(initialRuntimeImages),
+    liveToolImagesByData,
+    consumedLiveToolImageData,
     stopRequested: false,
     stopCompleted: false,
     promptError: null,
@@ -1550,6 +1720,7 @@ function startNativeOpenRouterRun(
   state.unsubscribe = () => {
     releaseEventSubscription();
     releaseNativeResultHook();
+    releaseLiveImageContextHook();
   };
   nativeScenarioState = state;
   if (prompt !== null) {
@@ -2523,6 +2694,7 @@ export function resolveNativeProviderToolRequest(
   contentPayload: unknown,
   details: unknown = contentPayload,
   isError = false,
+  content?: unknown,
 ): Record<string, unknown> {
   const state = requireNativeScenario();
   const pending = state.pendingTools.get(requestId);
@@ -2532,8 +2704,12 @@ export function resolveNativeProviderToolRequest(
   clearToolAbort(pending);
   state.pendingTools.delete(requestId);
   state.toolRequestsResolved += 1;
+  const nativeContent = content === undefined
+    ? [{ type: "text" as const, text: JSON.stringify(contentPayload) }]
+    : requireNativeToolContent(content);
+  registerLiveToolImages(state, pending.request, nativeContent, details, isError);
   pending.resolve({
-    content: [{ type: "text", text: JSON.stringify(contentPayload) }],
+    content: nativeContent,
     details: {
       [NATIVE_TOOL_RESULT_MARKER]: true,
       details,
@@ -2671,11 +2847,17 @@ function createNativeProviderStream(
     state.lateProviderRequestsAfterStop += 1;
     return stream;
   }
+  const messages = toOpenRouterMessages(context);
+  consumeLiveToolImages(
+    messages,
+    state.liveToolImagesByData,
+    state.consumedLiveToolImageData,
+  );
   const request: NativeProviderRequest = {
     id: `provider-${state.nextProviderRequestId++}`,
     kind: "openrouter_chat_stream",
     modelId: model.id,
-    messages: toOpenRouterMessages(context),
+    messages,
     ...(context.tools && context.tools.length > 0
       ? { tools: context.tools.map((tool) => ({
         type: "function",
@@ -3088,7 +3270,8 @@ function toOpenRouterMessages(context: Context): unknown[] {
   if (context.systemPrompt !== undefined && context.systemPrompt.length > 0) {
     messages.push({ role: "system", content: context.systemPrompt });
   }
-  for (const message of context.messages) {
+  for (let index = 0; index < context.messages.length; index += 1) {
+    const message = context.messages[index];
     if (message.role === "user") {
       messages.push({ role: "user", content: openRouterUserContent(message.content) });
     } else if (message.role === "assistant") {
@@ -3112,12 +3295,50 @@ function toOpenRouterMessages(context: Context): unknown[] {
         ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
       });
     } else {
-      messages.push({
-        role: "tool",
-        tool_call_id: message.toolCallId,
-        name: message.toolName,
-        content: textContent(message.content),
-      });
+      const imageBlocks: unknown[] = [];
+      let toolIndex = index;
+      for (
+        ;
+        toolIndex < context.messages.length &&
+          context.messages[toolIndex].role === "toolResult";
+        toolIndex += 1
+      ) {
+        const toolMessage = context.messages[toolIndex];
+        if (toolMessage.role !== "toolResult") break;
+        const text = toolMessage.content
+          .filter((block) => block.type === "text")
+          .map((block) => block.text)
+          .join("\n");
+        const images = toolMessage.content.filter(
+          (block): block is ImageContent => block.type === "image",
+        );
+        messages.push({
+          role: "tool",
+          tool_call_id: toolMessage.toolCallId,
+          name: toolMessage.toolName,
+          content: text.length > 0
+            ? text
+            : images.length > 0
+              ? "(see attached image)"
+              : "(no tool output)",
+        });
+        for (const block of images) {
+          imageBlocks.push({
+            type: "image_url",
+            image_url: { url: `data:${block.mimeType};base64,${block.data}` },
+          });
+        }
+      }
+      index = toolIndex - 1;
+      if (imageBlocks.length > 0) {
+        messages.push({
+          role: "user",
+          content: [
+            { type: "text", text: "Attached image(s) from tool result:" },
+            ...imageBlocks,
+          ],
+        });
+      }
     }
   }
   return messages;
@@ -3151,16 +3372,6 @@ function openRouterUserContent(
     throw new Error("PI_MOBILE_OPENROUTER_USER_CONTENT_UNSUPPORTED");
   }
   return parts;
-}
-
-function textContent(
-  content: string | Array<{ type: string; text?: string }>,
-): string {
-  if (typeof content === "string") return content;
-  if (content.some((block) => block.type !== "text")) {
-    throw new Error("PI_MOBILE_OPENROUTER_NON_TEXT_INPUT_UNSUPPORTED");
-  }
-  return content.map((block) => block.text ?? "").join("");
 }
 
 function initialAssistantMessage(model: Model<"openai-completions">): AssistantMessage {
@@ -3267,12 +3478,19 @@ function recordEvent(state: NativeScenarioState, event: AgentHarnessEvent): void
   } else {
     state.events.push(
       sanitizeImagesForAndroid(
-        JSON.parse(JSON.stringify(event)) as unknown,
+        expireLiveToolImages(
+          JSON.parse(JSON.stringify(event)) as unknown,
+          state.liveToolImagesByData,
+        ),
         state.imageAttachmentIdsByData,
       ),
     );
   }
   state.eventTypes.push(event.type);
+  if (event.type === "settled") {
+    state.liveToolImagesByData.clear();
+    state.consumedLiveToolImageData.clear();
+  }
   if (event.type === "tool_execution_start") {
     state.toolExecutionsStarted += 1;
     if (state.stopRequested) state.lateToolStartsAfterStop += 1;
@@ -3565,6 +3783,158 @@ function appendRuntimeImageReference(
   const attachmentIds = references.get(image.data) ?? [];
   if (!attachmentIds.includes(image.attachmentId)) attachmentIds.push(image.attachmentId);
   references.set(image.data, attachmentIds);
+}
+
+function requireNativeToolContent(
+  value: unknown,
+): AgentToolResult<unknown>["content"] {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 2) {
+    throw new Error("PI_MOBILE_NATIVE_TOOL_CONTENT_INVALID");
+  }
+  let imageCount = 0;
+  return value.map((candidate) => {
+    if (!isRecord(candidate)) {
+      throw new Error("PI_MOBILE_NATIVE_TOOL_CONTENT_INVALID");
+    }
+    if (
+      candidate.type === "text" &&
+      typeof candidate.text === "string" &&
+      candidate.text.length <= 65_536 &&
+      !candidate.text.includes("\u0000")
+    ) {
+      return { type: "text" as const, text: candidate.text };
+    }
+    if (
+      candidate.type === "image" &&
+      typeof candidate.data === "string" &&
+      candidate.data.length > 0 &&
+      candidate.data.length <= MAX_LIVE_TOOL_IMAGE_BASE64_CHARS &&
+      BASE64.test(candidate.data) &&
+      (candidate.mimeType === "image/png" || candidate.mimeType === "image/jpeg")
+    ) {
+      imageCount += 1;
+      if (imageCount > 1) throw new Error("PI_MOBILE_NATIVE_TOOL_IMAGE_LIMIT");
+      return {
+        type: "image" as const,
+        data: candidate.data,
+        mimeType: candidate.mimeType,
+      };
+    }
+    throw new Error("PI_MOBILE_NATIVE_TOOL_CONTENT_INVALID");
+  });
+}
+
+function registerLiveToolImages(
+  state: NativeScenarioState,
+  request: NativeToolRequest,
+  content: AgentToolResult<unknown>["content"],
+  details: unknown,
+  isError: boolean,
+): void {
+  const images = content.filter((block): block is ImageContent => block.type === "image");
+  if (images.length === 0) return;
+  if (!isRecord(details)) throw new Error("PI_MOBILE_LIVE_IMAGE_DETAILS_INVALID");
+  const contentSha256 = details.contentSha256;
+  const width = details.width;
+  const height = details.height;
+  const mimeType = details.mimeType;
+  if (
+    request.kind !== "android_screen_tool" ||
+    request.toolName !== SCREEN_CAPTURE_TOOL_NAME ||
+    isError ||
+    content.length !== 2 ||
+    content[0].type !== "text" ||
+    content[1].type !== "image" ||
+    details.liveOnly !== true ||
+    (details.source !== "accessibility" && details.source !== "media_projection") ||
+    typeof contentSha256 !== "string" ||
+    !/^[0-9a-f]{64}$/.test(contentSha256) ||
+    !Number.isSafeInteger(width) ||
+    (width as number) < 1 ||
+    (width as number) > 16_384 ||
+    !Number.isSafeInteger(height) ||
+    (height as number) < 1 ||
+    (height as number) > 16_384 ||
+    (mimeType !== "image/png" && mimeType !== "image/jpeg") ||
+    images[0].mimeType !== mimeType
+  ) {
+    throw new Error("PI_MOBILE_LIVE_IMAGE_DETAILS_INVALID");
+  }
+  state.liveToolImagesByData.set(images[0].data, {
+    contentSha256,
+    width: width as number,
+    height: height as number,
+    mimeType,
+  });
+}
+
+function expireLiveToolImages(
+  value: unknown,
+  images: Map<string, LiveToolImageDescriptor>,
+): unknown {
+  const visit = (candidate: unknown): unknown => {
+    if (Array.isArray(candidate)) return candidate.map(visit);
+    if (!isRecord(candidate)) return candidate;
+    if (
+      candidate.type === "image" &&
+      typeof candidate.data === "string" &&
+      images.has(candidate.data)
+    ) {
+      const descriptor = images.get(candidate.data)!;
+      return {
+        type: "text",
+        text: liveImageExpiredText(descriptor),
+      };
+    }
+    return Object.fromEntries(Object.entries(candidate).map(([key, item]) => [key, visit(item)]));
+  };
+  return visit(value);
+}
+
+function rehydrateLiveToolImages(
+  value: unknown,
+  images: Map<string, LiveToolImageDescriptor>,
+  consumedImageData: Set<string>,
+): unknown {
+  const imageByPlaceholder = new Map(
+    [...images.entries()]
+      .filter(([data]) => !consumedImageData.has(data))
+      .map(([data, descriptor]) => [
+        liveImageExpiredText(descriptor),
+        { type: "image", data, mimeType: descriptor.mimeType },
+      ]),
+  );
+  const visit = (candidate: unknown): unknown => {
+    if (Array.isArray(candidate)) return candidate.map(visit);
+    if (!isRecord(candidate)) return candidate;
+    if (candidate.type === "text" && typeof candidate.text === "string") {
+      const image = imageByPlaceholder.get(candidate.text);
+      if (image !== undefined) return { ...image };
+    }
+    return Object.fromEntries(Object.entries(candidate).map(([key, item]) => [key, visit(item)]));
+  };
+  return visit(value);
+}
+
+function consumeLiveToolImages(
+  providerMessages: unknown[],
+  images: Map<string, LiveToolImageDescriptor>,
+  consumedImageData: Set<string>,
+): void {
+  const serialized = JSON.stringify(providerMessages);
+  for (const data of images.keys()) {
+    if (serialized.includes(data)) consumedImageData.add(data);
+  }
+}
+
+function liveImageExpiredText(descriptor: LiveToolImageDescriptor): string {
+  return [
+    "[live screen image expired",
+    `sha256=${descriptor.contentSha256}`,
+    `${descriptor.width}x${descriptor.height}`,
+    descriptor.mimeType,
+    "]",
+  ].join(" ");
 }
 
 function sanitizeImagesForAndroid(

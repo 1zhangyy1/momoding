@@ -4,6 +4,7 @@ import app.momoding.core.data.TaskDetailEventRecord
 import app.momoding.core.data.TaskDetailSnapshot
 import app.momoding.core.data.AttentionResponseState
 import app.momoding.core.data.TaskAttentionKind
+import app.momoding.core.data.classifyTaskFailure
 import java.security.MessageDigest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -79,6 +80,7 @@ class PiUiReducer {
                         "request_user_question" -> TaskAttentionKind.QUESTION
                         "request_user_confirmation" -> TaskAttentionKind.CONFIRMATION
                         "device_media_list" -> TaskAttentionKind.CONFIRMATION
+                        "device_ui_action" -> TaskAttentionKind.CONFIRMATION
                         "device_files_read" -> TaskAttentionKind.FILE_CONTENT
                         else -> TaskAttentionKind.UNSUPPORTED
                     },
@@ -89,6 +91,7 @@ class PiUiReducer {
                             "request_user_question" -> "Momoding asked a question"
                             "request_user_confirmation" -> "An action needs confirmation"
                             "device_media_list" -> "Photo metadata access needs approval"
+                            "device_ui_action" -> "Interface action needs approval"
                             "device_files_read" -> "File content access needs approval"
                             "device_files_commit_changes" -> "Review proposed file changes"
                             else -> "Momoding is waiting for you"
@@ -440,23 +443,8 @@ class PiUiReducer {
         }
     }
 
-    private fun safeProviderError(errorMessage: String?): String = when (errorMessage) {
-        "OpenRouter API key is invalid" ->
-            "OpenRouter API key is invalid. Update it in Settings."
-        "OpenRouter account has insufficient credits" ->
-            "OpenRouter account has insufficient credits."
-        "OpenRouter request is not permitted" ->
-            "OpenRouter did not permit this request."
-        "OpenRouter model was not found" ->
-            "OpenRouter could not find this model. Update it in Settings."
-        "OpenRouter request timed out" ->
-            "OpenRouter request timed out. Try again."
-        "OpenRouter rate limit reached" ->
-            "OpenRouter rate limit reached. Try again shortly."
-        "OpenRouter provider is unavailable" ->
-            "OpenRouter provider is unavailable. Try again shortly."
-        else -> "The Provider could not complete this response."
-    }
+    private fun safeProviderError(errorMessage: String?): String =
+        classifyTaskFailure(errorMessage).message
 
     private fun projectToolResult(
         messageId: String,
@@ -547,6 +535,8 @@ class PiUiReducer {
             "device_files_list" -> "Listed authorized files"
             "device_files_read" -> "Requested file content"
             "device_media_list" -> "Listed recent photo metadata"
+            "device_ui_inspect" -> "Inspected the current interface"
+            "device_ui_action" -> "Performed an interface action"
             "attachment_read" -> "Read text attachment"
             "device_files_prepare_changes" -> "Prepared file changes"
             "device_files_commit_changes" -> "Applied file changes"

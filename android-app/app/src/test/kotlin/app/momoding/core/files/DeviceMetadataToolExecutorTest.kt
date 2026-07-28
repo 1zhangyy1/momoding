@@ -5,9 +5,17 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import app.momoding.wire.DeviceToolRequestFrame
 import app.momoding.wire.DeviceToolTerminalKind
+import app.momoding.core.capabilities.AndroidCapabilityId
+import app.momoding.core.capabilities.AndroidCapabilityProbe
+import app.momoding.core.capabilities.AndroidCapabilityRegistry
+import app.momoding.core.capabilities.AndroidCapabilityState
+import app.momoding.core.capabilities.CapabilityAvailability
 import app.momoding.core.data.MomodingDatabase
 import app.momoding.core.data.DraftEntity
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -47,7 +55,7 @@ class DeviceMetadataToolExecutorTest {
             newGrantId = { GRANT_ID },
         )
         repository.authorize(TREE_URI, READ_WRITE_FLAGS)
-        database.momodingDao().insertDraft(draft(TASK_ID, GRANT_ID))
+        database.p2Dao().insertDraft(draft(TASK_ID, GRANT_ID))
         executor = DeviceMetadataToolExecutor(database, repository)
     }
 
@@ -70,6 +78,74 @@ class DeviceMetadataToolExecutorTest {
         assertFalse(payload.toString().contains("content://"))
         assertFalse(payload.toString().contains("provider-root"))
     }
+
+    @Test
+    fun `phone local capabilities report every live Android state and its bounded tools`() =
+        runBlocking {
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+            try {
+                val probes = AndroidCapabilityId.entries.associateWith { id ->
+                    AndroidCapabilityProbe { checkedAt ->
+                        AndroidCapabilityState(
+                            id = id,
+                            availability = if (id == AndroidCapabilityId.SHIZUKU_SHELL_UID) {
+                                CapabilityAvailability.READY
+                            } else {
+                                CapabilityAvailability.NOT_GRANTED
+                            },
+                            source = "test-${id.name.lowercase()}",
+                            checkedAtMillis = checkedAt,
+                            safeMessage = "Safe ${id.name.lowercase()} state.",
+                        )
+                    }
+                }
+                val registry = AndroidCapabilityRegistry(
+                    probes = probes,
+                    scope = scope,
+                    nowMillis = { 42L },
+                )
+                val phoneLocalExecutor = DeviceMetadataToolExecutor(
+                    database = database,
+                    folders = repository,
+                    capabilityRegistry = registry,
+                )
+
+                val result = phoneLocalExecutor.execute(request(
+                    toolName = DeviceMetadataToolExecutor.CAPABILITIES_TOOL,
+                    arguments = buildJsonObject {},
+                ))
+
+                assertEquals(DeviceToolTerminalKind.SUCCEEDED, result.terminal)
+                val payload = result.result!!.jsonObject
+                val capabilities = payload.getValue("capabilities").jsonArray
+                assertEquals(AndroidCapabilityId.entries.size, capabilities.size)
+                assertEquals(
+                    AndroidCapabilityId.entries.map { it.name.lowercase() },
+                    capabilities.map { item ->
+                        item.jsonObject.getValue("id").jsonPrimitive.content
+                    },
+                )
+                val shizuku = capabilities.single { item ->
+                    item.jsonObject.getValue("id").jsonPrimitive.content ==
+                        "shizuku_shell_uid"
+                }.jsonObject
+                assertEquals(
+                    listOf("device_packages_list", "device_package_inspect"),
+                    shizuku.getValue("toolNames").jsonArray.map {
+                        it.jsonPrimitive.content
+                    },
+                )
+                val tools = payload.getValue("tools").jsonArray.map {
+                    it.jsonPrimitive.content
+                }
+                assertTrue(tools.contains("device_screen_capture"))
+                assertTrue(tools.contains("device_ui_action"))
+                assertTrue(tools.contains("device_packages_list"))
+                assertFalse(payload.toString().contains("content://"))
+            } finally {
+                scope.cancel()
+            }
+        }
 
     @Test
     fun `list returns bounded opaque metadata and rejects another grant`() = runBlocking {
@@ -102,7 +178,7 @@ class DeviceMetadataToolExecutorTest {
 
     @Test
     fun `task without a folder can query capabilities but cannot list files`() = runBlocking {
-        database.momodingDao().insertDraft(draft(OTHER_TASK_ID, null))
+        database.p2Dao().insertDraft(draft(OTHER_TASK_ID, null))
 
         val capabilities = executor.execute(request(
             taskId = OTHER_TASK_ID,

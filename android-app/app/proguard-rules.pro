@@ -1,1 +1,1 @@
-# Release builds currently do not enable R8. Add reviewed rules before enabling minification.
+# Release builds do not currently use R8. Add reviewed rules before enabling minification.

@@ -3,7 +3,7 @@ package app.momoding.wire
 sealed interface ReceiverAction
 
 data class FrameReady(
-    val received: ReceivedReliabilityServerFrame,
+    val received: ReceivedP1bServerFrame,
 ) : ReceiverAction
 
 data object AwaitingTransfer : ReceiverAction
@@ -60,7 +60,7 @@ class ReliabilityReceiver private constructor(
         tempRoot,
         store,
         nowMillis,
-        ReliabilityProtocol.SNAPSHOT_MAX_LOGICAL_BYTES.toLong(),
+        P1bProtocol.SNAPSHOT_MAX_LOGICAL_BYTES.toLong(),
     )
 
     internal constructor(
@@ -120,7 +120,7 @@ class ReliabilityReceiver private constructor(
         if (failure != null) throw failure
     }
 
-    private fun route(received: ReceivedReliabilityServerFrame): List<ReceiverAction> =
+    private fun route(received: ReceivedP1bServerFrame): List<ReceiverAction> =
         when (val frame = received.frame) {
             is TransportChunkStartFrame,
             is TransportChunkDataFrame,
@@ -152,7 +152,7 @@ class ReliabilityReceiver private constructor(
             else -> listOf(FrameReady(received))
         }
 
-    private fun routeChunk(received: ReceivedReliabilityServerFrame): List<ReceiverAction> = try {
+    private fun routeChunk(received: ReceivedP1bServerFrame): List<ReceiverAction> = try {
         when (val result = chunks.accept(received)) {
             ChunkTransferPending -> listOf(AwaitingTransfer)
             is CompletedChunkTransfer -> route(result.received)
@@ -167,7 +167,7 @@ class ReliabilityReceiver private constructor(
         failure(ReceiverFailureCode.PROJECTION_FAILED, error, reconnect = true)
     }
 
-    private fun routeEvent(received: ReceivedReliabilityServerFrame): List<ReceiverAction> {
+    private fun routeEvent(received: ReceivedP1bServerFrame): List<ReceiverAction> {
         rawBudgetExpectation?.let { expectation ->
             return listOf(SnapshotRequired(expectation, "Raw-event mutation is fenced"))
         }
@@ -181,7 +181,7 @@ class ReliabilityReceiver private constructor(
         }
     }
 
-    private fun routeDirectSnapshot(received: ReceivedReliabilityServerFrame): List<ReceiverAction> {
+    private fun routeDirectSnapshot(received: ReceivedP1bServerFrame): List<ReceiverAction> {
         val snapshot = received.frame as TaskSnapshotFrame
         val expectation = rawBudgetExpectation
         if (

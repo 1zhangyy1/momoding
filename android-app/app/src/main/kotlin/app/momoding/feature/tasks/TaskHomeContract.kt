@@ -19,6 +19,8 @@ enum class TaskRowStatus { ATTENTION, RUNNING, COMPLETED, FAILED }
 
 enum class TaskRowOpenAction { OPEN_TASK, OPEN_CACHED_TASK, OPEN_ATTENTION }
 
+enum class TaskRowRecoveryAction { FIX_PROVIDER, OPEN_TASK }
+
 data class TaskRowUiModel(
     val taskId: String,
     val title: String,
@@ -31,6 +33,7 @@ data class TaskRowUiModel(
     val openAction: TaskRowOpenAction = TaskRowOpenAction.OPEN_TASK,
     val pinned: Boolean = false,
     val archived: Boolean = false,
+    val recoveryAction: TaskRowRecoveryAction? = null,
 )
 
 enum class TaskManagementDialogKind { RENAME, DELETE }

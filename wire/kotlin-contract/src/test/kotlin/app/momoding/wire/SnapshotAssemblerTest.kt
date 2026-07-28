@@ -21,10 +21,10 @@ import kotlin.test.assertTrue
 
 class SnapshotAssemblerTest {
     private val reliabilityFixture: JsonObject by lazy {
-        fixture("/pi-0.80.6/reliability-contract.json")
+        fixture("/pi-0.80.6/p1b-reliability-contract.json")
     }
     private val byteFixture: JsonObject by lazy {
-        fixture("/pi-0.80.6/byte-domains.json")
+        fixture("/pi-0.80.6/p1b-byte-domains.json")
     }
 
     @Test
@@ -147,7 +147,7 @@ class SnapshotAssemblerTest {
             assertTrue(error.message!!.contains("aggregate raw-page budget"))
             assertEquals(0, assembler.pendingTransferCount)
         }
-        assertEquals(64 * 1024 * 1024, ReliabilityProtocol.SNAPSHOT_MAX_LOGICAL_BYTES)
+        assertEquals(64 * 1024 * 1024, P1bProtocol.SNAPSHOT_MAX_LOGICAL_BYTES)
         assertTrue(allowance <= 1024)
     }
 
@@ -186,7 +186,7 @@ class SnapshotAssemblerTest {
             assertEquals(0, assembler.pendingTransferCount)
         }
 
-        val half = ReliabilityProtocol.HISTORY_MAX_BYTES / 2
+        val half = P1bProtocol.HISTORY_MAX_BYTES / 2
         listOf(-1, 0, 1).forEach { delta ->
             SnapshotAssembler().use { assembler ->
                 val requestId = "history-global-${delta + 1}"
@@ -202,7 +202,7 @@ class SnapshotAssemblerTest {
                         requestId,
                         TASK_ID,
                         7,
-                        ReliabilityProtocol.HISTORY_MAX_BYTES.toLong(),
+                        P1bProtocol.HISTORY_MAX_BYTES.toLong(),
                     ),
                 )
                 assembler.acceptBegin(strictHistoryBegin(requestId, windowEnd = 2))
@@ -211,7 +211,7 @@ class SnapshotAssemblerTest {
                     assembler.acceptPage(pages[1])
                     val assembled = assembler.acceptEnd(validEnd)
                     assertEquals(
-                        ReliabilityProtocol.HISTORY_MAX_BYTES.toLong() + delta,
+                        P1bProtocol.HISTORY_MAX_BYTES.toLong() + delta,
                         assembled.receivedRawPageBytes,
                     )
                 } else {
@@ -231,7 +231,7 @@ class SnapshotAssemblerTest {
                         "history-too-large",
                         TASK_ID,
                         7,
-                        ReliabilityProtocol.HISTORY_MAX_BYTES.toLong() + 1,
+                        P1bProtocol.HISTORY_MAX_BYTES.toLong() + 1,
                     ),
                 )
             }
@@ -328,14 +328,14 @@ class SnapshotAssemblerTest {
         sha256 = sha,
     )
 
-    private fun decode(element: kotlinx.serialization.json.JsonElement): ReceivedReliabilityServerFrame =
+    private fun decode(element: kotlinx.serialization.json.JsonElement): ReceivedP1bServerFrame =
         ReliabilityContractDecoder.decode(element.toString().encodeToByteArray())
 
-    private fun received(frame: ReliabilityServerFrame, raw: String): ReceivedReliabilityServerFrame =
+    private fun received(frame: P1bServerFrame, raw: String): ReceivedP1bServerFrame =
         received(frame, raw.encodeToByteArray())
 
-    private fun received(frame: ReliabilityServerFrame, raw: ByteArray): ReceivedReliabilityServerFrame =
-        ReceivedReliabilityServerFrame(frame, raw)
+    private fun received(frame: P1bServerFrame, raw: ByteArray): ReceivedP1bServerFrame =
+        ReceivedP1bServerFrame(frame, raw)
 
     private fun emptyEnvelopeBytes(page: TaskSnapshotPageFrame): Long = buildJsonObject {
         put("protocolVersion", page.protocolVersion)
@@ -347,12 +347,12 @@ class SnapshotAssemblerTest {
         put("messages", JsonArray(emptyList()))
     }.toString().encodeToByteArray().size.toLong()
 
-    private fun replaceFixtureBegin(): ReceivedReliabilityServerFrame = decode(
+    private fun replaceFixtureBegin(): ReceivedP1bServerFrame = decode(
         reliabilityFixture.getValue("serverFrames").jsonObject
             .getValue("snapshotTransfer").jsonArray.first(),
     )
 
-    private fun strictHistoryBegin(requestId: String, windowEnd: Long): ReceivedReliabilityServerFrame {
+    private fun strictHistoryBegin(requestId: String, windowEnd: Long): ReceivedP1bServerFrame {
         val source = reliabilityFixture.getValue("serverFrames").jsonObject
             .getValue("historyTransfer").jsonArray.first().jsonObject
         val window = source.getValue("window").jsonObject
@@ -369,7 +369,7 @@ class SnapshotAssemblerTest {
         return ReliabilityContractDecoder.decode(raw)
     }
 
-    private fun strictEnd(rawPages: List<ByteArray>): ReceivedReliabilityServerFrame {
+    private fun strictEnd(rawPages: List<ByteArray>): ReceivedP1bServerFrame {
         val raw = buildJsonObject {
             put("protocolVersion", 1)
             put("kind", "task.snapshot.end")
@@ -385,7 +385,7 @@ class SnapshotAssemblerTest {
         targetBytes: Int,
         index: Int,
         start: Long,
-    ): ReceivedReliabilityServerFrame {
+    ): ReceivedP1bServerFrame {
         fun raw(padding: String): ByteArray = buildJsonObject {
             put("protocolVersion", 1)
             put("kind", "task.snapshot.page")
@@ -411,7 +411,7 @@ class SnapshotAssemblerTest {
         require(targetBytes >= empty.size) { "target $targetBytes is below valid page minimum" }
         val exact = raw("a".repeat(targetBytes - empty.size))
         assertEquals(targetBytes, exact.size)
-        val received = if (exact.size > ReliabilityProtocol.SNAPSHOT_PAGE_MAX_PHYSICAL_BYTES) {
+        val received = if (exact.size > P1bProtocol.SNAPSHOT_PAGE_MAX_PHYSICAL_BYTES) {
             ReliabilityContractDecoder.decodeReassembled(exact, "task.snapshot.page")
         } else {
             ReliabilityContractDecoder.decode(exact)

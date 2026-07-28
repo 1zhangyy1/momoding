@@ -295,7 +295,6 @@ export function startNativeOpenRouterTaskSessionJson(
   skillResourcesJson = "[]",
   imageInputsJson = "[]",
   textAttachmentInputsJson = "[]",
-  projectToolsEnabled = false,
 ): string {
   if (runtimeState === null) throw new Error("PI_MOBILE_RUNTIME_NOT_BOOTED");
   return JSON.stringify(
@@ -309,7 +308,6 @@ export function startNativeOpenRouterTaskSessionJson(
       requirePiMobileSkillResources(JSON.parse(skillResourcesJson) as unknown),
       requireRuntimeImageInputs(JSON.parse(imageInputsJson) as unknown),
       requireRuntimeTextAttachmentInputs(JSON.parse(textAttachmentInputsJson) as unknown),
-      projectToolsEnabled,
     ),
   );
 }
@@ -321,7 +319,6 @@ export function startNativeOpenRouterTaskSkillSessionJson(
   modelId: string,
   sessionId?: string,
   skillResourcesJson = "[]",
-  projectToolsEnabled = false,
 ): string {
   if (runtimeState === null) throw new Error("PI_MOBILE_RUNTIME_NOT_BOOTED");
   return JSON.stringify(
@@ -333,7 +330,6 @@ export function startNativeOpenRouterTaskSkillSessionJson(
       createBootstrapEnv(),
       sessionId,
       requirePiMobileSkillResources(JSON.parse(skillResourcesJson) as unknown),
-      projectToolsEnabled,
     ),
   );
 }
@@ -431,7 +427,6 @@ export function restoreNativeOpenRouterTaskSessionJson(
   modelId: string,
   skillResourcesJson = "[]",
   imageInputsJson = "[]",
-  projectToolsEnabled = false,
 ): string {
   if (runtimeState === null) throw new Error("PI_MOBILE_RUNTIME_NOT_BOOTED");
   return JSON.stringify(
@@ -444,7 +439,6 @@ export function restoreNativeOpenRouterTaskSessionJson(
       createBootstrapEnv(),
       requirePiMobileSkillResources(JSON.parse(skillResourcesJson) as unknown),
       requireRuntimeImageInputs(JSON.parse(imageInputsJson) as unknown),
-      projectToolsEnabled,
     ),
   );
 }
@@ -559,6 +553,7 @@ export function resolveNativeProviderToolRequestJson(
   contentPayloadJson: string,
   detailsJson?: string,
   isError = false,
+  contentJson?: string,
 ): string {
   return JSON.stringify(
     resolveNativeProviderToolRequest(
@@ -568,6 +563,9 @@ export function resolveNativeProviderToolRequestJson(
         ? undefined
         : JSON.parse(detailsJson) as unknown,
       isError,
+      contentJson === undefined
+        ? undefined
+        : JSON.parse(contentJson) as unknown,
     ),
   );
 }

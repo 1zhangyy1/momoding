@@ -11,9 +11,9 @@ import type { TaskRecoveryState, TaskRunState } from "./snapshot.js";
 import type { TaskSnapshotTransferFrame } from "./snapshot-transfer.js";
 import type { TransportChunkFrame } from "./transfer.js";
 
-export const CORE_HELLO_TIMEOUT_MS = 5_000;
-export const CORE_HEARTBEAT_INTERVAL_MS = 20_000;
-export const CORE_PONG_TIMEOUT_MS = 60_000;
+export const P1A_HELLO_TIMEOUT_MS = 5_000;
+export const P1A_HEARTBEAT_INTERVAL_MS = 20_000;
+export const P1A_PONG_TIMEOUT_MS = 60_000;
 export const WIRE_MAX_PHYSICAL_FRAME_BYTES = 1_048_576;
 
 export interface ResumeCursor {
@@ -43,7 +43,7 @@ export interface HelloAccepted {
   connectionId: string;
   serverVersion: string;
   piVersion: "0.80.6";
-  heartbeatIntervalMs: typeof CORE_HEARTBEAT_INTERVAL_MS;
+  heartbeatIntervalMs: typeof P1A_HEARTBEAT_INTERVAL_MS;
   maxFrameBytes: typeof WIRE_MAX_PHYSICAL_FRAME_BYTES;
 }
 
@@ -127,7 +127,7 @@ export interface SessionStopCommand extends RequestFrame {
   reason: string;
 }
 
-export type CoreClientCommand =
+export type P1AClientCommand =
   | TaskCreateCommand
   | TaskListCommand
   | TaskOpenCommand
@@ -137,8 +137,8 @@ export type CoreClientCommand =
   | SessionFollowUpCommand
   | SessionStopCommand;
 
-export type ReliabilityClientCommand =
-  | CoreClientCommand
+export type P1BClientCommand =
+  | P1AClientCommand
   | TaskHistoryRequest
   | PiEventAck
   | DeviceClientFrame;
@@ -166,15 +166,15 @@ export interface WireErrorFrame {
   error: WireErrorBody;
 }
 
-export type CoreServerFrame =
+export type P1AServerFrame =
   | HelloAccepted
   | CommandResponse
   | WireErrorFrame
   | TaskSnapshot
   | PiEventEnvelope;
 
-export type ReliabilityServerFrame =
-  | CoreServerFrame
+export type P1BServerFrame =
+  | P1AServerFrame
   | PiReplayComplete
   | PiResyncRequired
   | TransportChunkFrame

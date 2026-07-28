@@ -27,6 +27,7 @@ preview.
 ## Security boundary reminders
 
 - Provider credentials belong only in the in-app encrypted vault.
-- Android SAF authorization is scoped access, not full-device access.
+- SAF, shared storage, MediaProjection, accessibility, and Shizuku are separate authorities.
 - File content reads and file writes have separate approval boundaries.
-- The public build has no terminal execution or remote-host component.
+- PRoot project commands are not a hostile-code sandbox.
+- The public source excludes the remote-host service but does not silently remove product features.

@@ -15,7 +15,7 @@ import app.momoding.wire.DeviceToolReconcileResultItem
 import app.momoding.wire.DeviceToolRequestFrame
 import app.momoding.wire.DeviceToolResultClientFrame
 import app.momoding.wire.DeviceToolTerminalKind
-import app.momoding.wire.ReceivedReliabilityServerFrame
+import app.momoding.wire.ReceivedP1bServerFrame
 import app.momoding.wire.ReliabilityContractDecoder
 import app.momoding.core.data.AttentionAcceptanceScope
 import app.momoding.core.data.AttentionDeliveryState
@@ -91,7 +91,7 @@ sealed interface AttentionUserDecision {
 }
 
 /**
- * Application owner for durable attention and device-operation state.
+ * Application owner for attention and device state.
  *
  * Every method is synchronous by design. WssActor invokes it only from its one mailbox turn,
  * persists returned commands through RoomCommandDraftJournal, and remains the sole socket writer.
@@ -163,7 +163,7 @@ class AttentionApplicationCoordinator(
 
     fun onCommandResponse(
         request: PendingWireRequest,
-        received: ReceivedReliabilityServerFrame,
+        received: ReceivedP1bServerFrame,
         registeredRequestIds: Set<String> = emptySet(),
     ): AttentionCoordinatorPlan {
         val response = received.frame as? CommandResponseFrame
@@ -293,7 +293,7 @@ class AttentionApplicationCoordinator(
     }
 
     fun handleReconcileRequest(
-        received: ReceivedReliabilityServerFrame,
+        received: ReceivedP1bServerFrame,
     ): AttentionCoordinatorPlan {
         requireReady()
         val frame = received.frame as? DeviceToolReconcileRequestFrame
@@ -908,6 +908,7 @@ class AttentionApplicationCoordinator(
             summary = when (record.operation.toolName) {
                 CONTENT_READ_TOOL -> "Waiting for file content approval"
                 FILE_COMMIT_TOOL -> "Waiting for file change approval"
+                UI_ACTION_TOOL -> "Waiting for interface action approval"
                 else -> "Waiting for your answer"
             },
         )
@@ -997,7 +998,7 @@ class AttentionApplicationCoordinator(
     private fun durableResponseMatches(
         durable: OutboundCommandRecord,
         request: PendingWireRequest,
-        received: ReceivedReliabilityServerFrame,
+        received: ReceivedP1bServerFrame,
     ): Boolean {
         val durableResponse = durable.responseJson ?: return false
         val decoded = try {
@@ -1037,7 +1038,7 @@ class AttentionApplicationCoordinator(
     }
 
     private fun deterministicReconcileCommandId(rawBytes: ByteArray): String {
-        val domain = "attention-coordinator-reconcile-command\u0000".encodeToByteArray()
+        val domain = "p2-7d-reconcile-command\u0000".encodeToByteArray()
         val digest = reconcileDigest(domain + rawBytes)
         require(digest.size >= 16) { "Reconcile digest is too short" }
         val bytes = digest.copyOfRange(0, 16)
@@ -1055,6 +1056,7 @@ class AttentionApplicationCoordinator(
         const val CONFIRMATION_TOOL = "request_user_confirmation"
         const val CONTENT_READ_TOOL = "device_files_read"
         const val FILE_COMMIT_TOOL = "device_files_commit_changes"
+        const val UI_ACTION_TOOL = "device_ui_action"
         const val CAPABILITY_VERSION = 1L
         const val MAX_RECONCILE_CALLS = 8
         const val CAPABILITY_VALIDITY_MILLIS = 14 * 60_000L

@@ -90,7 +90,7 @@ class PhoneLocalProjectWorkspace internal constructor(
 
     suspend fun hasImportedTask(taskId: String): Boolean = withContext(Dispatchers.IO) {
         requireUuid(taskId, "taskId")
-        val selectedGrant = database.momodingDao().draftForTask(taskId)?.selectedGrantId ?: return@withContext false
+        val selectedGrant = database.p2Dao().draftForTask(taskId)?.selectedGrantId ?: return@withContext false
         val currentGrant = folders.folders().singleOrNull { it.grantId == selectedGrant }
             ?: return@withContext false
         if (!currentGrant.canRead) return@withContext false
@@ -111,7 +111,7 @@ class PhoneLocalProjectWorkspace internal constructor(
     suspend fun importApprovedTask(taskId: String): PhoneLocalProjectImportResult =
         withContext(Dispatchers.IO) {
             requireUuid(taskId, "taskId")
-            val grantId = database.momodingDao().draftForTask(taskId)?.selectedGrantId
+            val grantId = database.p2Dao().draftForTask(taskId)?.selectedGrantId
                 ?: throw SecurityException("Task has no user-selected project folder")
             val currentGrant = folders.folders().singleOrNull { it.grantId == grantId }
                 ?: throw SecurityException("Task project folder is unavailable")
@@ -120,7 +120,7 @@ class PhoneLocalProjectWorkspace internal constructor(
             check(snapshot.grantId == grantId) { "Project snapshot grant changed" }
 
             PhoneLocalWorkspaceLocks.withLock(taskId) {
-                check(database.momodingDao().draftForTask(taskId)?.selectedGrantId == grantId) {
+                check(database.p2Dao().draftForTask(taskId)?.selectedGrantId == grantId) {
                     "Task project folder changed during import"
                 }
                 val workspace = workspaceRoot(taskId)
@@ -198,7 +198,7 @@ class PhoneLocalProjectWorkspace internal constructor(
             requireUuid(taskId, "taskId")
             PhoneLocalWorkspaceLocks.withLock(taskId) {
                 val manifest = readManifest(taskId)
-                val selectedGrant = database.momodingDao().draftForTask(taskId)?.selectedGrantId
+                val selectedGrant = database.p2Dao().draftForTask(taskId)?.selectedGrantId
                 if (selectedGrant != manifest.grantId) {
                     throw SecurityException("Task project folder changed after import")
                 }

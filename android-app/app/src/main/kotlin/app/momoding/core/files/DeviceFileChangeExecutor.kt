@@ -45,6 +45,11 @@ enum class FileChangeSetState {
     UNKNOWN,
 }
 
+enum class FileChangeApprovalRisk {
+    LOW,
+    HIGH,
+}
+
 class FileChangeExecutionFailure(
     val code: String,
     override val message: String,
@@ -64,10 +69,41 @@ class DeviceFileChangeExecutor(
     private val tokenBytes: () -> ByteArray = {
         ByteArray(32).also(SecureRandom()::nextBytes)
     },
+    private val sharedStorage: SharedStorageRepository? = null,
 ) {
-    private val dao = database.momodingDao()
+    private val dao = database.p2Dao()
 
     fun handlesPrepare(toolName: String): Boolean = toolName == PREPARE_TOOL
+
+    fun isSharedGrant(grantId: String): Boolean =
+        sharedStorage?.isSharedGrant(grantId) == true
+
+    fun isSharedCommit(operation: DeviceOperationEntity): Boolean = runCatching {
+        val request = parseCommit(operation)
+        dao.fileChangeSet(request.preparedId)?.grantId?.let(::isSharedGrant) == true
+    }.getOrDefault(false)
+
+    fun approvalRisk(taskId: String, arguments: JsonObject): FileChangeApprovalRisk =
+        runCatching {
+            require(arguments.keys == setOf("preparedId", "planDigest"))
+            val preparedId = normalizeUuid(
+                arguments.getValue("preparedId").jsonPrimitive.content,
+                "preparedId",
+            )
+            val digest = arguments.getValue("planDigest").jsonPrimitive.content
+            require(SHA256.matches(digest))
+            val prepared = requireNotNull(dao.fileChangeSet(preparedId))
+            require(prepared.taskId == taskId && prepared.planDigest == digest)
+            if (decodeOperations(prepared.operationsCanonicalJson).any {
+                    it is AuthorizedFileMutation.WriteFile ||
+                        it is AuthorizedFileMutation.DeleteFile
+                }
+            ) {
+                FileChangeApprovalRisk.HIGH
+            } else {
+                FileChangeApprovalRisk.LOW
+            }
+        }.getOrDefault(FileChangeApprovalRisk.HIGH)
 
     suspend fun prepare(frame: DeviceToolRequestFrame): DeviceToolResultClientFrame {
         if (frame.toolName != PREPARE_TOOL) {
@@ -105,8 +141,14 @@ class DeviceFileChangeExecutor(
                     require(existing.operationsCanonicalJson == operationsJson)
                     return@withTimeout frame.succeeded(prepareResult(existing))
                 }
-                folders.validateChanges(request.grantId, request.operations)
-                val listing = folders.mutationMetadata(request.grantId)
+                val shared = sharedStorage?.takeIf { it.isSharedGrant(request.grantId) }
+                val listing = if (shared != null) {
+                    shared.validateChanges(request.grantId, request.operations)
+                    shared.mutationMetadata(request.grantId)
+                } else {
+                    folders.validateChanges(request.grantId, request.operations)
+                    folders.mutationMetadata(request.grantId)
+                }
                 val preview = buildPreview(request.operations, listing.documents)
                 val expiry = minOf(requestExpiry, now + MAX_PREPARED_LIFETIME_MILLIS)
                 val digestBinding = buildJsonObject {
@@ -177,11 +219,17 @@ class DeviceFileChangeExecutor(
                     "PREPARED_CHANGE_NOT_FOUND",
                     "Prepared file changes are unavailable",
                 )
-            require(current.taskId == operation.taskId) {
-                "Prepared file changes belong to another task"
+            if (current.taskId != operation.taskId) {
+                throw FileChangeExecutionFailure(
+                    "FILE_COMMIT_CONFLICT",
+                    "Prepared file changes belong to another task",
+                )
             }
-            require(current.planDigest == request.planDigest) {
-                "Prepared file digest changed"
+            if (current.planDigest != request.planDigest) {
+                throw FileChangeExecutionFailure(
+                    "FILE_COMMIT_CONFLICT",
+                    "Prepared file digest changed",
+                )
             }
             requireTaskGrantSync(operation.taskId, current.grantId)
             if (nowMillis() >= current.expiresAtMillis) {
@@ -218,6 +266,25 @@ class DeviceFileChangeExecutor(
     suspend fun approveAndCommit(
         operation: DeviceOperationEntity,
         durableTerminal: ((AttentionTerminalWrite) -> Unit)? = null,
+    ): JsonObject = commitApproved(
+        operation,
+        durableTerminal,
+        AttentionTerminalOrigin.USER,
+    )
+
+    suspend fun autoApproveAndCommit(
+        operation: DeviceOperationEntity,
+        durableTerminal: ((AttentionTerminalWrite) -> Unit)? = null,
+    ): JsonObject = commitApproved(
+        operation,
+        durableTerminal,
+        AttentionTerminalOrigin.AUTO_POLICY,
+    )
+
+    private suspend fun commitApproved(
+        operation: DeviceOperationEntity,
+        durableTerminal: ((AttentionTerminalWrite) -> Unit)?,
+        terminalOrigin: AttentionTerminalOrigin,
     ): JsonObject {
         val current = bindCommit(operation)
         if (current.state != FileChangeSetState.AWAITING_APPROVAL.name) {
@@ -269,11 +336,20 @@ class DeviceFileChangeExecutor(
         }
         val mutations = decodeOperations(committing.operationsCanonicalJson)
         val commit = try {
-            folders.commitChanges(
-                grantId = committing.grantId,
-                mutations = mutations,
-                stopRequested = { dao.activeStopFenceCount(operation.taskId) != 0 },
-            )
+            val shared = sharedStorage?.takeIf { it.isSharedGrant(committing.grantId) }
+            if (shared != null) {
+                shared.commitChanges(
+                    grantId = committing.grantId,
+                    mutations = mutations,
+                    stopRequested = { dao.activeStopFenceCount(operation.taskId) != 0 },
+                )
+            } else {
+                folders.commitChanges(
+                    grantId = committing.grantId,
+                    mutations = mutations,
+                    stopRequested = { dao.activeStopFenceCount(operation.taskId) != 0 },
+                )
+            }
         } catch (cancelled: CancellationException) {
             persistUnknownTerminal(
                 changeSet = committing,
@@ -348,7 +424,7 @@ class DeviceFileChangeExecutor(
             durableTerminal?.invoke(
                 AttentionTerminalWrite(
                     frame = succeededFrame(operation, result),
-                    origin = AttentionTerminalOrigin.USER,
+                    origin = terminalOrigin,
                     nowMillis = approvedAtMillis,
                 ),
             )
@@ -916,6 +992,10 @@ class DeviceFileChangeExecutor(
         grantId: String,
         requireWrite: Boolean,
     ) {
+        sharedStorage?.takeIf { it.isSharedGrant(grantId) }?.let {
+            it.requireReadyGrant(grantId)
+            return
+        }
         val selected = dao.draftForTask(taskId)?.selectedGrantId
         if (selected != grantId) throw SecurityException("Task grant changed")
         val current = folders.folders().singleOrNull { it.grantId == grantId }
@@ -926,8 +1006,22 @@ class DeviceFileChangeExecutor(
     }
 
     private fun requireTaskGrantSync(taskId: String, grantId: String) {
-        require(dao.draftForTaskSync(taskId)?.selectedGrantId == grantId) {
-            "Task grant changed"
+        sharedStorage?.takeIf { it.isSharedGrant(grantId) }?.let {
+            try {
+                it.requireReadyGrant(grantId)
+            } catch (_: SecurityException) {
+                throw FileChangeExecutionFailure(
+                    "AUTHORIZED_FOLDER_UNAVAILABLE",
+                    "Mobile folder authorization is unavailable",
+                )
+            }
+            return
+        }
+        if (dao.draftForTaskSync(taskId)?.selectedGrantId != grantId) {
+            throw FileChangeExecutionFailure(
+                "TASK_FILE_GRANT_REQUIRED",
+                "This task has no matching mobile folder grant",
+            )
         }
     }
 

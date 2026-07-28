@@ -1,4 +1,4 @@
-export const CORE_MAX_SNAPSHOT_BYTES = 768 * 1024;
+export const P1A_MAX_SNAPSHOT_BYTES = 768 * 1024;
 
 export type TaskRunState =
   | "idle"
@@ -26,7 +26,7 @@ export interface SnapshotDeviceCall {
 }
 
 /**
- * Core product snapshot. Messages remain raw Pi message JSON; this type does
+ * P1A product snapshot. Messages remain raw Pi message JSON; this type does
  * not copy or redefine Pi's event union.
  */
 export interface TaskSnapshot<TMessage = unknown, TQueueEntry = unknown, TAttention = unknown> {
@@ -52,17 +52,17 @@ export class SnapshotPayloadTooLargeError extends Error {
 
   constructor(
     readonly actualBytes: number,
-    readonly maxBytes = CORE_MAX_SNAPSHOT_BYTES,
+    readonly maxBytes = P1A_MAX_SNAPSHOT_BYTES,
   ) {
-    super(`Task snapshot is ${actualBytes} bytes; Core limit is ${maxBytes} bytes`);
+    super(`Task snapshot is ${actualBytes} bytes; P1A limit is ${maxBytes} bytes`);
     this.name = "SnapshotPayloadTooLargeError";
   }
 }
 
-export function serializeCoreTaskSnapshot(snapshot: TaskSnapshot): string {
+export function serializeP1ATaskSnapshot(snapshot: TaskSnapshot): string {
   const serialized = JSON.stringify(snapshot);
   const actualBytes = Buffer.byteLength(serialized, "utf8");
-  if (actualBytes > CORE_MAX_SNAPSHOT_BYTES) {
+  if (actualBytes > P1A_MAX_SNAPSHOT_BYTES) {
     throw new SnapshotPayloadTooLargeError(actualBytes);
   }
   return serialized;

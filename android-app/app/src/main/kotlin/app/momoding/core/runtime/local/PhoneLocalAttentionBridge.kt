@@ -5,6 +5,7 @@ import app.momoding.wire.DeviceToolRequestFrame
 import app.momoding.wire.DeviceToolResultClientFrame
 import app.momoding.wire.DeviceToolTerminalKind
 import app.momoding.core.data.AttentionAcceptanceScope
+import app.momoding.core.data.AttentionLedgerRecord
 import app.momoding.core.data.AttentionRequestRecord
 import app.momoding.core.data.AttentionTerminalOrigin
 import app.momoding.core.data.AttentionTerminalWrite
@@ -13,6 +14,7 @@ import app.momoding.core.files.ContentReadExecutionFailure
 import app.momoding.core.files.DeviceContentReadHandler
 import app.momoding.core.files.DeviceFileChangeExecutor
 import app.momoding.core.files.DeviceMetadataToolHandler
+import app.momoding.core.files.FileChangeApprovalRisk
 import app.momoding.core.files.FileChangeExecutionFailure
 import app.momoding.core.media.DeviceMediaListHandler
 import app.momoding.core.media.DeviceMediaListExecutor
@@ -26,6 +28,7 @@ import app.momoding.core.policy.PolicyDecisionKind
 import app.momoding.core.policy.TaskApprovalMode
 import app.momoding.core.transport.AttentionUserDecision
 import java.time.Instant
+import java.nio.charset.StandardCharsets
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -55,6 +58,9 @@ class PhoneLocalAttentionBridge(
     private val projectTools: PhoneLocalProjectToolHandler? = null,
     private val attachmentTools: PhoneLocalAttachmentToolHandler? = null,
     private val mediaTools: DeviceMediaListHandler? = null,
+    private val screenCaptureTools: PhoneLocalScreenCaptureToolHandler? = null,
+    private val uiTools: PhoneLocalUiToolHandler? = null,
+    private val packageTools: PhoneLocalPackageToolHandler? = null,
     private val approvalModeForTask: suspend (String) -> TaskApprovalMode = {
         TaskApprovalMode.REQUEST_APPROVAL
     },
@@ -109,15 +115,9 @@ class PhoneLocalAttentionBridge(
             CAPABILITIES_TOOL,
             FILES_LIST_TOOL,
             FILES_PREPARE_TOOL,
-            -> withContext(ioDispatcher) {
-                PiNativeAndroidToolResult(immediateToolResult(taskId, request))
-            }
-            FILES_READ_TOOL,
-            FILES_COMMIT_TOOL,
-            -> {
-                accept(taskId, request)
-                null
-            }
+            -> withContext(ioDispatcher) { immediateToolResult(taskId, request) }
+            FILES_READ_TOOL -> handleFileContentRequest(taskId, request)
+            FILES_COMMIT_TOOL -> handleFileCommitRequest(taskId, request)
             else -> throw IllegalArgumentException("PI_MOBILE_NATIVE_TOOL_NOT_ALLOWED")
         }
         PROJECT_NATIVE_KIND -> withContext(ioDispatcher) {
@@ -135,7 +135,257 @@ class PhoneLocalAttentionBridge(
             PiNativeAndroidToolResult(handler.execute(taskId, request))
         }
         MEDIA_NATIVE_KIND -> handleMediaRequest(taskId, request)
+        SCREEN_NATIVE_KIND -> withContext(ioDispatcher) {
+            val handler = requireNotNull(screenCaptureTools) {
+                "PI_MOBILE_SCREEN_CAPTURE_TOOL_EXECUTOR_MISSING"
+            }
+            require(handler.handles(request.toolName)) { "PI_MOBILE_NATIVE_TOOL_NOT_ALLOWED" }
+            handler.execute(taskId, request)
+        }
+        UI_NATIVE_KIND -> handleUiRequest(taskId, request)
+        PACKAGE_NATIVE_KIND -> withContext(ioDispatcher) {
+            val handler = requireNotNull(packageTools) {
+                "PI_MOBILE_PACKAGE_TOOL_EXECUTOR_MISSING"
+            }
+            require(handler.handles(request.toolName)) { "PI_MOBILE_NATIVE_TOOL_NOT_ALLOWED" }
+            handler.execute(taskId, request)
+        }
         else -> throw IllegalArgumentException("PI_MOBILE_NATIVE_TOOL_KIND_UNSUPPORTED")
+    }
+
+    private suspend fun handleFileContentRequest(
+        taskId: String,
+        request: PiNativeToolRequest,
+    ): PiNativeAndroidToolResult? {
+        val mode = withContext(ioDispatcher) { approvalModeForTask(taskId) }
+        val decision = DeviceActionPolicy.decide(
+            mode = mode,
+            request = DeviceActionRequest(
+                action = CapabilityAction.READ_USER_FILE_CONTENT,
+                target = CapabilityTarget(
+                    kind = CapabilityTargetKind.SHARED_FILE,
+                    syntheticId = request.arguments["grantId"]?.jsonPrimitive?.content
+                        ?: "invalid-file-grant",
+                    allowedByAndroid = true,
+                ),
+                capabilityReady = true,
+            ),
+        )
+        return when (decision.kind) {
+            PolicyDecisionKind.PROMPT_USER -> {
+                accept(taskId, request)
+                null
+            }
+            PolicyDecisionKind.AUTO_ALLOW -> withContext(ioDispatcher) {
+                val callId = accept(taskId, request, awaitUser = false)
+                val binding = requireNotNull(bindingsByCallId[callId])
+                val operation = requireNotNull(ledger.record(callId)).operation
+                submitContentReadDecision(
+                    operation = operation,
+                    binding = binding,
+                    decision = AttentionUserDecision.AllowContentRead(callId),
+                    approvalOrigin = AttentionTerminalOrigin.AUTO_POLICY,
+                )
+                null
+            }
+            PolicyDecisionKind.DENY -> filePolicyDenied()
+        }
+    }
+
+    private suspend fun handleFileCommitRequest(
+        taskId: String,
+        request: PiNativeToolRequest,
+    ): PiNativeAndroidToolResult? {
+        val handler = requireNotNull(fileChangeHandler) {
+            "PI_MOBILE_FILE_CHANGE_EXECUTOR_MISSING"
+        }
+        val risk = withContext(ioDispatcher) {
+            handler.approvalRisk(taskId, request.arguments)
+        }
+        val action = if (risk == FileChangeApprovalRisk.HIGH) {
+            CapabilityAction.DELETE_FILE
+        } else {
+            CapabilityAction.CREATE_FILE
+        }
+        val decision = DeviceActionPolicy.decide(
+            mode = withContext(ioDispatcher) { approvalModeForTask(taskId) },
+            request = DeviceActionRequest(
+                action = action,
+                target = CapabilityTarget(
+                    kind = CapabilityTargetKind.SHARED_FILE,
+                    syntheticId = request.arguments["preparedId"]?.jsonPrimitive?.content
+                        ?: "invalid-file-plan",
+                    allowedByAndroid = true,
+                ),
+                capabilityReady = true,
+            ),
+        )
+        return when (decision.kind) {
+            PolicyDecisionKind.PROMPT_USER -> {
+                accept(taskId, request)
+                null
+            }
+            PolicyDecisionKind.AUTO_ALLOW -> withContext(ioDispatcher) {
+                val callId = accept(taskId, request, awaitUser = false)
+                val binding = requireNotNull(bindingsByCallId[callId])
+                val operation = requireNotNull(ledger.record(callId)).operation
+                if (operation.terminalSha256 == null) {
+                    submitFileChangeDecision(
+                        operation = operation,
+                        binding = binding,
+                        decision = AttentionUserDecision.ApproveFileChanges(callId),
+                        approvalOrigin = AttentionTerminalOrigin.AUTO_POLICY,
+                    )
+                }
+                null
+            }
+            PolicyDecisionKind.DENY -> filePolicyDenied()
+        }
+    }
+
+    private fun filePolicyDenied() = PiNativeAndroidToolResult(
+        contentPayload = buildJsonObject {
+            put("code", "DEVICE_ACTION_DENIED")
+            put("message", "Android file access is outside the active task policy")
+        },
+        isError = true,
+    )
+
+    private suspend fun handleUiRequest(
+        taskId: String,
+        request: PiNativeToolRequest,
+    ): PiNativeAndroidToolResult? {
+        val handler = requireNotNull(uiTools) { "PI_MOBILE_UI_TOOL_EXECUTOR_MISSING" }
+        require(handler.handles(request.toolName)) { "PI_MOBILE_NATIVE_TOOL_NOT_ALLOWED" }
+        if (request.toolName == PhoneLocalUiToolExecutor.INSPECT_TOOL) {
+            return withContext(ioDispatcher) { handler.inspect(taskId, request) }
+        }
+        require(request.toolName == UI_ACTION_TOOL) { "PI_MOBILE_NATIVE_TOOL_NOT_ALLOWED" }
+        ledger.record(stableUiCallId(taskId, request))?.let { existing ->
+            return replayExistingUiAction(existing, request)
+        }
+        val taskMode = withContext(ioDispatcher) { approvalModeForTask(taskId) }
+        return when (
+            val disposition = handler.decideAction(
+                taskId,
+                request,
+                taskMode,
+            )
+        ) {
+            is PhoneLocalUiActionDisposition.Deny -> disposition.result
+            is PhoneLocalUiActionDisposition.Prompt -> {
+                val attentionArguments = buildJsonObject {
+                    request.arguments.forEach { (key, value) -> put(key, value) }
+                    put("approvalSummary", disposition.summary)
+                    put("approvalDetails", disposition.details)
+                }
+                accept(
+                    taskId,
+                    request,
+                    durableArguments = attentionArguments,
+                    uiActionAuthorization = PhoneLocalUiActionAuthorization(
+                        taskMode = taskMode,
+                        approvedAction = disposition.action,
+                        userApproved = false,
+                    ),
+                )
+                null
+            }
+            is PhoneLocalUiActionDisposition.AutoAllow ->
+                executeAutomaticUiAction(
+                    taskId = taskId,
+                    request = request,
+                    handler = handler,
+                    authorization = PhoneLocalUiActionAuthorization(
+                        taskMode = taskMode,
+                        approvedAction = disposition.action,
+                        userApproved = false,
+                    ),
+                )
+        }
+    }
+
+    private fun replayExistingUiAction(
+        existing: AttentionLedgerRecord,
+        request: PiNativeToolRequest,
+    ): PiNativeAndroidToolResult {
+        val durableArguments = STRICT_JSON.parseToJsonElement(
+            existing.operation.argumentsCanonicalJson,
+        ).jsonObject
+        val originalArguments = JsonObject(
+            durableArguments.filterKeys { it in UI_ACTION_ARGUMENT_KEYS },
+        )
+        if (originalArguments != request.arguments) {
+            return uiActionFailure(
+                "UI_ACTION_DUPLICATE_CONFLICT",
+                "This Pi interface-action call was already bound to different arguments.",
+            )
+        }
+        val expectation = ledger.piDeliveryExpectationForValidatedPair(existing.operation)
+            ?: return uiActionFailure(
+                "UI_ACTION_DUPLICATE_IN_PROGRESS",
+                "This Pi interface-action call is already pending and will not be repeated.",
+            )
+        val approvalOrigin = if (
+            "approvalSummary" in durableArguments ||
+            "approvalDetails" in durableArguments
+        ) {
+            "user"
+        } else {
+            "auto_policy"
+        }
+        return PiNativeAndroidToolResult(
+            contentPayload = expectation.contentPayload.asResultObject(),
+            details = deliveryProofDetails(
+                existing.operation,
+                expectation,
+                uiApprovalOrigin = approvalOrigin,
+            ),
+            isError = expectation.isError,
+        )
+    }
+
+    private suspend fun executeAutomaticUiAction(
+        taskId: String,
+        request: PiNativeToolRequest,
+        handler: PhoneLocalUiToolHandler,
+        authorization: PhoneLocalUiActionAuthorization,
+    ): PiNativeAndroidToolResult = withContext(ioDispatcher) {
+        val callId = accept(
+            taskId,
+            request,
+            awaitUser = false,
+            uiActionAuthorization = authorization,
+        )
+        val binding = requireNotNull(bindingsByCallId[callId])
+        val operation = requireNotNull(ledger.record(callId)).operation
+        val result = runCatching {
+            handler.executeAction(taskId, request, authorization)
+        }.getOrElse {
+            uiActionFailure(
+                "UI_ACTION_REJECTED",
+                "Android could not execute the interface action.",
+            )
+        }
+        ledger.recordTerminal(
+            AttentionTerminalWrite(
+                frame = uiActionTerminal(operation, result),
+                origin = AttentionTerminalOrigin.AUTO_POLICY,
+                nowMillis = nowMillis(),
+            ),
+        )
+        val terminalOperation = requireNotNull(ledger.record(callId)).operation
+        val expectation = requireNotNull(
+            ledger.piDeliveryExpectationForValidatedPair(terminalOperation),
+        )
+        removeBinding(binding)
+        result.copy(
+            details = deliveryProofDetails(
+                terminalOperation,
+                expectation,
+                uiApprovalOrigin = "auto_policy",
+            ),
+        )
     }
 
     private suspend fun handleMediaRequest(
@@ -174,22 +424,35 @@ class PhoneLocalAttentionBridge(
         }
     }
 
-    internal fun accept(taskId: String, request: PiNativeToolRequest): String {
+    internal fun accept(
+        taskId: String,
+        request: PiNativeToolRequest,
+        awaitUser: Boolean = true,
+        durableArguments: JsonObject = request.arguments,
+        uiActionAuthorization: PhoneLocalUiActionAuthorization? = null,
+    ): String {
         require(
             (request.kind == ATTENTION_NATIVE_KIND && request.toolName in ATTENTION_TOOLS) ||
                 (request.kind == FILE_NATIVE_KIND && request.toolName in CONSENT_TOOLS) ||
-                (request.kind == MEDIA_NATIVE_KIND && request.toolName == MEDIA_LIST_TOOL),
+                (request.kind == MEDIA_NATIVE_KIND && request.toolName == MEDIA_LIST_TOOL) ||
+                (request.kind == UI_NATIVE_KIND && request.toolName == UI_ACTION_TOOL),
         ) { "PI_MOBILE_NATIVE_TOOL_NOT_ALLOWED" }
         require(callIdsByNativeRequest[request.id] == null) {
             "PI_MOBILE_NATIVE_TOOL_REQUEST_DUPLICATED"
         }
-        val callId = idFactory()
+        val callId = if (request.kind == UI_NATIVE_KIND && request.toolName == UI_ACTION_TOOL) {
+            stableUiCallId(taskId, request)
+        } else {
+            idFactory()
+        }
         val binding = PendingBinding(
             callId = callId,
             taskId = taskId,
             nativeRequestId = request.id,
             piToolCallId = request.toolCallId,
             toolName = request.toolName,
+            request = request,
+            uiActionAuthorization = uiActionAuthorization,
         )
         check(bindingsByCallId.putIfAbsent(callId, binding) == null) {
             "PI_MOBILE_ATTENTION_CALL_DUPLICATED"
@@ -206,9 +469,14 @@ class PhoneLocalAttentionBridge(
                     piToolCallId = request.toolCallId,
                     deviceId = DEVICE_ID,
                     toolName = request.toolName,
-                    arguments = request.arguments,
-                    sideEffect = request.toolName == FILES_COMMIT_TOOL,
-                    operationId = if (request.toolName == FILES_COMMIT_TOOL) {
+                    arguments = durableArguments,
+                    sideEffect = request.toolName in SIDE_EFFECT_TOOLS,
+                    operationId = if (
+                        request.kind == UI_NATIVE_KIND &&
+                        request.toolName == UI_ACTION_TOOL
+                    ) {
+                        stableUiOperationId(taskId, request)
+                    } else if (request.toolName in SIDE_EFFECT_TOOLS) {
                         operationIdFactory()
                     } else {
                         null
@@ -234,24 +502,29 @@ class PhoneLocalAttentionBridge(
             removeBinding(binding)
             throw IllegalArgumentException("PI_MOBILE_ATTENTION_ARGUMENTS_INVALID")
         }
+        var preApprovalFailure = false
         if (request.toolName == FILES_COMMIT_TOOL) {
             try {
                 requireNotNull(fileChangeHandler) {
                     "PI_MOBILE_FILE_CHANGE_EXECUTOR_MISSING"
                 }.bindCommit(accepted.operation)
             } catch (failure: FileChangeExecutionFailure) {
+                preApprovalFailure = true
                 ledger.recordTerminal(
                     AttentionTerminalWrite(
                         frame = failedFrame(accepted.operation, failure.code, failure.message),
-                        origin = AttentionTerminalOrigin.USER,
+                        origin = AttentionTerminalOrigin.FAILED_CLOSED,
                         nowMillis = nowMillis(),
                     ),
                 )
             }
         }
-        ledger.markAwaitingUser(callId)
+        if (awaitUser && !preApprovalFailure) ledger.markAwaitingUser(callId)
         if (ledger.record(callId)?.operation?.terminalSha256 != null) {
-            readyForPi += ReadyDelivery(callId)
+            readyForPi += ReadyDelivery(
+                callId = callId,
+                approvalOrigin = if (preApprovalFailure) "none" else "user",
+            )
         }
         return callId
     }
@@ -288,9 +561,47 @@ class PhoneLocalAttentionBridge(
                 FILES_READ_TOOL -> submitContentReadDecision(durable.operation, binding, decision)
                 FILES_COMMIT_TOOL -> submitFileChangeDecision(durable.operation, binding, decision)
                 MEDIA_LIST_TOOL -> submitMediaListDecision(durable.operation, binding, decision)
+                UI_ACTION_TOOL -> submitUiActionDecision(durable.operation, binding, decision)
                 else -> error("Phone-local decision is bound to an unsupported tool")
             }
         }
+    }
+
+    private suspend fun submitUiActionDecision(
+        operation: app.momoding.core.data.DeviceOperationEntity,
+        binding: PendingBinding,
+        decision: AttentionUserDecision,
+    ) {
+        require(decision is AttentionUserDecision.Confirm || decision is AttentionUserDecision.Decline) {
+            "Interface-action decision type is invalid"
+        }
+        val terminal = if (decision is AttentionUserDecision.Confirm) {
+            val authorization = requireNotNull(binding.uiActionAuthorization) {
+                "PI_MOBILE_UI_ACTION_AUTHORIZATION_MISSING"
+            }
+            val result = requireNotNull(uiTools) { "PI_MOBILE_UI_TOOL_EXECUTOR_MISSING" }
+                .executeAction(
+                    binding.taskId,
+                    binding.request,
+                    authorization.copy(userApproved = true),
+                )
+            uiActionTerminal(operation, result)
+        } else {
+            failedFrame(
+                operation,
+                USER_DECLINED_UI_ACTION.code,
+                USER_DECLINED_UI_ACTION.message,
+                rejected = true,
+            )
+        }
+        ledger.recordTerminal(
+            AttentionTerminalWrite(
+                frame = terminal,
+                origin = AttentionTerminalOrigin.USER,
+                nowMillis = nowMillis(),
+            ),
+        )
+        readyForPi += ReadyDelivery(binding.callId)
     }
 
     /** Called only by the QuickJS owner thread. */
@@ -310,7 +621,11 @@ class PhoneLocalAttentionBridge(
             }
             val result = delivery.liveResult ?: expectation!!.contentPayload.asResultObject()
             val details = expectation?.let {
-                deliveryProofDetails(record.operation, it)
+                deliveryProofDetails(
+                    operation = record.operation,
+                    expectation = it,
+                    uiApprovalOrigin = delivery.approvalOrigin,
+                )
             } ?: result
             try {
                 engine.resolveNativeProviderToolRequest(
@@ -344,6 +659,8 @@ class PhoneLocalAttentionBridge(
 
     internal suspend fun cancelTask(taskId: String, reason: String) = withContext(ioDispatcher) {
         projectTools?.stopTask(taskId)
+        screenCaptureTools?.stopTask(taskId, reason)
+        uiTools?.stopTask(taskId, reason)
         decisionMutex.withLock {
             bindingsByCallId.values.filter { it.taskId == taskId }.forEach { binding ->
                 val record = ledger.record(binding.callId)
@@ -388,7 +705,7 @@ class PhoneLocalAttentionBridge(
     private suspend fun immediateToolResult(
         taskId: String,
         request: PiNativeToolRequest,
-    ): JsonObject {
+    ): PiNativeAndroidToolResult {
         val frame = requestFrame(
             taskId = taskId,
             request = request,
@@ -401,12 +718,16 @@ class PhoneLocalAttentionBridge(
                 fileChangeHandler.prepare(frame)
             else -> throw IllegalStateException("PI_MOBILE_FILE_TOOL_EXECUTOR_MISSING")
         }
-        return terminal.result?.asResultObject() ?: requireNotNull(terminal.error).let { error ->
+        val content = terminal.result?.asResultObject() ?: requireNotNull(terminal.error).let { error ->
             buildJsonObject {
                 put("code", error.code)
                 put("message", error.message)
             }
         }
+        return PiNativeAndroidToolResult(
+            contentPayload = content,
+            isError = terminal.terminal != DeviceToolTerminalKind.SUCCEEDED,
+        )
     }
 
     private suspend fun immediateMediaToolResult(
@@ -475,6 +796,7 @@ class PhoneLocalAttentionBridge(
         operation: app.momoding.core.data.DeviceOperationEntity,
         binding: PendingBinding,
         decision: AttentionUserDecision,
+        approvalOrigin: AttentionTerminalOrigin = AttentionTerminalOrigin.USER,
     ) {
         require(
             decision is AttentionUserDecision.AllowContentRead ||
@@ -489,6 +811,7 @@ class PhoneLocalAttentionBridge(
                     callId = binding.callId,
                     liveResult = result,
                     discardLiveContentAfterAttempt = true,
+                    approvalOrigin = approvalOrigin.wireValue(),
                 )
                 return
             } catch (failure: ContentReadExecutionFailure) {
@@ -503,7 +826,7 @@ class PhoneLocalAttentionBridge(
                         origin = if (failure.code == "CONTENT_READ_CANCELLED") {
                             AttentionTerminalOrigin.HOST_CANCEL
                         } else {
-                            AttentionTerminalOrigin.USER
+                            approvalOrigin
                         },
                         nowMillis = nowMillis(),
                         cancelReason = if (failure.code == "CONTENT_READ_CANCELLED") {
@@ -523,18 +846,22 @@ class PhoneLocalAttentionBridge(
                         CONTENT_READ_DECLINED.message,
                         rejected = true,
                     ),
-                    origin = AttentionTerminalOrigin.USER,
+                    origin = approvalOrigin,
                     nowMillis = nowMillis(),
                 ),
             )
         }
-        readyForPi += ReadyDelivery(binding.callId)
+        readyForPi += ReadyDelivery(
+            callId = binding.callId,
+            approvalOrigin = approvalOrigin.wireValue(),
+        )
     }
 
     private suspend fun submitFileChangeDecision(
         operation: app.momoding.core.data.DeviceOperationEntity,
         binding: PendingBinding,
         decision: AttentionUserDecision,
+        approvalOrigin: AttentionTerminalOrigin = AttentionTerminalOrigin.USER,
     ) {
         require(
             decision is AttentionUserDecision.ApproveFileChanges ||
@@ -553,13 +880,17 @@ class PhoneLocalAttentionBridge(
                         USER_DECLINED_FILE_CHANGES.message,
                         rejected = true,
                     ),
-                    origin = AttentionTerminalOrigin.USER,
+                    origin = approvalOrigin,
                     nowMillis = nowMillis(),
                 ),
             )
         } else {
             try {
-                val result = handler.approveAndCommit(operation, ledger::recordTerminal)
+                val result = if (approvalOrigin == AttentionTerminalOrigin.AUTO_POLICY) {
+                    handler.autoApproveAndCommit(operation, ledger::recordTerminal)
+                } else {
+                    handler.approveAndCommit(operation, ledger::recordTerminal)
+                }
                 if (ledger.record(operation.callId)?.operation?.terminalSha256 == null) {
                     ledger.recordTerminal(
                         AttentionTerminalWrite(
@@ -570,7 +901,7 @@ class PhoneLocalAttentionBridge(
                                 terminal = DeviceToolTerminalKind.SUCCEEDED,
                                 result = result,
                             ),
-                            origin = AttentionTerminalOrigin.USER,
+                            origin = approvalOrigin,
                             nowMillis = nowMillis(),
                         ),
                     )
@@ -588,7 +919,7 @@ class PhoneLocalAttentionBridge(
                             origin = if (failure.code == "FILE_COMMIT_CANCELLED") {
                                 AttentionTerminalOrigin.HOST_CANCEL
                             } else {
-                                AttentionTerminalOrigin.USER
+                                approvalOrigin
                             },
                             nowMillis = nowMillis(),
                             cancelReason = if (failure.code == "FILE_COMMIT_CANCELLED") {
@@ -601,7 +932,10 @@ class PhoneLocalAttentionBridge(
                 }
             }
         }
-        readyForPi += ReadyDelivery(binding.callId)
+        readyForPi += ReadyDelivery(
+            callId = binding.callId,
+            approvalOrigin = approvalOrigin.wireValue(),
+        )
     }
 
     private fun requestFrame(
@@ -642,12 +976,48 @@ class PhoneLocalAttentionBridge(
         error = DeviceClientWireError(code, message),
     )
 
+    private fun uiActionTerminal(
+        operation: app.momoding.core.data.DeviceOperationEntity,
+        result: PiNativeAndroidToolResult,
+    ): DeviceToolResultClientFrame = if (result.isError) {
+        DeviceToolResultClientFrame(
+            callId = operation.callId,
+            taskId = operation.taskId,
+            deviceId = operation.deviceId,
+            terminal = DeviceToolTerminalKind.FAILED,
+            error = DeviceClientWireError(
+                result.contentPayload["errorCode"]?.jsonPrimitive?.content
+                    ?: "UI_ACTION_REJECTED",
+                result.contentPayload["errorMessage"]?.jsonPrimitive?.content
+                    ?: "Android rejected the interface action.",
+            ),
+        )
+    } else {
+        DeviceToolResultClientFrame(
+            callId = operation.callId,
+            taskId = operation.taskId,
+            deviceId = operation.deviceId,
+            terminal = DeviceToolTerminalKind.SUCCEEDED,
+            result = result.contentPayload,
+        )
+    }
+
+    private fun uiActionFailure(code: String, message: String): PiNativeAndroidToolResult {
+        val payload = buildJsonObject {
+            put("ok", false)
+            put("errorCode", code)
+            put("errorMessage", message)
+        }
+        return PiNativeAndroidToolResult(payload, isError = true)
+    }
+
     private fun kotlinx.serialization.json.JsonElement.asResultObject(): JsonObject =
         this as? JsonObject ?: buildJsonObject { put("result", this@asResultObject) }
 
     private fun deliveryProofDetails(
         operation: app.momoding.core.data.DeviceOperationEntity,
         expectation: app.momoding.core.data.AttentionPiDeliveryExpectation,
+        uiApprovalOrigin: String = "user",
     ): JsonObject = buildJsonObject {
         put("callId", operation.callId)
         put("toolName", operation.toolName)
@@ -655,14 +1025,44 @@ class PhoneLocalAttentionBridge(
         put("sideEffect", operation.sideEffect)
         when (operation.toolName) {
             FILES_READ_TOOL -> {
-                put("contentScope", "android_saf_user_approved")
-                put("dataScope", "android_saf_task_grant")
+                val arguments = STRICT_JSON.parseToJsonElement(
+                    operation.argumentsCanonicalJson,
+                ).jsonObject
+                val shared = arguments["grantId"]?.jsonPrimitive?.content?.let {
+                    fileChangeHandler?.isSharedGrant(it)
+                } == true
+                put(
+                    "contentScope",
+                    if (shared) "android_shared_storage_policy" else "android_saf_user_approved",
+                )
+                put(
+                    "dataScope",
+                    if (shared) "android_shared_storage_grant" else "android_saf_task_grant",
+                )
+                put("approvalOrigin", uiApprovalOrigin)
             }
             FILES_COMMIT_TOOL -> {
-                put("dataScope", "android_saf_task_grant")
+                put(
+                    "dataScope",
+                    if (fileChangeHandler?.isSharedCommit(operation) == true) {
+                        "android_shared_storage_grant"
+                    } else {
+                        "android_saf_task_grant"
+                    },
+                )
                 put("operationId", requireNotNull(operation.operationId))
+                put("approvalOrigin", uiApprovalOrigin)
+            }
+            UI_ACTION_TOOL -> {
+                put("operationId", requireNotNull(operation.operationId))
+                put("approvalOrigin", uiApprovalOrigin)
             }
         }
+    }
+
+    private fun AttentionTerminalOrigin.wireValue(): String = when (this) {
+        AttentionTerminalOrigin.AUTO_POLICY -> "auto_policy"
+        else -> "user"
     }
 
     private fun terminalForDecision(
@@ -727,7 +1127,7 @@ class PhoneLocalAttentionBridge(
             is AttentionUserDecision.DenyContentRead,
             is AttentionUserDecision.ApproveFileChanges,
             is AttentionUserDecision.RejectFileChanges,
-            -> error("Phone-local Attention only accepts question and confirmation decisions")
+            -> error("Phone-local Attention E2 only accepts question and confirmation decisions")
         }
         return DeviceToolResultClientFrame(
             callId = binding.callId,
@@ -744,18 +1144,31 @@ class PhoneLocalAttentionBridge(
         callIdsByNativeRequest.remove(binding.nativeRequestId, binding.callId)
     }
 
+    private fun stableUiCallId(taskId: String, request: PiNativeToolRequest): String =
+        stableUuid("momoding:ui-call:$taskId:${request.toolCallId}:${request.toolName}")
+
+    private fun stableUiOperationId(taskId: String, request: PiNativeToolRequest): String =
+        stableUuid("momoding:ui-operation:$taskId:${request.toolCallId}:${request.toolName}")
+
+    private fun stableUuid(value: String): String = UUID.nameUUIDFromBytes(
+        value.toByteArray(StandardCharsets.UTF_8),
+    ).toString()
+
     private data class PendingBinding(
         val callId: String,
         val taskId: String,
         val nativeRequestId: String,
         val piToolCallId: String,
         val toolName: String,
+        val request: PiNativeToolRequest,
+        val uiActionAuthorization: PhoneLocalUiActionAuthorization? = null,
     )
 
     private data class ReadyDelivery(
         val callId: String,
         val liveResult: JsonObject? = null,
         val discardLiveContentAfterAttempt: Boolean = false,
+        val approvalOrigin: String = "user",
     )
 
     private companion object {
@@ -771,13 +1184,25 @@ class PhoneLocalAttentionBridge(
         const val PROJECT_NATIVE_KIND = "android_project_tool"
         const val ATTACHMENT_NATIVE_KIND = "android_attachment_tool"
         const val MEDIA_NATIVE_KIND = "android_media_tool"
+        const val SCREEN_NATIVE_KIND = "android_screen_tool"
+        const val UI_NATIVE_KIND = "android_ui_tool"
+        const val PACKAGE_NATIVE_KIND = "android_package_tool"
         const val MEDIA_LIST_TOOL = DeviceMediaListExecutor.TOOL_NAME
+        const val UI_ACTION_TOOL = PhoneLocalUiToolExecutor.ACTION_TOOL
         const val DEVICE_ID = "phone-local-android"
         const val CAPABILITY_VERSION = 1L
         const val ATTENTION_TTL_MILLIS = 30 * 60_000L
         const val TOOL_TTL_MILLIS = 30 * 60_000L
         val ATTENTION_TOOLS = setOf(QUESTION_TOOL, CONFIRMATION_TOOL)
         val CONSENT_TOOLS = setOf(FILES_READ_TOOL, FILES_COMMIT_TOOL)
+        val SIDE_EFFECT_TOOLS = setOf(FILES_COMMIT_TOOL, UI_ACTION_TOOL)
+        val UI_ACTION_ARGUMENT_KEYS = setOf(
+            "snapshotId",
+            "nodeHandle",
+            "action",
+            "text",
+            "direction",
+        )
         val ATTENTION_CANCELLED = DeviceClientWireError(
             "ATTENTION_CANCELLED",
             "Attention request was cancelled",
@@ -785,6 +1210,10 @@ class PhoneLocalAttentionBridge(
         val USER_DECLINED = DeviceClientWireError(
             "USER_DECLINED",
             "User declined the confirmation",
+        )
+        val USER_DECLINED_UI_ACTION = DeviceClientWireError(
+            "USER_DECLINED",
+            "User declined interface action",
         )
         val CONTENT_READ_DECLINED = DeviceClientWireError(
             "CONTENT_READ_DECLINED",
@@ -811,8 +1240,9 @@ class PhoneLocalAttentionBridge(
     }
 }
 
-internal data class PiNativeAndroidToolResult(
+data class PiNativeAndroidToolResult(
     val contentPayload: JsonObject,
     val details: JsonObject = contentPayload,
+    val content: JsonArray? = null,
     val isError: Boolean = false,
 )

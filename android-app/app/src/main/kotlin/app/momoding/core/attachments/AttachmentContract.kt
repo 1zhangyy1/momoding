@@ -129,12 +129,12 @@ interface TaskAttachmentGateway {
 }
 
 object AttachmentFeatureGate {
-    /** Staged images are delivered to the same Pi task session. */
+    /** Staged images must reach the same Pi task session. */
     const val PHOTO_PRODUCT_INPUT_ENABLED: Boolean = true
 
     /** Task-scoped text reading is bounded and enforced by Android. */
     const val TEXT_FILE_PRODUCT_INPUT_ENABLED: Boolean = true
 
-    /** Camera capture: a system camera intent writes to one app-private temporary URI. */
+    /** A system camera intent writes to one app-private temporary URI. */
     const val CAMERA_PRODUCT_INPUT_ENABLED: Boolean = true
 }

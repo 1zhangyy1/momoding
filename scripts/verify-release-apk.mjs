@@ -38,11 +38,14 @@ const actualPermissions = [
 ].map((match) => match[1]).sort();
 const expectedPermissions = [
   "android.permission.ACCESS_NETWORK_STATE",
+  "android.permission.FOREGROUND_SERVICE",
+  "android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION",
   "android.permission.INTERNET",
+  "android.permission.MANAGE_EXTERNAL_STORAGE",
   "android.permission.READ_EXTERNAL_STORAGE",
   "android.permission.READ_MEDIA_IMAGES",
   "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
-  "app.momoding.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
+  "moe.shizuku.manager.permission.API_V23",
 ].sort();
 if (JSON.stringify(actualPermissions) !== JSON.stringify(expectedPermissions)) {
   fail(
@@ -57,6 +60,14 @@ const exported = components.filter((component) => component.exported);
 const expectedExported = new Map([
   ["activity:app.momoding.app.MainActivity", null],
   ["activity:app.momoding.feature.share.ShareReceiverActivity", null],
+  [
+    "service:app.momoding.core.accessibility.MomodingAccessibilityService",
+    "android.permission.BIND_ACCESSIBILITY_SERVICE",
+  ],
+  [
+    "provider:rikka.shizuku.ShizukuProvider",
+    "android.permission.INTERACT_ACROSS_USERS_FULL",
+  ],
   ["receiver:androidx.profileinstaller.ProfileInstallReceiver", "android.permission.DUMP"],
 ]);
 if (exported.length !== expectedExported.size) {
@@ -69,10 +80,6 @@ for (const component of exported) {
     fail(`exported component permission changed: ${key}`);
   }
 }
-for (const component of components.filter(({ type }) => type === "provider" || type === "service")) {
-  if (component.exported) fail(`provider or service must not be exported: ${component.name}`);
-}
-
 const entries = run("jar", ["tf", apk]).trim().split("\n");
 for (const required of [
   "assets/pi-runtime/manifest.json",
@@ -88,7 +95,7 @@ if (forbiddenEntry) fail(`forbidden release APK entry found: ${forbiddenEntry}`)
 
 console.log(
   `Verified release APK: ${actualPermissions.length} permissions, ` +
-    `${exported.length} reviewed exported components, no command-runtime artifacts.`,
+    `${exported.length} reviewed exported components, no debug Linux-runtime artifacts.`,
 );
 
 function parseComponents(tree) {

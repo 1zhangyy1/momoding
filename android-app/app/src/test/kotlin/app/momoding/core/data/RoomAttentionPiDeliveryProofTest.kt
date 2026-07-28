@@ -47,9 +47,9 @@ class RoomAttentionPiDeliveryProofTest {
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
         context.deleteDatabase(DATABASE_NAME)
-        tempRoot = Files.createTempDirectory("attention-delivery-pi-proof-")
+        tempRoot = Files.createTempDirectory("p2-7e-pi-proof-")
         openDatabase()
-        database.momodingDao().upsertTask(task(TASK_ID))
+        database.p2Dao().upsertTask(task(TASK_ID))
     }
 
     @After
@@ -484,7 +484,7 @@ class RoomAttentionPiDeliveryProofTest {
             receivedAtMillis = NOW,
             updatedAtMillis = NOW,
         )
-        database.momodingDao().insertDeviceOperation(operation)
+        database.p2Dao().insertDeviceOperation(operation)
         val fileToolResult = buildJsonObject {
             put("role", "toolResult")
             put("toolCallId", operation.piToolCallId)
@@ -509,7 +509,7 @@ class RoomAttentionPiDeliveryProofTest {
         )
 
         assertTrue(actions.toString(), actions.last() is AckReady)
-        assertEquals(operation, database.momodingDao().deviceOperation(callId))
+        assertEquals(operation, database.p2Dao().deviceOperation(callId))
         assertEquals(1, requireNotNull(store.read(TASK_ID)).messages.size)
     }
 
@@ -557,6 +557,7 @@ class RoomAttentionPiDeliveryProofTest {
                 put("sideEffect", true)
                 put("operationId", OPERATION_ID)
                 put("dataScope", "android_saf_task_grant")
+                put("approvalOrigin", "user")
             })
             put("isError", false)
             put("timestamp", NOW)
@@ -570,11 +571,72 @@ class RoomAttentionPiDeliveryProofTest {
         assertTrue(actions.toString(), actions.last() is AckReady)
         assertDelivered(callId, AttentionResponseState.RESOLVED)
         val visible = validatedAttentionRecords(
-            database.momodingDao().deviceOperations(TASK_ID),
-            database.momodingDao().localPendingAttention(TASK_ID),
+            database.p2Dao().deviceOperations(TASK_ID),
+            database.p2Dao().localPendingAttention(TASK_ID),
             ledger,
         ).filter { it.isTaskEntryVisible() }
         assertTrue(visible.isEmpty())
+    }
+
+    @Test
+    fun `file commit preapproval failure proof uses explicit none origin`() {
+        val callId = callId(94)
+        ledger.acceptRequest(
+            request(
+                callId,
+                "device_files_commit_changes",
+                buildJsonObject {
+                    put("preparedId", OPERATION_ID)
+                    put("planDigest", "a".repeat(64))
+                },
+            ).copy(
+                sideEffect = true,
+                operationId = OPERATION_ID,
+            ),
+            scope(),
+        )
+        ledger.recordTerminal(
+            AttentionTerminalWrite(
+                DeviceToolResultClientFrame(
+                    callId = callId,
+                    taskId = TASK_ID,
+                    deviceId = DEVICE_ID,
+                    terminal = DeviceToolTerminalKind.FAILED,
+                    error = DeviceClientWireError(
+                        "AUTHORIZED_FOLDER_UNAVAILABLE",
+                        "Mobile folder authorization is unavailable",
+                    ),
+                ),
+                AttentionTerminalOrigin.FAILED_CLOSED,
+                NOW,
+            ),
+        )
+        val expectation = expectation(callId)
+        val proof = buildJsonObject {
+            put("role", "toolResult")
+            put("toolCallId", "pi-$callId")
+            put("toolName", "device_files_commit_changes")
+            put("content", buildJsonArray { add(textContent(expectation.contentPayload)) })
+            put("details", buildJsonObject {
+                put("callId", callId)
+                put("toolName", "device_files_commit_changes")
+                put("terminalSemanticSha256", expectation.terminalSemanticSha256)
+                put("sideEffect", true)
+                put("operationId", OPERATION_ID)
+                put("dataScope", "android_shared_storage_grant")
+                put("approvalOrigin", "none")
+            })
+            put("isError", true)
+            put("timestamp", NOW)
+        }
+
+        val actions = receive(
+            directSnapshotFrame(1, 0, listOf(proof)),
+            "file-commit-preapproval-failure-proof",
+        )
+
+        assertTrue(actions.toString(), actions.last() is AckReady)
+        assertDelivered(callId, AttentionResponseState.CANCELLED)
     }
 
     @Test
@@ -595,7 +657,7 @@ class RoomAttentionPiDeliveryProofTest {
         assertEquals(1, actions.size)
         assertTrue(actions.single() is ReceiverFailure)
         assertTrue(actions.none { it is AckReady })
-        assertNull(database.momodingDao().task(OTHER_TASK_ID))
+        assertNull(database.p2Dao().task(OTHER_TASK_ID))
         assertEquals(AttentionDeliveryState.READY_TO_SEND.name,
             requireNotNull(ledger.record(CALL_ID)).operation.deliveryState)
     }
@@ -1004,11 +1066,11 @@ class RoomAttentionPiDeliveryProofTest {
     }
 
     private companion object {
-        const val DATABASE_NAME = "attention-delivery-pi-delivery-proof.db"
+        const val DATABASE_NAME = "p2-7e-pi-delivery-proof.db"
         const val TASK_ID = "11111111-1111-4111-8111-111111111111"
         const val OTHER_TASK_ID = "11111111-1111-4111-8111-111111111112"
         const val CALL_ID = "22222222-2222-4222-8222-222222222221"
-        const val DEVICE_ID = "android-attention-device"
+        const val DEVICE_ID = "android-p2-7-device"
         const val OPERATION_ID = "33333333-3333-4333-8333-333333333333"
         const val PI_SESSION_ID = "44444444-4444-4444-8444-444444444444"
         const val STREAM_ID = "55555555-5555-4555-8555-555555555555"

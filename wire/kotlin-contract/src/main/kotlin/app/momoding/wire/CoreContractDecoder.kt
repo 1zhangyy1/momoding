@@ -13,7 +13,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonPrimitive
 
-sealed interface CoreServerFrame : ReliabilityServerFrame
+sealed interface P1aServerFrame : P1bServerFrame
 
 @Serializable
 data class HelloAcceptedFrame(
@@ -25,16 +25,16 @@ data class HelloAcceptedFrame(
     val piVersion: String,
     val heartbeatIntervalMs: Int,
     val maxFrameBytes: Int,
-) : CoreServerFrame {
+) : P1aServerFrame {
     init {
         requireProtocolVersion(protocolVersion)
         requireKind(kind, "hello.accepted")
         requirePiVersion(piVersion)
-        requireContract(heartbeatIntervalMs == CoreProtocol.HEARTBEAT_INTERVAL_MS) {
-            "heartbeatIntervalMs must be ${CoreProtocol.HEARTBEAT_INTERVAL_MS}"
+        requireContract(heartbeatIntervalMs == P1aProtocol.HEARTBEAT_INTERVAL_MS) {
+            "heartbeatIntervalMs must be ${P1aProtocol.HEARTBEAT_INTERVAL_MS}"
         }
-        requireContract(maxFrameBytes == CoreProtocol.MAX_FRAME_BYTES) {
-            "maxFrameBytes must be ${CoreProtocol.MAX_FRAME_BYTES}"
+        requireContract(maxFrameBytes == P1aProtocol.MAX_FRAME_BYTES) {
+            "maxFrameBytes must be ${P1aProtocol.MAX_FRAME_BYTES}"
         }
     }
 }
@@ -51,7 +51,7 @@ data class PiEventFrame(
     val emittedAt: String,
     val requestId: String? = null,
     val event: JsonObject,
-) : CoreServerFrame {
+) : P1aServerFrame {
     init {
         requireProtocolVersion(protocolVersion)
         requireKind(kind, "pi.event")
@@ -72,7 +72,7 @@ data class CommandResponseFrame(
     val ok: Boolean,
     val data: JsonElement? = null,
     val error: WireErrorBody? = null,
-) : CoreServerFrame {
+) : P1aServerFrame {
     init {
         requireProtocolVersion(protocolVersion)
         requireKind(kind, "response")
@@ -88,7 +88,7 @@ data class WireErrorFrame(
     val kind: String,
     val requestId: String? = null,
     val error: WireErrorBody,
-) : CoreServerFrame {
+) : P1aServerFrame {
     init {
         requireProtocolVersion(protocolVersion)
         requireKind(kind, "error")
@@ -133,7 +133,7 @@ data class TaskSnapshotFrame(
     val pendingAttention: List<JsonElement>,
     val deviceCalls: List<SnapshotDeviceCall>,
     val cursor: StreamCursor,
-) : CoreServerFrame {
+) : P1aServerFrame {
     init {
         requireKind(kind, "task.snapshot")
         requireContract(snapshotVersion > 0) { "snapshotVersion must be positive" }
@@ -203,7 +203,7 @@ data class StreamCursor(
     val oldestReplayableSequence: Long,
 )
 
-object CoreServerFrameDecoder {
+object P1aServerFrameDecoder {
     private val json = Json {
         ignoreUnknownKeys = false
         isLenient = false
@@ -211,31 +211,31 @@ object CoreServerFrameDecoder {
         explicitNulls = true
     }
 
-    fun decode(text: String): CoreServerFrame {
+    fun decode(text: String): P1aServerFrame {
         val actualBytes = text.encodeToByteArray().size
-        if (actualBytes > CoreProtocol.MAX_FRAME_BYTES) {
+        if (actualBytes > P1aProtocol.MAX_FRAME_BYTES) {
             throw SerializationException(
-                "Core server frame exceeds ${CoreProtocol.MAX_FRAME_BYTES} UTF-8 bytes",
+                "P1A server frame exceeds ${P1aProtocol.MAX_FRAME_BYTES} UTF-8 bytes",
             )
         }
         val element = json.parseToJsonElement(text)
         val frame = element as? JsonObject
-            ?: throw SerializationException("Core server frame must be a JSON object")
-        if (readFrameKind(frame) == "task.snapshot" && actualBytes > CoreProtocol.MAX_SNAPSHOT_BYTES) {
+            ?: throw SerializationException("P1A server frame must be a JSON object")
+        if (readFrameKind(frame) == "task.snapshot" && actualBytes > P1aProtocol.MAX_SNAPSHOT_BYTES) {
             throw SerializationException(
-                "task.snapshot exceeds ${CoreProtocol.MAX_SNAPSHOT_BYTES} received UTF-8 bytes",
+                "task.snapshot exceeds ${P1aProtocol.MAX_SNAPSHOT_BYTES} received UTF-8 bytes",
             )
         }
         return decode(frame)
     }
 
-    fun decode(element: JsonElement): CoreServerFrame {
+    fun decode(element: JsonElement): P1aServerFrame {
         val frame = element as? JsonObject
-            ?: throw SerializationException("Core server frame must be a JSON object")
+            ?: throw SerializationException("P1A server frame must be a JSON object")
         val actualFrameBytes = frame.toString().encodeToByteArray().size
-        if (actualFrameBytes > CoreProtocol.MAX_FRAME_BYTES) {
+        if (actualFrameBytes > P1aProtocol.MAX_FRAME_BYTES) {
             throw SerializationException(
-                "Core server frame exceeds ${CoreProtocol.MAX_FRAME_BYTES} UTF-8 bytes",
+                "P1A server frame exceeds ${P1aProtocol.MAX_FRAME_BYTES} UTF-8 bytes",
             )
         }
         val kind = readFrameKind(frame)
@@ -257,14 +257,14 @@ object CoreServerFrameDecoder {
                 }
                 "task.snapshot" -> {
                     val actualBytes = frame.toString().encodeToByteArray().size
-                    requireContract(actualBytes <= CoreProtocol.MAX_SNAPSHOT_BYTES) {
-                        "task.snapshot exceeds ${CoreProtocol.MAX_SNAPSHOT_BYTES} UTF-8 bytes"
+                    requireContract(actualBytes <= P1aProtocol.MAX_SNAPSHOT_BYTES) {
+                        "task.snapshot exceeds ${P1aProtocol.MAX_SNAPSHOT_BYTES} UTF-8 bytes"
                     }
                     validateOptionalString(frame, "requestId")
                     validateSnapshotDeviceCalls(frame)
                     json.decodeFromJsonElement<TaskSnapshotFrame>(frame)
                 }
-                else -> throw SerializationException("Unsupported Core server frame kind: $kind")
+                else -> throw SerializationException("Unsupported P1A server frame kind: $kind")
             }
         } catch (error: SerializationException) {
             throw error
@@ -277,7 +277,7 @@ object CoreServerFrameDecoder {
 private fun readFrameKind(frame: JsonObject): String {
     val kindPrimitive = frame["kind"] as? JsonPrimitive
     return kindPrimitive?.takeIf(JsonPrimitive::isString)?.contentOrNull
-        ?: throw SerializationException("Core server frame must contain a string kind")
+        ?: throw SerializationException("P1A server frame must contain a string kind")
 }
 
 private fun validateOptionalString(value: JsonObject, key: String) {
@@ -309,14 +309,14 @@ private fun validateResponseShape(frame: JsonObject) {
 }
 
 private fun requireProtocolVersion(actual: Int) {
-    requireContract(actual == CoreProtocol.PROTOCOL_VERSION) {
-        "protocolVersion must be ${CoreProtocol.PROTOCOL_VERSION}"
+    requireContract(actual == P1aProtocol.PROTOCOL_VERSION) {
+        "protocolVersion must be ${P1aProtocol.PROTOCOL_VERSION}"
     }
 }
 
 private fun requirePiVersion(actual: String) {
-    requireContract(actual == CoreProtocol.PI_VERSION) {
-        "piVersion must be ${CoreProtocol.PI_VERSION}"
+    requireContract(actual == P1aProtocol.PI_VERSION) {
+        "piVersion must be ${P1aProtocol.PI_VERSION}"
     }
 }
 

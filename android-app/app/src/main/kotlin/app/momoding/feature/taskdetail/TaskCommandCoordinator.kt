@@ -74,7 +74,7 @@ sealed interface TaskCommandProgress {
  */
 class TaskCommandCoordinator(
     private val transportStatus: StateFlow<app.momoding.core.transport.SecureTransportUiStatus>,
-    private val submitExact: suspend (OutboundWireRequest) -> app.momoding.wire.ReceivedReliabilityServerFrame,
+    private val submitExact: suspend (OutboundWireRequest) -> app.momoding.wire.ReceivedP1bServerFrame,
     private val journal: RoomCommandDraftJournal,
     private val applicationScope: CoroutineScope,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,

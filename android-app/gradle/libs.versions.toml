@@ -21,6 +21,7 @@ androidx-core = "1.19.0"
 quickjs-kt = "1.0.5"
 markdown-renderer = "0.38.1"
 exifinterface = "1.4.2"
+shizuku = "13.1.5"
 
 [libraries]
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity-compose" }
@@ -60,6 +61,8 @@ androidx-compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-mani
 quickjs-kt = { module = "io.github.dokar3:quickjs-kt", version.ref = "quickjs-kt" }
 markdown-renderer-m3 = { module = "com.mikepenz:multiplatform-markdown-renderer-m3-android", version.ref = "markdown-renderer" }
 androidx-exifinterface = { module = "androidx.exifinterface:exifinterface", version.ref = "exifinterface" }
+shizuku-api = { module = "dev.rikka.shizuku:api", version.ref = "shizuku" }
+shizuku-provider = { module = "dev.rikka.shizuku:provider", version.ref = "shizuku" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

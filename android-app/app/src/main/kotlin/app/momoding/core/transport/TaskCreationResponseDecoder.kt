@@ -1,7 +1,7 @@
 package app.momoding.core.transport
 
 import app.momoding.wire.CommandResponseFrame
-import app.momoding.wire.ReceivedReliabilityServerFrame
+import app.momoding.wire.ReceivedP1bServerFrame
 import app.momoding.wire.WireErrorCode
 import java.util.UUID
 import kotlinx.serialization.json.JsonObject
@@ -28,7 +28,7 @@ sealed interface ExactWireOutcome<out T> {
 }
 
 object TaskCreationResponseDecoder {
-    fun decodeTaskOpen(requestId: String, received: ReceivedReliabilityServerFrame): ExactWireOutcome<TaskOpenSuccess> =
+    fun decodeTaskOpen(requestId: String, received: ReceivedP1bServerFrame): ExactWireOutcome<TaskOpenSuccess> =
         decode(requestId, received) { data ->
             requireExactKeys(data, setOf("snapshotVersion"), "task.open response")
             val version = data["snapshotVersion"]?.jsonPrimitive?.longOrNull
@@ -37,7 +37,7 @@ object TaskCreationResponseDecoder {
             TaskOpenSuccess(version)
         }
 
-    fun decodeCreate(requestId: String, received: ReceivedReliabilityServerFrame): ExactWireOutcome<TaskCreateSuccess> =
+    fun decodeCreate(requestId: String, received: ReceivedP1bServerFrame): ExactWireOutcome<TaskCreateSuccess> =
         decode(requestId, received) { data ->
             requireExactKeys(data, setOf("taskId", "piSessionId"), "task.create response")
             TaskCreateSuccess(
@@ -46,7 +46,7 @@ object TaskCreationResponseDecoder {
             )
         }
 
-    fun decodePrompt(requestId: String, received: ReceivedReliabilityServerFrame): ExactWireOutcome<PromptAcceptedSuccess> =
+    fun decodePrompt(requestId: String, received: ReceivedP1bServerFrame): ExactWireOutcome<PromptAcceptedSuccess> =
         decode(requestId, received) { data ->
             requireExactKeys(data, setOf("accepted", "runState"), "session.prompt response")
             require(data["accepted"]?.jsonPrimitive?.booleanOrNull == true) {
@@ -60,7 +60,7 @@ object TaskCreationResponseDecoder {
 
     private inline fun <T> decode(
         requestId: String,
-        received: ReceivedReliabilityServerFrame,
+        received: ReceivedP1bServerFrame,
         success: (JsonObject) -> T,
     ): ExactWireOutcome<T> {
         val frame = received.frame as? CommandResponseFrame
@@ -92,7 +92,7 @@ object TaskCommandResponseDecoder {
     fun decode(
         kind: String,
         requestId: String,
-        received: ReceivedReliabilityServerFrame,
+        received: ReceivedP1bServerFrame,
     ): ExactWireOutcome<Any> = when (kind) {
         "session.prompt" -> TaskCreationResponseDecoder.decodePrompt(requestId, received)
         "session.steer", "session.follow_up" -> decodeQueue(kind, requestId, received)
@@ -103,7 +103,7 @@ object TaskCommandResponseDecoder {
     private fun decodeQueue(
         kind: String,
         requestId: String,
-        received: ReceivedReliabilityServerFrame,
+        received: ReceivedP1bServerFrame,
     ): ExactWireOutcome<QueueAcceptedSuccess> = decodeExact(requestId, received) { data ->
         requireExactKeys(data, setOf("accepted", "queueDepth"), "$kind response")
         require(data["accepted"]?.jsonPrimitive?.booleanOrNull == true) {
@@ -117,7 +117,7 @@ object TaskCommandResponseDecoder {
 
     private fun decodeStop(
         requestId: String,
-        received: ReceivedReliabilityServerFrame,
+        received: ReceivedP1bServerFrame,
     ): ExactWireOutcome<StopAcceptedSuccess> = decodeExact(requestId, received) { data ->
         requireExactKeys(data, setOf("accepted", "runState"), "session.stop response")
         require(data["accepted"]?.jsonPrimitive?.booleanOrNull == true) {
@@ -133,7 +133,7 @@ object TaskCommandResponseDecoder {
 
     private inline fun <T> decodeExact(
         requestId: String,
-        received: ReceivedReliabilityServerFrame,
+        received: ReceivedP1bServerFrame,
         success: (JsonObject) -> T,
     ): ExactWireOutcome<T> {
         val frame = received.frame as? CommandResponseFrame

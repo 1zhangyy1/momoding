@@ -25,14 +25,14 @@ import kotlin.test.assertTrue
 
 class ReliabilityContractDecoderTest {
     private val reliabilityFixture: JsonObject by lazy {
-        readFixture("/pi-0.80.6/reliability-contract.json")
+        readFixture("/pi-0.80.6/p1b-reliability-contract.json")
     }
     private val byteFixture: JsonObject by lazy {
-        readFixture("/pi-0.80.6/byte-domains.json")
+        readFixture("/pi-0.80.6/p1b-byte-domains.json")
     }
 
     @Test
-    fun `decodes the complete Reliability server union while retaining exact raw bytes`() {
+    fun `decodes the complete P1B server union while retaining exact raw bytes`() {
         val server = reliabilityFixture.getValue("serverFrames").jsonObject
         val extensionFrames = buildList {
             add(server.getValue("replayComplete"))
@@ -90,14 +90,14 @@ class ReliabilityContractDecoderTest {
         val smallSnapshot = reliabilityFixture.getValue("smallSnapshot")
         assertIs<TaskSnapshotFrame>(ReliabilityContractDecoder.decode(smallSnapshot.toString()).frame)
 
-        val coreFrames = listOf(
+        val p1aFrames = listOf(
             """{"protocolVersion":1,"kind":"hello.accepted","requestId":"hello","connectionId":"connection","serverVersion":"fixture","piVersion":"0.80.6","heartbeatIntervalMs":20000,"maxFrameBytes":1048576}""",
             """{"protocolVersion":1,"kind":"response","requestId":"response","ok":true,"data":{"accepted":true}}""",
             """{"protocolVersion":1,"kind":"error","error":{"code":"BAD_REQUEST","message":"fixture","retryable":false}}""",
         ).map { ReliabilityContractDecoder.decode(it).frame }
-        assertIs<HelloAcceptedFrame>(coreFrames[0])
-        assertIs<CommandResponseFrame>(coreFrames[1])
-        assertIs<WireErrorFrame>(coreFrames[2])
+        assertIs<HelloAcceptedFrame>(p1aFrames[0])
+        assertIs<CommandResponseFrame>(p1aFrames[1])
+        assertIs<WireErrorFrame>(p1aFrames[2])
     }
 
     @Test
@@ -118,7 +118,7 @@ class ReliabilityContractDecoderTest {
                 PiEventAckFrame(
                     taskId = source.string("taskId"),
                     streamId = source.string("streamId"),
-                    throughSequence = ReliabilityProtocol.MAX_SAFE_INTEGER + 1,
+                    throughSequence = P1bProtocol.MAX_SAFE_INTEGER + 1,
                 ),
             )
         }
@@ -204,10 +204,10 @@ class ReliabilityContractDecoderTest {
         }
 
         val atMaximum = JsonObject(
-            resync + ("snapshotVersion" to JsonPrimitive(ReliabilityProtocol.MAX_SAFE_INTEGER)),
+            resync + ("snapshotVersion" to JsonPrimitive(P1bProtocol.MAX_SAFE_INTEGER)),
         )
         assertEquals(
-            ReliabilityProtocol.MAX_SAFE_INTEGER,
+            P1bProtocol.MAX_SAFE_INTEGER,
             assertIs<PiResyncRequiredFrame>(
                 ReliabilityContractDecoder.decode(atMaximum.toString()).frame,
             ).snapshotVersion,
@@ -230,7 +230,7 @@ class ReliabilityContractDecoderTest {
     }
 
     @Test
-    fun `strictly validates Core direct events before delegating to the Core decoder`() {
+    fun `strictly validates P1A direct events before delegating to the Core decoder`() {
         val source = reliabilityFixture.getValue("serverFrames").jsonObject
             .getValue("directEvent").jsonObject
 
@@ -240,13 +240,13 @@ class ReliabilityContractDecoderTest {
         assertFails {
             JsonObject(
                 source +
-                    ("sequence" to JsonPrimitive(ReliabilityProtocol.MAX_SAFE_INTEGER + 1)),
+                    ("sequence" to JsonPrimitive(P1bProtocol.MAX_SAFE_INTEGER + 1)),
             )
         }
         assertFails { JsonObject(source + ("emittedAt" to JsonPrimitive("not-rfc3339"))) }
 
         var nested: JsonElement = JsonPrimitive("leaf")
-        repeat(ReliabilityProtocol.MAX_JSON_DEPTH + 2) {
+        repeat(P1bProtocol.MAX_JSON_DEPTH + 2) {
             nested = JsonObject(mapOf("child" to nested))
         }
         assertFails {
@@ -258,7 +258,7 @@ class ReliabilityContractDecoderTest {
     }
 
     @Test
-    fun `strictly validates Core direct snapshots before delegating to the Core decoder`() {
+    fun `strictly validates P1A direct snapshots before delegating to the Core decoder`() {
         val source = reliabilityFixture.getValue("smallSnapshot").jsonObject
 
         listOf("taskId", "piSessionId").forEach { key ->
@@ -267,7 +267,7 @@ class ReliabilityContractDecoderTest {
         assertFails {
             JsonObject(
                 source +
-                    ("snapshotVersion" to JsonPrimitive(ReliabilityProtocol.MAX_SAFE_INTEGER + 1)),
+                    ("snapshotVersion" to JsonPrimitive(P1bProtocol.MAX_SAFE_INTEGER + 1)),
             )
         }
 
@@ -286,7 +286,7 @@ class ReliabilityContractDecoderTest {
         }
 
         var nested: JsonElement = JsonPrimitive("leaf")
-        repeat(ReliabilityProtocol.MAX_JSON_DEPTH + 2) {
+        repeat(P1bProtocol.MAX_JSON_DEPTH + 2) {
             nested = JsonObject(mapOf("child" to nested))
         }
         val pi = source.getValue("pi").jsonObject
@@ -307,19 +307,19 @@ class ReliabilityContractDecoderTest {
         assertFails {
             JsonObject(
                 eventStart +
-                    ("totalBytes" to JsonPrimitive(ReliabilityProtocol.DIRECT_PI_EVENT_MAX_BYTES)),
+                    ("totalBytes" to JsonPrimitive(P1bProtocol.DIRECT_PI_EVENT_MAX_BYTES)),
             )
         }
         assertFails {
             JsonObject(
                 pageStart +
-                    ("totalBytes" to JsonPrimitive(ReliabilityProtocol.SNAPSHOT_PAGE_MAX_PHYSICAL_BYTES)),
+                    ("totalBytes" to JsonPrimitive(P1bProtocol.SNAPSHOT_PAGE_MAX_PHYSICAL_BYTES)),
             )
         }
         assertFails {
             JsonObject(
                 eventStart +
-                    ("totalBytes" to JsonPrimitive(ReliabilityProtocol.CHUNK_MAX_TRANSFER_BYTES + 1)),
+                    ("totalBytes" to JsonPrimitive(P1bProtocol.CHUNK_MAX_TRANSFER_BYTES + 1)),
             )
         }
         assertFails {
@@ -423,7 +423,7 @@ class ReliabilityContractDecoderTest {
         }
 
         var nested: JsonElement = JsonPrimitive("leaf")
-        repeat(ReliabilityProtocol.MAX_JSON_DEPTH + 2) {
+        repeat(P1bProtocol.MAX_JSON_DEPTH + 2) {
             nested = JsonObject(mapOf("child" to nested))
         }
         assertFails { JsonObject(readRequest + ("arguments" to nested)) }
@@ -436,7 +436,7 @@ class ReliabilityContractDecoderTest {
             .filter { it.string("domain") == "directEvent" }
         directRecipes.forEach { recipe ->
             val bytes = structuredRecipeBytes(recipe)
-            if (recipe.int("targetBytes") <= ReliabilityProtocol.DIRECT_PI_EVENT_MAX_BYTES) {
+            if (recipe.int("targetBytes") <= P1bProtocol.DIRECT_PI_EVENT_MAX_BYTES) {
                 assertIs<PiEventFrame>(ReliabilityContractDecoder.decode(bytes).frame)
             } else {
                 assertFailsWith<SerializationException> {
@@ -449,7 +449,7 @@ class ReliabilityContractDecoderTest {
             .map { it.jsonObject }
         pageRecipes.forEach { recipe ->
             val bytes = physicalFrameBytes(recipe)
-            if (recipe.int("targetBytes") <= ReliabilityProtocol.SNAPSHOT_PAGE_MAX_PHYSICAL_BYTES) {
+            if (recipe.int("targetBytes") <= P1bProtocol.SNAPSHOT_PAGE_MAX_PHYSICAL_BYTES) {
                 assertIs<TaskSnapshotPageFrame>(ReliabilityContractDecoder.decode(bytes).frame)
             } else {
                 assertFailsWith<SerializationException> {
@@ -462,7 +462,7 @@ class ReliabilityContractDecoderTest {
             .map { it.jsonObject }
         chunkRecipes.forEach { recipe ->
             val bytes = chunkDataFrameBytes(recipe)
-            if (recipe.int("physicalByteLength") <= ReliabilityProtocol.CHUNK_MAX_PHYSICAL_FRAME_BYTES) {
+            if (recipe.int("physicalByteLength") <= P1bProtocol.CHUNK_MAX_PHYSICAL_FRAME_BYTES) {
                 val frame = assertIs<TransportChunkDataFrame>(
                     ReliabilityContractDecoder.decode(bytes).frame,
                 )

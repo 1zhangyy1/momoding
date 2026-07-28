@@ -58,6 +58,10 @@ fun DeviceCapabilitiesScreen(
     onRefresh: () -> Unit,
     onOpenFolders: (() -> Unit)?,
     onManagePhotoAccess: (() -> Unit)? = null,
+    onManageAccessibility: (() -> Unit)? = null,
+    onManageScreenCapture: (() -> Unit)? = null,
+    onManageAllFiles: (() -> Unit)? = null,
+    onManageShizuku: (() -> Unit)? = null,
     onSetUpFullAccess: (() -> Unit)? = null,
 ) {
     val statesById = states.associateBy(AndroidCapabilityState::id)
@@ -112,7 +116,10 @@ fun DeviceCapabilitiesScreen(
                     val action = when (presentation.id) {
                         AndroidCapabilityId.SAF_FOLDERS -> onOpenFolders
                         AndroidCapabilityId.PHOTO_LIBRARY -> onManagePhotoAccess
-                        else -> null
+                        AndroidCapabilityId.ACCESSIBILITY_CONTROL -> onManageAccessibility
+                        AndroidCapabilityId.SCREEN_CAPTURE -> onManageScreenCapture
+                        AndroidCapabilityId.ALL_FILES -> onManageAllFiles
+                        AndroidCapabilityId.SHIZUKU_SHELL_UID -> onManageShizuku
                     }
                     CapabilityCard(
                         presentation = presentation,
@@ -141,7 +148,7 @@ private fun FullAccessSetupCard(onSetUp: () -> Unit) {
             modifier = Modifier.semantics { heading() },
         )
         Text(
-            "Momoding will request the available photo and folder access in sequence. Android still asks you to confirm each system prompt once.",
+            "Momoding guides you through photo, folder, and shared-storage access. Android still requires you to enable each system access once.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -272,8 +279,21 @@ private fun CapabilityCard(
         if (onOpen != null) {
             Button(
                 onClick = onOpen,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-            ) { Text(presentation.actionLabel) }
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .testTag("capability-action-${presentation.id.name}"),
+            ) {
+                Text(
+                    when {
+                        presentation.id == AndroidCapabilityId.SCREEN_CAPTURE &&
+                            state?.source == "Android MediaProjection" -> "Stop session"
+                        presentation.id == AndroidCapabilityId.SCREEN_CAPTURE ->
+                            "Start screen session"
+                        else -> presentation.actionLabel
+                    },
+                )
+            }
         }
     }
 }
@@ -343,15 +363,15 @@ private enum class CapabilityPresentation(
     ALL_FILES(
         AndroidCapabilityId.ALL_FILES,
         "All files access",
-        "Broader shared-storage access for an explicit enhanced setup.",
+        "Use bounded tools in Downloads, Documents, Pictures, Camera, Movies, and Music.",
         Icons.Outlined.Security,
-        "Open",
+        "Manage shared storage",
     ),
     SHIZUKU(
         AndroidCapabilityId.SHIZUKU_SHELL_UID,
         "Shizuku shell access",
-        "Run selected Android shell operations through a separately started Shizuku service.",
+        "Read selected Android package facts through a separately started shell-only service.",
         Icons.Outlined.Terminal,
-        "Open",
+        "Set up Shizuku",
     ),
 }

@@ -68,6 +68,7 @@ class DiagnosticsExporterTest {
         assertTrue(text.contains("OFFLINE"))
         assertTrue(BuildConfig.SOURCE_REVISION.matches(Regex("^[0-9a-f]{40}$")))
         assertTrue(text.contains(BuildConfig.SOURCE_REVISION))
+        assertTrue(text.contains("\"sourceDirty\":${BuildConfig.SOURCE_DIRTY}"))
         assertEquals(now + 15 * 60 * 1000L, archive.expiresAtMillis)
     }
 

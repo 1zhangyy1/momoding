@@ -1,9 +1,9 @@
 import { PROTOCOL_VERSION } from "./envelope.js";
 
-export const RELIABILITY_REPLAY_MAX_EVENTS_PER_TASK = 4_096;
-export const RELIABILITY_REPLAY_MAX_BYTES_PER_TASK = 8 * 1024 * 1024;
-export const RELIABILITY_REPLAY_MAX_AGE_MS = 10 * 60 * 1_000;
-export const RELIABILITY_REPLAY_MAX_BYTES_GLOBAL = 64 * 1024 * 1024;
+export const P1B_REPLAY_MAX_EVENTS_PER_TASK = 4_096;
+export const P1B_REPLAY_MAX_BYTES_PER_TASK = 8 * 1024 * 1024;
+export const P1B_REPLAY_MAX_AGE_MS = 10 * 60 * 1_000;
+export const P1B_REPLAY_MAX_BYTES_GLOBAL = 64 * 1024 * 1024;
 
 export interface PiEventAck {
   protocolVersion: typeof PROTOCOL_VERSION;

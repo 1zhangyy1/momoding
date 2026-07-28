@@ -81,13 +81,14 @@ data class TaskDetailSnapshot(
     val goal: TaskDetailGoalRecord? = null,
     val childAgents: List<TaskDetailChildAgentRecord> = emptyList(),
     val approvalMode: TaskApprovalMode = TaskApprovalMode.REQUEST_APPROVAL,
+    val failure: TaskFailure? = null,
 )
 
 class TaskDetailRepository(
     database: MomodingDatabase,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
-    private val dao = database.momodingDao()
+    private val dao = database.p2Dao()
     private val attentionValidator = RoomAttentionLedger(database)
 
     fun observe(taskId: String): Flow<TaskDetailSnapshot?> {
@@ -215,5 +216,6 @@ private fun TaskDetailEntity.toSnapshot(
             )
         },
         approvalMode = task.approvalMode,
+        failure = task.storedTaskFailure(),
     )
 }

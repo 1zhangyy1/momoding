@@ -1,23 +1,16 @@
 # Momoding wire contracts
 
-This directory defines the transport boundary shared by the Android client and a compatible
-remote host.
+`wire/` contains the shared protocol schemas, deterministic synthetic fixtures, and the independent
+Kotlin/JVM contract implementation used by the Android application.
 
-- `schemas/` contains TypeScript definitions for envelopes, snapshots, transfers, reliability,
-  errors, commands, and Android-owned tools.
-- `fixtures/pi-0.80.6/` contains deterministic synthetic protocol examples and byte oracles.
-- `kotlin-contract/` contains strict Kotlin/JVM decoders, encoders, replay protection, chunk
-  assembly, and the executable contract tests consumed by the Android build.
+The fixtures are schema and byte-domain oracles. They are not captured production sessions and do
+not contain real credentials, device identities, or user project content.
 
-The repository does not include a remote-host service. These schemas and fixtures describe the
-client boundary; they are not recordings of production sessions or claims that a host deployment
-is available.
-
-Run the Kotlin contract suite from the repository root:
+Run the Kotlin contract tests:
 
 ```bash
-./wire/kotlin-contract/gradlew -p wire/kotlin-contract --no-daemon test
+JAVA_HOME=/path/to/jdk-17 \
+./wire/kotlin-contract/gradlew -p wire/kotlin-contract test
 ```
 
-Changes to a schema must include the corresponding Kotlin implementation, synthetic fixture, and
-contract-test update when that boundary is affected.
+The Android build consumes the same implementation through an included Gradle build.

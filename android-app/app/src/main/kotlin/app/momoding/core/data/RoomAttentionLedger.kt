@@ -54,6 +54,7 @@ enum class AttentionResponseState {
 
 enum class AttentionTerminalOrigin {
     USER,
+    AUTO_POLICY,
     LOCAL_RECOVERY,
     EXPIRY,
     HOST_CANCEL,
@@ -107,16 +108,16 @@ data class AttentionTerminalWrite(
 class AttentionLedgerConflictException(message: String) : IllegalStateException(message)
 
 /**
- * The Android-authoritative attention ledger.
+ * The Android-authoritative P2 attention ledger.
  *
  * Host snapshots never create, replace, or delete these rows. The WSS coordinator added in
- * A single-owner IO actor invokes this API before exposing or sending state.
+ * The single-owner IO actor invokes this API before exposing or sending state.
  */
 class RoomAttentionLedger(
     private val database: MomodingDatabase,
     private val nowMillis: () -> Long = System::currentTimeMillis,
 ) {
-    private val dao = database.momodingDao()
+    private val dao = database.p2Dao()
 
     fun record(callId: String): AttentionLedgerRecord? =
         database.runInTransaction<AttentionLedgerRecord?> {
@@ -524,6 +525,19 @@ class RoomAttentionLedger(
                         "Task stop fence blocks attention response"
                     }
                 }
+                AttentionTerminalOrigin.AUTO_POLICY -> {
+                    require(write.nowMillis < expiresAtMillis) { "Automatic action has expired" }
+                    require(dao.activeStopFenceCount(operation.taskId) == 0) {
+                        "Task stop fence blocks automatic action"
+                    }
+                    require(operation.toolName in setOf(
+                        CONTENT_READ_TOOL,
+                        FILE_COMMIT_TOOL,
+                        UI_ACTION_TOOL,
+                    )) {
+                        "Automatic policy origin is only valid for policy-controlled actions"
+                    }
+                }
                 AttentionTerminalOrigin.LOCAL_RECOVERY -> require(
                     operation.toolName == FILE_COMMIT_TOOL,
                 ) { "Local terminal recovery is only valid for a durable file commit" }
@@ -537,6 +551,7 @@ class RoomAttentionLedger(
             val timestamp = nowMillis()
             val ledgerState = when (write.origin) {
                 AttentionTerminalOrigin.USER,
+                AttentionTerminalOrigin.AUTO_POLICY,
                 AttentionTerminalOrigin.LOCAL_RECOVERY,
                 -> AttentionLedgerState.TERMINAL
                 AttentionTerminalOrigin.EXPIRY -> AttentionLedgerState.TIMED_OUT
@@ -545,6 +560,7 @@ class RoomAttentionLedger(
             }
             val responseState = when (write.origin) {
                 AttentionTerminalOrigin.USER,
+                AttentionTerminalOrigin.AUTO_POLICY,
                 AttentionTerminalOrigin.LOCAL_RECOVERY,
                 -> AttentionResponseState.RESPONDING
                 AttentionTerminalOrigin.EXPIRY -> AttentionResponseState.EXPIRED
@@ -754,7 +770,7 @@ class RoomAttentionLedger(
         val operationId = request.operationId?.let { normalizeUuid(it, "operationId") }
         val expiresAt = normalizeTimestamp(request.expiresAt)
         val argumentsCanonicalJson = canonicalJson(request.arguments)
-        val safeBinding = if (request.toolName == FILE_COMMIT_TOOL) {
+        val safeBinding = if (request.toolName in SIDE_EFFECT_TOOLS) {
             request.sideEffect && operationId != null
         } else {
             !request.sideEffect && operationId == null
@@ -1002,9 +1018,9 @@ class RoomAttentionLedger(
             require(operation.toolName in ATTENTION_TOOLS) {
                 "Actionable attention request tool is unsafe"
             }
-            if (operation.toolName == FILE_COMMIT_TOOL) {
+            if (operation.toolName in SIDE_EFFECT_TOOLS) {
                 require(operation.sideEffect && operation.operationId != null) {
-                    "File commit binding is unsafe"
+                    "Side-effect attention binding is unsafe"
                 }
             } else {
                 require(!operation.sideEffect && operation.operationId == null) {
@@ -1157,12 +1173,15 @@ class RoomAttentionLedger(
         const val CONTENT_READ_TOOL = "device_files_read"
         const val FILE_COMMIT_TOOL = "device_files_commit_changes"
         const val MEDIA_LIST_TOOL = "device_media_list"
+        const val UI_ACTION_TOOL = "device_ui_action"
+        val SIDE_EFFECT_TOOLS = setOf(FILE_COMMIT_TOOL, UI_ACTION_TOOL)
         val ATTENTION_TOOLS = setOf(
             "request_user_question",
             "request_user_confirmation",
             CONTENT_READ_TOOL,
             FILE_COMMIT_TOOL,
             MEDIA_LIST_TOOL,
+            UI_ACTION_TOOL,
         )
         val ATTENTION_VALIDATION_CODES = setOf("ANSWER_REQUIRED", "ANSWER_TOO_LONG")
         val UUID_PATTERN = Regex(
@@ -1291,6 +1310,10 @@ class RoomAttentionLedger(
                 }
                 return
             }
+            if (toolName == UI_ACTION_TOOL) {
+                validateUiActionArguments(objectValue)
+                return
+            }
             requireExactKeys(objectValue, setOf("summary"), setOf("details"))
             requireSizedString(objectValue.getValue("summary"), "summary", 1, 4_096, false)
             objectValue["details"]?.let { details ->
@@ -1347,6 +1370,65 @@ class RoomAttentionLedger(
                 ?: throw IllegalArgumentException("totalMaxBytes must be an integer")
             require(total in 1..MAX_TOTAL_CONTENT_BYTES) {
                 "totalMaxBytes is outside content policy"
+            }
+        }
+
+        fun validateUiActionArguments(value: JsonObject) {
+            requireExactKeys(
+                value,
+                setOf("snapshotId", "action"),
+                setOf(
+                    "nodeHandle",
+                    "text",
+                    "direction",
+                    "approvalSummary",
+                    "approvalDetails",
+                ),
+            )
+            val snapshotId = requireSizedString(
+                value.getValue("snapshotId"),
+                "snapshotId",
+                35,
+                35,
+                true,
+            )
+            require(UI_SNAPSHOT_ID.matches(snapshotId)) { "snapshotId is invalid" }
+            val action = requireSizedString(value.getValue("action"), "action", 4, 11, true)
+            require(action in setOf("click", "scroll", "input_draft", "back")) {
+                "action is invalid"
+            }
+            val nodeHandle = value["nodeHandle"]?.let {
+                requireSizedString(it, "nodeHandle", 38, 320, true)
+            }
+            val text = value["text"]?.let {
+                requireSizedString(it, "text", 1, 4_096, false)
+            }
+            val direction = value["direction"]?.let {
+                requireSizedString(it, "direction", 2, 5, true)
+            }
+            value["approvalSummary"]?.let {
+                requireSizedString(it, "approvalSummary", 1, 4_096, false)
+            }
+            value["approvalDetails"]?.let {
+                requireSizedString(it, "approvalDetails", 1, 8_192, false)
+            }
+            when (action) {
+                "click" -> require(
+                    nodeHandle?.startsWith("$snapshotId:n") == true &&
+                        text == null &&
+                        direction == null,
+                )
+                "scroll" -> require(
+                    nodeHandle?.startsWith("$snapshotId:n") == true &&
+                        text == null &&
+                        direction in setOf("up", "down", "left", "right"),
+                )
+                "input_draft" -> require(
+                    nodeHandle?.startsWith("$snapshotId:n") == true &&
+                        text != null &&
+                        direction == null,
+                )
+                "back" -> require(nodeHandle == null && text == null && direction == null)
             }
         }
 
@@ -1424,6 +1506,10 @@ class RoomAttentionLedger(
                     validateMediaListResult(result)
                     return
                 }
+                if (operation.toolName == UI_ACTION_TOOL) {
+                    validateUiActionResult(operation, result)
+                    return
+                }
                 if (operation.toolName == "request_user_question") {
                     val outcome = result["outcome"]?.jsonPrimitive?.contentOrNull
                     if (outcome == "skipped") {
@@ -1483,6 +1569,10 @@ class RoomAttentionLedger(
                 validateMediaListError(terminal, error)
                 return
             }
+            if (operation.toolName == UI_ACTION_TOOL) {
+                validateUiActionError(terminal, error)
+                return
+            }
             val expected = when (terminal) {
                 DeviceToolTerminalKind.REJECTED.wireValue -> {
                     require(operation.toolName == "request_user_confirmation") {
@@ -1537,6 +1627,78 @@ class RoomAttentionLedger(
                 item["height"]?.let { require(it.jsonPrimitive.intOrNull?.let { n -> n > 0 } == true) }
                 item["capturedAtMillis"]?.let { require(it.jsonPrimitive.longOrNull?.let { n -> n > 0L } == true) }
                 item["addedAtMillis"]?.let { require(it.jsonPrimitive.longOrNull?.let { n -> n > 0L } == true) }
+            }
+        }
+
+        fun validateUiActionResult(
+            operation: DeviceOperationEntity,
+            result: JsonObject,
+        ) {
+            requireExactKeys(
+                result,
+                setOf(
+                    "ok",
+                    "action",
+                    "beforeSnapshotId",
+                    "afterSnapshotId",
+                    "foregroundPackage",
+                    "targetChanged",
+                    "changed",
+                    "noChangeCount",
+                    "sessionPaused",
+                    "actionCount",
+                ),
+                emptySet(),
+            )
+            require(result["ok"]?.jsonPrimitive?.booleanOrNull == true)
+            val request = STRICT_JSON.parseToJsonElement(
+                operation.argumentsCanonicalJson,
+            ).jsonObject
+            require(result.getValue("action") == request.getValue("action")) {
+                "UI action result changed action"
+            }
+            require(result.getValue("beforeSnapshotId") == request.getValue("snapshotId")) {
+                "UI action result changed snapshot binding"
+            }
+            require(
+                UI_SNAPSHOT_ID.matches(
+                    requireSizedString(
+                        result.getValue("afterSnapshotId"),
+                        "afterSnapshotId",
+                        35,
+                        35,
+                        true,
+                    ),
+                ),
+            )
+            requireSizedString(
+                result.getValue("foregroundPackage"),
+                "foregroundPackage",
+                1,
+                255,
+                true,
+            )
+            require(result["targetChanged"]?.jsonPrimitive?.booleanOrNull != null)
+            require(result["changed"]?.jsonPrimitive?.booleanOrNull != null)
+            require(result["sessionPaused"]?.jsonPrimitive?.booleanOrNull != null)
+            require(result["noChangeCount"]?.jsonPrimitive?.intOrNull in 0..3)
+            require(result["actionCount"]?.jsonPrimitive?.intOrNull in 1..20)
+        }
+
+        fun validateUiActionError(terminal: String, error: JsonObject) {
+            val code = error["code"]?.jsonPrimitive?.contentOrNull
+            val message = error["message"]?.jsonPrimitive?.contentOrNull
+            require(error["retryable"]?.jsonPrimitive?.booleanOrNull == false)
+            val allowed = when (terminal) {
+                DeviceToolTerminalKind.REJECTED.wireValue -> setOf("USER_DECLINED")
+                DeviceToolTerminalKind.TIMED_OUT.wireValue -> setOf("ATTENTION_EXPIRED")
+                DeviceToolTerminalKind.CANCELLED.wireValue ->
+                    setOf("ATTENTION_CANCELLED", "UI_ACTION_CANCELLED")
+                DeviceToolTerminalKind.FAILED.wireValue -> UI_ACTION_FAILURE_CODES
+                else -> throw IllegalArgumentException("UI action terminal kind is invalid")
+            }
+            require(code in allowed && !message.isNullOrBlank() && message.length <= 512) {
+                "UI action error differs from the fixed contract"
             }
         }
 
@@ -1764,6 +1926,10 @@ class RoomAttentionLedger(
                     DeviceToolTerminalKind.REJECTED,
                     DeviceToolTerminalKind.FAILED,
                 )) { "User attention response uses an invalid terminal" }
+                AttentionTerminalOrigin.AUTO_POLICY -> require(write.frame.terminal in setOf(
+                    DeviceToolTerminalKind.SUCCEEDED,
+                    DeviceToolTerminalKind.FAILED,
+                )) { "Automatic policy action uses an invalid terminal" }
                 AttentionTerminalOrigin.EXPIRY -> require(
                     write.frame.terminal == DeviceToolTerminalKind.TIMED_OUT,
                 ) { "Expiry must use timed_out terminal" }
@@ -1786,6 +1952,29 @@ class RoomAttentionLedger(
         const val MAX_TOTAL_CONTENT_BYTES = 524_288L
         val DOCUMENT_ALIAS = Regex("^doc-[0-9a-f]{24}$")
         val SHA256_PATTERN = Regex("^[0-9a-f]{64}$")
+        val UI_SNAPSHOT_ID = Regex("^ui-[0-9a-f]{32}$")
+        val UI_ACTION_FAILURE_CODES = setOf(
+            "UI_ACTION_ARGUMENTS_INVALID",
+            "UI_ACTION_CONTEXT_TRUNCATED",
+            "UI_ACTION_HARD_DENY",
+            "UI_ACTION_POLICY_DENIED",
+            "UI_ACTION_REAPPROVAL_REQUIRED",
+            "UI_ACTION_LIMIT_REACHED",
+            "UI_ACTION_OUTCOME_UNKNOWN",
+            "UI_ACTION_REJECTED",
+            "UI_ACTION_STOPPED",
+            "UI_ACTION_TARGET_CHANGED",
+            "UI_ACTION_TARGET_RETURN_TIMEOUT",
+            "UI_ACTION_UNSUPPORTED",
+            "UI_ACTION_USER_TAKEOVER",
+            "UI_CONTROL_DEVICE_LOCKED",
+            "UI_CONTROL_SESSION_REQUIRED",
+            "UI_NODE_NOT_FOUND",
+            "UI_NODE_STALE",
+            "UI_SNAPSHOT_NOT_FOUND",
+            "UI_SNAPSHOT_STALE",
+            "UI_SNAPSHOT_TASK_MISMATCH",
+        )
         val FILE_COMMIT_FAILURE_CODES = setOf(
             "UNSUPPORTED_DEVICE_CAPABILITY",
             "PREPARED_CHANGE_NOT_FOUND",

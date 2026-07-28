@@ -16,8 +16,8 @@ import kotlin.test.assertTrue
 
 class ByteDomainContractTest {
     private val fixture: JsonObject by lazy {
-        val text = checkNotNull(javaClass.getResource("/pi-0.80.6/byte-domains.json")) {
-            "Reliability byte-domain fixture is missing from the test resources"
+        val text = checkNotNull(javaClass.getResource("/pi-0.80.6/p1b-byte-domains.json")) {
+            "P1B byte-domain fixture is missing from the test resources"
         }.readText()
         Json.parseToJsonElement(text).jsonObject
     }
@@ -60,17 +60,17 @@ class ByteDomainContractTest {
     @Test
     fun `reproduces structured logical and complete physical frame boundaries`() {
         assertEquals(
-            boundary(ReliabilityProtocol.SNAPSHOT_PAGE_MAX_PHYSICAL_BYTES),
+            boundary(P1bProtocol.SNAPSHOT_PAGE_MAX_PHYSICAL_BYTES),
             fixture.getValue("physicalFrameRecipes").jsonArray
                 .map { it.jsonObject.int("targetBytes") },
         )
         assertEquals(
-            boundary(ReliabilityProtocol.DIRECT_PI_EVENT_MAX_BYTES),
+            boundary(P1bProtocol.DIRECT_PI_EVENT_MAX_BYTES),
             structuredTargets("directEvent"),
         )
-        assertEquals(boundary(ReliabilityProtocol.HISTORY_MAX_BYTES), structuredTargets("historyPage"))
+        assertEquals(boundary(P1bProtocol.HISTORY_MAX_BYTES), structuredTargets("historyPage"))
         assertEquals(
-            boundary(ReliabilityProtocol.SNAPSHOT_MAX_LOGICAL_BYTES),
+            boundary(P1bProtocol.SNAPSHOT_MAX_LOGICAL_BYTES),
             structuredTargets("taskSnapshot"),
         )
 
@@ -78,9 +78,9 @@ class ByteDomainContractTest {
             .map { it.jsonObject }
             .forEach { recipe ->
                 val limit = when (recipe.string("domain")) {
-                    "directEvent" -> ReliabilityProtocol.DIRECT_PI_EVENT_MAX_BYTES
-                    "historyPage" -> ReliabilityProtocol.HISTORY_MAX_BYTES
-                    else -> ReliabilityProtocol.SNAPSHOT_MAX_LOGICAL_BYTES
+                    "directEvent" -> P1bProtocol.DIRECT_PI_EVENT_MAX_BYTES
+                    "historyPage" -> P1bProtocol.HISTORY_MAX_BYTES
+                    else -> P1bProtocol.SNAPSHOT_MAX_LOGICAL_BYTES
                 }
                 assertEquals(
                     !recipe.string("name").endsWith("PlusOne"),
@@ -129,8 +129,8 @@ class ByteDomainContractTest {
                 Base64.getDecoder().decode(parsed.string("data")).size,
             )
         }
-        assertEquals(ReliabilityProtocol.SNAPSHOT_PAGE_MAX_PHYSICAL_BYTES, chunkFrames[0].second.size)
-        assertTrue(chunkFrames[1].second.size > ReliabilityProtocol.SNAPSHOT_PAGE_MAX_PHYSICAL_BYTES)
+        assertEquals(P1bProtocol.SNAPSHOT_PAGE_MAX_PHYSICAL_BYTES, chunkFrames[0].second.size)
+        assertTrue(chunkFrames[1].second.size > P1bProtocol.SNAPSHOT_PAGE_MAX_PHYSICAL_BYTES)
 
         val large = fixture.getValue("largeSnapshotCase").jsonObject
         val pageRecipe = fixture.getValue("physicalFrameRecipes").jsonArray
@@ -148,7 +148,7 @@ class ByteDomainContractTest {
                 large.string("taskSnapshotJsonSuffix").toByteArray(StandardCharsets.UTF_8)
         assertEquals(large.int("taskSnapshotByteLength"), taskSnapshotBytes.size)
         assertEquals(large.string("taskSnapshotSha256"), sha256(taskSnapshotBytes))
-        assertTrue(taskSnapshotBytes.size > ReliabilityProtocol.SNAPSHOT_PAGE_MAX_PHYSICAL_BYTES)
+        assertTrue(taskSnapshotBytes.size > P1bProtocol.SNAPSHOT_PAGE_MAX_PHYSICAL_BYTES)
         assertEquals(
             "task.snapshot",
             Json.parseToJsonElement(taskSnapshotBytes.toString(StandardCharsets.UTF_8))

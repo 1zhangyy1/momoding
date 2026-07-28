@@ -1,7 +1,7 @@
 package app.momoding.core.transport
 
 import androidx.test.core.app.ApplicationProvider
-import app.momoding.wire.ReceivedReliabilityServerFrame
+import app.momoding.wire.ReceivedP1bServerFrame
 import app.momoding.core.auth.HostBindingSnapshot
 import app.momoding.core.auth.HostBindingStatus
 import app.momoding.core.auth.VaultHeader
@@ -244,7 +244,7 @@ class AndroidSecureTransportRuntimeUiStatusTest {
             mutableStatus.value = WssConnectionStatus(WssConnectionPhase.CONNECTING)
         }
 
-        override suspend fun requestPage(cursor: String?, limit: Int): ReceivedReliabilityServerFrame =
+        override suspend fun requestPage(cursor: String?, limit: Int): ReceivedP1bServerFrame =
             error("task.list is outside this lifecycle test")
 
         override suspend fun submitAttentionDecision(decision: AttentionUserDecision) {

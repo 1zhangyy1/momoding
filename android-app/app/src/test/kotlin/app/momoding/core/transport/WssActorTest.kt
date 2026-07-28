@@ -201,7 +201,7 @@ class WssActorTest {
         val socketEvidence = mutableListOf<String>()
         val fixture = Fixture(this, jitter = { 0.0 }, socketEvents = socketEvidence)
         val sensitivePath = "/private/synthetic/receiver-secret.txt"
-        val sensitiveToken = "test-token-receiver-never-use"
+        val sensitiveToken = "synthetic-receiver-token"
         val sensitiveUri = "content://synthetic.receiver/private"
         val decodeFrame =
             """{"protocolVersion":1,"kind":"synthetic.invalid","path":"$sensitivePath","token":"$sensitiveToken","uri":"$sensitiveUri"}"""
@@ -270,7 +270,7 @@ class WssActorTest {
         val socketEvidence = mutableListOf<String>()
         val fixture = Fixture(this, jitter = { 0.5 }, socketEvents = socketEvidence)
         val sensitivePath = "/private/synthetic/backoff-secret.txt"
-        val sensitiveToken = "test-token-backoff-never-use"
+        val sensitiveToken = "synthetic-backoff-token"
         val sensitiveUri = "content://synthetic.receiver/backoff"
         try {
             val first = fixture.startOnline()
@@ -434,7 +434,7 @@ class WssActorTest {
         }
 
         runRecoverable { it.binary(1) }
-        runRecoverable { it.text("x".repeat(app.momoding.wire.CoreProtocol.MAX_FRAME_BYTES + 1)) }
+        runRecoverable { it.text("x".repeat(app.momoding.wire.P1aProtocol.MAX_FRAME_BYTES + 1)) }
         runRecoverable { it.text(successResponse(OTHER_REQUEST_ID)) }
 
         val burstFixture = Fixture(this)

@@ -1,6 +1,6 @@
 package app.momoding.core.transport
 
-import app.momoding.wire.ReliabilityProtocol
+import app.momoding.wire.P1bProtocol
 import app.momoding.core.auth.PairingIdentity
 import app.momoding.core.auth.VaultHeader
 import app.momoding.core.auth.VaultSecret
@@ -96,7 +96,7 @@ class PairingClientTest {
         val floatingRevision = validPairResponse().replace("\"configRevision\":1", "\"configRevision\":1.0")
         val unsafeRevision = validPairResponse().replace(
             "\"configRevision\":1",
-            "\"configRevision\":${ReliabilityProtocol.MAX_SAFE_INTEGER + 1}",
+            "\"configRevision\":${P1bProtocol.MAX_SAFE_INTEGER + 1}",
         )
         listOf(mutable, floatingRevision, unsafeRevision, "x".repeat(8_193)).forEach { response ->
             assertThrows(Exception::class.java) {

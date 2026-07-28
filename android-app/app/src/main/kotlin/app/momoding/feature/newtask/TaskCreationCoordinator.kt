@@ -50,7 +50,7 @@ sealed interface TaskCreationProgress {
 /** Application-scope owner for the durable create -> prompt operation. */
 class TaskCreationCoordinator(
     private val transportStatus: StateFlow<app.momoding.core.transport.SecureTransportUiStatus>,
-    private val submitExact: suspend (OutboundWireRequest) -> app.momoding.wire.ReceivedReliabilityServerFrame,
+    private val submitExact: suspend (OutboundWireRequest) -> app.momoding.wire.ReceivedP1bServerFrame,
     private val journal: RoomCommandDraftJournal,
     private val applicationScope: CoroutineScope,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
@@ -191,7 +191,7 @@ class TaskCreationCoordinator(
         draftId: String,
         commandId: String,
         original: OutboundWireRequest,
-    ): app.momoding.wire.ReceivedReliabilityServerFrame {
+    ): app.momoding.wire.ReceivedP1bServerFrame {
         while (true) {
             val durable = journal.commandByCommandId(commandId)
             if (durable?.state == OutboundCommandState.TERMINAL) {

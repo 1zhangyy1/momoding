@@ -4,8 +4,8 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import app.momoding.wire.CommandResponseFrame
-import app.momoding.wire.ReliabilityProtocol
-import app.momoding.wire.ReceivedReliabilityServerFrame
+import app.momoding.wire.P1bProtocol
+import app.momoding.wire.ReceivedP1bServerFrame
 import app.momoding.wire.ReliabilityContractDecoder
 import app.momoding.core.data.MomodingDatabase
 import app.momoding.core.data.HostTaskSummary
@@ -68,7 +68,7 @@ class TaskListSynchronizerTest {
     fun partialFailurePreservesPreviousCacheExactly() = runTest {
         val old = summary(9, 9_000)
         merger.mergeCompleteList(1, listOf(old))
-        val before = database.momodingDao().allTasks()
+        val before = database.p2Dao().allTasks()
         val newer = summary(1, 3_000)
         val outOfOrder = summary(2, 4_000)
         val port = QueueTaskListPort(
@@ -80,13 +80,13 @@ class TaskListSynchronizerTest {
 
         expectFailure { TaskListSynchronizer(port, merger).synchronize() }
 
-        assertEquals(before, database.momodingDao().allTasks())
+        assertEquals(before, database.p2Dao().allTasks())
     }
 
     @Test
     fun cursorInvalidRestartsFromFirstPageAtMostThreeTimes() = runTest {
         val task = summary(1, 3_000)
-        val responses = mutableListOf<ReceivedReliabilityServerFrame>()
+        val responses = mutableListOf<ReceivedP1bServerFrame>()
         repeat(3) {
             responses += page(listOf(task), revision = 4, nextCursor = "cursor-$it")
             responses += cursorInvalid()
@@ -99,7 +99,7 @@ class TaskListSynchronizerTest {
         assertEquals(3, result.cursorRestarts)
         assertEquals(listOf(null, "cursor-0", null, "cursor-1", null, "cursor-2", null), port.requestedCursors)
 
-        val failing = mutableListOf<ReceivedReliabilityServerFrame>()
+        val failing = mutableListOf<ReceivedP1bServerFrame>()
         repeat(4) {
             failing += page(listOf(task), revision = 5, nextCursor = "cursor-$it")
             failing += cursorInvalid()
@@ -109,14 +109,14 @@ class TaskListSynchronizerTest {
 
     @Test
     fun pageByteAndRevisionLimitsAreCumulativeAcrossRestarts() = runTest {
-        val inflated = mutableListOf<ReceivedReliabilityServerFrame>()
+        val inflated = mutableListOf<ReceivedP1bServerFrame>()
         repeat(5) { index ->
             val received = page(
                 listOf(summary(index + 1, 10_000L - index)),
                 revision = 8,
                 nextCursor = "cursor-$index",
             )
-            inflated += ReceivedReliabilityServerFrame(received.frame, ByteArray(1_048_576))
+            inflated += ReceivedP1bServerFrame(received.frame, ByteArray(1_048_576))
         }
         expectFailure { TaskListSynchronizer(QueueTaskListPort(inflated), merger).synchronize() }
 
@@ -136,7 +136,7 @@ class TaskListSynchronizerTest {
         val invalidDataObjects = listOf(
             "{\"tasks\":[$valid],\"listRevision\":1,\"unknown\":true}",
             "{\"tasks\":[$valid],\"listRevision\":1.0}",
-            "{\"tasks\":[$valid],\"listRevision\":${ReliabilityProtocol.MAX_SAFE_INTEGER + 1}}",
+            "{\"tasks\":[$valid],\"listRevision\":${P1bProtocol.MAX_SAFE_INTEGER + 1}}",
             "{\"tasks\":[${valid.replace("idle", "unknown")}],\"listRevision\":1}",
             "{\"tasks\":[${valid.replace("1970-01-01T00:00:03.000Z", "1970-01-01T00:00:03Z")}],\"listRevision\":1}",
             "{\"tasks\":[$second,$valid],\"listRevision\":1}",
@@ -152,7 +152,7 @@ class TaskListSynchronizerTest {
     fun oneHundredAndFirstPageFailsWithoutPublishingPartialRows() = runTest {
         val old = summary(500, 20_000)
         merger.mergeCompleteList(1, listOf(old))
-        val responses = mutableListOf<ReceivedReliabilityServerFrame>()
+        val responses = mutableListOf<ReceivedP1bServerFrame>()
         repeat(101) { index ->
             responses += page(
                 listOf(summary(index + 1, 10_000L - index)),
@@ -170,7 +170,7 @@ class TaskListSynchronizerTest {
         tasks: List<HostTaskSummary>,
         revision: Long,
         nextCursor: String? = null,
-    ): ReceivedReliabilityServerFrame {
+    ): ReceivedP1bServerFrame {
         val data = buildString {
             append("{\"tasks\":[")
             append(tasks.joinToString(",", transform = ::summaryJson))
@@ -181,11 +181,11 @@ class TaskListSynchronizerTest {
         return responseWithData(data)
     }
 
-    private fun responseWithData(data: String): ReceivedReliabilityServerFrame = ReliabilityContractDecoder.decode(
+    private fun responseWithData(data: String): ReceivedP1bServerFrame = ReliabilityContractDecoder.decode(
         """{"protocolVersion":1,"kind":"response","requestId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","ok":true,"data":$data}""",
     )
 
-    private fun cursorInvalid(): ReceivedReliabilityServerFrame = ReliabilityContractDecoder.decode(
+    private fun cursorInvalid(): ReceivedP1bServerFrame = ReliabilityContractDecoder.decode(
         """{"protocolVersion":1,"kind":"response","requestId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","ok":false,"error":{"code":"CURSOR_INVALID","message":"cursor invalid","retryable":true}}""",
     )
 
@@ -212,11 +212,11 @@ class TaskListSynchronizerTest {
     }
 
     private class QueueTaskListPort(
-        private val responses: MutableList<ReceivedReliabilityServerFrame>,
+        private val responses: MutableList<ReceivedP1bServerFrame>,
     ) : TaskListWirePort {
         val requestedCursors = mutableListOf<String?>()
 
-        override suspend fun requestPage(cursor: String?, limit: Int): ReceivedReliabilityServerFrame {
+        override suspend fun requestPage(cursor: String?, limit: Int): ReceivedP1bServerFrame {
             assertEquals(100, limit)
             requestedCursors += cursor
             return responses.removeAt(0)

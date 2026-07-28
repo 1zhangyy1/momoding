@@ -6,7 +6,9 @@ import androidx.lifecycle.viewModelScope
 import app.momoding.core.data.TaskAttentionKind
 import app.momoding.core.data.AttentionResponseState
 import app.momoding.core.data.TaskListRow
+import app.momoding.core.data.TaskFailureRecovery
 import app.momoding.core.data.TaskRepository
+import app.momoding.core.data.taskFailureForRunState
 import app.momoding.core.transport.AndroidSecureTransportRuntime
 import app.momoding.core.transport.SecureTransportUiPhase
 import java.util.Locale
@@ -421,6 +423,7 @@ private fun TaskListRow.toUiModel(nowMillis: Long, cached: Boolean): TaskRowUiMo
         runState in setOf("FAILED", "INTERRUPTED") -> TaskRowStatus.FAILED
         else -> TaskRowStatus.COMPLETED
     }
+    val typedFailure = failure ?: taskFailureForRunState(runState)
     val detail = when (status) {
         TaskRowStatus.ATTENTION -> if (
             primaryAttentionResponseState == AttentionResponseState.RESPONDING
@@ -442,7 +445,7 @@ private fun TaskListRow.toUiModel(nowMillis: Long, cached: Boolean): TaskRowUiMo
             "STOPPING" -> "Stopping safely"
             else -> "Working on this task"
         }
-        TaskRowStatus.FAILED -> "Provider needs attention"
+        TaskRowStatus.FAILED -> requireNotNull(typedFailure).homeDetail
         TaskRowStatus.COMPLETED -> "Task completed"
     }
     return TaskRowUiModel(
@@ -466,6 +469,14 @@ private fun TaskListRow.toUiModel(nowMillis: Long, cached: Boolean): TaskRowUiMo
         },
         pinned = pinnedAtMillis != null,
         archived = archivedAtMillis != null,
+        recoveryAction = typedFailure?.let {
+            when (it.recovery) {
+                TaskFailureRecovery.FIX_PROVIDER -> TaskRowRecoveryAction.FIX_PROVIDER
+                TaskFailureRecovery.RETRY,
+                TaskFailureRecovery.OPEN_TASK,
+                -> TaskRowRecoveryAction.OPEN_TASK
+            }
+        },
     )
 }
 

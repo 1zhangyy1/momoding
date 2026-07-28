@@ -723,6 +723,7 @@ internal fun projectTaskDetailUiState(
             projection?.recovery
         },
         activeStopFence = snapshot?.activeStopFence == true,
+        failure = snapshot?.failure,
         composerBlockedReason = blockedReason,
         planMode = current.phoneLocal && phoneLocalPlan.enabled,
         latestPlanDigest = phoneLocalPlan.latestPlan?.planDigest,

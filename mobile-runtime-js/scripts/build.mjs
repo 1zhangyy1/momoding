@@ -8,9 +8,7 @@ import { build } from "esbuild";
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const projectDir = resolve(scriptDir, "..");
 const repositoryDir = resolve(projectDir, "..");
-const outputDir = process.env.PI_MOBILE_OUTPUT_DIR
-  ? resolve(process.env.PI_MOBILE_OUTPUT_DIR)
-  : resolve(repositoryDir, "android-app/app/src/main/assets/pi-runtime");
+const outputDir = resolve(repositoryDir, "android-app/app/src/main/assets/pi-runtime");
 const bundlePath = join(outputDir, "pi-mobile.js");
 const manifestPath = join(outputDir, "manifest.json");
 const packageJson = JSON.parse(await readFile(join(projectDir, "package.json"), "utf8"));
@@ -25,14 +23,7 @@ if (piVersion !== "0.80.6" || lockedPiVersion !== piVersion) {
   throw new Error(`Pi version must be exactly 0.80.6; package=${piVersion}, lock=${lockedPiVersion}`);
 }
 
-const revision = process.env.SOURCE_REVISION?.trim() || execFileSync(
-  "git",
-  ["rev-parse", "HEAD"],
-  {
-    cwd: repositoryDir,
-    encoding: "utf8",
-  },
-).trim();
+const revision = await resolveBuildRevision();
 if (!/^[0-9a-f]{40}$/.test(revision)) {
   throw new Error(`Invalid build revision: ${revision}`);
 }
@@ -106,6 +97,28 @@ function assertExactToolchain() {
   if (npmVersion !== packageJson.engines.npm) {
     throw new Error(`npm ${packageJson.engines.npm} required, found ${npmVersion}`);
   }
+}
+
+async function resolveBuildRevision() {
+  const declaredRevision = process.env.SOURCE_REVISION?.trim();
+  if (declaredRevision) return declaredRevision;
+
+  try {
+    const publicSource = JSON.parse(
+      await readFile(join(repositoryDir, ".public-source.json"), "utf8"),
+    );
+    if (typeof publicSource.sourceRevision !== "string") {
+      throw new Error(".public-source.json sourceRevision must be a string");
+    }
+    return publicSource.sourceRevision;
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+
+  return execFileSync("git", ["rev-parse", "HEAD"], {
+    cwd: repositoryDir,
+    encoding: "utf8",
+  }).trim();
 }
 
 async function sourceHash() {

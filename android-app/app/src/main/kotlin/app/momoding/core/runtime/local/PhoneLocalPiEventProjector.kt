@@ -1,8 +1,8 @@
 package app.momoding.core.runtime.local
 
-import app.momoding.wire.CoreProtocol
+import app.momoding.wire.P1aProtocol
 import app.momoding.wire.RawPiSnapshot
-import app.momoding.wire.ReceivedReliabilityServerFrame
+import app.momoding.wire.ReceivedP1bServerFrame
 import app.momoding.wire.RecoveryState
 import app.momoding.wire.ReliabilityContractDecoder
 import app.momoding.wire.ReliableProjection
@@ -12,6 +12,8 @@ import app.momoding.wire.TaskSnapshotFrame
 import app.momoding.core.data.MomodingDatabase
 import app.momoding.core.data.RoomProjectionTransactionStore
 import app.momoding.core.data.TaskEntity
+import app.momoding.core.data.storedTaskFailure
+import app.momoding.core.data.taskFailureForRunState
 import app.momoding.core.policy.TaskApprovalMode
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -72,8 +74,8 @@ class PhoneLocalPiEventProjector(
             "PI_MOBILE_TASK_INPUT_EMPTY"
         }
         database.runInTransaction {
-            check(database.momodingDao().task(taskId) == null) { "PI_MOBILE_TASK_ALREADY_EXISTS" }
-            database.momodingDao().upsertTask(
+            check(database.p2Dao().task(taskId) == null) { "PI_MOBILE_TASK_ALREADY_EXISTS" }
+            database.p2Dao().upsertTask(
                 TaskEntity(
                     taskId = taskId,
                     title = title,
@@ -160,11 +162,11 @@ class PhoneLocalPiEventProjector(
 
     fun stabilizeTaskTitle(taskId: String) {
         database.runInTransaction {
-            val current = requireNotNull(database.momodingDao().task(taskId)) {
+            val current = requireNotNull(database.p2Dao().task(taskId)) {
                 "PI_MOBILE_TASK_NOT_FOUND"
             }
             if (current.titleSource in setOf("USER", "AUTOMATIC")) return@runInTransaction
-            database.momodingDao().setAutomaticTaskTitle(
+            database.p2Dao().setAutomaticTaskTitle(
                 taskId,
                 automaticTaskTitle(current.title),
             )
@@ -177,14 +179,28 @@ class PhoneLocalPiEventProjector(
         isStreaming: Boolean,
     ) {
         database.runInTransaction {
-            val current = requireNotNull(database.momodingDao().task(taskId)) {
+            val current = requireNotNull(database.p2Dao().task(taskId)) {
                 "PI_MOBILE_TASK_NOT_FOUND"
             }
-            database.momodingDao().upsertTask(
+            val messages = if (runState == TaskRunState.FAILED) {
+                persistedSession(taskId)?.snapshot?.entries?.let { sessionMessages(taskId, it) }
+                    .orEmpty()
+            } else {
+                emptyList()
+            }
+            val failure = taskFailureForRunState(
+                runState = runState.name,
+                messages = messages,
+                previous = current.storedTaskFailure(),
+            )
+            database.p2Dao().upsertTask(
                 current.copy(
                     runState = runState.name,
                     isStreaming = isStreaming,
                     updatedAtMillis = nowMillis(),
+                    failureKind = failure?.kind?.name,
+                    failureMessage = failure?.message,
+                    failureRecovery = failure?.recovery?.name,
                 ),
             )
         }
@@ -192,7 +208,8 @@ class PhoneLocalPiEventProjector(
 
     fun interruptStaleLocalRuns(): Int = database.runInTransaction<Int> {
         var interrupted = 0
-        database.momodingDao().allTasks()
+        val failure = requireNotNull(taskFailureForRunState(TaskRunState.INTERRUPTED.name))
+        database.p2Dao().allTasks()
             .filter { task ->
                 task.lastListSyncGeneration == null &&
                     task.hostUpdatedAtMillis == null &&
@@ -200,12 +217,15 @@ class PhoneLocalPiEventProjector(
                     task.runState in ACTIVE_RUN_STATES
             }
             .forEach { task ->
-                database.momodingDao().upsertTask(
+                database.p2Dao().upsertTask(
                     task.copy(
                         runState = TaskRunState.INTERRUPTED.name,
                         recoveryState = RecoveryState.INTERRUPTED.name,
                         isStreaming = false,
                         updatedAtMillis = nowMillis(),
+                        failureKind = failure.kind.name,
+                        failureMessage = failure.message,
+                        failureRecovery = failure.recovery.name,
                     ),
                 )
                 interrupted += 1
@@ -228,11 +248,11 @@ class PhoneLocalPiEventProjector(
         val receivedEvents = events.map { event ->
             throughSequence += 1
             val rawEnvelope = buildJsonObject {
-                put("protocolVersion", CoreProtocol.PROTOCOL_VERSION)
+                put("protocolVersion", P1aProtocol.PROTOCOL_VERSION)
                 put("kind", "pi.event")
                 put("taskId", taskId)
                 put("piSessionId", piSessionId)
-                put("piVersion", CoreProtocol.PI_VERSION)
+                put("piVersion", P1aProtocol.PI_VERSION)
                 put("streamId", streamId)
                 put("sequence", throughSequence)
                 put("emittedAt", emittedAt())
@@ -286,7 +306,7 @@ class PhoneLocalPiEventProjector(
             ),
         )
         val raw = json.encodeToString(TaskSnapshotFrame.serializer(), frame).encodeToByteArray()
-        val result = projection.applyDirectSnapshot(ReceivedReliabilityServerFrame(frame, raw))
+        val result = projection.applyDirectSnapshot(ReceivedP1bServerFrame(frame, raw))
         check(result.state.snapshotVersion == frame.snapshotVersion) {
             "PI_MOBILE_SNAPSHOT_NOT_DURABLE"
         }

@@ -11,7 +11,7 @@ import kotlin.test.assertTrue
 
 class RawFrameRetentionPolicyTest {
     @Test
-    fun `binds raw event and staged audit limits to the retention contract`() {
+    fun `binds raw event and staged audit limits to the P2 contract`() {
         assertEquals(3_584, RawFrameRetentionPolicy.RAW_EVENT_SOFT_MAX_EVENTS)
         assertEquals(7L * 1024 * 1024, RawFrameRetentionPolicy.RAW_EVENT_SOFT_MAX_BYTES)
         assertEquals(4_096, RawFrameRetentionPolicy.RAW_EVENT_HARD_MAX_EVENTS)
@@ -75,7 +75,7 @@ class RawFrameRetentionPolicyTest {
                 TASK_ID,
                 STREAM_ID,
                 1,
-                ReliabilityProtocol.CHUNK_MAX_TRANSFER_BYTES.toLong(),
+                P1bProtocol.CHUNK_MAX_TRANSFER_BYTES.toLong(),
             ),
         )
         assertNotNull(accepted.snapshotRecommendation)
@@ -90,7 +90,7 @@ class RawFrameRetentionPolicyTest {
                 TASK_ID,
                 STREAM_ID,
                 1,
-                ReliabilityProtocol.CHUNK_MAX_TRANSFER_BYTES.toLong() + 1,
+                P1bProtocol.CHUNK_MAX_TRANSFER_BYTES.toLong() + 1,
             )
         }
 
@@ -100,7 +100,7 @@ class RawFrameRetentionPolicyTest {
                 TASK_ID,
                 STREAM_ID,
                 2,
-                ReliabilityProtocol.CHUNK_MAX_TRANSFER_BYTES.toLong(),
+                P1bProtocol.CHUNK_MAX_TRANSFER_BYTES.toLong(),
             ),
         )
         assertEquals(2, tailPlusMaximum.expectation.rejectedSequence)
@@ -117,12 +117,12 @@ class RawFrameRetentionPolicyTest {
     @Test
     fun `retains a maximum legal batch and compacts only complete prior batches`() {
         val maximumBatch = buildList {
-            add(StagedRawFrame("pi.event", ByteArray(ReliabilityProtocol.SNAPSHOT_MAX_LOGICAL_BYTES)))
-            repeat(ReliabilityProtocol.SNAPSHOT_MAX_PAGES) {
+            add(StagedRawFrame("pi.event", ByteArray(P1bProtocol.SNAPSHOT_MAX_LOGICAL_BYTES)))
+            repeat(P1bProtocol.SNAPSHOT_MAX_PAGES) {
                 add(StagedRawFrame("task.snapshot.page", ByteArray(1024)))
             }
-            add(StagedRawFrame("task.snapshot.begin", ByteArray(CoreProtocol.MAX_FRAME_BYTES)))
-            add(StagedRawFrame("task.snapshot.end", ByteArray(CoreProtocol.MAX_FRAME_BYTES)))
+            add(StagedRawFrame("task.snapshot.begin", ByteArray(P1aProtocol.MAX_FRAME_BYTES)))
+            add(StagedRawFrame("task.snapshot.end", ByteArray(P1aProtocol.MAX_FRAME_BYTES)))
         }
         assertEquals(RawFrameRetentionPolicy.MAX_STAGED_AUDIT_BYTES, maximumBatch.sumOf { it.byteCount })
         val exact = RawFrameRetentionPolicy.retainBatch(

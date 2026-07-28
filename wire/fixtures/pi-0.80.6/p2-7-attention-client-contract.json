@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "protocolVersion": 1,
+    "scope": "Exact Android-to-Host device client frames; capability manifest advertises P3A-C consent-gated content read without embedding SAF content, provider identifiers, or credentials"
+  },
+  "capabilitiesReport": {
+    "protocolVersion": 1,
+    "kind": "device.capabilities.report",
+    "requestId": "capabilities-request-p2-7",
+    "commandId": "44444444-4444-4444-8444-444444444447",
+    "deviceId": "android-p2-7-fixture",
+    "capabilityVersion": 1,
+    "manifest": {
+      "tools": [
+        "device_capabilities_get",
+        "device_files_list",
+        "device_files_read",
+        "device_files_prepare_changes",
+        "device_files_commit_changes",
+        "request_user_question",
+        "request_user_confirmation"
+      ]
+    },
+    "expiresAt": "2026-07-17T01:15:00.000Z"
+  },
+  "toolProgress": {
+    "protocolVersion": 1,
+    "kind": "device.tool.progress",
+    "callId": "55555555-5555-4555-8555-555555555557",
+    "taskId": "11111111-1111-4111-8111-111111111111",
+    "deviceId": "android-p2-7-fixture",
+    "progressSequence": 2,
+    "phase": "awaiting_user",
+    "summary": "Waiting for your answer"
+  },
+  "toolResults": {
+    "questionOption": {
+      "protocolVersion": 1,
+      "kind": "device.tool.result",
+      "callId": "55555555-5555-4555-8555-555555555557",
+      "taskId": "11111111-1111-4111-8111-111111111111",
+      "deviceId": "android-p2-7-fixture",
+      "terminal": "succeeded",
+      "result": {
+        "outcome": "answered",
+        "answer": {
+          "kind": "option",
+          "index": 0,
+          "label": "Balanced approach"
+        }
+      }
+    },
+    "confirmationDeclined": {
+      "protocolVersion": 1,
+      "kind": "device.tool.result",
+      "callId": "55555555-5555-4555-8555-555555555558",
+      "taskId": "11111111-1111-4111-8111-111111111111",
+      "deviceId": "android-p2-7-fixture",
+      "terminal": "rejected",
+      "error": {
+        "code": "USER_DECLINED",
+        "message": "User declined the confirmation",
+        "retryable": false
+      }
+    }
+  },
+  "reconcileResult": {
+    "protocolVersion": 1,
+    "kind": "device.tool.reconcile.result",
+    "requestId": "reconcile-request-p2-7",
+    "commandId": "66666666-6666-4666-8666-666666666667",
+    "taskId": "11111111-1111-4111-8111-111111111111",
+    "deviceId": "android-p2-7-fixture",
+    "results": [
+      {
+        "callId": "70000000-0000-4000-8000-000000000011",
+        "state": "never_started"
+      },
+      {
+        "callId": "70000000-0000-4000-8000-000000000012",
+        "state": "running"
+      },
+      {
+        "callId": "70000000-0000-4000-8000-000000000013",
+        "state": "succeeded",
+        "resultSummary": {
+          "outcome": "skipped"
+        }
+      },
+      {
+        "callId": "70000000-0000-4000-8000-000000000014",
+        "state": "failed",
+        "error": {
+          "code": "ATTENTION_EXPIRED",
+          "message": "Attention request expired",
+          "retryable": false
+        }
+      },
+      {
+        "callId": "70000000-0000-4000-8000-000000000015",
+        "state": "cancelled",
+        "error": {
+          "code": "ATTENTION_CANCELLED",
+          "message": "Attention request was cancelled",
+          "retryable": false
+        }
+      },
+      {
+        "callId": "70000000-0000-4000-8000-000000000016",
+        "state": "unknown"
+      }
+    ]
+  }
+}

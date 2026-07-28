@@ -4,44 +4,66 @@
 
 # Momoding
 
-Momoding 是一个本地优先的 Android AI 编程工作台。Agent 循环运行在手机上，通过用户自己的
-OpenRouter API Key 调用模型，并且只能访问用户通过 Android Storage Access Framework
-明确授权的文件夹。
+Momoding 是一个 Android 本地优先的 AI 编程工作台。Pi Agent 循环运行在手机上，使用用户自己
+配置的 OpenRouter API Key；所有设备侧动作都要经过 Android 端持有的权限、策略和确认流程。
 
 [English](README.md)
 
-> **开发者预览版：** 当前仓库适合代码审查与本地开发，但还不是正式发布版。公开构建明确
-> 不包含实验性的 Linux/PRoot runtime 和远程 Host，也不会向模型暴露终端或测试执行工具。
+> **开发者预览版：** 当前仓库适合源码审阅和本地开发，但还不是正式发行版或 Play 商店版本，
+> 也尚未经过独立安全审计。
 
 ## 当前能力
 
-- Pi Agent 循环运行在手机 QuickJS 中；Node.js 只用于构建和测试。
-- 用户自行配置 OpenRouter。API Key 使用 Android Keystore 支持的 AES-GCM 加密，并存放在
-  App 的 no-backup 私有目录。
-- 使用 Room 持久化任务、计划、目标、子 Agent、Skill、附件和恢复状态。
-- 文件夹必须由用户通过 Android SAF 授权，任务只使用不暴露真实路径的文件身份。
-- 读取文件内容需要单独批准；写入前必须展示 Diff 并再次确认。
-- 支持 Photo Picker、已授权的照片元数据、拍照、系统分享入口和受大小限制的文本附件。
+- Pi Agent 循环在 QuickJS 中运行；Node.js 仅用于构建和测试运行时包。
+- 用户自带 OpenRouter API Key，并由 Android Keystore 支持的加密方案保存。
+- 持久化任务、计划、Goal、子 Agent、Skill、附件、审批与恢复状态。
+- 用户授权项目目录、受控内容读取、变更预览以及写入前确认。
+- 在支持的 Debug 构建中提供手机本地 Linux 项目环境，以及命令和测试工具。
+- 图片元数据、拍照、系统分享导入、文本附件和共享存储工具。
+- 用户主动开启的屏幕捕获，以及基于无障碍服务的界面检查和受控操作。
+- 通过用户另行安装并授权的 Shizuku，执行只读的应用列表与单应用信息查询。
 
-## 真实边界
+## 重要权限边界
 
-| 范围 | 当前行为 |
+| 能力 | 当前边界 |
 | --- | --- |
-| API Key | 仅在本地加密保存，不写入源码或 APK |
-| 项目文件夹 | 只有用户通过 Android SAF 选择后才能访问 |
-| 文件内容 | 需要任务级单独授权 |
-| 文件修改 | 先在私有空间准备，展示 Diff，确认后才写入真实文件夹 |
-| 照片 | Photo Picker 不需要全库权限；照片库元数据服从 Android 权限状态 |
-| 终端 | 公开构建不可用 |
-| 远程 Host | 不在本仓库中 |
+| API Key | 本地加密；不会有意写入 JavaScript、日志或 APK |
+| 项目目录 | 由用户通过 Android Storage Access Framework 选择 |
+| 文件内容 | 通过任务级工具和当前有效的 Android 授权读取 |
+| 文件修改 | 先准备和展示差异，再经过 Android 策略检查后提交 |
+| 共享存储 | 需要用户在系统设置中授予“所有文件访问”权限 |
+| 屏幕捕获 | 需要用户主动启动 MediaProjection；图像只在当前工具轮次使用 |
+| 界面控制 | 需要开启无障碍服务；操作只接受最新快照产生的不透明节点句柄 |
+| 应用信息 | 需要 Shizuku；只提供有界、只读的列表和详情查询 |
+| 项目命令 | 运行在 PRoot/Alpine 环境；PRoot 不是面向恶意代码的安全沙箱 |
+| 模型服务 | 用户授权的提示词与工具内容会发送到所选择的 OpenRouter 模型 |
 
-这是一套安全边界设计，并不等同于形式化安全证明。安全问题请按照
-[SECURITY.md](SECURITY.md) 私下报告。
+更完整的说明见[安全模型](docs/SECURITY_MODEL.md)。这些设计用于减少越权和误操作，不构成
+形式化安全证明。
 
-## 本地构建
+## 仓库结构
 
-需要 JDK 17、Android SDK Platform 37 / Build Tools 37.0.0、Node.js 22.22.3 和 npm
-10.9.8。设置 `JAVA_HOME` 与 `ANDROID_HOME`，不要提交 `local.properties`。
+```text
+android-app/        Android 应用、Room 存储、设备策略、界面与测试
+mobile-runtime-js/  为 QuickJS 构建的固定版本 Pi 运行时
+wire/               共享协议与 Kotlin 合约
+scripts/            运行时构建、验证与公开发布检查
+third_party/        复现可选原生组件所需的已审阅补丁
+```
+
+公开仓库由私有主仓库中的明确白名单生成。内部调研、真机记录、凭据、远程 Host 代码和历史
+验证材料不会进入公开仓库。详见[开源范围](OPEN_SOURCE_SCOPE.md)。
+
+## 环境要求
+
+- JDK 17
+- Android SDK Platform 37、Build Tools 37.0.0、NDK 28.2.13676358
+- Node.js 22.22.3、npm 10.9.8
+- Git、curl、patch、ripgrep
+
+请配置 `JAVA_HOME` 和 `ANDROID_HOME`，不要提交 `local.properties`。
+
+## 构建与测试
 
 ```bash
 npm ci --prefix mobile-runtime-js
@@ -53,17 +75,21 @@ ANDROID_HOME=/path/to/android-sdk \
   testDebugUnitTest lintDebug assembleDebug assembleRelease
 ```
 
+Debug 构建会下载固定版本的 PRoot、talloc 和 Alpine 源码/资源，校验 SHA-256 后生成手机本地
+项目运行环境。在完整审查对应源码和第三方声明义务之前，不应对外分发生成的 APK。
+
 完整验证：
 
 ```bash
 ./scripts/verify.sh
 ```
 
-架构见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)，安全边界见
-[docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md)，发布流程见
-[RELEASING.md](RELEASING.md)。仓库公开范围见
-[OPEN_SOURCE_SCOPE.md](OPEN_SOURCE_SCOPE.md)，参与贡献见
-[CONTRIBUTING.md](CONTRIBUTING.md)，第三方许可证见
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+## 参与贡献与安全问题
 
-Momoding 自有源码使用 [MIT License](LICENSE)。
+提交 Pull Request 前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。安全问题请按
+[SECURITY.md](SECURITY.md) 私下报告；不要在公开 Issue 中提交真实凭据、私有项目文件或诊断包。
+
+## 许可证
+
+Momoding 自有源码使用 [MIT License](LICENSE)。打包或构建时获取的第三方组件继续适用其原始
+许可证，详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

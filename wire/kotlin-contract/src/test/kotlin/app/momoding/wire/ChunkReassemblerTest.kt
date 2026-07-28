@@ -27,10 +27,10 @@ import kotlin.test.assertTrue
 
 class ChunkReassemblerTest {
     private val reliabilityFixture: JsonObject by lazy {
-        readFixture("/pi-0.80.6/reliability-contract.json")
+        readFixture("/pi-0.80.6/p1b-reliability-contract.json")
     }
     private val byteFixture: JsonObject by lazy {
-        readFixture("/pi-0.80.6/byte-domains.json")
+        readFixture("/pi-0.80.6/p1b-byte-domains.json")
     }
 
     @Test
@@ -230,7 +230,7 @@ class ChunkReassemblerTest {
             val transfer = pageTransfer()
             assembler.accept(transfer.start)
             val artifact = singleArtifact(root)
-            assertTrue(artifact.fileName.toString().startsWith("reliability-chunk-"))
+            assertTrue(artifact.fileName.toString().startsWith("p1b-chunk-"))
             assertTrue(!artifact.fileName.toString().contains(transfer.transferId))
 
             clock.now = 29_999
@@ -344,9 +344,9 @@ class ChunkReassemblerTest {
         withAssembler { assembler, root, _ ->
             val source = eventTransfer().startFrame
             val invalidStarts = listOf(
-                source.copy(totalBytes = ReliabilityProtocol.CHUNK_MAX_TRANSFER_BYTES.toLong() + 1),
-                source.copy(chunkCount = ReliabilityProtocol.CHUNK_MAX_COUNT + 1),
-                source.copy(totalBytes = ReliabilityProtocol.DIRECT_PI_EVENT_MAX_BYTES.toLong()),
+                source.copy(totalBytes = P1bProtocol.CHUNK_MAX_TRANSFER_BYTES.toLong() + 1),
+                source.copy(chunkCount = P1bProtocol.CHUNK_MAX_COUNT + 1),
+                source.copy(totalBytes = P1bProtocol.DIRECT_PI_EVENT_MAX_BYTES.toLong()),
                 source.copy(contentKind = "task.snapshot.page"),
             )
             invalidStarts.forEach { start ->
@@ -357,8 +357,8 @@ class ChunkReassemblerTest {
             }
 
             val maximum = source.copy(
-                totalBytes = ReliabilityProtocol.CHUNK_MAX_TRANSFER_BYTES.toLong(),
-                chunkCount = ReliabilityProtocol.CHUNK_MAX_COUNT,
+                totalBytes = P1bProtocol.CHUNK_MAX_TRANSFER_BYTES.toLong(),
+                chunkCount = P1bProtocol.CHUNK_MAX_COUNT,
             )
             assertSame(ChunkTransferPending, assembler.accept(receivedStart(maximum)))
             assertEquals(0, Files.size(singleArtifact(root)))
@@ -434,7 +434,7 @@ class ChunkReassemblerTest {
         transferId: String,
         logical: ByteArray,
         firstChunkBytes: Int,
-    ): List<ReceivedReliabilityServerFrame> {
+    ): List<ReceivedP1bServerFrame> {
         val chunks = listOf(
             logical.copyOfRange(0, firstChunkBytes),
             logical.copyOfRange(firstChunkBytes, logical.size),
@@ -446,7 +446,7 @@ class ChunkReassemblerTest {
         transferId: String,
         chunkIndex: Int,
         bytes: ByteArray,
-    ): ReceivedReliabilityServerFrame {
+    ): ReceivedP1bServerFrame {
         val frame = JsonObject(
             mapOf(
                 "protocolVersion" to JsonPrimitive(1),
@@ -462,14 +462,14 @@ class ChunkReassemblerTest {
     private fun mutateStart(
         source: JsonObject,
         vararg changes: Pair<String, JsonPrimitive>,
-    ): ReceivedReliabilityServerFrame = ReliabilityContractDecoder.decode(
+    ): ReceivedP1bServerFrame = ReliabilityContractDecoder.decode(
         JsonObject(source + changes.toMap()).toString(),
     )
 
-    private fun receivedStart(frame: PiEventChunkStartFrame): ReceivedReliabilityServerFrame =
-        ReceivedReliabilityServerFrame(frame, "review-constructed-start".encodeToByteArray())
+    private fun receivedStart(frame: PiEventChunkStartFrame): ReceivedP1bServerFrame =
+        ReceivedP1bServerFrame(frame, "review-constructed-start".encodeToByteArray())
 
-    private fun decodedChunkBytes(received: ReceivedReliabilityServerFrame): ByteArray =
+    private fun decodedChunkBytes(received: ReceivedP1bServerFrame): ByteArray =
         Base64.getDecoder().decode(assertIs<TransportChunkDataFrame>(received.frame).data)
 
     private fun structuredRecipeBytes(recipe: JsonObject): ByteArray =
@@ -515,7 +515,7 @@ class ChunkReassemblerTest {
     private fun withAssembler(
         block: (ChunkReassembler, Path, MutableClock) -> Unit,
     ) {
-        val root = Files.createTempDirectory("reliability-kotlin-chunks-")
+        val root = Files.createTempDirectory("p1b-kotlin-chunks-")
         val clock = MutableClock()
         val assembler = ChunkReassembler(root, clock::read)
         try {
@@ -544,10 +544,10 @@ class ChunkReassemblerTest {
     private data class TransferFixture<T : TransportChunkStartFrame>(
         val transferId: String,
         val startSource: JsonObject,
-        val start: ReceivedReliabilityServerFrame,
+        val start: ReceivedP1bServerFrame,
         val startFrame: T,
-        val data: List<ReceivedReliabilityServerFrame>,
-        val end: ReceivedReliabilityServerFrame,
+        val data: List<ReceivedP1bServerFrame>,
+        val end: ReceivedP1bServerFrame,
         val logicalBytes: ByteArray,
         val firstChunkBytes: Int,
     )

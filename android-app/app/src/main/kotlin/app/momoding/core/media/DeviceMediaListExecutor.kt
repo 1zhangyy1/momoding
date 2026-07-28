@@ -8,8 +8,11 @@ import app.momoding.wire.DeviceClientWireError
 import app.momoding.wire.DeviceToolRequestFrame
 import app.momoding.wire.DeviceToolResultClientFrame
 import app.momoding.wire.DeviceToolTerminalKind
+import app.momoding.core.capabilities.AndroidPermissionRequestResult
+import app.momoding.core.capabilities.AndroidPermissionRequestCoordinator
 import app.momoding.core.capabilities.CapabilityAvailability
 import app.momoding.core.capabilities.photoLibraryAvailability
+import app.momoding.core.capabilities.photoLibraryPermissionRequest
 import java.time.OffsetDateTime
 import java.time.format.DateTimeParseException
 import kotlinx.coroutines.CancellationException
@@ -48,6 +51,10 @@ fun interface DevicePhotoMetadataQuery {
     suspend fun newestImages(limit: Int): List<DevicePhotoMetadata>
 }
 
+fun interface PhotoLibraryPermissionRequester {
+    suspend fun request(): Boolean
+}
+
 interface DeviceMediaListHandler {
     fun handles(toolName: String): Boolean
     fun currentScope(): PhotoLibraryScope
@@ -57,6 +64,8 @@ interface DeviceMediaListHandler {
 class DeviceMediaListExecutor(
     private val scopeProvider: PhotoLibraryScopeProvider,
     private val query: DevicePhotoMetadataQuery,
+    private val permissionRequester: PhotoLibraryPermissionRequester =
+        PhotoLibraryPermissionRequester { false },
 ) : DeviceMediaListHandler {
     override fun handles(toolName: String): Boolean = toolName == TOOL_NAME
 
@@ -87,9 +96,15 @@ class DeviceMediaListExecutor(
         if (limit !in 1..MAX_ITEMS) {
             return frame.failed("INVALID_DEVICE_TOOL_ARGUMENTS", "Photo-library arguments are invalid")
         }
-        val scope = currentScope()
+        var scope = currentScope()
         if (scope == PhotoLibraryScope.DENIED) {
-            return frame.failed("PHOTO_LIBRARY_PERMISSION_REQUIRED", "Enable photo-library access in Device capabilities")
+            if (permissionRequester.request()) scope = currentScope()
+        }
+        if (scope == PhotoLibraryScope.DENIED) {
+            return frame.failed(
+                "PHOTO_LIBRARY_PERMISSION_REQUIRED",
+                "Photo-library access was not granted",
+            )
         }
         return try {
             val items = withTimeout(REQUEST_TIMEOUT_MILLIS) { query.newestImages(limit) }.take(limit)
@@ -156,7 +171,10 @@ class DeviceMediaListExecutor(
         private const val REQUEST_TIMEOUT_MILLIS = 5_000L
         private val ALLOWED_KEYS = setOf("purpose", "limit")
 
-        fun create(context: Context): DeviceMediaListExecutor {
+        fun create(
+            context: Context,
+            permissionCoordinator: AndroidPermissionRequestCoordinator? = null,
+        ): DeviceMediaListExecutor {
             val appContext = context.applicationContext
             return DeviceMediaListExecutor(
                 scopeProvider = PhotoLibraryScopeProvider {
@@ -170,6 +188,11 @@ class DeviceMediaListExecutor(
                     }
                 },
                 query = AndroidMediaStorePhotoQuery(appContext.contentResolver),
+                permissionRequester = PhotoLibraryPermissionRequester {
+                    permissionCoordinator?.request(
+                        photoLibraryPermissionRequest(android.os.Build.VERSION.SDK_INT),
+                    ) == AndroidPermissionRequestResult.GRANTED
+                },
             )
         }
     }

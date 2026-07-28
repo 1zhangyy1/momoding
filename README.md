@@ -4,75 +4,72 @@
 
 # Momoding
 
-Momoding is a local-first AI coding workspace for Android. The agent loop runs on the phone,
-connects to OpenRouter with the user's own API key, and can work only with files the user
-explicitly selects through Android's Storage Access Framework.
+Momoding is a local-first AI coding workspace for Android. Its Pi agent loop runs on the phone,
+connects to OpenRouter with the user's own API key, and routes every device-side action through
+Android-owned policy and permission checks.
 
 [简体中文](README.zh-CN.md)
 
-> **Developer preview:** the repository is suitable for review and local development, but the app
-> is not yet a production or Play Store release. The public build intentionally excludes the
-> experimental Linux/PRoot runtime and remote host service. It does not expose terminal or test
-> execution tools to the model.
+> **Developer preview:** this repository is suitable for source review and local development. It
+> is not yet a production or Play Store release, and it has not received an independent security
+> audit.
 
 ## What works
 
-- On-device Pi agent loop in QuickJS; Node.js is used only to build and test the bundle.
-- OpenRouter bring-your-own-key setup. Credentials are encrypted with an Android Keystore-backed
-  AES-GCM key and stored in the app's no-backup directory.
-- Task, plan, goal, child-agent, skill, attachment, and recovery state persisted with Room.
-- Explicit Android SAF folder authorization with task-scoped opaque file identities.
-- Separate approval for reading file contents and a reviewed diff/confirmation step before writes.
-- Photo Picker, selected photo-library metadata, camera capture, share-sheet text/files, and
-  bounded text attachments.
+- On-device Pi agent loop in QuickJS; Node.js is used to build and test the bundled runtime.
+- OpenRouter bring-your-own-key setup with Android Keystore-backed credential encryption.
+- Persistent tasks, plans, goals, child agents, skills, attachments, approvals, and recovery state.
+- User-authorized project folders, bounded content reads, prepared diffs, and explicit write
+  confirmation.
+- A phone-local Linux project runtime with model-visible command and test tools in supported debug
+  builds.
+- Photo metadata, camera capture, share-sheet import, text attachments, and shared-storage tools.
+- User-started screen capture plus accessibility-based UI inspection and bounded UI actions.
+- Read-only installed-package listing and inspection through a separately installed and authorized
+  Shizuku service.
 
-## Trust boundaries
+## Important trust boundaries
 
-| Boundary | Current behavior |
+| Capability | Current boundary |
 | --- | --- |
-| API key | Encrypted locally; never committed or embedded in the APK |
-| Project folders | Available only after the user selects a folder through Android SAF |
-| File contents | Require a separate task-scoped read approval |
-| File changes | Prepared privately, shown as a diff, then committed only after confirmation |
-| Photos | Photo Picker works without broad library access; library metadata follows Android permission state |
-| Terminal | Not available in the public build |
-| Remote host | Not included in this repository |
+| API key | Encrypted locally; never intentionally placed in JavaScript, logs, or the APK |
+| Project folders | Selected by the user through Android's Storage Access Framework |
+| File contents | Read through task-scoped tools and current Android grants |
+| File changes | Prepared first, shown for review, and committed only after Android policy checks |
+| Shared storage | Requires the Android all-files access setting; the app reports the live state |
+| Screen capture | Requires a user-started MediaProjection session; captured images are turn-local |
+| UI control | Requires the accessibility service; actions use fresh opaque node handles |
+| Package facts | Requires Shizuku; limited to bounded read-only list and inspection operations |
+| Project commands | Run inside a PRoot/Alpine environment; PRoot is not a hostile-code sandbox |
+| Model provider | Authorized prompt and tool content is sent to the selected OpenRouter model |
 
-This is a security design, not a formal security proof. Please report suspected vulnerabilities
-privately as described in [SECURITY.md](SECURITY.md).
+See [Security model](docs/SECURITY_MODEL.md) for details. This design reduces accidental authority;
+it is not a security proof.
 
 ## Repository layout
 
 ```text
-android-app/        Android application, Room storage, policy, UI, and tests
+android-app/        Android application, Room storage, device policies, UI, and tests
 mobile-runtime-js/  Pinned Pi runtime bundle built for QuickJS
-wire/               Shared protocol schemas and the Kotlin wire contract
-scripts/            Repository verification and public-release checks
+wire/               Shared protocol schemas and Kotlin contract
+scripts/            Runtime builders, verification, and public-release checks
+third_party/        Reviewed patches needed to reproduce optional native components
 ```
 
-The exact public boundary is recorded in [OPEN_SOURCE_SCOPE.md](OPEN_SOURCE_SCOPE.md). Internal
-research, device captures, credentials, private host code, and historical validation artifacts are
-not part of this repository.
-
-## Documentation
-
-- [Architecture](docs/ARCHITECTURE.md)
-- [Security model](docs/SECURITY_MODEL.md)
-- [Release process](RELEASING.md)
-- [Android module](android-app/README.md)
-- [Pi runtime module](mobile-runtime-js/README.md)
-- [Wire contracts](wire/README.md)
+The public repository is generated from an explicit allowlist in the private source repository.
+Internal research, device captures, credentials, remote-host code, and historical validation
+artifacts are excluded. See [Open-source scope](OPEN_SOURCE_SCOPE.md).
 
 ## Prerequisites
 
 - JDK 17
-- Android SDK Platform 37 and Build Tools 37.0.0
+- Android SDK Platform 37, Build Tools 37.0.0, and NDK 28.2.13676358
 - Node.js 22.22.3 and npm 10.9.8
-- Git and `rg` (ripgrep)
+- Git, curl, patch, and ripgrep
 
-Set `JAVA_HOME` and `ANDROID_HOME`; do not commit `local.properties`.
+Set `JAVA_HOME` and `ANDROID_HOME`. Do not commit `local.properties`.
 
-## Build
+## Build and test
 
 ```bash
 npm ci --prefix mobile-runtime-js
@@ -84,36 +81,23 @@ ANDROID_HOME=/path/to/android-sdk \
   testDebugUnitTest lintDebug assembleDebug assembleRelease
 ```
 
-The debug APK is written to
-`android-app/app/build/outputs/apk/debug/app-debug.apk`.
+The debug build downloads pinned PRoot, talloc, and Alpine sources/assets, verifies their SHA-256
+digests, and creates the phone-local project runtime. Do not redistribute a generated APK until
+all corresponding-source and third-party notice obligations have been reviewed.
 
-Install it on an Android 11+ test device:
-
-```bash
-adb install -r android-app/app/build/outputs/apk/debug/app-debug.apk
-```
-
-Open **Settings → Provider**, enter an OpenRouter API key, choose a model, and then authorize only
-the folders a task should use.
-
-## One-command verification
+For the full repository gate:
 
 ```bash
 ./scripts/verify.sh
 ```
 
-The command checks the public repository boundary, rebuilds the runtime in temporary directories,
-runs the JavaScript and Kotlin/JVM suites, runs all Android unit tests, compiles the instrumentation
-tests, runs lint, assembles both debug and release APKs, and inspects the release APK's permissions,
-exported components, and packaged artifacts. It does not require a real API key.
+## Contributing and security
 
-## Contributing
-
-Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Use a public issue for normal
-bugs and feature requests, but never post API keys, diagnostics archives, private project files, or
-security reports. Security reports follow [SECURITY.md](SECURITY.md).
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Report suspected
+vulnerabilities privately as described in [SECURITY.md](SECURITY.md); never put real credentials,
+private project files, or diagnostics archives in a public issue.
 
 ## License
 
-Momoding source code is available under the [MIT License](LICENSE). Third-party components keep
-their original licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Momoding-authored source is available under the [MIT License](LICENSE). Bundled and build-fetched
+components keep their original licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

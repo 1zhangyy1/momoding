@@ -1,0 +1,96 @@
+diff --git a/src/GNUmakefile b/src/GNUmakefile
+index 6c3ab6c..e4b7b61 100644
+--- a/src/GNUmakefile
++++ b/src/GNUmakefile
+@@ -10,6 +10,7 @@ INSTALL  = install
+ CC       ?= $(CROSS_COMPILE)gcc
+ LD       = $(CC)
+ STRIP    ?= $(CROSS_COMPILE)strip
++READELF  ?= readelf
+ OBJCOPY  ?= $(CROSS_COMPILE)objcopy
+ OBJDUMP  ?= $(CROSS_COMPILE)objdump
+ 
+@@ -242,7 +243,7 @@ endif
+ $(eval $(call build_loader,-m32))
+ endif
+ 
+ loader/loader-info.c: loader/loader
+-	readelf -s $< | awk -f loader/loader-info.awk > $@
++	$(READELF) -s $< | awk -f loader/loader-info.awk > $@
+ 
+ ######################################################################
+ # Dependencies
+diff --git a/src/extension/ashmem_memfd/ashmem_memfd.c b/src/extension/ashmem_memfd/ashmem_memfd.c
+index 20ed313..c29fd98 100644
+--- a/src/extension/ashmem_memfd/ashmem_memfd.c
++++ b/src/extension/ashmem_memfd/ashmem_memfd.c
+@@ -1,6 +1,7 @@
+ #if defined(__ANDROID__) || defined(__BIONIC__)
+ 
+ #include <stdlib.h>
++#include <string.h>
+ #include <signal.h>
+ #include <unistd.h>
+ #include <sys/syscall.h>  /* __NR_memfd_create,  */
+diff --git a/src/tracee/event.c b/src/tracee/event.c
+index 503ba65..ce6c0b9 100644
+--- a/src/tracee/event.c
++++ b/src/tracee/event.c
+@@ -96,6 +96,25 @@ int launch_process(Tracee *tracee, char *const argv[])
+ 		return -errno;
+ 
+ 	case 0: /* child */
++		/* Android app processes inherit ignored signal dispositions from Zygote.
++		 * In particular, ignored SIGPIPE makes ordinary guest pipelines such as
++		 * `yes | head` never terminate. Our ProcessBuilder caller opts into a clean
++		 * command-process signal state before PRoot launches the first tracee. */
++		if (getenv("MOMODING_PROOT_RESET_GUEST_SIGNALS") != NULL) {
++			struct sigaction action;
++			sigset_t empty_set;
++			int signum;
++
++			memset(&action, 0, sizeof(action));
++			action.sa_handler = SIG_DFL;
++			sigemptyset(&action.sa_mask);
++			for (signum = 1; signum < SIGRTMAX; signum++)
++				if (signum != SIGKILL && signum != SIGSTOP)
++					(void) sigaction(signum, &action, NULL);
++			sigemptyset(&empty_set);
++			(void) sigprocmask(SIG_SETMASK, &empty_set, NULL);
++		}
++
+ 		/* Declare myself as ptraceable before executing the
+ 		 * requested program. */
+ 		status = ptrace(PTRACE_TRACEME, 0, NULL, NULL);
+@@ -301,6 +320,8 @@ int event_loop()
+ 	/* Handle all signals.  */
+ 	for (signum = 0; signum < SIGRTMAX; signum++) {
+ 		switch (signum) {
++		case SIGINT:
++		case SIGTERM:
+ 		case SIGQUIT:
+ 		case SIGILL:
+ 		case SIGABRT:
+diff --git a/src/syscall/pipe_shadow.c b/src/syscall/pipe_shadow.c
+index a46e577..6aebfcb 100644
+--- a/src/syscall/pipe_shadow.c
++++ b/src/syscall/pipe_shadow.c
+@@ -25,6 +25,7 @@
+  */
+ 
+ #include <stdio.h>    /* snprintf, fopen, fgets, fclose */
++#include <stdlib.h>   /* getenv */
+ #include <string.h>   /* strncmp */
+ #include <fcntl.h>    /* open, O_RDONLY, O_CLOEXEC */
+ #include <unistd.h>   /* readlink, close */
+@@ -68,6 +68,10 @@ void shadow_pipe_read_end(pid_t tracee_pid, int tracee_fd)
+ 	int shadow_fd;
+ 	int i;
+ 
++	/* Shadow read ends prevent normal SIGPIPE termination (`yes | head`). */
++	if (getenv("MOMODING_PROOT_DISABLE_PIPE_SHADOW") != NULL)
++		return;
++
+ 	ensure_init();
+ 
+ 	/* Check the fd is an anonymous pipe. */

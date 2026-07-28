@@ -243,13 +243,13 @@ class ReliableProjectionTest {
         sequence: Long,
         streamId: String = STREAM_ID,
         rawSuffix: String = "same",
-    ): ReceivedReliabilityServerFrame {
+    ): ReceivedP1bServerFrame {
         val frame = PiEventFrame(
             protocolVersion = 1,
             kind = "pi.event",
             taskId = TASK_ID,
             piSessionId = SESSION_ID,
-            piVersion = CoreProtocol.PI_VERSION,
+            piVersion = P1aProtocol.PI_VERSION,
             streamId = streamId,
             sequence = sequence,
             emittedAt = "2026-07-15T00:00:00.000Z",
@@ -260,10 +260,10 @@ class ReliableProjectionTest {
                 ),
             ),
         )
-        return ReceivedReliabilityServerFrame(frame, "event-$streamId-$sequence-$rawSuffix".encodeToByteArray())
+        return ReceivedP1bServerFrame(frame, "event-$streamId-$sequence-$rawSuffix".encodeToByteArray())
     }
 
-    private fun replay(through: Long, liveFrom: Long) = ReceivedReliabilityServerFrame(
+    private fun replay(through: Long, liveFrom: Long) = ReceivedP1bServerFrame(
         PiReplayCompleteFrame(1, "pi.replay.complete", TASK_ID, STREAM_ID, through, liveFrom),
         "replay-$through-$liveFrom".encodeToByteArray(),
     )
@@ -273,7 +273,7 @@ class ReliableProjectionTest {
         requestedStream: String,
         currentStream: String,
         snapshotVersion: Long,
-    ) = ReceivedReliabilityServerFrame(
+    ) = ReceivedP1bServerFrame(
         PiResyncRequiredFrame(
             1,
             "pi.resync_required",
@@ -291,7 +291,7 @@ class ReliableProjectionTest {
         version: Long = 7,
         through: Long = 9,
         messages: List<kotlinx.serialization.json.JsonElement> = emptyList(),
-    ) = ReceivedReliabilityServerFrame(
+    ) = ReceivedP1bServerFrame(
         TaskSnapshotFrame(
             kind = "task.snapshot",
             requestId = "snapshot",

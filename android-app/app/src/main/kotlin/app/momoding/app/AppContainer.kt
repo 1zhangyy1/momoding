@@ -1,14 +1,21 @@
 package app.momoding.app
 
 import android.app.Application
+import android.app.KeyguardManager
+import android.content.Context
 import app.momoding.core.appearance.AppearanceStore
+import app.momoding.core.accessibility.MomodingAccessibilityRuntime
+import app.momoding.core.accessibility.ScreenCaptureCoordinator
 import app.momoding.core.attachments.AttachmentRepository
 import app.momoding.core.capabilities.AndroidCapabilityRegistry
+import app.momoding.core.capabilities.AndroidPermissionRequestCoordinator
 import app.momoding.core.diagnostics.DiagnosticsExporter
+import app.momoding.core.files.AuthorizedContentReadPolicy
 import app.momoding.core.files.AuthorizedFoldersRepository
 import app.momoding.core.files.DeviceContentReadExecutor
 import app.momoding.core.files.DeviceFileChangeExecutor
 import app.momoding.core.files.DeviceMetadataToolExecutor
+import app.momoding.core.files.SharedStorageRepository
 import app.momoding.core.media.DeviceMediaListExecutor
 import app.momoding.core.policy.TaskApprovalMode
 import app.momoding.core.provider.OpenRouterNativeClient
@@ -20,6 +27,10 @@ import app.momoding.core.runtime.local.PhoneLocalAttachmentToolExecutor
 import app.momoding.core.runtime.local.PhoneLocalLinuxRuntime
 import app.momoding.core.runtime.local.PhoneLocalProjectToolExecutor
 import app.momoding.core.runtime.local.PhoneLocalProjectWorkspace
+import app.momoding.core.runtime.local.PhoneLocalScreenCaptureToolExecutor
+import app.momoding.core.runtime.local.PhoneLocalShizukuToolExecutor
+import app.momoding.core.runtime.local.PhoneLocalUiToolExecutor
+import app.momoding.core.shizuku.ShizukuController
 import app.momoding.core.skills.SkillCatalogService
 import app.momoding.core.skills.SkillImportReader
 import app.momoding.core.skills.SkillRepository
@@ -42,8 +53,14 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import rikka.shizuku.ShizukuProvider
 
 class MomodingApplication : Application() {
+    override fun attachBaseContext(base: Context) {
+        ShizukuProvider.disableAutomaticSuiInitialization()
+        super.attachBaseContext(base)
+    }
+
     val container: AppContainer by lazy { AppContainer(this) }
 }
 
@@ -54,14 +71,36 @@ class AppContainer(application: Application) {
     val taskRepository = TaskRepository(database)
     val taskDetailRepository = TaskDetailRepository(database)
     val authorizedFoldersRepository = AuthorizedFoldersRepository(application, database)
+    val sharedStorageRepository = SharedStorageRepository()
+    val shizukuController = ShizukuController(application)
+    val androidPermissionRequestCoordinator = AndroidPermissionRequestCoordinator()
     val androidCapabilityRegistry = AndroidCapabilityRegistry.create(
         context = application,
         folders = authorizedFoldersRepository,
+        shizuku = shizukuController,
         scope = applicationScope,
-    ).also(AndroidCapabilityRegistry::refresh)
+    ).also { registry ->
+        MomodingAccessibilityRuntime.setCapabilityChangedListener(registry::refresh)
+        shizukuController.setCapabilityChangedListener(registry::refresh)
+        registry.refresh()
+    }
     val attentionRepository = AttentionRepository(
         database = database,
-        folders = authorizedFoldersRepository,
+        contentMetadataLoader = { grantId ->
+            if (sharedStorageRepository.isSharedGrant(grantId)) {
+                sharedStorageRepository.metadata(
+                    grantId = grantId,
+                    maxDepth = AuthorizedContentReadPolicy.MAX_CONTENT_SCAN_DEPTH,
+                    maxItems = AuthorizedContentReadPolicy.MAX_CONTENT_SCAN_ITEMS,
+                )
+            } else {
+                authorizedFoldersRepository.metadata(
+                    grantId = grantId,
+                    maxDepth = AuthorizedContentReadPolicy.MAX_CONTENT_SCAN_DEPTH,
+                    maxItems = AuthorizedContentReadPolicy.MAX_CONTENT_SCAN_ITEMS,
+                )
+            }
+        },
     )
     val fileChangeRepository = FileChangeRepository(database)
     val draftRepository = DraftRepository(database)
@@ -94,8 +133,9 @@ class AppContainer(application: Application) {
     val providerCredentialVault = ProviderCredentialVault.create(application)
     val openRouterClient = OpenRouterNativeClient()
     val phoneLocalFileChangeExecutor = DeviceFileChangeExecutor(
-        database,
-        authorizedFoldersRepository,
+        database = database,
+        folders = authorizedFoldersRepository,
+        sharedStorage = sharedStorageRepository,
     )
     val phoneLocalLinuxRuntime = PhoneLocalLinuxRuntime(application)
     val phoneLocalProjectWorkspace = PhoneLocalProjectWorkspace(
@@ -110,16 +150,44 @@ class AppContainer(application: Application) {
         phoneLocalFileChangeExecutor,
     )
     val phoneLocalAttachmentToolExecutor = PhoneLocalAttachmentToolExecutor(attachmentRepository)
+    private val phoneLocalScreenCaptureToolExecutor = PhoneLocalScreenCaptureToolExecutor(
+        ScreenCaptureCoordinator(application),
+    )
+    private val phoneLocalUiToolExecutor = PhoneLocalUiToolExecutor(
+        controller = MomodingAccessibilityRuntime.controller,
+        isDeviceLocked = {
+            application.getSystemService(Context.KEYGUARD_SERVICE)
+                .let { it as KeyguardManager }
+                .isDeviceLocked
+        },
+    )
+    private val phoneLocalShizukuToolExecutor =
+        PhoneLocalShizukuToolExecutor(shizukuController)
     val phoneLocalAttentionBridge = PhoneLocalAttentionBridge(
         ledger = RoomAttentionLedger(database),
-        metadataTools = DeviceMetadataToolExecutor(database, authorizedFoldersRepository),
-        contentReadHandler = DeviceContentReadExecutor(database, authorizedFoldersRepository),
+        metadataTools = DeviceMetadataToolExecutor(
+            database = database,
+            folders = authorizedFoldersRepository,
+            sharedStorage = sharedStorageRepository,
+            capabilityRegistry = androidCapabilityRegistry,
+        ),
+        contentReadHandler = DeviceContentReadExecutor(
+            database = database,
+            folders = authorizedFoldersRepository,
+            sharedStorage = sharedStorageRepository,
+        ),
         fileChangeHandler = phoneLocalFileChangeExecutor,
         projectTools = phoneLocalProjectToolExecutor,
         attachmentTools = phoneLocalAttachmentToolExecutor,
-        mediaTools = DeviceMediaListExecutor.create(application),
+        mediaTools = DeviceMediaListExecutor.create(
+            application,
+            androidPermissionRequestCoordinator,
+        ),
+        screenCaptureTools = phoneLocalScreenCaptureToolExecutor,
+        uiTools = phoneLocalUiToolExecutor,
+        packageTools = phoneLocalShizukuToolExecutor,
         approvalModeForTask = { taskId ->
-            database.momodingDao().task(taskId)?.approvalMode ?: TaskApprovalMode.REQUEST_APPROVAL
+            database.p2Dao().task(taskId)?.approvalMode ?: TaskApprovalMode.REQUEST_APPROVAL
         },
     )
     val phoneLocalChildAgentRepository = PhoneLocalChildAgentRepository(database)

@@ -24,33 +24,33 @@ object ReliabilityContractDecoder {
         explicitNulls = true
     }
 
-    fun decode(bytes: ByteArray): ReceivedReliabilityServerFrame {
-        requirePhysicalLimit(bytes.size, CoreProtocol.MAX_FRAME_BYTES, "Reliability server frame")
+    fun decode(bytes: ByteArray): ReceivedP1bServerFrame {
+        requirePhysicalLimit(bytes.size, P1aProtocol.MAX_FRAME_BYTES, "P1B server frame")
         val text = try {
             bytes.decodeToString(throwOnInvalidSequence = true)
         } catch (error: CharacterCodingException) {
-            throw SerializationException("Reliability server frame must be valid UTF-8", error)
+            throw SerializationException("P1B server frame must be valid UTF-8", error)
         }
         val element = try {
             json.parseToJsonElement(text)
         } catch (error: SerializationException) {
             throw error
         } catch (error: IllegalArgumentException) {
-            throw SerializationException("Reliability server frame must contain valid JSON", error)
+            throw SerializationException("P1B server frame must contain valid JSON", error)
         }
         val objectValue = element as? JsonObject
-            ?: throw SerializationException("Reliability server frame must be a JSON object")
+            ?: throw SerializationException("P1B server frame must be a JSON object")
         val kind = readKind(objectValue)
 
-        val frame = if (kind in CORE_SERVER_KINDS) {
-            parseCoreFrame(objectValue, kind, text)
+        val frame = if (kind in P1A_SERVER_KINDS) {
+            parseP1aFrame(objectValue, kind, text)
         } else {
             parseExtension(objectValue, kind, bytes.size)
         }
-        return ReceivedReliabilityServerFrame(frame, bytes)
+        return ReceivedP1bServerFrame(frame, bytes)
     }
 
-    fun decode(text: String): ReceivedReliabilityServerFrame = decode(text.encodeToByteArray())
+    fun decode(text: String): ReceivedP1bServerFrame = decode(text.encodeToByteArray())
 
     /**
      * Decodes exact logical bytes after a transport chunk transfer has passed
@@ -60,15 +60,15 @@ object ReliabilityContractDecoder {
     internal fun decodeReassembled(
         bytes: ByteArray,
         contentKind: String,
-    ): ReceivedReliabilityServerFrame {
+    ): ReceivedP1bServerFrame {
         requirePhysicalLimit(
             bytes.size,
-            ReliabilityProtocol.CHUNK_MAX_TRANSFER_BYTES,
+            P1bProtocol.CHUNK_MAX_TRANSFER_BYTES,
             "Reassembled logical frame",
         )
         val directThreshold = when (contentKind) {
-            "pi.event" -> ReliabilityProtocol.DIRECT_PI_EVENT_MAX_BYTES
-            "task.snapshot.page" -> ReliabilityProtocol.SNAPSHOT_PAGE_MAX_PHYSICAL_BYTES
+            "pi.event" -> P1bProtocol.DIRECT_PI_EVENT_MAX_BYTES
+            "task.snapshot.page" -> P1bProtocol.SNAPSHOT_PAGE_MAX_PHYSICAL_BYTES
             else -> throw SerializationException("Unsupported chunk contentKind: $contentKind")
         }
         if (bytes.size <= directThreshold) {
@@ -102,7 +102,7 @@ object ReliabilityContractDecoder {
             "task.snapshot.page" -> parseExtension(frame, kind, physicalBytes = null)
             else -> error("contentKind checked above")
         }
-        return ReceivedReliabilityServerFrame(decoded, bytes)
+        return ReceivedP1bServerFrame(decoded, bytes)
     }
 
     internal fun encodeAck(frame: PiEventAckFrame): ByteArray {
@@ -110,7 +110,7 @@ object ReliabilityContractDecoder {
         val streamId = requireUuidValue(frame.streamId, "streamId")
         requireSafeIntegerValue(frame.throughSequence, "throughSequence", 0)
         return buildJsonObject {
-            put("protocolVersion", CoreProtocol.PROTOCOL_VERSION)
+            put("protocolVersion", P1aProtocol.PROTOCOL_VERSION)
             put("kind", "pi.event.ack")
             put("taskId", taskId)
             put("streamId", streamId)
@@ -118,11 +118,11 @@ object ReliabilityContractDecoder {
         }.toString().encodeToByteArray()
     }
 
-    private fun parseCoreFrame(
+    private fun parseP1aFrame(
         frame: JsonObject,
         kind: String,
         exactText: String,
-    ): CoreServerFrame = try {
+    ): P1aServerFrame = try {
         when (kind) {
             "hello.accepted" -> {
                 frame.requireExactKeys(
@@ -159,9 +159,9 @@ object ReliabilityContractDecoder {
             }
             "pi.event" -> validateDirectPiEvent(frame)
             "task.snapshot" -> validateDirectTaskSnapshot(frame)
-            else -> throw SerializationException("Unsupported Core server frame kind: $kind")
+            else -> throw SerializationException("Unsupported P1A server frame kind: $kind")
         }
-        CoreServerFrameDecoder.decode(exactText)
+        P1aServerFrameDecoder.decode(exactText)
     } catch (error: SerializationException) {
         throw error
     } catch (error: IllegalArgumentException) {
@@ -238,10 +238,10 @@ object ReliabilityContractDecoder {
         frame: JsonObject,
         kind: String,
         physicalBytes: Int?,
-    ): ReliabilityServerFrame {
+    ): P1bServerFrame {
         val extensionPhysicalLimit = when (kind) {
-            "task.snapshot.page" -> ReliabilityProtocol.SNAPSHOT_PAGE_MAX_PHYSICAL_BYTES
-            "transport.chunk.data" -> ReliabilityProtocol.CHUNK_MAX_PHYSICAL_FRAME_BYTES
+            "task.snapshot.page" -> P1bProtocol.SNAPSHOT_PAGE_MAX_PHYSICAL_BYTES
+            "transport.chunk.data" -> P1bProtocol.CHUNK_MAX_PHYSICAL_FRAME_BYTES
             else -> null
         }
         if (extensionPhysicalLimit != null && physicalBytes != null) {
@@ -265,7 +265,7 @@ object ReliabilityContractDecoder {
                 "device.tool.request" -> parseDeviceToolRequest(frame)
                 "device.tool.cancel" -> parseDeviceToolCancel(frame)
                 "device.tool.reconcile.request" -> parseDeviceReconcileRequest(frame)
-                else -> throw SerializationException("Unsupported Reliability server frame kind: $kind")
+                else -> throw SerializationException("Unsupported P1B server frame kind: $kind")
             }
         } catch (error: SerializationException) {
             throw error
@@ -289,7 +289,7 @@ object ReliabilityContractDecoder {
             "liveFromSequence must immediately follow replayedThroughSequence"
         }
         return PiReplayCompleteFrame(
-            protocolVersion = CoreProtocol.PROTOCOL_VERSION,
+            protocolVersion = P1aProtocol.PROTOCOL_VERSION,
             kind = "pi.replay.complete",
             taskId = frame.requireUuid("taskId"),
             streamId = frame.requireUuid("streamId"),
@@ -315,7 +315,7 @@ object ReliabilityContractDecoder {
             else -> throw IllegalArgumentException("reason is not supported")
         }
         return PiResyncRequiredFrame(
-            protocolVersion = CoreProtocol.PROTOCOL_VERSION,
+            protocolVersion = P1aProtocol.PROTOCOL_VERSION,
             kind = "pi.resync_required",
             taskId = frame.requireUuid("taskId"),
             reason = reason,
@@ -342,13 +342,13 @@ object ReliabilityContractDecoder {
         val totalBytes = frame.requireSafeInteger(
             "totalBytes",
             1,
-            ReliabilityProtocol.CHUNK_MAX_TRANSFER_BYTES.toLong(),
+            P1bProtocol.CHUNK_MAX_TRANSFER_BYTES.toLong(),
         )
         val sha256 = frame.requireSha256("sha256")
         val chunkCount = frame.requireSafeInteger(
             "chunkCount",
             1,
-            ReliabilityProtocol.CHUNK_MAX_COUNT.toLong(),
+            P1bProtocol.CHUNK_MAX_COUNT.toLong(),
         ).toInt()
 
         return when (contentKind) {
@@ -356,11 +356,11 @@ object ReliabilityContractDecoder {
                 frame.requireExactKeys(
                     *(commonRequired + arrayOf("streamId", "sequence")),
                 )
-                requireContract(totalBytes > ReliabilityProtocol.DIRECT_PI_EVENT_MAX_BYTES) {
-                    "pi.event chunk totalBytes must exceed ${ReliabilityProtocol.DIRECT_PI_EVENT_MAX_BYTES}"
+                requireContract(totalBytes > P1bProtocol.DIRECT_PI_EVENT_MAX_BYTES) {
+                    "pi.event chunk totalBytes must exceed ${P1bProtocol.DIRECT_PI_EVENT_MAX_BYTES}"
                 }
                 PiEventChunkStartFrame(
-                    protocolVersion = CoreProtocol.PROTOCOL_VERSION,
+                    protocolVersion = P1aProtocol.PROTOCOL_VERSION,
                     kind = "transport.chunk.start",
                     transferId = transferId,
                     contentKind = contentKind,
@@ -376,11 +376,11 @@ object ReliabilityContractDecoder {
                 frame.requireExactKeys(
                     *(commonRequired + arrayOf("snapshotVersion", "pageIndex")),
                 )
-                requireContract(totalBytes > ReliabilityProtocol.SNAPSHOT_PAGE_MAX_PHYSICAL_BYTES) {
-                    "task.snapshot.page chunk totalBytes must exceed ${ReliabilityProtocol.SNAPSHOT_PAGE_MAX_PHYSICAL_BYTES}"
+                requireContract(totalBytes > P1bProtocol.SNAPSHOT_PAGE_MAX_PHYSICAL_BYTES) {
+                    "task.snapshot.page chunk totalBytes must exceed ${P1bProtocol.SNAPSHOT_PAGE_MAX_PHYSICAL_BYTES}"
                 }
                 SnapshotPageChunkStartFrame(
-                    protocolVersion = CoreProtocol.PROTOCOL_VERSION,
+                    protocolVersion = P1aProtocol.PROTOCOL_VERSION,
                     kind = "transport.chunk.start",
                     transferId = transferId,
                     contentKind = contentKind,
@@ -389,7 +389,7 @@ object ReliabilityContractDecoder {
                     pageIndex = frame.requireSafeInteger(
                         "pageIndex",
                         0,
-                        (ReliabilityProtocol.SNAPSHOT_MAX_PAGES - 1).toLong(),
+                        (P1bProtocol.SNAPSHOT_MAX_PAGES - 1).toLong(),
                     ).toInt(),
                     totalBytes = totalBytes,
                     sha256 = sha256,
@@ -409,13 +409,13 @@ object ReliabilityContractDecoder {
             "data",
         )
         return TransportChunkDataFrame(
-            protocolVersion = CoreProtocol.PROTOCOL_VERSION,
+            protocolVersion = P1aProtocol.PROTOCOL_VERSION,
             kind = "transport.chunk.data",
             transferId = frame.requireUuid("transferId"),
             chunkIndex = frame.requireSafeInteger(
                 "chunkIndex",
                 0,
-                (ReliabilityProtocol.CHUNK_MAX_COUNT - 1).toLong(),
+                (P1bProtocol.CHUNK_MAX_COUNT - 1).toLong(),
             ).toInt(),
             data = frame.requireCanonicalBase64("data"),
         )
@@ -424,7 +424,7 @@ object ReliabilityContractDecoder {
     private fun parseChunkEnd(frame: JsonObject): TransportChunkEndFrame {
         frame.requireExactKeys("protocolVersion", "kind", "transferId")
         return TransportChunkEndFrame(
-            protocolVersion = CoreProtocol.PROTOCOL_VERSION,
+            protocolVersion = P1aProtocol.PROTOCOL_VERSION,
             kind = "transport.chunk.end",
             transferId = frame.requireUuid("transferId"),
         )
@@ -451,7 +451,7 @@ object ReliabilityContractDecoder {
         )
         val totalMessages = frame.requireSafeInteger("totalMessages", 0)
         return TaskSnapshotBeginFrame(
-            protocolVersion = CoreProtocol.PROTOCOL_VERSION,
+            protocolVersion = P1aProtocol.PROTOCOL_VERSION,
             kind = "task.snapshot.begin",
             requestId = frame.optionalString("requestId", 128),
             transferMode = when (frame.requireLiteralString("transferMode")) {
@@ -485,14 +485,14 @@ object ReliabilityContractDecoder {
             "messages",
         )
         return TaskSnapshotPageFrame(
-            protocolVersion = CoreProtocol.PROTOCOL_VERSION,
+            protocolVersion = P1aProtocol.PROTOCOL_VERSION,
             kind = "task.snapshot.page",
             taskId = frame.requireUuid("taskId"),
             snapshotVersion = frame.requireSafeInteger("snapshotVersion", 1),
             pageIndex = frame.requireSafeInteger(
                 "pageIndex",
                 0,
-                (ReliabilityProtocol.SNAPSHOT_MAX_PAGES - 1).toLong(),
+                (P1bProtocol.SNAPSHOT_MAX_PAGES - 1).toLong(),
             ).toInt(),
             messageStartIndex = frame.requireSafeInteger("messageStartIndex", 0),
             messages = frame.requireJsonArray("messages"),
@@ -509,14 +509,14 @@ object ReliabilityContractDecoder {
             "sha256",
         )
         return TaskSnapshotEndFrame(
-            protocolVersion = CoreProtocol.PROTOCOL_VERSION,
+            protocolVersion = P1aProtocol.PROTOCOL_VERSION,
             kind = "task.snapshot.end",
             taskId = frame.requireUuid("taskId"),
             snapshotVersion = frame.requireSafeInteger("snapshotVersion", 1),
             pageCount = frame.requireSafeInteger(
                 "pageCount",
                 1,
-                ReliabilityProtocol.SNAPSHOT_MAX_PAGES.toLong(),
+                P1bProtocol.SNAPSHOT_MAX_PAGES.toLong(),
             ).toInt(),
             sha256 = frame.requireSha256("sha256"),
         )
@@ -545,7 +545,7 @@ object ReliabilityContractDecoder {
         val arguments = frame.required("arguments")
         validateJsonValue(arguments, "arguments")
         return DeviceToolRequestFrame(
-            protocolVersion = CoreProtocol.PROTOCOL_VERSION,
+            protocolVersion = P1aProtocol.PROTOCOL_VERSION,
             kind = "device.tool.request",
             callId = frame.requireUuid("callId"),
             taskId = frame.requireUuid("taskId"),
@@ -570,7 +570,7 @@ object ReliabilityContractDecoder {
             else -> throw IllegalArgumentException("reason is not supported")
         }
         return DeviceToolCancelFrame(
-            protocolVersion = CoreProtocol.PROTOCOL_VERSION,
+            protocolVersion = P1aProtocol.PROTOCOL_VERSION,
             kind = "device.tool.cancel",
             callId = frame.requireUuid("callId"),
             taskId = frame.requireUuid("taskId"),
@@ -590,8 +590,8 @@ object ReliabilityContractDecoder {
         val requestId = frame.requireString("requestId", 128)
         val callsValue = frame.required("calls") as? JsonArray
             ?: throw IllegalArgumentException("calls must be an array")
-        requireContract(callsValue.isNotEmpty() && callsValue.size <= ReliabilityProtocol.MAX_DEVICE_ITEMS) {
-            "calls must contain 1-${ReliabilityProtocol.MAX_DEVICE_ITEMS} items"
+        requireContract(callsValue.isNotEmpty() && callsValue.size <= P1bProtocol.MAX_DEVICE_ITEMS) {
+            "calls must contain 1-${P1bProtocol.MAX_DEVICE_ITEMS} items"
         }
         val calls = callsValue.mapIndexed { index, value ->
             val call = value as? JsonObject
@@ -619,7 +619,7 @@ object ReliabilityContractDecoder {
             )
         }
         return DeviceToolReconcileRequestFrame(
-            protocolVersion = CoreProtocol.PROTOCOL_VERSION,
+            protocolVersion = P1aProtocol.PROTOCOL_VERSION,
             kind = "device.tool.reconcile.request",
             requestId = requestId,
             taskId = frame.requireUuid("taskId"),
@@ -630,8 +630,8 @@ object ReliabilityContractDecoder {
 
     private fun requireProtocol(frame: JsonObject) {
         val protocolVersion = frame.requireSafeInteger("protocolVersion", 1, 1)
-        requireContract(protocolVersion == CoreProtocol.PROTOCOL_VERSION.toLong()) {
-            "protocolVersion must be ${CoreProtocol.PROTOCOL_VERSION}"
+        requireContract(protocolVersion == P1aProtocol.PROTOCOL_VERSION.toLong()) {
+            "protocolVersion must be ${P1aProtocol.PROTOCOL_VERSION}"
         }
     }
 }
@@ -639,7 +639,7 @@ object ReliabilityContractDecoder {
 private fun readKind(frame: JsonObject): String {
     val primitive = frame["kind"] as? JsonPrimitive
     return primitive?.takeIf(JsonPrimitive::isString)?.contentOrNull
-        ?: throw SerializationException("Reliability server frame must contain a string kind")
+        ?: throw SerializationException("P1B server frame must contain a string kind")
 }
 
 private fun requirePhysicalLimit(actual: Int, maximum: Int, label: String) {
@@ -691,7 +691,7 @@ private fun JsonObject.requireBoolean(key: String): Boolean {
 private fun JsonObject.requireSafeInteger(
     key: String,
     minimum: Long,
-    maximum: Long = ReliabilityProtocol.MAX_SAFE_INTEGER,
+    maximum: Long = P1bProtocol.MAX_SAFE_INTEGER,
 ): Long {
     val primitive = required(key) as? JsonPrimitive
     requireContract(primitive != null && !primitive.isString) { "$key must be an integer" }
@@ -713,7 +713,7 @@ private fun requireSafeIntegerValue(
     value: Long,
     field: String,
     minimum: Long,
-    maximum: Long = ReliabilityProtocol.MAX_SAFE_INTEGER,
+    maximum: Long = P1bProtocol.MAX_SAFE_INTEGER,
 ) {
     requireContract(value in minimum..maximum) {
         "$field must be an integer from $minimum through $maximum"
@@ -741,7 +741,7 @@ private fun JsonObject.requireSha256(key: String): String {
 }
 
 private fun JsonObject.requireCanonicalBase64(key: String): String {
-    val value = requireString(key, ReliabilityProtocol.CHUNK_MAX_TRANSFER_BYTES * 2)
+    val value = requireString(key, P1bProtocol.CHUNK_MAX_TRANSFER_BYTES * 2)
     requireContract(BASE64_PATTERN.matches(value)) { "$key must be canonical base64" }
     val decoded = try {
         Base64.getDecoder().decode(value)
@@ -779,8 +779,8 @@ private fun validateJsonValue(
     field: String,
     depth: Int = 0,
 ) {
-    requireContract(depth <= ReliabilityProtocol.MAX_JSON_DEPTH) {
-        "$field exceeds JSON depth ${ReliabilityProtocol.MAX_JSON_DEPTH}"
+    requireContract(depth <= P1bProtocol.MAX_JSON_DEPTH) {
+        "$field exceeds JSON depth ${P1bProtocol.MAX_JSON_DEPTH}"
     }
     when (value) {
         is JsonArray -> value.forEachIndexed { index, child ->
@@ -818,8 +818,8 @@ private fun JsonObject.requireTaskRunState(key: String): TaskRunState =
 private fun JsonObject.requireSnapshotDeviceCalls(key: String): List<SnapshotDeviceCall> {
     val array = required(key) as? JsonArray
         ?: throw IllegalArgumentException("$key must be an array")
-    requireContract(array.size <= ReliabilityProtocol.MAX_DEVICE_ITEMS) {
-        "$key must contain at most ${ReliabilityProtocol.MAX_DEVICE_ITEMS} items"
+    requireContract(array.size <= P1bProtocol.MAX_DEVICE_ITEMS) {
+        "$key must contain at most ${P1bProtocol.MAX_DEVICE_ITEMS} items"
     }
     return array.mapIndexed { index, value ->
         val call = value as? JsonObject
@@ -884,7 +884,7 @@ private inline fun requireContract(condition: Boolean, message: () -> String) {
     if (!condition) throw IllegalArgumentException(message())
 }
 
-private val CORE_SERVER_KINDS = setOf(
+private val P1A_SERVER_KINDS = setOf(
     "hello.accepted",
     "response",
     "error",

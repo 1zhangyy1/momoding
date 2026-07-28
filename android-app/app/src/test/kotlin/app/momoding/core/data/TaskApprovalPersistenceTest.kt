@@ -42,7 +42,7 @@ class TaskApprovalPersistenceTest {
         assertEquals(TaskApprovalMode.REQUEST_APPROVAL, draft.approvalMode)
 
         projector().createTask(TASK_ID, "Task", SESSION_ID, STREAM_ID, "Prompt")
-        assertEquals(TaskApprovalMode.REQUEST_APPROVAL, database.momodingDao().task(TASK_ID)?.approvalMode)
+        assertEquals(TaskApprovalMode.REQUEST_APPROVAL, database.p2Dao().task(TASK_ID)?.approvalMode)
     }
 
     @Test
@@ -55,10 +55,10 @@ class TaskApprovalPersistenceTest {
 
             val bound = RoomCommandDraftJournal(database).bindDraftTask(DRAFT_ID, TASK_ID)
             assertEquals(TaskApprovalMode.FULL_ACCESS, bound.approvalMode)
-            assertEquals(TaskApprovalMode.FULL_ACCESS, database.momodingDao().task(TASK_ID)?.approvalMode)
+            assertEquals(TaskApprovalMode.FULL_ACCESS, database.p2Dao().task(TASK_ID)?.approvalMode)
 
             projector().markRunState(TASK_ID, TaskRunState.RUNNING, isStreaming = true)
-            assertEquals(TaskApprovalMode.FULL_ACCESS, database.momodingDao().task(TASK_ID)?.approvalMode)
+            assertEquals(TaskApprovalMode.FULL_ACCESS, database.p2Dao().task(TASK_ID)?.approvalMode)
 
             assertThrows(JournalConflictException::class.java) {
                 RoomCommandDraftJournal(database).saveDraft(
@@ -78,10 +78,10 @@ class TaskApprovalPersistenceTest {
 
             val journal = RoomCommandDraftJournal(database)
             journal.bindDraftTask(DRAFT_ID, TASK_ID)
-            assertEquals(1, database.momodingDao().updateTaskApprovalMode(TASK_ID, TaskApprovalMode.REQUEST_APPROVAL))
+            assertEquals(1, database.p2Dao().updateTaskApprovalMode(TASK_ID, TaskApprovalMode.REQUEST_APPROVAL))
 
             journal.bindDraftTask(DRAFT_ID, TASK_ID)
-            assertEquals(TaskApprovalMode.REQUEST_APPROVAL, database.momodingDao().task(TASK_ID)?.approvalMode)
+            assertEquals(TaskApprovalMode.REQUEST_APPROVAL, database.p2Dao().task(TASK_ID)?.approvalMode)
 
             drafts.createDraft(OTHER_DRAFT_ID)
             assertThrows(JournalConflictException::class.java) {
@@ -124,7 +124,7 @@ class TaskApprovalPersistenceTest {
                 ),
             )
 
-        assertEquals(TaskApprovalMode.AUTO_APPROVE, database.momodingDao().task(TASK_ID)?.approvalMode)
+        assertEquals(TaskApprovalMode.AUTO_APPROVE, database.p2Dao().task(TASK_ID)?.approvalMode)
     }
 
     @Test
@@ -139,7 +139,7 @@ class TaskApprovalPersistenceTest {
             "UPDATE drafts SET approvalMode = 'FUTURE_MODE' WHERE draftId = '$DRAFT_ID'",
         )
 
-        assertEquals(TaskApprovalMode.REQUEST_APPROVAL, database.momodingDao().task(TASK_ID)?.approvalMode)
+        assertEquals(TaskApprovalMode.REQUEST_APPROVAL, database.p2Dao().task(TASK_ID)?.approvalMode)
         assertEquals(
             TaskApprovalMode.REQUEST_APPROVAL,
             RoomCommandDraftJournal(database).draft(DRAFT_ID)?.approvalMode,

@@ -5,7 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.content.FileProvider
-import app.momoding.wire.CoreProtocol
+import app.momoding.wire.P1aProtocol
 import app.momoding.BuildConfig
 import app.momoding.core.transport.SecureTransportUiStatus
 import java.io.File
@@ -25,6 +25,7 @@ data class DiagnosticsArchive(
 private data class SanitizedDiagnostics(
     val appVersion: String,
     val sourceRevision: String,
+    val sourceDirty: Boolean,
     val androidApi: Int,
     val abi: String,
     val wireVersion: Int,
@@ -51,10 +52,11 @@ class DiagnosticsExporter(
         val payload = SanitizedDiagnostics(
             appVersion = BuildConfig.VERSION_NAME,
             sourceRevision = BuildConfig.SOURCE_REVISION,
+            sourceDirty = BuildConfig.SOURCE_DIRTY,
             androidApi = Build.VERSION.SDK_INT,
             abi = Build.SUPPORTED_ABIS.firstOrNull() ?: "unknown",
-            wireVersion = CoreProtocol.PROTOCOL_VERSION,
-            piVersion = CoreProtocol.PI_VERSION,
+            wireVersion = P1aProtocol.PROTOCOL_VERSION,
+            piVersion = P1aProtocol.PI_VERSION,
             connectionPhase = status.phase.name,
             hostAlias = status.hostAlias,
             configRevision = status.configRevision,

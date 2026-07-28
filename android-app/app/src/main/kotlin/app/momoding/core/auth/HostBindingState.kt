@@ -9,7 +9,7 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStoreFile
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
-import app.momoding.wire.ReliabilityProtocol
+import app.momoding.wire.P1bProtocol
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
@@ -76,7 +76,7 @@ data class HostBindingSnapshot(
         require(provider.isNotBlank() && provider.length <= 128) { "Provider label is invalid" }
         require(model.isNotBlank() && model.length <= 256) { "Model label is invalid" }
         require(thinking == "default" && !mutable) { "Client profile is not immutable" }
-        require(configRevision in 1..ReliabilityProtocol.MAX_SAFE_INTEGER) { "Config revision is invalid" }
+        require(configRevision in 1..P1bProtocol.MAX_SAFE_INTEGER) { "Config revision is invalid" }
     }
 
     companion object {

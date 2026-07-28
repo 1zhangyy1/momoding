@@ -1,16 +1,20 @@
 package app.momoding.app
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.media.projection.MediaProjectionManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -57,6 +61,9 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.core.view.WindowCompat
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
@@ -89,8 +96,12 @@ import app.momoding.feature.newtask.NewTaskScreen
 import app.momoding.feature.newtask.NewTaskViewModel
 import app.momoding.core.attachments.AttachmentFeatureGate
 import app.momoding.core.capabilities.AndroidCapabilityId
+import app.momoding.core.capabilities.AndroidPermissionRequest
+import app.momoding.core.capabilities.AndroidPermissionRequestResult
 import app.momoding.core.capabilities.CapabilityAvailability
 import app.momoding.core.capabilities.photoLibraryPermissionRequest
+import app.momoding.core.accessibility.MomodingScreenCaptureRuntime
+import app.momoding.core.accessibility.ScreenCaptureSessionService
 import app.momoding.feature.outputs.TaskOutputsRoute
 import app.momoding.feature.providersetup.ProviderSetupAction
 import app.momoding.feature.providersetup.ProviderSetupLoadState
@@ -139,6 +150,7 @@ import app.momoding.ui.theme.resolvesToDark
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
@@ -162,9 +174,15 @@ class MainActivity : ComponentActivity() {
             container.openRouterClient,
         )
     }
+    private lateinit var toolPermissionLauncher: ActivityResultLauncher<Array<String>>
+    private lateinit var toolPermissionSettingsLauncher: ActivityResultLauncher<Intent>
+    private var activeToolPermissionRequestId: String? = null
+    private var activeToolPermissions: List<String> = emptyList()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        registerToolPermissionLaunchers()
         acceptShareNavigation(intent)
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -174,6 +192,13 @@ class MainActivity : ComponentActivity() {
                         SettingsOneShot.OpenSystemAccessibility -> openSystemAccessibility()
                     }
                 }
+            }
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                container.androidPermissionRequestCoordinator.pending
+                    .filterNotNull()
+                    .collect(::handleToolPermissionRequest)
             }
         }
         setContent {
@@ -330,6 +355,108 @@ class MainActivity : ComponentActivity() {
             settingsViewModel.dispatch(SettingsAction.OperationFailed("accessibility", "System accessibility settings are unavailable."))
         }
     }
+
+    private fun registerToolPermissionLaunchers() {
+        toolPermissionLauncher = registerForActivityResult(
+            ActivityResultContracts.RequestMultiplePermissions(),
+        ) {
+            if (activeToolPermissions.any(::isPermissionGranted)) {
+                completeToolPermissionRequest(AndroidPermissionRequestResult.GRANTED)
+            } else {
+                showToolPermissionSettingsFallback()
+            }
+        }
+        toolPermissionSettingsLauncher = registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult(),
+        ) {
+            completeToolPermissionRequest(
+                if (activeToolPermissions.any(::isPermissionGranted)) {
+                    AndroidPermissionRequestResult.GRANTED
+                } else {
+                    AndroidPermissionRequestResult.DENIED
+                },
+            )
+        }
+    }
+
+    private fun handleToolPermissionRequest(request: AndroidPermissionRequest) {
+        if (request.requestId == activeToolPermissionRequestId) return
+        activeToolPermissionRequestId = request.requestId
+        activeToolPermissions = request.permissions
+        if (request.permissions.any(::isPermissionGranted)) {
+            completeToolPermissionRequest(AndroidPermissionRequestResult.GRANTED)
+            return
+        }
+        val permanentlyDenied = request.permissions.any { permission ->
+            wasPermissionAsked(permission) &&
+                !ActivityCompat.shouldShowRequestPermissionRationale(this, permission)
+        }
+        if (permanentlyDenied) {
+            showToolPermissionSettingsFallback()
+        } else {
+            request.permissions.forEach(::markPermissionAsked)
+            toolPermissionLauncher.launch(request.permissions.toTypedArray())
+        }
+    }
+
+    private fun showToolPermissionSettingsFallback() {
+        val requestId = activeToolPermissionRequestId ?: return
+        AlertDialog.Builder(this)
+            .setTitle("Photo access needed")
+            .setMessage(
+                "Momoding needs Android photo access to complete this request. " +
+                    "Open this app’s settings and allow Photos and videos.",
+            )
+            .setPositiveButton("Open settings") { _, _ ->
+                val intent = Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.fromParts("package", packageName, null),
+                )
+                try {
+                    toolPermissionSettingsLauncher.launch(intent)
+                } catch (_: ActivityNotFoundException) {
+                    if (activeToolPermissionRequestId == requestId) {
+                        completeToolPermissionRequest(AndroidPermissionRequestResult.DENIED)
+                    }
+                }
+            }
+            .setNegativeButton("Not now") { _, _ ->
+                if (activeToolPermissionRequestId == requestId) {
+                    completeToolPermissionRequest(AndroidPermissionRequestResult.DENIED)
+                }
+            }
+            .setOnCancelListener {
+                if (activeToolPermissionRequestId == requestId) {
+                    completeToolPermissionRequest(AndroidPermissionRequestResult.DENIED)
+                }
+            }
+            .show()
+    }
+
+    private fun completeToolPermissionRequest(result: AndroidPermissionRequestResult) {
+        val requestId = activeToolPermissionRequestId ?: return
+        activeToolPermissionRequestId = null
+        activeToolPermissions = emptyList()
+        container.androidPermissionRequestCoordinator.respond(requestId, result)
+        container.androidCapabilityRegistry.refresh()
+    }
+
+    private fun isPermissionGranted(permission: String): Boolean =
+        ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
+
+    private fun wasPermissionAsked(permission: String): Boolean =
+        getSharedPreferences(TOOL_PERMISSION_PREFS, MODE_PRIVATE)
+            .getBoolean(permission, false)
+
+    private fun markPermissionAsked(permission: String) {
+        getSharedPreferences(TOOL_PERMISSION_PREFS, MODE_PRIVATE).edit {
+            putBoolean(permission, true)
+        }
+    }
+
+    private companion object {
+        const val TOOL_PERMISSION_PREFS = "tool_permission_requests"
+    }
 }
 
 typealias TaskHomeRouteEntry = @Composable (
@@ -435,7 +562,7 @@ internal fun MomodingApp(
 ) {
     val accessibilityView = LocalView.current
     val announceAccessibility = onAccessibilityAnnouncement ?: remember(accessibilityView) {
-        { message: String -> accessibilityView.announceCompat(message) }
+        { message: String -> accessibilityView.announceForAccessibility(message) }
     }
     val announcedAttentionEffects = remember { LinkedHashSet<String>() }
     val backStack = rememberNavBackStack(*initialBackStack.toTypedArray())
@@ -919,13 +1046,7 @@ internal fun MomodingApp(
                         PaddingValues(24.dp),
                     )
             }
-            entry<DiffPlaceholderRoute> {
-                StagePlaceholder(
-                    "Diff unavailable",
-                    "No reviewed file change is available for this task.",
-                    PaddingValues(24.dp),
-                )
-            }
+            entry<DiffPlaceholderRoute> { StagePlaceholder("Diff unavailable", "Diff content is not available for this task.", PaddingValues(24.dp)) }
             entry<FileChangeRoute> { key ->
                 fileChangeEntry?.invoke(key, ::popRoute)
                     ?: StagePlaceholder(
@@ -950,15 +1071,6 @@ internal fun MomodingApp(
             }
         },
     )
-}
-
-/**
- * A direct announcement is used for this one-shot event because it has no persistent visual
- * status whose text change could act as an accessibility live region.
- */
-@Suppress("DEPRECATION")
-private fun android.view.View.announceCompat(message: String) {
-    announceForAccessibility(message)
 }
 
 @Composable
@@ -1030,17 +1142,54 @@ private fun DeviceCapabilitiesRouteContent(
     val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
     var continueToFoldersAfterPhoto by rememberSaveable { mutableStateOf(false) }
+    var continueToFoldersAfterAllFiles by rememberSaveable { mutableStateOf(false) }
     val foldersNeedSetup = states.firstOrNull {
         it.id == AndroidCapabilityId.SAF_FOLDERS
     }?.availability != CapabilityAvailability.READY
+    val allFilesNeedSetup = states.firstOrNull {
+        it.id == AndroidCapabilityId.ALL_FILES
+    }?.availability != CapabilityAvailability.READY
+    val openAllFilesSettings: () -> Unit = openSettings@{
+        val packageUri = Uri.fromParts("package", context.packageName, null)
+        val candidates = listOf(
+            Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, packageUri),
+            Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION),
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, packageUri),
+        )
+        candidates.forEach { intent ->
+            try {
+                context.startActivity(intent)
+                return@openSettings
+            } catch (_: ActivityNotFoundException) {
+                // Try the next Android/OEM fallback.
+            }
+        }
+    }
     val photoAccessLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) {
         container.androidCapabilityRegistry.refresh()
         if (continueToFoldersAfterPhoto) {
             continueToFoldersAfterPhoto = false
-            if (foldersNeedSetup) onOpenFolders(true)
+            if (allFilesNeedSetup) {
+                continueToFoldersAfterAllFiles = true
+                openAllFilesSettings()
+            } else if (foldersNeedSetup) {
+                onOpenFolders(true)
+            }
         }
+    }
+    val screenCaptureLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        val data = result.data
+        if (result.resultCode == Activity.RESULT_OK && data != null) {
+            ContextCompat.startForegroundService(
+                context,
+                ScreenCaptureSessionService.startIntent(context, result.resultCode, data),
+            )
+        }
+        container.androidCapabilityRegistry.refresh()
     }
     val startAvailableAccessSetup = {
         val photoAccess = states.firstOrNull { it.id == AndroidCapabilityId.PHOTO_LIBRARY }
@@ -1053,8 +1202,17 @@ private fun DeviceCapabilitiesRouteContent(
             photoAccessLauncher.launch(
                 photoLibraryPermissionRequest(Build.VERSION.SDK_INT).toTypedArray(),
             )
+        } else if (allFilesNeedSetup) {
+            continueToFoldersAfterAllFiles = true
+            openAllFilesSettings()
         } else if (foldersNeedSetup) {
             onOpenFolders(true)
+        }
+    }
+    LaunchedEffect(allFilesNeedSetup, continueToFoldersAfterAllFiles) {
+        if (continueToFoldersAfterAllFiles && !allFilesNeedSetup) {
+            continueToFoldersAfterAllFiles = false
+            if (foldersNeedSetup) onOpenFolders(true)
         }
     }
     val latestStartAvailableAccessSetup by rememberUpdatedState(startAvailableAccessSetup)
@@ -1083,6 +1241,25 @@ private fun DeviceCapabilitiesRouteContent(
         onRefresh = container.androidCapabilityRegistry::refresh,
         onSetUpFullAccess = startAvailableAccessSetup,
         onOpenFolders = { onOpenFolders(false) },
+        onManageAccessibility = {
+            runCatching {
+                context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            }
+        },
+        onManageScreenCapture = {
+            if (MomodingScreenCaptureRuntime.mediaProjection.state.value.active) {
+                MomodingScreenCaptureRuntime.mediaProjection.stop(context)
+            } else {
+                val manager = context.getSystemService(MediaProjectionManager::class.java)
+                screenCaptureLauncher.launch(manager.createScreenCaptureIntent())
+            }
+        },
+        onManageAllFiles = {
+            openAllFilesSettings()
+        },
+        onManageShizuku = {
+            container.shizukuController.performPrimaryAction(context)
+        },
         onManagePhotoAccess = {
             val photoAccess = states.firstOrNull { it.id == AndroidCapabilityId.PHOTO_LIBRARY }
             if (photoAccess?.availability in setOf(
@@ -1454,7 +1631,7 @@ private fun AttentionFoundation(
             modifier = Modifier.focusRequester(titleFocus).focusable().semantics { heading() },
         )
         LaunchedEffect(Unit) { titleFocus.requestFocus() }
-        Text("Dismiss closes this view without approving or rejecting the request.")
+        Text("This request is not currently actionable. Dismiss does not approve or reject it.")
         if (dismissIntent != null) {
             Button(
                 onClick = {

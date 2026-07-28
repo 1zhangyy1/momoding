@@ -68,7 +68,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import app.momoding.wire.CoreProtocol
+import app.momoding.wire.P1aProtocol
 import app.momoding.BuildConfig
 import app.momoding.core.appearance.AppearanceMode
 import app.momoding.core.provider.ProviderProfile
@@ -159,7 +159,7 @@ fun SettingsScreen(
             item {
                 WarningBanner(
                     title = "Host update required",
-                    body = "App uses Wire v${CoreProtocol.PROTOCOL_VERSION}. The Host reported an incompatible protocol.",
+                    body = "App uses Wire v${P1aProtocol.PROTOCOL_VERSION}. The Host reported an incompatible protocol.",
                     action = "Details",
                     actionModifier = Modifier
                         .testTag("action-OpenVersionDetails")
@@ -314,7 +314,7 @@ fun SettingsScreen(
                     detail = if (filesEnabled) {
                         "Choose and manage Android SAF folders"
                     } else {
-                        "Available for folders you explicitly authorize"
+                        "Available in the reviewed File E2E phase"
                     },
                     value = if (filesEnabled) "Manage" else "Unavailable",
                     modifier = Modifier
@@ -413,7 +413,12 @@ fun SettingsScreen(
                     value = BuildConfig.VERSION_NAME,
                 )
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                SettingsRow(Icons.Outlined.Description, "Source revision", "Current local build", value = BuildConfig.SOURCE_REVISION.take(12))
+                SettingsRow(
+                    Icons.Outlined.Description,
+                    "Source revision",
+                    if (BuildConfig.SOURCE_DIRTY) "Dirty local build" else "Clean local build",
+                    value = BuildConfig.SOURCE_REVISION.take(12),
+                )
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 SettingsRow(Icons.Outlined.Description, "License", "Open-source license", value = "MIT")
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -463,8 +468,8 @@ fun SettingsScreen(
                     "The App and Host must use the same Wire contract before tasks can run. Update one side, then reconnect.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                VersionPair("App Wire", "v${CoreProtocol.PROTOCOL_VERSION}")
-                VersionPair("Pi runtime", CoreProtocol.PI_VERSION)
+                VersionPair("App Wire", "v${P1aProtocol.PROTOCOL_VERSION}")
+                VersionPair("Pi runtime", P1aProtocol.PI_VERSION)
                 Button(
                     onClick = { onAction(SettingsAction.ExportDiagnostics) },
                     modifier = Modifier
@@ -678,7 +683,7 @@ private fun connectionDetail(phase: SecureTransportUiPhase): String = when (phas
     SecureTransportUiPhase.CONNECTING -> "Connecting to the paired Host"
     SecureTransportUiPhase.AUTHENTICATING -> "Authenticating this device"
     SecureTransportUiPhase.SYNCHRONIZING -> "Synchronizing task metadata"
-    SecureTransportUiPhase.READY -> "Connected · Pi ${CoreProtocol.PI_VERSION}"
+    SecureTransportUiPhase.READY -> "Connected · Pi ${P1aProtocol.PI_VERSION}"
     SecureTransportUiPhase.OFFLINE -> "Paired cache available · Host offline"
     SecureTransportUiPhase.VERSION_MISMATCH -> "App and Host Wire contracts differ"
     SecureTransportUiPhase.ERROR -> "Connection blocked by a local or TLS error"

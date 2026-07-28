@@ -8,6 +8,8 @@ import app.momoding.core.data.MomodingDatabase
 import app.momoding.core.data.PiSessionSnapshotEntity
 import app.momoding.core.data.RoomProjectionTransactionStore
 import app.momoding.core.data.TaskDetailRepository
+import app.momoding.core.data.TaskFailureKind
+import app.momoding.core.data.TaskFailureRecovery
 import app.momoding.core.data.TaskRepository
 import app.momoding.feature.taskdetail.PiUiReducer
 import app.momoding.feature.taskdetail.TaskDetailRunState
@@ -180,6 +182,52 @@ class PhoneLocalPiEventProjectorTest {
                 .first { it.runState == "INTERRUPTED" }
             assertEquals("INTERRUPTED", interrupted.recoveryState)
             assertEquals(false, interrupted.isStreaming)
+            assertEquals(TaskFailureKind.INTERRUPTED, interrupted.failure?.kind)
+        }
+
+    @Test
+    fun `terminal Provider failure is typed from the durable Pi session and clears on retry`() =
+        runTest {
+            val projector = PhoneLocalPiEventProjector(database)
+            projector.createTask(
+                taskId = TASK_ID,
+                title = "Provider failure",
+                piSessionId = SESSION_ID,
+                streamId = STREAM_ID,
+                initialPrompt = "Review this project.",
+            )
+            projector.replaceWithSessionSnapshot(
+                taskId = TASK_ID,
+                piSessionId = SESSION_ID,
+                streamId = STREAM_ID,
+                snapshot = PiNativeTaskSessionSnapshot(
+                    taskId = TASK_ID,
+                    turnCount = 1,
+                    entries = buildJsonArray {
+                        add(messageEntry(userMessage("Review this project.")))
+                        add(messageEntry(providerErrorMessage("OpenRouter API key is invalid")))
+                    },
+                ),
+                runState = TaskRunState.RUNNING,
+            )
+
+            projector.markRunState(TASK_ID, TaskRunState.FAILED, isStreaming = false)
+
+            val failed = TaskDetailRepository(database).observe(TASK_ID).filterNotNull().first()
+            assertEquals(TaskFailureKind.PROVIDER_AUTH, failed.failure?.kind)
+            assertEquals(TaskFailureRecovery.FIX_PROVIDER, failed.failure?.recovery)
+            assertEquals(
+                TaskFailureKind.PROVIDER_AUTH,
+                TaskRepository(database, Dispatchers.Unconfined)
+                    .observeTaskRows()
+                    .first()
+                    .single()
+                    .failure
+                    ?.kind,
+            )
+
+            projector.markRunState(TASK_ID, TaskRunState.STARTING, isStreaming = true)
+            assertEquals(null, database.p2Dao().task(TASK_ID)?.failureKind)
         }
 
     @Test
@@ -219,7 +267,7 @@ class PhoneLocalPiEventProjectorTest {
         assertEquals(events.size, durable?.rawEvents?.size)
         assertEquals(2, durable?.stagedRawFrameBatches?.size)
         assertEquals(events.size, durable?.stagedRawFrameBatches?.last()?.frames?.size)
-        assertEquals(1, database.momodingDao().timeline(TASK_ID).size)
+        assertEquals(1, database.p2Dao().timeline(TASK_ID).size)
     }
 
     @Test
@@ -236,7 +284,7 @@ class PhoneLocalPiEventProjectorTest {
             streamId = STREAM_ID,
             initialPrompt = "Keep this readable.",
         )
-        database.momodingDao().upsertPiSessionSnapshot(
+        database.p2Dao().upsertPiSessionSnapshot(
             PiSessionSnapshotEntity(
                 taskId = TASK_ID,
                 piSessionId = SESSION_ID,
@@ -274,24 +322,24 @@ class PhoneLocalPiEventProjectorTest {
         )
 
         projector.stabilizeTaskTitle(TASK_ID)
-        assertEquals("Review the Android project", database.momodingDao().task(TASK_ID)?.title)
-        assertEquals("AUTOMATIC", database.momodingDao().task(TASK_ID)?.titleSource)
+        assertEquals("Review the Android project", database.p2Dao().task(TASK_ID)?.title)
+        assertEquals("AUTOMATIC", database.p2Dao().task(TASK_ID)?.titleSource)
 
-        database.momodingDao().upsertTask(
-            requireNotNull(database.momodingDao().task(TASK_ID)).copy(
+        database.p2Dao().upsertTask(
+            requireNotNull(database.p2Dao().task(TASK_ID)).copy(
                 title = "Review the Android project · preserved after another turn",
             ),
         )
         projector.stabilizeTaskTitle(TASK_ID)
         assertEquals(
             "Review the Android project · preserved after another turn",
-            database.momodingDao().task(TASK_ID)?.title,
+            database.p2Dao().task(TASK_ID)?.title,
         )
 
-        database.momodingDao().renameTask(TASK_ID, "My durable task name")
+        database.p2Dao().renameTask(TASK_ID, "My durable task name")
         projector.stabilizeTaskTitle(TASK_ID)
-        assertEquals("My durable task name", database.momodingDao().task(TASK_ID)?.title)
-        assertEquals("USER", database.momodingDao().task(TASK_ID)?.titleSource)
+        assertEquals("My durable task name", database.p2Dao().task(TASK_ID)?.title)
+        assertEquals("USER", database.p2Dao().task(TASK_ID)?.titleSource)
     }
 
     @Test
@@ -469,6 +517,14 @@ class PhoneLocalPiEventProjectorTest {
     private fun assistantMessage(text: String) = buildJsonObject {
         put("role", "assistant")
         put("content", textContent(text))
+        put("timestamp", 2)
+    }
+
+    private fun providerErrorMessage(errorMessage: String) = buildJsonObject {
+        put("role", "assistant")
+        put("content", buildJsonArray {})
+        put("stopReason", "error")
+        put("errorMessage", errorMessage)
         put("timestamp", 2)
     }
 

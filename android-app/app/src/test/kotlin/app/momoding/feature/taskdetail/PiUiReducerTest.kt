@@ -769,7 +769,7 @@ class PiUiReducerTest {
         assertEquals(
             listOf(
                 "OpenRouter API key is invalid. Update it in Settings.",
-                "The Provider could not complete this response.",
+                "The task could not complete this response.",
             ),
             errors.map(TimelineItem.Error::message),
         )

@@ -4,6 +4,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import app.momoding.core.data.TaskDetailGoalRecord
 import app.momoding.core.data.TaskDetailChildAgentRecord
 import app.momoding.core.data.TaskDetailSnapshot
+import app.momoding.core.data.classifyTaskFailure
 import app.momoding.core.policy.TaskApprovalMode
 import app.momoding.core.transport.SecureTransportUiPhase
 import app.momoding.core.transport.SecureTransportUiStatus
@@ -221,7 +222,7 @@ class TaskDetailViewModelTest {
     }
 
     @Test
-    fun `phone local Provider failure exposes exact recovery and retry contract`() {
+    fun `phone local Provider auth failure exposes only the exact recovery contract`() {
         val timeline = TimelineWindow(
             settledItems = listOf(
                 TimelineItem.UserMessage("user-1", "Summarize the project"),
@@ -230,7 +231,9 @@ class TaskDetailViewModelTest {
         )
         val failed = projectTaskDetailUiState(
             current = TaskDetailUiState(TASK_ID, phoneLocal = true),
-            snapshot = snapshot(false),
+            snapshot = snapshot(false).copy(
+                failure = classifyTaskFailure("OpenRouter API key is invalid"),
+            ),
             projection = PiUiProjection(
                 TaskDetailRunState.FAILED,
                 timeline,
@@ -245,9 +248,38 @@ class TaskDetailViewModelTest {
 
         assertTrue(failed.providerRecoveryAvailable)
         assertEquals("Summarize the project", failed.retryOriginalText)
-        assertTrue(failed.canRetryOriginal)
+        assertFalse(failed.canRetryOriginal)
         assertFalse(failed.copy(composer = TextFieldValue("Keep this draft")).canRetryOriginal)
         assertFalse(failed.copy(phoneLocal = false).providerRecoveryAvailable)
+    }
+
+    @Test
+    fun `retryable Provider failure exposes retry without Provider setup`() {
+        val failed = projectTaskDetailUiState(
+            current = TaskDetailUiState(TASK_ID, phoneLocal = true),
+            snapshot = snapshot(false).copy(
+                failure = classifyTaskFailure("OpenRouter request timed out"),
+            ),
+            projection = PiUiProjection(
+                TaskDetailRunState.FAILED,
+                TimelineWindow(
+                    settledItems = listOf(
+                        TimelineItem.UserMessage("user-1", "Summarize the project"),
+                        TimelineItem.Error("error-1", "OpenRouter request timed out. Try again."),
+                    ),
+                ),
+                emptyList(),
+                null,
+                null,
+            ),
+            transport = SecureTransportUiStatus(SecureTransportUiPhase.READY, "this phone"),
+            replay = null,
+            commandProgress = TaskCommandProgress.Idle,
+        )
+
+        assertFalse(failed.providerRecoveryAvailable)
+        assertTrue(failed.failureRecoveryAvailable)
+        assertTrue(failed.canRetryOriginal)
     }
 
     @Test

@@ -104,7 +104,7 @@ test("real AgentHarness exposes a user prompt through the same native Provider m
 
 test("one phone-local task keeps the same real AgentHarness context across three prompts", async () => {
   const context = await bootRuntime();
-  const taskId = "task-three-turn";
+  const taskId = "task-m1-three-turn";
 
   JSON.parse(call(
     context,
@@ -147,13 +147,13 @@ test("one phone-local task keeps the same real AgentHarness context across three
   JSON.parse(call(
     context,
     "continueNativeOpenRouterTaskPromptJson",
-    JSON.stringify("Make the second step a reference Android device device test."),
+    JSON.stringify("Make the second step a Xiaomi 12X device test."),
   ));
   const third = await nextProviderRequest(context);
   assert.deepEqual(userTexts(third), [
     "Create an Android release plan.",
     "Reduce it to three steps.",
-    "Make the second step a reference Android device device test.",
+    "Make the second step a Xiaomi 12X device test.",
   ]);
   assert.equal(
     third.messages.some((message) =>
@@ -165,7 +165,7 @@ test("one phone-local task keeps the same real AgentHarness context across three
   finishTextRequest(
     context,
     third,
-    "Three steps: build, test on reference Android device, release.",
+    "Three steps: build, test on Xiaomi 12X, release.",
   );
   status = await waitForTerminal(context);
   assert.equal(status.turnCount, 3);
@@ -191,7 +191,7 @@ test("one phone-local task keeps the same real AgentHarness context across three
 
 test("phone-local task exposes real project terminal and test tools through the Android mailbox", async () => {
   const context = await bootRuntime();
-  const taskId = "task-project-tools";
+  const taskId = "task-e5b3-project-tools";
 
   JSON.parse(call(
     context,
@@ -199,12 +199,6 @@ test("phone-local task exposes real project terminal and test tools through the 
     JSON.stringify(taskId),
     JSON.stringify("Inspect the selected Android project."),
     JSON.stringify("deepseek/deepseek-v4-pro"),
-    "undefined",
-    "false",
-    JSON.stringify("[]"),
-    JSON.stringify("[]"),
-    JSON.stringify("[]"),
-    "true",
   ));
   const first = await nextProviderRequest(context);
   const commandTool = first.tools.find(
@@ -303,18 +297,18 @@ test("phone-local task exposes real project terminal and test tools through the 
 
 test("a persisted Pi Session restores without replay and continues with full history", async () => {
   const firstProcess = await bootRuntime();
-  const taskId = "task-restored-session";
-  const sessionId = "session-restored";
+  const taskId = "task-m3-restored";
+  const sessionId = "session-m3-restored";
 
   JSON.parse(call(
     firstProcess,
     "startNativeOpenRouterTaskSessionJson",
     JSON.stringify(taskId),
-    JSON.stringify("Remember that the device is a reference Android device."),
+    JSON.stringify("Remember that the device is a Xiaomi 12X."),
     JSON.stringify("deepseek/deepseek-v4-pro"),
   ));
   const first = await nextProviderRequest(firstProcess);
-  finishTextRequest(firstProcess, first, "I will remember the reference Android device.");
+  finishTextRequest(firstProcess, first, "I will remember the Xiaomi 12X.");
   await waitForTerminal(firstProcess);
 
   JSON.parse(call(
@@ -329,10 +323,10 @@ test("a persisted Pi Session restores without replay and continues with full his
   JSON.parse(call(
     firstProcess,
     "continueNativeOpenRouterTaskPromptJson",
-    JSON.stringify("Finally remember that the codename is Aurora."),
+    JSON.stringify("Finally remember that the codename is Psyche."),
   ));
   const third = await nextProviderRequest(firstProcess);
-  finishTextRequest(firstProcess, third, "I will remember the Aurora codename.");
+  finishTextRequest(firstProcess, third, "I will remember the Psyche codename.");
   await waitForTerminal(firstProcess);
 
   const snapshot = JSON.parse(
@@ -370,19 +364,19 @@ test("a persisted Pi Session restores without replay and continues with full his
   ));
   const continued = await nextProviderRequest(secondProcess);
   assert.deepEqual(userTexts(continued), [
-    "Remember that the device is a reference Android device.",
+    "Remember that the device is a Xiaomi 12X.",
     "Also remember that the build channel is beta.",
-    "Finally remember that the codename is Aurora.",
+    "Finally remember that the codename is Psyche.",
     "Which device did I name?",
   ]);
   assert.equal(
     continued.messages.some((message) =>
       message.role === "assistant" &&
-      message.content === "I will remember the reference Android device."
+      message.content === "I will remember the Xiaomi 12X."
     ),
     true,
   );
-  finishTextRequest(secondProcess, continued, "You named the reference Android device.");
+  finishTextRequest(secondProcess, continued, "You named the Xiaomi 12X.");
   const terminal = await waitForTerminal(secondProcess);
   assert.equal(terminal.turnCount, 4);
   assert.equal(terminal.providerRequestsIssued, 1);
@@ -394,8 +388,8 @@ test("a persisted Pi Session restores without replay and continues with full his
 
 test("Pi native images serialize to OpenRouter and restore only through attachment references", async () => {
   const firstProcess = await bootRuntime();
-  const taskId = "task-attachment-native-images";
-  const sessionId = "session-attachment-native-images";
+  const taskId = "task-e7-native-images";
+  const sessionId = "session-e7-native-images";
   const firstImage = {
     attachmentId: "11111111-1111-4111-8111-111111111111",
     mimeType: "image/jpeg",
@@ -508,8 +502,8 @@ test("Pi native images serialize to OpenRouter and restore only through attachme
 
 test("text attachments stay as Pi Session metadata and read through the Android task tool", async () => {
   const firstProcess = await bootRuntime();
-  const taskId = "task-text-attachment";
-  const sessionId = "session-text-attachment";
+  const taskId = "task-e7-text-attachment";
+  const sessionId = "session-e7-text-attachment";
   const attachment = {
     attachmentId: "55555555-5555-4555-8555-555555555555",
     displayName: "context.md",
@@ -609,11 +603,11 @@ test("image Session restore fails closed when private attachment bytes are unava
     () => call(
       context,
       "restoreNativeOpenRouterTaskSessionJson",
-      JSON.stringify("task-attachment-missing-image"),
-      JSON.stringify("session-attachment-missing-image"),
+      JSON.stringify("task-e7-missing-image"),
+      JSON.stringify("session-e7-missing-image"),
       JSON.stringify(1),
       JSON.stringify(JSON.stringify([{
-        id: "entry-attachment-user",
+        id: "entry-e7-user",
         parentId: null,
         timestamp: "2026-07-22T00:00:00.000Z",
         type: "message",
@@ -639,8 +633,8 @@ test("a corrupt persisted Pi Session is rejected before any provider request", a
     () => call(
       context,
       "restoreNativeOpenRouterTaskSessionJson",
-      JSON.stringify("task-corrupt-session"),
-      JSON.stringify("session-corrupt"),
+      JSON.stringify("task-m3-corrupt"),
+      JSON.stringify("session-m3-corrupt"),
       JSON.stringify(1),
       JSON.stringify(JSON.stringify([{
         id: "orphan",
@@ -666,7 +660,7 @@ test("phone-local task queues native steer and follow-up on the active Pi run", 
   JSON.parse(call(
     context,
     "startNativeOpenRouterTaskSessionJson",
-    JSON.stringify("task-message-queue"),
+    JSON.stringify("task-m1-queue"),
     JSON.stringify("Draft a migration plan."),
     JSON.stringify("deepseek/deepseek-v4-pro"),
   ));
@@ -739,7 +733,7 @@ test("phone-local task stop cancels its active request and closes without late w
   JSON.parse(call(
     context,
     "startNativeOpenRouterTaskSessionJson",
-    JSON.stringify("task-stop"),
+    JSON.stringify("task-m1-stop"),
     JSON.stringify("Run until stopped."),
     JSON.stringify("deepseek/deepseek-v4-pro"),
   ));
@@ -750,7 +744,7 @@ test("phone-local task stop cancels its active request and closes without late w
   assert.equal(cancellation.kind, "cancel_openrouter_stream");
   const status = await waitForTerminal(context);
   assert.equal(status.expectationMet, true, JSON.stringify(status));
-  assert.equal(status.taskId, "task-stop");
+  assert.equal(status.taskId, "task-m1-stop");
   assert.equal(status.stopCompleted, true);
   assert.equal(status.hasAbort, true);
   assert.equal(status.lateProviderRequestsAfterStop, 0);
@@ -773,8 +767,8 @@ test("phone-local task stop cancels its active request and closes without late w
 
 test("Plan Mode restricts real Pi tools, restores exactly, survives rebuild, and rejects stale Implement", async () => {
   const context = await bootRuntime();
-  const taskId = "task-plan";
-  const sessionId = "session-plan";
+  const taskId = "task-e6-plan";
+  const sessionId = "session-e6-plan";
   JSON.parse(call(
     context,
     "startNativeOpenRouterTaskSessionJson",
@@ -782,10 +776,6 @@ test("Plan Mode restricts real Pi tools, restores exactly, survives rebuild, and
     JSON.stringify("Plan how to add an Android release check."),
     JSON.stringify("deepseek/deepseek-v4-pro"),
     JSON.stringify(sessionId),
-    "true",
-    JSON.stringify("[]"),
-    JSON.stringify("[]"),
-    JSON.stringify("[]"),
     "true",
   ));
   const planning = await nextProviderRequest(context);
@@ -797,6 +787,10 @@ test("Plan Mode restricts real Pi tools, restores exactly, survives rebuild, and
     "device_files_list",
     "device_files_read",
     "device_media_list",
+    "device_screen_capture",
+    "device_ui_inspect",
+    "device_packages_list",
+    "device_package_inspect",
     "attachment_read",
     "task_plan_update",
   ]);
@@ -866,9 +860,6 @@ test("Plan Mode restricts real Pi tools, restores exactly, survives rebuild, and
     String(snapshot.turnCount),
     JSON.stringify(JSON.stringify(snapshot.entries)),
     JSON.stringify("deepseek/deepseek-v4-pro"),
-    JSON.stringify("[]"),
-    JSON.stringify("[]"),
-    "true",
   ));
   assert.equal(status.terminal, true);
   assert.equal(status.planMode, true);
@@ -1111,7 +1102,7 @@ test("delegate runs two isolated Pi child harnesses with overlapping Provider in
   JSON.parse(call(
     context,
     "startNativeOpenRouterTaskSessionJson",
-    JSON.stringify("task-child-overlap"),
+    JSON.stringify("task-e6-child-overlap"),
     JSON.stringify("Compare two Android release risks."),
     JSON.stringify("deepseek/deepseek-v4-pro"),
   ));
@@ -1122,7 +1113,7 @@ test("delegate runs two isolated Pi child harnesses with overlapping Provider in
 
   finishParallelToolCalls(context, parent, [
     { id: "delegate-build", name: "delegate", arguments: { name: "Build analyst", task: "Analyze build reproducibility." } },
-    { id: "delegate-device", name: "delegate", arguments: { name: "Device analyst", task: "Analyze Android device risk." } },
+    { id: "delegate-device", name: "delegate", arguments: { name: "Device analyst", task: "Analyze Xiaomi device risk." } },
   ]);
   const childRequests = await nextProviderRequests(context, 2);
   assert.equal(new Set(childRequests.map((request) => request.childId)).size, 2);
@@ -1131,7 +1122,7 @@ test("delegate runs two isolated Pi child harnesses with overlapping Provider in
     new Set(["delegate-build", "delegate-device"]),
   );
   for (const request of childRequests) {
-    assert.equal(request.parentTaskId, "task-child-overlap");
+    assert.equal(request.parentTaskId, "task-e6-child-overlap");
     assert.equal(request.tools, undefined, "child must not receive nested or side-effect tools");
     assert.equal(userTexts(request).length, 1, "each child must have isolated context");
     assert.equal(userTexts(request).includes("Compare two Android release risks."), false);
@@ -1301,6 +1292,276 @@ test("native attention resolution keeps the model payload separate from exact de
   assert.deepEqual(JSON.parse(call(context, "closeJson")), { ok: true, closed: true });
 });
 
+test("screen capture reaches only the current provider turn and expires from events and session", async () => {
+  const context = await bootRuntime();
+  const imageData = "iVBORw0KGgo=";
+  const digest = createHash("sha256").update(Buffer.from(imageData, "base64")).digest("hex");
+  JSON.parse(call(
+    context,
+    "startNativeOpenRouterTaskSessionJson",
+    JSON.stringify("task-live-screen"),
+    JSON.stringify("Inspect the current Android screen."),
+    JSON.stringify("deepseek/deepseek-v4-pro"),
+  ));
+  const first = await nextProviderRequest(context);
+  const screenTool = first.tools.find((tool) =>
+    tool.function.name === "device_screen_capture"
+  );
+  assert.ok(screenTool);
+  assert.equal(screenTool.function.parameters.required.includes("purpose"), true);
+  finishToolCall(
+    context,
+    first,
+    "call-live-screen",
+    "device_screen_capture",
+    { purpose: "Understand the visible error", targetPackage: "com.example.target" },
+  );
+  const nativeRequest = await nextNativeToolRequest(context);
+  assert.equal(nativeRequest.kind, "android_screen_tool");
+  assert.deepEqual(nativeRequest.arguments, {
+    purpose: "Understand the visible error",
+    targetPackage: "com.example.target",
+  });
+  const details = {
+    ok: true,
+    liveOnly: true,
+    source: "accessibility",
+    contentSha256: digest,
+    width: 720,
+    height: 1280,
+    mimeType: "image/png",
+  };
+  const content = [
+    { type: "text", text: JSON.stringify({ ...details, image: "live-only" }) },
+    { type: "image", data: imageData, mimeType: "image/png" },
+  ];
+  JSON.parse(call(
+    context,
+    "resolveNativeProviderToolRequestJson",
+    JSON.stringify(nativeRequest.id),
+    JSON.stringify(JSON.stringify(details)),
+    JSON.stringify(JSON.stringify(details)),
+    "false",
+    JSON.stringify(JSON.stringify(content)),
+  ));
+
+  const followUp = await nextProviderRequest(context);
+  const toolMessage = followUp.messages.find((message) =>
+    message.role === "tool" && message.tool_call_id === "call-live-screen"
+  );
+  assert.match(toolMessage.content, /live-only/);
+  const liveImageMessage = followUp.messages.find((message) =>
+    message.role === "user" && Array.isArray(message.content) &&
+    message.content.some((block) => block.type === "image_url")
+  );
+  assert.equal(
+    liveImageMessage.content[1].image_url.url,
+    `data:image/png;base64,${imageData}`,
+  );
+  finishTextRequest(context, followUp, "The visible screen shows a test error.");
+  const status = await waitForTerminal(context);
+  assert.equal(JSON.stringify(status.runEvents).includes(imageData), false);
+  assert.match(JSON.stringify(status.runEvents), /live screen image expired/);
+
+  const snapshot = JSON.parse(call(context, "nativeOpenRouterTaskSessionSnapshotJson"));
+  const persisted = JSON.stringify(snapshot);
+  assert.equal(persisted.includes(imageData), false);
+  assert.match(persisted, /live screen image expired/);
+  assert.match(persisted, new RegExp(digest));
+  assert.deepEqual(JSON.parse(call(context, "closeJson")), { ok: true, closed: true });
+
+  const restored = await bootRuntime();
+  const restoredStatus = JSON.parse(call(
+    restored,
+    "restoreNativeOpenRouterTaskSessionJson",
+    JSON.stringify("task-live-screen"),
+    JSON.stringify("task-live-screen"),
+    JSON.stringify(snapshot.turnCount),
+    JSON.stringify(JSON.stringify(snapshot.entries)),
+    JSON.stringify("deepseek/deepseek-v4-pro"),
+    JSON.stringify("[]"),
+    JSON.stringify("[]"),
+  ));
+  assert.equal(restoredStatus.terminal, true);
+  assert.deepEqual(JSON.parse(call(restored, "drainNativeProviderRequestsJson")), []);
+  assert.deepEqual(JSON.parse(call(restored, "closeJson")), { ok: true, closed: true });
+});
+
+test("UI inspect and one bounded action use the Android mailbox in sequence", async () => {
+  const context = await bootRuntime();
+  const snapshotId = "ui-11111111111111111111111111111111";
+  const nodeHandle = `${snapshotId}:n2`;
+  JSON.parse(call(
+    context,
+    "startNativeOpenRouterTaskSessionJson",
+    JSON.stringify("task-ui-action"),
+    JSON.stringify("Open the harmless fixture control."),
+    JSON.stringify("deepseek/deepseek-v4-pro"),
+  ));
+  const first = await nextProviderRequest(context);
+  const inspectTool = first.tools.find((tool) => tool.function.name === "device_ui_inspect");
+  const actionTool = first.tools.find((tool) => tool.function.name === "device_ui_action");
+  assert.ok(inspectTool);
+  assert.ok(actionTool);
+  assert.equal(inspectTool.function.parameters.properties.maxNodes.maximum, 250);
+  assert.deepEqual(
+    actionTool.function.parameters.properties.action.enum,
+    ["click", "scroll", "input_draft", "back"],
+  );
+
+  finishToolCall(
+    context,
+    first,
+    "call-ui-inspect",
+    "device_ui_inspect",
+    { targetPackage: "dev.fixture", maxNodes: 50 },
+  );
+  const inspectRequest = await nextNativeToolRequest(context);
+  assert.equal(inspectRequest.kind, "android_ui_tool");
+  assert.equal(inspectRequest.toolName, "device_ui_inspect");
+  resolveNativeTool(context, inspectRequest.id, {
+    ok: true,
+    snapshotId,
+    packageName: "dev.fixture",
+    nodes: [{ handle: nodeHandle, clickable: true, redacted: false }],
+  });
+
+  const second = await nextProviderRequest(context);
+  finishToolCall(
+    context,
+    second,
+    "call-ui-action",
+    "device_ui_action",
+    { snapshotId, nodeHandle, action: "click" },
+  );
+  const actionRequest = await nextNativeToolRequest(context);
+  assert.equal(actionRequest.kind, "android_ui_tool");
+  assert.equal(actionRequest.toolName, "device_ui_action");
+  assert.deepEqual(actionRequest.arguments, { snapshotId, nodeHandle, action: "click" });
+  resolveNativeTool(context, actionRequest.id, {
+    ok: true,
+    action: "click",
+    beforeSnapshotId: snapshotId,
+    afterSnapshotId: "ui-22222222222222222222222222222222",
+    foregroundPackage: "dev.fixture",
+    changed: true,
+    noChangeCount: 0,
+    sessionPaused: false,
+    actionCount: 1,
+  });
+
+  const finalRequest = await nextProviderRequest(context);
+  assert.match(JSON.stringify(finalRequest.messages), /afterSnapshotId/);
+  finishTextRequest(context, finalRequest, "The harmless fixture control opened.");
+  const status = await waitForTerminal(context);
+  assert.equal(status.expectationMet, true, JSON.stringify(status));
+  assert.deepEqual(JSON.parse(call(context, "closeJson")), { ok: true, closed: true });
+});
+
+test("capability and package facts stay in one Pi task through the Android mailbox", async () => {
+  const context = await bootRuntime();
+  JSON.parse(call(
+    context,
+    "startNativeOpenRouterTaskSessionJson",
+    JSON.stringify("task-package-facts"),
+    JSON.stringify("Check whether the Android settings package is available."),
+    JSON.stringify("deepseek/deepseek-v4-pro"),
+  ));
+
+  const capabilityTurn = await nextProviderRequest(context);
+  const listSchema = capabilityTurn.tools.find(
+    (tool) => tool.function.name === "device_packages_list",
+  )?.function.parameters;
+  const inspectSchema = capabilityTurn.tools.find(
+    (tool) => tool.function.name === "device_package_inspect",
+  )?.function.parameters;
+  assert.ok(listSchema);
+  assert.ok(inspectSchema);
+  assert.equal(listSchema.additionalProperties, false);
+  assert.equal(listSchema.properties.limit.maximum, 100);
+  assert.equal(inspectSchema.additionalProperties, false);
+  assert.match(inspectSchema.properties.packageName.pattern, /A-Za-z/);
+
+  finishToolCall(
+    context,
+    capabilityTurn,
+    "call-package-capabilities",
+    "device_capabilities_get",
+    {},
+  );
+  const capabilityRequest = await nextNativeToolRequest(context);
+  assert.equal(capabilityRequest.kind, "android_file_tool");
+  resolveNativeTool(context, capabilityRequest.id, {
+    ok: true,
+    capabilities: [{
+      id: "shizuku_shell_uid",
+      availability: "ready",
+      source: "shizuku",
+      safeMessage: "Shizuku is ready.",
+      toolNames: ["device_packages_list", "device_package_inspect"],
+    }],
+  });
+
+  const listTurn = await nextProviderRequest(context);
+  assert.match(JSON.stringify(listTurn.messages), /shizuku_shell_uid/);
+  finishToolCall(
+    context,
+    listTurn,
+    "call-package-list",
+    "device_packages_list",
+    { purpose: "Find settings", includeSystem: true, offset: 0, limit: 10 },
+  );
+  const listRequest = await nextNativeToolRequest(context);
+  assert.equal(listRequest.kind, "android_package_tool");
+  assert.equal(listRequest.toolName, "device_packages_list");
+  resolveNativeTool(context, listRequest.id, {
+    ok: true,
+    capabilityId: "shizuku_shell_uid",
+    packages: [{
+      packageName: "com.android.settings",
+      label: "Settings",
+      system: true,
+      enabled: true,
+    }],
+  });
+
+  const inspectTurn = await nextProviderRequest(context);
+  assert.match(JSON.stringify(inspectTurn.messages), /com.android.settings/);
+  finishToolCall(
+    context,
+    inspectTurn,
+    "call-package-inspect",
+    "device_package_inspect",
+    { purpose: "Verify settings metadata", packageName: "com.android.settings" },
+  );
+  const inspectRequest = await nextNativeToolRequest(context);
+  assert.equal(inspectRequest.kind, "android_package_tool");
+  assert.equal(inspectRequest.toolName, "device_package_inspect");
+  resolveNativeTool(context, inspectRequest.id, {
+    ok: true,
+    capabilityId: "shizuku_shell_uid",
+    package: {
+      packageName: "com.android.settings",
+      label: "Settings",
+      system: true,
+      enabled: true,
+      versionName: "1",
+      versionCode: 1,
+      minSdk: 35,
+      targetSdk: 35,
+    },
+  });
+
+  const finalTurn = await nextProviderRequest(context);
+  assert.match(JSON.stringify(finalTurn.messages), /targetSdk/);
+  finishTextRequest(context, finalTurn, "Android Settings is installed and enabled.");
+  const status = await waitForTerminal(context);
+  assert.equal(status.expectationMet, true, JSON.stringify(status));
+  assert.equal(status.toolExecutionsStarted, 3);
+  assert.equal(status.toolExecutionsEnded, 3);
+  assert.deepEqual(JSON.parse(call(context, "closeJson")), { ok: true, closed: true });
+});
+
 test("device media list uses the Android mailbox and preserves success and failure semantics", async () => {
   const context = await bootRuntime();
   JSON.parse(call(
@@ -1385,7 +1646,7 @@ test("delegate keeps child failure explicit while the parent Pi turn can recover
   JSON.parse(call(
     context,
     "startNativeOpenRouterTaskSessionJson",
-    JSON.stringify("task-child-failure"),
+    JSON.stringify("task-e6-child-failure"),
     JSON.stringify("Delegate a risky analysis."),
     JSON.stringify("deepseek/deepseek-v4-pro"),
   ));
@@ -1436,7 +1697,7 @@ test("delegate enforces three children per parent turn and rejects the fourth", 
   JSON.parse(call(
     context,
     "startNativeOpenRouterTaskSessionJson",
-    JSON.stringify("task-child-limit"),
+    JSON.stringify("task-e6-child-limit"),
     JSON.stringify("Delegate the bounded release analysis."),
     JSON.stringify("deepseek/deepseek-v4-pro"),
   ));
@@ -1476,7 +1737,7 @@ test("one child can be cancelled without stopping the parent task", async () => 
   JSON.parse(call(
     context,
     "startNativeOpenRouterTaskSessionJson",
-    JSON.stringify("task-child-cancel"),
+    JSON.stringify("task-e6-child-cancel"),
     JSON.stringify("Delegate one cancellable analysis."),
     JSON.stringify("deepseek/deepseek-v4-pro"),
   ));
@@ -1535,7 +1796,7 @@ test("parent Stop cancels every running child without late Provider work", async
   JSON.parse(call(
     context,
     "startNativeOpenRouterTaskSessionJson",
-    JSON.stringify("task-child-stop"),
+    JSON.stringify("task-e6-child-stop"),
     JSON.stringify("Delegate two long analyses."),
     JSON.stringify("deepseek/deepseek-v4-pro"),
   ));
@@ -1715,7 +1976,7 @@ test("settled Harness replaces Skill resources exactly once and skips an identic
   JSON.parse(call(
     context,
     "startNativeOpenRouterTaskSessionJson",
-    JSON.stringify("task-skills-resources"),
+    JSON.stringify("task-e6-skills-resources"),
     JSON.stringify("Start without Skills."),
     JSON.stringify("deepseek/deepseek-v4-pro"),
   ));
@@ -1780,7 +2041,7 @@ test("invalid Skill resources and invocations fail before mutation or Provider w
   JSON.parse(call(
     context,
     "startNativeOpenRouterTaskSessionJson",
-    JSON.stringify("task-skill-fail-closed"),
+    JSON.stringify("task-e6-skill-fail-closed"),
     JSON.stringify("Establish one settled turn."),
     JSON.stringify("deepseek/deepseek-v4-pro"),
     "undefined",
@@ -1847,7 +2108,7 @@ test("explicit Skill invocation uses the same Pi Harness and fails before extra 
   JSON.parse(call(
     context,
     "startNativeOpenRouterTaskSessionJson",
-    JSON.stringify("task-skill-turn"),
+    JSON.stringify("task-e6-skill-turn"),
     JSON.stringify("Start a normal task."),
     JSON.stringify("deepseek/deepseek-v4-pro"),
     "undefined",
@@ -1906,7 +2167,7 @@ test("explicit Skill invocation uses the same Pi Harness and fails before extra 
   JSON.parse(call(
     context,
     "startNativeOpenRouterTaskGoalJson",
-    JSON.stringify("goal-skill-conflict"),
+    JSON.stringify("goal-e6-skill-conflict"),
     JSON.stringify("Keep the Skill conflict explicit."),
     "1",
     "1",
@@ -1927,7 +2188,7 @@ test("explicit Skill invocation uses the same Pi Harness and fails before extra 
   JSON.parse(call(
     context,
     "setNativeOpenRouterTaskGoalStateJson",
-    JSON.stringify("goal-skill-conflict"),
+    JSON.stringify("goal-e6-skill-conflict"),
     "1",
     JSON.stringify("cleared"),
   ));
@@ -1959,7 +2220,7 @@ test("a New Task can start with a Skill and restore its resources without replay
   JSON.parse(call(
     firstProcess,
     "startNativeOpenRouterTaskSkillSessionJson",
-    JSON.stringify("task-new-skill"),
+    JSON.stringify("task-e6-new-skill"),
     JSON.stringify("mobile-review"),
     JSON.stringify("Review the initial task."),
     JSON.stringify("deepseek/deepseek-v4-pro"),
@@ -1988,7 +2249,7 @@ test("a New Task can start with a Skill and restore its resources without replay
     restored,
     "restoreNativeOpenRouterTaskSessionJson",
     JSON.stringify(snapshot.taskId),
-    JSON.stringify("task-new-skill"),
+    JSON.stringify("task-e6-new-skill"),
     JSON.stringify(snapshot.turnCount),
     JSON.stringify(JSON.stringify(snapshot.entries)),
     JSON.stringify("deepseek/deepseek-v4-pro"),

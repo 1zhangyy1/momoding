@@ -37,7 +37,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
-/** Secure transport composition. It intentionally exposes no product or UI behavior. */
+/** Secure transport production composition. It intentionally exposes no product UI behavior. */
 class AndroidSecureTransportRuntime(
     context: Context,
     private val applicationScope: CoroutineScope,
@@ -68,7 +68,7 @@ class AndroidSecureTransportRuntime(
     private val coordinator = HostBindingCoordinator(
         stateStore = stateStore,
         vault = vault,
-        roomEraser = HostRoomEraser { database.momodingDao().eraseHostScopedData() },
+        roomEraser = HostRoomEraser { database.p2Dao().eraseHostScopedData() },
         connectionStopper = HostConnectionStopper { stopActiveActor() },
     )
     private val pairingAttemptOwner = PairingAttemptOwner(
@@ -190,7 +190,7 @@ class AndroidSecureTransportRuntime(
         }
     }
 
-    suspend fun submitExact(request: OutboundWireRequest): app.momoding.wire.ReceivedReliabilityServerFrame =
+    suspend fun submitExact(request: OutboundWireRequest): app.momoding.wire.ReceivedP1bServerFrame =
         withContext(Dispatchers.IO) {
             val actor = actorMutex.withLock {
                 requireNotNull(activeActor) { "Host connection is not started" }
@@ -355,7 +355,7 @@ class AndroidSecureTransportRuntime(
                 )
             },
             resumeCursorSource = ResumeCursorSource {
-                database.momodingDao().allTasks()
+                database.p2Dao().allTasks()
                     .asSequence()
                     .filter { it.streamId != null }
                     .sortedByDescending { it.updatedAtMillis }

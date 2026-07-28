@@ -52,8 +52,8 @@ class DeviceFileChangeExecutorTest {
             ApplicationProvider.getApplicationContext<Context>(),
             MomodingDatabase::class.java,
         ).allowMainThreadQueries().build()
-        database.momodingDao().upsertTask(task())
-        database.momodingDao().insertDraft(draft())
+        database.p2Dao().upsertTask(task())
+        database.p2Dao().insertDraft(draft())
         access = FakeAccess()
         folders = AuthorizedFoldersRepository(
             store = RoomAuthorizedFolderStore(database),
@@ -89,7 +89,7 @@ class DeviceFileChangeExecutorTest {
         assertTrue(access.mutations.isEmpty())
         assertEquals(
             FileChangeSetState.PREPARED.name,
-            database.momodingDao().fileChangeSet(PREPARE_CALL_ID)?.state,
+            database.p2Dao().fileChangeSet(PREPARE_CALL_ID)?.state,
         )
 
         val commit = acceptCommit()
@@ -113,7 +113,7 @@ class DeviceFileChangeExecutorTest {
         assertFalse(first.toString().contains("provider-root"))
         assertEquals(
             FileChangeSetState.COMPLETED.name,
-            database.momodingDao().fileChangeSet(PREPARE_CALL_ID)?.state,
+            database.p2Dao().fileChangeSet(PREPARE_CALL_ID)?.state,
         )
     }
 
@@ -132,11 +132,11 @@ class DeviceFileChangeExecutorTest {
         )
         assertEquals(
             FileChangeSetState.CANCELLED.name,
-            database.momodingDao().fileChangeSet(PREPARE_CALL_ID)?.state,
+            database.p2Dao().fileChangeSet(PREPARE_CALL_ID)?.state,
         )
         assertEquals(
             "PROJECT_COMMAND_STOPPED",
-            database.momodingDao().fileChangeSet(PREPARE_CALL_ID)?.failureCode,
+            database.p2Dao().fileChangeSet(PREPARE_CALL_ID)?.failureCode,
         )
         assertTrue(access.mutations.isEmpty())
         assertEquals(
@@ -168,14 +168,14 @@ class DeviceFileChangeExecutorTest {
             val ledger = RoomAttentionLedger(database) { now }
             assertEquals(
                 FileChangeSetState.COMMITTING.name,
-                database.momodingDao().fileChangeSet(PREPARE_CALL_ID)?.state,
+                database.p2Dao().fileChangeSet(PREPARE_CALL_ID)?.state,
             )
             assertEquals(null, ledger.record(COMMIT_CALL_ID)?.operation?.terminalSha256)
 
             assertTrue(restartedExecutor().repairInterruptedCommit(commit, ledger::recordTerminal))
             assertEquals(
                 FileChangeSetState.UNKNOWN.name,
-                database.momodingDao().fileChangeSet(PREPARE_CALL_ID)?.state,
+                database.p2Dao().fileChangeSet(PREPARE_CALL_ID)?.state,
             )
             assertEquals(
                 AttentionLedgerState.FAILED_CLOSED.name,
@@ -204,7 +204,7 @@ class DeviceFileChangeExecutorTest {
         assertEquals("completed", result.getValue("outcome").jsonPrimitive.content)
         assertEquals(
             FileChangeSetState.COMPLETED.name,
-            database.momodingDao().fileChangeSet(PREPARE_CALL_ID)?.state,
+            database.p2Dao().fileChangeSet(PREPARE_CALL_ID)?.state,
         )
         assertEquals(
             AttentionLedgerState.TERMINAL.name,
@@ -280,7 +280,7 @@ class DeviceFileChangeExecutorTest {
             assertEquals("unknown", first.getValue("outcome").jsonPrimitive.content)
             assertEquals(
                 FileChangeSetState.UNKNOWN.name,
-                database.momodingDao().fileChangeSet(PREPARE_CALL_ID)?.state,
+                database.p2Dao().fileChangeSet(PREPARE_CALL_ID)?.state,
             )
         }
 
@@ -300,7 +300,7 @@ class DeviceFileChangeExecutorTest {
         assertTrue(access.mutations.isEmpty())
         assertEquals(
             FileChangeSetState.FAILED.name,
-            database.momodingDao().fileChangeSet(PREPARE_CALL_ID)?.state,
+            database.p2Dao().fileChangeSet(PREPARE_CALL_ID)?.state,
         )
     }
 
@@ -511,7 +511,7 @@ class DeviceFileChangeExecutorTest {
                     put("preparedId", PREPARE_CALL_ID)
                     put(
                         "planDigest",
-                        requireNotNull(database.momodingDao().fileChangeSet(PREPARE_CALL_ID))
+                        requireNotNull(database.p2Dao().fileChangeSet(PREPARE_CALL_ID))
                             .planDigest,
                     )
                 },
@@ -524,7 +524,7 @@ class DeviceFileChangeExecutorTest {
             assertTrue(access.mutations.isEmpty())
             assertEquals(
                 FileChangeSetState.REJECTED.name,
-                database.momodingDao().fileChangeSet(PREPARE_CALL_ID)?.state,
+                database.p2Dao().fileChangeSet(PREPARE_CALL_ID)?.state,
             )
             assertEquals(
                 AttentionLedgerState.TERMINAL.name,
@@ -535,8 +535,8 @@ class DeviceFileChangeExecutorTest {
                     .contains("USER_DECLINED"),
             )
 
-            database.momodingDao().updateFileChangeSet(
-                requireNotNull(database.momodingDao().fileChangeSet(PREPARE_CALL_ID)).copy(
+            database.p2Dao().updateFileChangeSet(
+                requireNotNull(database.p2Dao().fileChangeSet(PREPARE_CALL_ID)).copy(
                     state = FileChangeSetState.PREPARED.name,
                     commitCallId = null,
                     commitOperationId = null,
@@ -564,7 +564,7 @@ class DeviceFileChangeExecutorTest {
             assertTrue(access.mutations.isEmpty())
             assertEquals(
                 FileChangeSetState.CANCELLED.name,
-                database.momodingDao().fileChangeSet(PREPARE_CALL_ID)?.state,
+                database.p2Dao().fileChangeSet(PREPARE_CALL_ID)?.state,
             )
             assertTrue(
                 requireNotNull(ledger.record(pendingCallId)?.operation?.terminalFrameCanonicalJson)
@@ -666,7 +666,7 @@ class DeviceFileChangeExecutorTest {
                 put("preparedId", PREPARE_CALL_ID)
                 put(
                     "planDigest",
-                    requireNotNull(database.momodingDao().fileChangeSet(PREPARE_CALL_ID)).planDigest,
+                    requireNotNull(database.p2Dao().fileChangeSet(PREPARE_CALL_ID)).planDigest,
                 )
             },
             sideEffect = true,

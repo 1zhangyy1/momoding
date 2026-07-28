@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Momoding</string>
+    <string name="accessibility_service_description">Lets Momoding inspect visible interfaces and, only after a task policy allows it, operate controls. Passwords, one-time codes, payment, and Android permission screens remain blocked.</string>
 </resources>

@@ -27,8 +27,8 @@ the phone-local agent loop.
 - Provider credentials are encrypted with an Android Keystore-backed AES-GCM key and stored in the
   app's no-backup directory.
 - Android Storage Access Framework grants are the source of truth for project-folder access.
-- Android-owned tools list authorized metadata, request content-read consent, prepare file changes,
-  commit confirmed changes, read explicit attachments, and list bounded photo metadata.
+- Android-owned tools handle project commands, authorized files, shared storage, attachments,
+  photo metadata, screen capture, accessibility UI actions, and read-only Shizuku package facts.
 
 Model output is never treated as Android authority. The model can request a tool; Android policy,
 durable state, current permission state, and user decisions determine whether it runs.
@@ -43,9 +43,14 @@ The tracked runtime asset is generated deterministically. Its manifest records t
 source digest, bundle digest, compatibility transforms, and the public source revision used to
 build it.
 
-The runtime contains optional command-tool implementation scaffolding for future development, but
-the public Android bridge passes `projectToolsEnabled=false`, the JavaScript API defaults that
-flag to `false`, and the release APK contains no PRoot executable or Alpine filesystem.
+Task sessions expose project command and test tools. Android executes them through a phone-local
+PRoot/Alpine project environment in supported debug builds, then routes any prepared real-folder
+change through the same Android policy and confirmation path. PRoot is a compatibility layer, not
+a hostile-code sandbox.
+
+Screen images are injected only into the live provider turn that requested them. UI actions require
+a fresh accessibility snapshot and snapshot-specific opaque node handle. Shizuku integration is
+limited to bounded installed-package listing and exact-package inspection.
 
 ## Wire contracts
 
@@ -68,7 +73,10 @@ the same implementation through an included Gradle build.
 | Agent conversation | Pi session plus Android task projection |
 | Goal and child-agent recovery | Room plus validated Pi events/snapshots |
 | Remote-host connection | Android pairing state and pinned endpoint; service not included |
-| Terminal command | Unavailable in the public build |
+| Terminal command | Android project-tool executor plus PRoot/Alpine debug runtime |
+| Screen capture | User-started MediaProjection session and turn-local image |
+| UI action | Enabled accessibility service plus fresh snapshot handle |
+| Package fact | Authorized Shizuku session and read-only bounded tool |
 
 ## Process-death and replay behavior
 
@@ -81,5 +89,6 @@ permission to repeat a user-visible action.
 
 `scripts/verify.sh` verifies sources, dependency checksums, the reproducible runtime, protocol
 contracts, Android unit/instrumentation compilation, lint, APK assembly, the merged release
-manifest, exported components, and packaged artifacts. Build products, signing material, captures,
-and validation reports are intentionally not tracked.
+manifest, exported components, and packaged artifacts. The debug build fetches pinned PRoot,
+talloc, and Alpine inputs; generated binaries and root filesystems are not tracked. Build products,
+signing material, captures, and validation reports are intentionally excluded from publication.

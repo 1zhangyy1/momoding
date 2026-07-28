@@ -91,8 +91,8 @@ object DeviceClientFrameEncoder {
         val commandId = normalizeUuid(frame.commandId, "commandId")
         val taskId = normalizeUuid(frame.taskId, "taskId")
         val deviceId = normalizeWireString(frame.deviceId, "deviceId", 128)
-        require(frame.results.isNotEmpty() && frame.results.size <= ReliabilityProtocol.MAX_DEVICE_ITEMS) {
-            "results must contain 1-${ReliabilityProtocol.MAX_DEVICE_ITEMS} items"
+        require(frame.results.isNotEmpty() && frame.results.size <= P1bProtocol.MAX_DEVICE_ITEMS) {
+            "results must contain 1-${P1bProtocol.MAX_DEVICE_ITEMS} items"
         }
         val normalizedCallIds = frame.results.mapIndexed { index, item ->
             normalizeUuid(item.callId, "results[$index].callId")
@@ -161,8 +161,8 @@ object DeviceClientFrameEncoder {
 
     private fun encodePhysicalFrame(frame: JsonObject): ByteArray {
         val bytes = frame.toString().encodeToByteArray()
-        require(bytes.size <= CoreProtocol.MAX_FRAME_BYTES) {
-            "Physical frame exceeds ${CoreProtocol.MAX_FRAME_BYTES} bytes"
+        require(bytes.size <= P1aProtocol.MAX_FRAME_BYTES) {
+            "Physical frame exceeds ${P1aProtocol.MAX_FRAME_BYTES} bytes"
         }
         return bytes
     }
@@ -197,7 +197,7 @@ private fun requireSafeInteger(
     value: Long,
     field: String,
     minimum: Long,
-    maximum: Long = ReliabilityProtocol.MAX_SAFE_INTEGER,
+    maximum: Long = P1bProtocol.MAX_SAFE_INTEGER,
 ) {
     require(value in minimum..maximum) {
         "$field must be an integer from $minimum through $maximum"
@@ -205,8 +205,8 @@ private fun requireSafeInteger(
 }
 
 private fun validateJsonValue(value: JsonElement, field: String, depth: Int = 0) {
-    require(depth <= ReliabilityProtocol.MAX_JSON_DEPTH) {
-        "$field exceeds JSON depth ${ReliabilityProtocol.MAX_JSON_DEPTH}"
+    require(depth <= P1bProtocol.MAX_JSON_DEPTH) {
+        "$field exceeds JSON depth ${P1bProtocol.MAX_JSON_DEPTH}"
     }
     when (value) {
         JsonNull -> Unit

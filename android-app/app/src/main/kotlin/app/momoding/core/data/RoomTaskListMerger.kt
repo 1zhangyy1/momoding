@@ -1,6 +1,6 @@
 package app.momoding.core.data
 
-import app.momoding.wire.ReliabilityProtocol
+import app.momoding.wire.P1bProtocol
 import app.momoding.core.policy.TaskApprovalMode
 import java.util.UUID
 
@@ -18,13 +18,13 @@ class RoomTaskListMerger(
     private val nowMillis: () -> Long = System::currentTimeMillis,
     private val generationFactory: () -> String = { UUID.randomUUID().toString() },
 ) {
-    private val dao = database.momodingDao()
+    private val dao = database.p2Dao()
 
     fun mergeCompleteList(
         listRevision: Long,
         summaries: List<HostTaskSummary>,
     ): String {
-        require(listRevision in 1..ReliabilityProtocol.MAX_SAFE_INTEGER) {
+        require(listRevision in 1..P1bProtocol.MAX_SAFE_INTEGER) {
             "listRevision must be a positive safe integer"
         }
         require(summaries.size <= MAX_TASKS) { "Task list exceeds $MAX_TASKS summaries" }
@@ -58,7 +58,7 @@ class RoomTaskListMerger(
             require(summary.hostUpdatedAtMillis >= 0) { "Host updatedAt is invalid" }
             require(summary.runState in RUN_STATES) { "Host runState is invalid" }
             require(summary.recoveryState in RECOVERY_STATES) { "Host recoveryState is invalid" }
-            require(summary.snapshotVersion in 1..ReliabilityProtocol.MAX_SAFE_INTEGER) {
+            require(summary.snapshotVersion in 1..P1bProtocol.MAX_SAFE_INTEGER) {
                 "Host snapshotVersion is invalid"
             }
         }
@@ -77,32 +77,43 @@ class RoomTaskListMerger(
         generation: String,
         listRevision: Long,
         insertedAtMillis: Long,
-    ): TaskEntity = TaskEntity(
-        taskId = taskId,
-        title = title.orEmpty(),
-        runState = runState.uppercase(),
-        recoveryState = recoveryState.uppercase(),
-        readState = previous?.readState ?: "UNREAD",
-        attentionState = previous?.attentionState ?: "NONE",
-        streamId = previous?.streamId,
-        throughSequence = previous?.throughSequence ?: 0,
-        snapshotVersion = snapshotVersion,
-        windowStart = previous?.windowStart ?: 0,
-        windowEndExclusive = previous?.windowEndExclusive ?: 0,
-        nextStageBatchOrdinal = previous?.nextStageBatchOrdinal ?: 1,
-        queueJson = previous?.queueJson ?: "[]",
-        piSessionId = previous?.piSessionId,
-        isStreaming = previous?.isStreaming ?: false,
-        updatedAtMillis = previous?.updatedAtMillis ?: insertedAtMillis,
-        listedByHost = true,
-        lastListSyncGeneration = generation,
-        lastListRevision = listRevision,
-        hostUpdatedAtMillis = hostUpdatedAtMillis,
-        titleSource = previous?.titleSource ?: "LEGACY",
-        pinnedAtMillis = previous?.pinnedAtMillis,
-        archivedAtMillis = previous?.archivedAtMillis,
-        approvalMode = previous?.approvalMode ?: draftMode ?: TaskApprovalMode.REQUEST_APPROVAL,
-    )
+    ): TaskEntity {
+        val failure = taskFailureForRunState(
+            runState = runState,
+            previous = previous
+                ?.takeIf { it.snapshotVersion == snapshotVersion }
+                ?.storedTaskFailure(),
+        )
+        return TaskEntity(
+            taskId = taskId,
+            title = title.orEmpty(),
+            runState = runState.uppercase(),
+            recoveryState = recoveryState.uppercase(),
+            readState = previous?.readState ?: "UNREAD",
+            attentionState = previous?.attentionState ?: "NONE",
+            streamId = previous?.streamId,
+            throughSequence = previous?.throughSequence ?: 0,
+            snapshotVersion = snapshotVersion,
+            windowStart = previous?.windowStart ?: 0,
+            windowEndExclusive = previous?.windowEndExclusive ?: 0,
+            nextStageBatchOrdinal = previous?.nextStageBatchOrdinal ?: 1,
+            queueJson = previous?.queueJson ?: "[]",
+            piSessionId = previous?.piSessionId,
+            isStreaming = previous?.isStreaming ?: false,
+            updatedAtMillis = previous?.updatedAtMillis ?: insertedAtMillis,
+            listedByHost = true,
+            lastListSyncGeneration = generation,
+            lastListRevision = listRevision,
+            hostUpdatedAtMillis = hostUpdatedAtMillis,
+            titleSource = previous?.titleSource ?: "LEGACY",
+            pinnedAtMillis = previous?.pinnedAtMillis,
+            archivedAtMillis = previous?.archivedAtMillis,
+            approvalMode = previous?.approvalMode ?: draftMode ?: TaskApprovalMode.REQUEST_APPROVAL,
+            failureKind = failure?.kind?.name,
+            failureMessage = failure?.message,
+            failureRecovery = failure?.recovery?.name,
+        )
+    }
 
     private companion object {
         const val MAX_TASKS = 10_000

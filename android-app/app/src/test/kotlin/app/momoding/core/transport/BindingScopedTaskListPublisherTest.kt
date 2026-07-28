@@ -53,7 +53,7 @@ class BindingScopedTaskListPublisherTest {
             RoomTaskListMerger(database),
         )
         val requestStarted = CompletableDeferred<Unit>()
-        val finalPage = CompletableDeferred<app.momoding.wire.ReceivedReliabilityServerFrame>()
+        val finalPage = CompletableDeferred<app.momoding.wire.ReceivedP1bServerFrame>()
         val port = TaskListWirePort { _, _ ->
             requestStarted.complete(Unit)
             finalPage.await()
@@ -72,7 +72,7 @@ class BindingScopedTaskListPublisherTest {
         finalPage.complete(taskListPage())
 
         assertTrue(synchronizing.await().isFailure)
-        assertEquals(emptyList<Any>(), database.momodingDao().allTasks())
+        assertEquals(emptyList<Any>(), database.p2Dao().allTasks())
     }
 
     private class MemoryStateStore(var snapshot: HostBindingSnapshot?) : HostStateStore {
@@ -97,7 +97,7 @@ class BindingScopedTaskListPublisherTest {
         updatedAtMillis = 1,
     )
 
-    private fun taskListPage(): app.momoding.wire.ReceivedReliabilityServerFrame =
+    private fun taskListPage(): app.momoding.wire.ReceivedP1bServerFrame =
         app.momoding.wire.ReliabilityContractDecoder.decode(
             """{"protocolVersion":1,"kind":"response","requestId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","ok":true,"data":{"tasks":[{"taskId":"55555555-5555-4555-8555-555555555555","title":"Old Host","updatedAt":"1970-01-01T00:00:01.000Z","runState":"idle","recoveryState":"normal","snapshotVersion":1}],"listRevision":1}}""",
         )

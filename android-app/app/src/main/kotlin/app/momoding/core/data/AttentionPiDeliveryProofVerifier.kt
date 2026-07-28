@@ -39,19 +39,27 @@ internal object AttentionPiDeliveryProofVerifier {
     private val contentReadDetailKeys = coreDetailKeys + setOf(
         "contentScope",
         "dataScope",
+        "approvalOrigin",
     )
     private val fileCommitDetailKeys = coreDetailKeys + setOf(
         "dataScope",
         "operationId",
+        "approvalOrigin",
+    )
+    private val uiActionDetailKeys = coreDetailKeys + setOf(
+        "operationId",
+        "approvalOrigin",
     )
     private val sha256Pattern = Regex("^[0-9a-f]{64}$")
     private const val CONTENT_READ_TOOL = "device_files_read"
     private const val FILE_COMMIT_TOOL = "device_files_commit_changes"
+    private const val UI_ACTION_TOOL = "device_ui_action"
     private val attentionTools = setOf(
         "request_user_question",
         "request_user_confirmation",
         CONTENT_READ_TOOL,
         FILE_COMMIT_TOOL,
+        UI_ACTION_TOOL,
     )
     private val fileApprovalTools = setOf(CONTENT_READ_TOOL, FILE_COMMIT_TOOL)
 
@@ -147,8 +155,10 @@ internal object AttentionPiDeliveryProofVerifier {
     ): VerifiedAttentionPiDeliveryProof? {
         if (operation.toolName !in attentionTools) return null
         when (operation.toolName) {
-            FILE_COMMIT_TOOL -> if (!operation.sideEffect || operation.operationId == null) {
-                corrupt("Exact Pi delivery proof targets an unsafe file-commit binding")
+            FILE_COMMIT_TOOL,
+            UI_ACTION_TOOL,
+            -> if (!operation.sideEffect || operation.operationId == null) {
+                corrupt("Exact Pi delivery proof targets an unsafe side-effect binding")
             }
             else -> if (operation.sideEffect || operation.operationId != null) {
                 corrupt("Exact Pi delivery proof targets an unsafe attention binding")
@@ -173,6 +183,7 @@ internal object AttentionPiDeliveryProofVerifier {
             recovery != null -> recoveryDetailKeys
             operation.toolName == CONTENT_READ_TOOL -> contentReadDetailKeys
             operation.toolName == FILE_COMMIT_TOOL -> fileCommitDetailKeys
+            operation.toolName == UI_ACTION_TOOL -> uiActionDetailKeys
             else -> coreDetailKeys
         }
         if (details.keys != expectedDetailKeys) {
@@ -193,7 +204,7 @@ internal object AttentionPiDeliveryProofVerifier {
         ) {
             corrupt("Exact Pi delivery proof side-effect binding conflicts")
         }
-        if (operation.toolName == FILE_COMMIT_TOOL) {
+        if (operation.toolName in setOf(FILE_COMMIT_TOOL, UI_ACTION_TOOL)) {
             if (
                 details.getValue("operationId").requiredString("details.operationId") !=
                 operation.operationId
@@ -201,18 +212,31 @@ internal object AttentionPiDeliveryProofVerifier {
                 corrupt("Exact Pi delivery proof operationId conflicts")
             }
         }
+        if (operation.toolName in fileApprovalTools || operation.toolName == UI_ACTION_TOOL) {
+            val validOrigins = if (operation.toolName == FILE_COMMIT_TOOL) {
+                setOf("none", "user", "auto_policy")
+            } else {
+                setOf("user", "auto_policy")
+            }
+            if (
+                details.getValue("approvalOrigin").requiredString("details.approvalOrigin") !in
+                validOrigins
+            ) {
+                corrupt("Exact Pi delivery proof approval origin is invalid")
+            }
+        }
         if (operation.toolName in fileApprovalTools) {
             if (
-                details.getValue("dataScope").requiredString("details.dataScope") !=
-                "android_saf_task_grant"
+                details.getValue("dataScope").requiredString("details.dataScope") !in
+                setOf("android_saf_task_grant", "android_shared_storage_grant")
             ) {
                 corrupt("Exact Pi delivery proof data scope conflicts")
             }
         }
         if (
             operation.toolName == CONTENT_READ_TOOL &&
-            details.getValue("contentScope").requiredString("details.contentScope") !=
-            "android_saf_user_approved"
+            details.getValue("contentScope").requiredString("details.contentScope") !in
+            setOf("android_saf_user_approved", "android_shared_storage_policy")
         ) {
             corrupt("Exact Pi delivery proof content scope conflicts")
         }

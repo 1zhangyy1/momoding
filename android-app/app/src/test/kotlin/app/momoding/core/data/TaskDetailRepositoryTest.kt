@@ -41,7 +41,7 @@ class TaskDetailRepositoryTest {
 
     @Test
     fun `atomic task detail read includes ordered timeline and durable stop fence`() = runTest {
-        val dao = database.momodingDao()
+        val dao = database.p2Dao()
         dao.upsertTask(task(windowEnd = 2))
         dao.insertTimeline(
             listOf(
@@ -138,7 +138,7 @@ class TaskDetailRepositoryTest {
 
     @Test
     fun `noncontiguous timeline fails closed`() {
-        val dao = database.momodingDao()
+        val dao = database.p2Dao()
         dao.upsertTask(task(windowEnd = 2))
         dao.insertTimeline(
             listOf(timeline("message-2", 1, """{"role":"user","content":[{"type":"text","text":"gap"}]}""")),
@@ -184,6 +184,6 @@ class TaskDetailRepositoryTest {
         const val ATTENTION_CALL_ID = "44444444-4444-4444-8444-444444444444"
         const val PENDING_ATTENTION_CALL_ID = "44444444-4444-4444-8444-444444444445"
         const val PHANTOM_HOST_CALL_ID = "55555555-5555-4555-8555-555555555555"
-        const val DEVICE_ID = "android-attention-device"
+        const val DEVICE_ID = "android-p2-7-device"
     }
 }

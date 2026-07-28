@@ -1,8 +1,8 @@
 package app.momoding
 
 import app.momoding.wire.HelloAcceptedFrame
-import app.momoding.wire.CoreProtocol
-import app.momoding.wire.CoreServerFrameDecoder
+import app.momoding.wire.P1aProtocol
+import app.momoding.wire.P1aServerFrameDecoder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -10,14 +10,14 @@ import org.junit.Test
 class SharedWireConsumerTest {
     @Test
     fun `formal Android app consumes the shared protocol constants`() {
-        assertEquals(1, CoreProtocol.PROTOCOL_VERSION)
-        assertEquals("0.80.6", CoreProtocol.PI_VERSION)
-        assertEquals(1_048_576, CoreProtocol.MAX_FRAME_BYTES)
+        assertEquals(1, P1aProtocol.PROTOCOL_VERSION)
+        assertEquals("0.80.6", P1aProtocol.PI_VERSION)
+        assertEquals(1_048_576, P1aProtocol.MAX_FRAME_BYTES)
     }
 
     @Test
     fun `formal Android app decodes a server frame through the shared decoder`() {
-        val frame = CoreServerFrameDecoder.decode(
+        val frame = P1aServerFrameDecoder.decode(
             """
             {
               "protocolVersion": 1,

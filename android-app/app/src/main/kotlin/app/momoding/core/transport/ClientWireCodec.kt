@@ -1,6 +1,6 @@
 package app.momoding.core.transport
 
-import app.momoding.wire.ReliabilityProtocol
+import app.momoding.wire.P1bProtocol
 import app.momoding.core.auth.VaultEnvelopeCodec
 import app.momoding.core.auth.VaultSecret
 import java.util.UUID
@@ -37,7 +37,7 @@ object ClientWireCodec {
             payload.resume.forEach { cursor ->
                 requireUuid(cursor.taskId, "resume.taskId")
                 requireUuid(cursor.streamId, "resume.streamId")
-                require(cursor.lastAckedSequence in 0..ReliabilityProtocol.MAX_SAFE_INTEGER) {
+                require(cursor.lastAckedSequence in 0..P1bProtocol.MAX_SAFE_INTEGER) {
                     "resume.lastAckedSequence is invalid"
                 }
                 add(
@@ -116,7 +116,7 @@ object ClientWireCodec {
         requireUuid(requestId, "requestId")
         requireUuid(taskId, "taskId")
         knownSnapshotVersion?.let {
-            require(it in 0..ReliabilityProtocol.MAX_SAFE_INTEGER) {
+            require(it in 0..P1bProtocol.MAX_SAFE_INTEGER) {
                 "knownSnapshotVersion is invalid"
             }
         }

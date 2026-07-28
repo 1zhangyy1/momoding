@@ -10,10 +10,13 @@ All notable public changes will be documented here. The project follows
 - Clean Momoding open-source source snapshot with new public Git history.
 - Android local-first agent workspace, encrypted OpenRouter credential storage, SAF file review
   flow, attachments, skills, plans, goals, child agents, and recovery state.
+- Phone-local project commands, shared-storage tools, screen capture, accessibility UI actions, and
+  read-only Shizuku package inspection.
 - Reproducible phone-local Pi runtime verification.
 - CI, security policy, contribution guide, public-scope gate, and third-party notices.
 
 ### Security
 
-- Public build excludes remote-host code and Linux/PRoot artifacts.
-- Terminal and test execution tools are disabled at the model boundary.
+- Remote-host service and internal development evidence remain outside the public boundary.
+- Powerful Android capabilities and the non-sandboxed PRoot runtime are documented explicitly.
+- Public snapshots are generated from the private source-of-truth repository by allowlist.

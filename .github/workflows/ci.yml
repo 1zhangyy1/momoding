@@ -59,8 +59,6 @@ jobs:
   android:
     name: Android
     runs-on: ubuntu-latest
-    env:
-      SOURCE_REVISION: ${{ github.sha }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
@@ -73,9 +71,17 @@ jobs:
           node-version-file: mobile-runtime-js/.nvmrc
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
       - name: Install Android SDK
-        run: sdkmanager "platform-tools" "platforms;android-37" "build-tools;37.0.0"
+        run: >-
+          sdkmanager
+          "platform-tools"
+          "platforms;android-37"
+          "build-tools;37.0.0"
+          "ndk;28.2.13676358"
       - name: Test, lint, and assemble
         run: >-
+          SOURCE_REVISION="$(node -p
+          "JSON.parse(require('node:fs').readFileSync('.public-source.json',
+          'utf8')).sourceRevision")"
           ./android-app/gradlew -p android-app --no-daemon
           testDebugUnitTest compileDebugAndroidTestKotlin
           lintDebug assembleDebug assembleRelease

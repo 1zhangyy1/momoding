@@ -1,0 +1,60 @@
+# Public root and community files
++.editorconfig
++.gitattributes
++.github
++.gitignore
++CHANGELOG.md
++CODE_OF_CONDUCT.md
++CONTRIBUTING.md
++LICENSE
++OPEN_SOURCE_SCOPE.md
++README.md
++README.zh-CN.md
++RELEASING.md
++SECURITY.md
++SUPPORT.md
++THIRD_PARTY_NOTICES.md
+
+# Public product documentation and license texts
++docs/ARCHITECTURE.md
++docs/SECURITY_MODEL.md
++docs/design/fixtures/r0-contract-fixtures.json
++licenses
+
+# Android production source and reviewable unit tests
++android-app/PHOSPHOR-NOTICE.md
++android-app/README.md
++android-app/build.gradle.kts
++android-app/gradle.properties
++android-app/gradle
++android-app/gradlew
++android-app/gradlew.bat
++android-app/settings-gradle.lockfile
++android-app/settings.gradle.kts
++android-app/app/build.gradle.kts
++android-app/app/gradle.lockfile
++android-app/app/lint.xml
++android-app/app/proguard-rules.pro
++android-app/app/schemas
++android-app/app/src/main
++android-app/app/src/test
+-android-app/app/src/test/kotlin/app/momoding/debug/P2FixtureCatalogTest.kt
+
+# Pi runtime and shared protocol
++mobile-runtime-js
++wire
+-wire/fixtures/pi-0.80.6/README.md
+-wire/kotlin-contract/README.md
+
+# Reproducible builders, public checks, and required third-party patch
++scripts/build-phone-local-linux-runtime.sh
++scripts/check-markdown-links.mjs
++scripts/check-public-repo.sh
++scripts/check-public-sync.sh
++scripts/export-public-repo.sh
++scripts/generate-p2-fixtures.mjs
++scripts/lib/p2-fixture-projection.mjs
++scripts/public-export-paths.txt
++scripts/verify-release-apk.mjs
++scripts/verify.sh
++third_party/patches/proot-5.1.107.86-android-ndk.patch

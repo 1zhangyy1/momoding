@@ -48,7 +48,7 @@ class TaskRepositoryTest {
     @Test
     fun `single observable projection uses only local ledger and prioritizes actionable`() =
         runBlocking {
-            val dao = database.momodingDao()
+            val dao = database.p2Dao()
             dao.upsertTask(task(OLDER_TASK_ID, 100, readState = "UNREAD"))
             dao.upsertTask(task(NEWER_TASK_ID, 200, readState = "READ"))
             dao.upsertTask(task(UNDATED_TASK_ID, null, readState = "UNREAD"))
@@ -108,7 +108,7 @@ class TaskRepositoryTest {
 
     @Test
     fun `exact task and call query never substitutes another local attention`() = runBlocking {
-        val dao = database.momodingDao()
+        val dao = database.p2Dao()
         dao.upsertTask(task(NEWER_TASK_ID, 200, readState = "READ"))
         dao.upsertTask(task(OLDER_TASK_ID, 100, readState = "READ"))
         accept(NEWER_TASK_ID, NEWER_PENDING_CALL_ID, "request_user_question")
@@ -128,7 +128,7 @@ class TaskRepositoryTest {
     @Test
     fun `typed responding state remains through Host proof and exits only after Pi proof`() =
         runBlocking {
-            database.momodingDao().upsertTask(task(NEWER_TASK_ID, 200, readState = "READ"))
+            database.p2Dao().upsertTask(task(NEWER_TASK_ID, 200, readState = "READ"))
             accept(NEWER_TASK_ID, NEWER_RESPONDING_CALL_ID, "request_user_question")
             val repository = TaskRepository(database, Dispatchers.Unconfined)
             ledger.recordTerminal(
@@ -159,7 +159,7 @@ class TaskRepositoryTest {
 
     @Test
     fun `corrupt and failed closed local pairs never become task entry points`() = runBlocking {
-        val dao = database.momodingDao()
+        val dao = database.p2Dao()
         dao.upsertTask(task(NEWER_TASK_ID, 200, readState = "READ"))
         accept(NEWER_TASK_ID, NEWER_PENDING_CALL_ID, "request_user_question")
         val projection = requireNotNull(dao.pendingAttention(NEWER_PENDING_CALL_ID))
@@ -193,7 +193,7 @@ class TaskRepositoryTest {
     @Test
     fun `phone local task management persists rename pin archive restore and guarded delete`() =
         runBlocking {
-            val dao = database.momodingDao()
+            val dao = database.p2Dao()
             dao.upsertTask(task(NEWER_TASK_ID, 200, readState = "READ"))
             val repository = TaskRepository(
                 database = database,
@@ -228,16 +228,16 @@ class TaskRepositoryTest {
             runState = "RUNNING",
             isStreaming = true,
         )
-        database.momodingDao().upsertTask(active)
+        database.p2Dao().upsertTask(active)
         val repository = TaskRepository(database, Dispatchers.Unconfined)
 
         assertTrue(runCatching { repository.archive(NEWER_TASK_ID) }.isFailure)
-        assertNotNull(database.momodingDao().task(NEWER_TASK_ID))
+        assertNotNull(database.p2Dao().task(NEWER_TASK_ID))
     }
 
     @Test
     fun `conditional archive and delete reject a task that became active after a stale read`() {
-        val dao = database.momodingDao()
+        val dao = database.p2Dao()
         dao.upsertTask(task(NEWER_TASK_ID, 200, readState = "READ"))
         val staleSettled = requireNotNull(dao.task(NEWER_TASK_ID))
         assertFalse(staleSettled.isStreaming)
@@ -262,7 +262,7 @@ class TaskRepositoryTest {
     @Test
     fun `permanent delete removes bound draft and command payloads but preserves unrelated data`() =
         runBlocking {
-            val dao = database.momodingDao()
+            val dao = database.p2Dao()
             dao.upsertTask(task(NEWER_TASK_ID, 200, readState = "READ"))
             dao.insertDraft(
                 draft(
@@ -461,7 +461,7 @@ class TaskRepositoryTest {
         const val NEWER_PENDING_CALL_ID = "22222222-2222-4222-8222-222222222222"
         const val OLDER_CONFIRM_CALL_ID = "22222222-2222-4222-8222-222222222223"
         const val PHANTOM_HOST_CALL_ID = "22222222-2222-4222-8222-222222222224"
-        const val DEVICE_ID = "android-attention-device"
+        const val DEVICE_ID = "android-p2-7-device"
         const val EXPIRES_AT = "2030-01-01T00:00:00.000Z"
     }
 }

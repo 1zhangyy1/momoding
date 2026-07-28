@@ -40,9 +40,10 @@ fun interface DeviceContentReadHandler {
 class DeviceContentReadExecutor(
     database: MomodingDatabase,
     private val folders: AuthorizedFoldersRepository,
+    private val sharedStorage: SharedStorageRepository? = null,
     private val nowMillis: () -> Long = System::currentTimeMillis,
 ) : DeviceContentReadHandler {
-    private val dao = database.momodingDao()
+    private val dao = database.p2Dao()
 
     override suspend fun execute(operation: DeviceOperationEntity): JsonObject = try {
         withTimeout(READ_TIMEOUT_MILLIS) {
@@ -65,12 +66,17 @@ class DeviceContentReadExecutor(
                     "File content request was cancelled",
                 )
             }
-            val selectedGrant = dao.draftForTask(operation.taskId)?.selectedGrantId
-            if (selectedGrant != request.grantId) {
-                throw ContentReadExecutionFailure(
-                    "TASK_FILE_GRANT_REQUIRED",
-                    "This task has no matching mobile folder grant",
-                )
+            val shared = sharedStorage?.takeIf { it.isSharedGrant(request.grantId) }
+            if (shared != null) {
+                shared.requireReadyGrant(request.grantId)
+            } else {
+                val selectedGrant = dao.draftForTask(operation.taskId)?.selectedGrantId
+                if (selectedGrant != request.grantId) {
+                    throw ContentReadExecutionFailure(
+                        "TASK_FILE_GRANT_REQUIRED",
+                        "This task has no matching mobile folder grant",
+                    )
+                }
             }
             val scopeExpiry = minOf(requestExpiry, now + MAX_SCOPE_MILLIS)
             val contentGrant = TaskContentGrantEntity(
@@ -132,17 +138,26 @@ class DeviceContentReadExecutor(
                     "File content approval expired or was revoked",
                 )
             }
-            val read = folders.readText(
-                grantId = request.grantId,
-                requests = request.documents.map {
-                    AuthorizedDocumentReadRequest(
-                        alias = it.alias,
-                        expectedMimeType = it.expectedMimeType,
-                        maxBytes = it.maxBytes,
-                    )
-                },
-                totalMaxBytes = request.totalMaxBytes,
-            )
+            val requests = request.documents.map {
+                AuthorizedDocumentReadRequest(
+                    alias = it.alias,
+                    expectedMimeType = it.expectedMimeType,
+                    maxBytes = it.maxBytes,
+                )
+            }
+            val read = if (shared != null) {
+                shared.readText(
+                    grantId = request.grantId,
+                    requests = requests,
+                    totalMaxBytes = request.totalMaxBytes,
+                )
+            } else {
+                folders.readText(
+                    grantId = request.grantId,
+                    requests = requests,
+                    totalMaxBytes = request.totalMaxBytes,
+                )
+            }
             val currentScope = dao.taskContentGrant(operation.callId)
                 ?: throw ContentReadExecutionFailure(
                     "CONTENT_SCOPE_UNAVAILABLE",

@@ -1,32 +1,63 @@
-# Momoding Android app
+# Momoding Android application
 
-This module owns the Android product surface: Compose UI, Room persistence, encrypted provider
-credentials, Android permission/capability state, SAF file access, attachment handling, and the
-phone-local Pi bridge.
+This directory contains the independent open-source Momoding Android application. It is not an
+official OpenAI application.
 
-The app namespace and application ID are both `app.momoding`. The minimum supported version is
-Android 11 (API 30).
+## Product boundaries
 
-## Build
+- Package namespace and application ID: `app.momoding`
+- Minimum Android version: Android 11 / API 30
+- Provider: user-configured OpenRouter credential
+- Durable state: Room with the bundled SQLite driver
+- Local agent runtime: Pi AgentHarness in QuickJS
+- Project access: Android SAF plus optional shared-storage access
+- Optional device capabilities: media metadata, MediaProjection screen capture, accessibility UI
+  inspection/actions, and Shizuku read-only package inspection
+- Debug project runtime: pinned PRoot/talloc/Alpine build
+
+Android owns credentials, provider HTTP, permission state, policy checks, tool execution, and
+durable side-effect records. JavaScript does not receive the provider API key.
+
+## Prerequisites
+
+- JDK 17 through `JAVA_HOME`
+- Android SDK Platform 37 and Build Tools 37.0.0 through `ANDROID_HOME`
+- Android NDK 28.2.13676358 for the debug phone-local Linux runtime
+- Node.js 22.22.3 for regenerating the tracked Pi runtime asset
+
+`local.properties` is ignored and must not be committed.
+
+## Build and verify
 
 From the repository root:
 
 ```bash
+npm ci --prefix mobile-runtime-js
+npm run check --prefix mobile-runtime-js
+
 JAVA_HOME=/path/to/jdk-17 \
 ANDROID_HOME=/path/to/android-sdk \
 ./android-app/gradlew -p android-app \
-  testDebugUnitTest lintDebug assembleDebug assembleRelease
+  testDebugUnitTest \
+  compileDebugAndroidTestKotlin \
+  lintDebug \
+  assembleDebug \
+  assembleRelease
 ```
 
-`SOURCE_REVISION` may be set to a 40-character Git commit when building outside a Git checkout.
-`local.properties`, signing keys, APKs, reports, and device captures are intentionally ignored.
+The APK outputs are under `android-app/app/build/outputs/apk/`.
 
-## Public-build limitation
+The debug build downloads pinned native/runtime inputs and verifies their digests. See
+[`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md) before redistributing an APK.
 
-The source tree retains experimental scaffolding for an app-private workspace command runtime,
-but the public runtime bundle starts task sessions with project command tools disabled. No PRoot
-binary or Alpine filesystem is packaged, and the model is explicitly told that terminal commands
-and test execution are unavailable.
+## Test layers
 
-Do not enable that runtime in a distributed build until its complete corresponding source,
-license notices, update policy, ABI support, and device validation are ready.
+- JVM/Robolectric tests cover state, policy, persistence, provider encoding, recovery, and tool
+  routing.
+- Instrumentation sources compile as part of the public gate; device-dependent suites require
+  explicit emulators, physical devices, permissions, or Shizuku setup.
+- `lintDebug` is configured to fail on warnings.
+- `scripts/verify-release-apk.mjs` inspects the built release manifest, permissions, exported
+  components, and packaged artifacts.
+
+The repository-wide command is `./scripts/verify.sh`.

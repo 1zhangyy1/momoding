@@ -41,7 +41,7 @@ class SnapshotAssemblyException(
 ) : IllegalStateException(message, cause)
 
 class SnapshotAssembler(
-    private val snapshotLogicalLimitBytes: Long = ReliabilityProtocol.SNAPSHOT_MAX_LOGICAL_BYTES.toLong(),
+    private val snapshotLogicalLimitBytes: Long = P1bProtocol.SNAPSHOT_MAX_LOGICAL_BYTES.toLong(),
 ) : AutoCloseable {
     private val expectations = linkedMapOf<String, HistoryRequestExpectation>()
     private val pending = linkedMapOf<String, PendingSnapshot>()
@@ -64,7 +64,7 @@ class SnapshotAssembler(
     }
 
     @Synchronized
-    fun acceptBegin(received: ReceivedReliabilityServerFrame) {
+    fun acceptBegin(received: ReceivedP1bServerFrame) {
         ensureOpen()
         val begin = received.frame as? TaskSnapshotBeginFrame
             ?: throw SnapshotAssemblyException("SnapshotAssembler requires task.snapshot.begin")
@@ -92,7 +92,7 @@ class SnapshotAssembler(
     }
 
     @Synchronized
-    fun acceptPage(received: ReceivedReliabilityServerFrame) {
+    fun acceptPage(received: ReceivedP1bServerFrame) {
         ensureOpen()
         val page = received.frame as? TaskSnapshotPageFrame
             ?: throw SnapshotAssemblyException("SnapshotAssembler requires task.snapshot.page")
@@ -111,7 +111,7 @@ class SnapshotAssembler(
             if (page.messageStartIndex != state.nextMessageIndex) {
                 fail(page.taskId, "Snapshot page message range is not contiguous")
             }
-            if (page.pageIndex >= ReliabilityProtocol.SNAPSHOT_MAX_PAGES) {
+            if (page.pageIndex >= P1bProtocol.SNAPSHOT_MAX_PAGES) {
                 fail(page.taskId, "Snapshot page count exceeds the maximum")
             }
 
@@ -162,7 +162,7 @@ class SnapshotAssembler(
     }
 
     @Synchronized
-    fun acceptEnd(received: ReceivedReliabilityServerFrame): AssembledSnapshot {
+    fun acceptEnd(received: ReceivedP1bServerFrame): AssembledSnapshot {
         ensureOpen()
         val end = received.frame as? TaskSnapshotEndFrame
             ?: throw SnapshotAssemblyException("SnapshotAssembler requires task.snapshot.end")
@@ -172,7 +172,7 @@ class SnapshotAssembler(
             if (end.snapshotVersion != state.begin.snapshotVersion) {
                 fail(end.taskId, "Snapshot end version does not match begin")
             }
-            if (end.pageCount != state.pages.size || end.pageCount !in 1..ReliabilityProtocol.SNAPSHOT_MAX_PAGES) {
+            if (end.pageCount != state.pages.size || end.pageCount !in 1..P1bProtocol.SNAPSHOT_MAX_PAGES) {
                 fail(end.taskId, "Snapshot end pageCount does not match received pages")
             }
             if (state.nextMessageIndex != state.begin.window.messageEndExclusive) {
@@ -220,12 +220,12 @@ class SnapshotAssembler(
         if (!SNAPSHOT_UUID_PATTERN.matches(expectation.taskId)) {
             throw SnapshotAssemblyException("History taskId must be a UUID")
         }
-        if (expectation.snapshotVersion !in 1..ReliabilityProtocol.MAX_SAFE_INTEGER) {
+        if (expectation.snapshotVersion !in 1..P1bProtocol.MAX_SAFE_INTEGER) {
             throw SnapshotAssemblyException("History snapshotVersion must be safe and positive")
         }
-        if (expectation.limitBytes !in 1..ReliabilityProtocol.HISTORY_MAX_BYTES.toLong()) {
+        if (expectation.limitBytes !in 1..P1bProtocol.HISTORY_MAX_BYTES.toLong()) {
             throw SnapshotAssemblyException(
-                "History limitBytes must be 1-${ReliabilityProtocol.HISTORY_MAX_BYTES}",
+                "History limitBytes must be 1-${P1bProtocol.HISTORY_MAX_BYTES}",
             )
         }
     }

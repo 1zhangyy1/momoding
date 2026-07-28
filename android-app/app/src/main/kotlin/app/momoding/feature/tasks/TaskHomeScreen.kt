@@ -424,7 +424,7 @@ private fun TaskRowManagementMenu(
                     },
                 )
             } else {
-                if (row.status == TaskRowStatus.FAILED) {
+                if (row.recoveryAction == TaskRowRecoveryAction.FIX_PROVIDER) {
                     DropdownMenuItem(
                         text = { Text("Fix Provider") },
                         leadingIcon = { Icon(Icons.Outlined.ErrorOutline, contentDescription = null) },

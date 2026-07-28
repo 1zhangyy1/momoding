@@ -158,7 +158,7 @@ class AttentionRepository(
         )
     },
 ) : AttentionDataSource {
-    private val dao = database.momodingDao()
+    private val dao = database.p2Dao()
     private val ledger = RoomAttentionLedger(database)
 
     override fun observe(taskId: String, callId: String): Flow<AttentionRecordState> =
@@ -322,6 +322,20 @@ class AttentionRepository(
             "request_user_confirmation" -> AttentionPrompt.Confirmation(
                 summary = value.getValue("summary").jsonPrimitive.content,
                 details = value["details"]?.jsonPrimitive?.contentOrNull,
+            )
+            "device_ui_action" -> AttentionPrompt.Confirmation(
+                summary = value["approvalSummary"]?.jsonPrimitive?.contentOrNull ?: when (
+                    value.getValue("action").jsonPrimitive.content
+                ) {
+                    "click" -> "Allow Momoding to click the selected control?"
+                    "scroll" -> "Allow Momoding to scroll the selected view?"
+                    "input_draft" -> "Allow Momoding to enter draft text?"
+                    "back" -> "Allow Momoding to go back?"
+                    else -> error("Unsupported interface action")
+                },
+                details = value["approvalDetails"]?.jsonPrimitive?.contentOrNull
+                    ?: "Android will re-check the foreground app, snapshot, and target " +
+                        "immediately before acting.",
             )
             "device_media_list" -> AttentionPrompt.Confirmation(
                 summary = "Allow Momoding to inspect recent photo metadata?",

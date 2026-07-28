@@ -7,6 +7,9 @@ import androidx.compose.ui.semantics.semantics
 import app.momoding.core.attachments.AttachmentKind
 import app.momoding.core.data.TaskAttentionKind
 import app.momoding.core.policy.TaskApprovalMode
+import app.momoding.core.data.TaskFailure
+import app.momoding.core.data.TaskFailureKind
+import app.momoding.core.data.TaskFailureRecovery
 import app.momoding.feature.settings.contractAction
 
 enum class TaskDetailLoadState { LOADING, READY, MISSING, ERROR }
@@ -285,6 +288,7 @@ data class TaskDetailUiState(
     val attachmentImporting: Boolean = false,
     val attachmentError: String? = null,
     val attachments: List<TaskDetailAttachmentUiModel> = emptyList(),
+    val failure: TaskFailure? = null,
 ) {
     val latestError: TimelineItem.Error?
         get() = timeline.allItems.filterIsInstance<TimelineItem.Error>().lastOrNull()
@@ -297,13 +301,19 @@ data class TaskDetailUiState(
             ?.takeIf(String::isNotBlank)
 
     val providerRecoveryAvailable: Boolean
+        get() = failureRecoveryAvailable &&
+            failure?.recovery == TaskFailureRecovery.FIX_PROVIDER
+
+    val failureRecoveryAvailable: Boolean
         get() = phoneLocal &&
             runState == TaskDetailRunState.FAILED &&
             latestError != null &&
+            failure != null &&
             retryOriginalText != null
 
     val canRetryOriginal: Boolean
-        get() = providerRecoveryAvailable &&
+        get() = failureRecoveryAvailable &&
+            failure?.recovery == TaskFailureRecovery.RETRY &&
             loadState == TaskDetailLoadState.READY &&
             connection == TaskDetailConnectionState.CONNECTED &&
             !commandPending &&
@@ -311,6 +321,22 @@ data class TaskDetailUiState(
             !approvalModeSaving &&
             !activeStopFence &&
             composer.text.isBlank()
+
+    val failureTitle: String
+        get() = when (failure?.kind) {
+            TaskFailureKind.PROVIDER_AUTH,
+            TaskFailureKind.PROVIDER_CREDITS,
+            TaskFailureKind.PROVIDER_POLICY,
+            TaskFailureKind.PROVIDER_MODEL,
+            TaskFailureKind.PROVIDER_RATE_LIMIT,
+            TaskFailureKind.PROVIDER_TIMEOUT,
+            TaskFailureKind.PROVIDER_UNAVAILABLE,
+            TaskFailureKind.PROVIDER_OTHER,
+            -> "Provider needs attention"
+            TaskFailureKind.RUNTIME -> "Task stopped unexpectedly"
+            TaskFailureKind.INTERRUPTED -> "Run interrupted"
+            TaskFailureKind.UNKNOWN, null -> "Task needs attention"
+        }
 
     val commandPending: Boolean
         get() = command is TaskCommandUiState.Persisting ||

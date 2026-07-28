@@ -2727,8 +2727,8 @@ ${previousSummary}
     if (response.stopReason === "error") {
       return err(new CompactionError("summarization_failed", `Summarization failed: ${response.errorMessage || "Unknown error"}`));
     }
-    const textContent2 = response.content.filter((c) => c.type === "text").map((c) => c.text).join("\n");
-    return ok(textContent2);
+    const textContent = response.content.filter((c) => c.type === "text").map((c) => c.text).join("\n");
+    return ok(textContent);
   }
   function prepareCompaction(pathEntries, settings) {
     if (pathEntries.length === 0 || pathEntries[pathEntries.length - 1].type === "compaction") {
@@ -11376,6 +11376,11 @@ ${additionalInstructions}` : skillBlock;
   var FILES_PREPARE_TOOL_NAME = "device_files_prepare_changes";
   var FILES_COMMIT_TOOL_NAME = "device_files_commit_changes";
   var MEDIA_LIST_TOOL_NAME = "device_media_list";
+  var SCREEN_CAPTURE_TOOL_NAME = "device_screen_capture";
+  var UI_INSPECT_TOOL_NAME = "device_ui_inspect";
+  var UI_ACTION_TOOL_NAME = "device_ui_action";
+  var PACKAGES_LIST_TOOL_NAME = "device_packages_list";
+  var PACKAGE_INSPECT_TOOL_NAME = "device_package_inspect";
   var ATTACHMENT_READ_TOOL_NAME = "attachment_read";
   var RUN_COMMAND_TOOL_NAME = "run_command";
   var RUN_TESTS_TOOL_NAME = "run_tests";
@@ -11398,6 +11403,7 @@ ${additionalInstructions}` : skillBlock;
   var MAX_RUNTIME_TEXT_ATTACHMENTS = 5;
   var MAX_RUNTIME_IMAGE_BASE64_CHARS = 15e5;
   var MAX_RUNTIME_IMAGES_BASE64_CHARS = 75e5;
+  var MAX_LIVE_TOOL_IMAGE_BASE64_CHARS = 28e5;
   var ATTACHMENT_IMAGE_REFERENCE = /^attachment:([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/;
   var ATTACHMENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
   var BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
@@ -11415,25 +11421,24 @@ ${additionalInstructions}` : skillBlock;
     FILES_LIST_TOOL_NAME,
     FILES_READ_TOOL_NAME,
     MEDIA_LIST_TOOL_NAME,
+    SCREEN_CAPTURE_TOOL_NAME,
+    UI_INSPECT_TOOL_NAME,
+    PACKAGES_LIST_TOOL_NAME,
+    PACKAGE_INSPECT_TOOL_NAME,
     ATTACHMENT_READ_TOOL_NAME,
     TASK_PLAN_UPDATE_TOOL_NAME
   ];
   var BASE_TASK_SYSTEM_PROMPT = [
     "You are Momoding, a coding agent running locally on Android.",
     "Use run_command and run_tests for terminal work inside the task's private project snapshot.",
-    "When either tool returns fileChanges.state=prepared, call device_files_commit_changes with the exact preparedId and planDigest so Android can show a Diff and ask the user before changing the authorized real folder.",
-    "Never claim that files in the real folder changed until device_files_commit_changes succeeds.",
+    "When either tool returns fileChanges.state=prepared, call device_files_commit_changes with the exact preparedId and planDigest so Android can apply the task approval policy before changing an authorized real folder or shared-storage root.",
+    "Never claim that Android files changed until device_files_commit_changes succeeds.",
     "Text attachments explicitly sent with a task are identified in the user message. Read their contents only with attachment_read, using nextOffset until eof when more content is needed, and never claim to have read content before the tool succeeds.",
-    "Use device_media_list only when recent photo metadata is relevant. It never returns image bytes, names, paths, location, or EXIF data."
-  ].join(" ");
-  var BASE_TASK_WITHOUT_SHELL_SYSTEM_PROMPT = [
-    "You are Momoding, a coding agent running locally on Android.",
-    "Terminal commands and test execution are not available in this build.",
-    "Use the Android file tools to inspect authorized folders and prepare reviewed changes. Never claim to have run a command or test.",
-    "When device_files_prepare_changes succeeds, call device_files_commit_changes with the exact preparedId and planDigest so Android can show a Diff and ask the user before changing the authorized real folder.",
-    "Never claim that files in the real folder changed until device_files_commit_changes succeeds.",
-    "Text attachments explicitly sent with a task are identified in the user message. Read their contents only with attachment_read, using nextOffset until eof when more content is needed, and never claim to have read content before the tool succeeds.",
-    "Use device_media_list only when recent photo metadata is relevant. It never returns image bytes, names, paths, location, or EXIF data."
+    "Call device_capabilities_get before relying on Android file, media, screen, accessibility, or Shizuku capabilities; treat its current states as authoritative.",
+    "When recent photo metadata is relevant, call device_media_list even if photo-library access is not yet granted. Android will show its native permission UI at the moment of use and the user decides; never claim that you cannot open the permission prompt. The tool never returns image bytes, names, paths, location, or EXIF data.",
+    "Use device_screen_capture only when seeing the current Android screen is necessary. Its image is live for the current tool turn only and cannot be replayed from task history.",
+    "Before controlling Android UI, call device_ui_inspect, choose only an opaque nodeHandle from that exact snapshot, then call device_ui_action. Never repeat a click automatically when Android reports an unknown or stale outcome.",
+    "Use device_packages_list and device_package_inspect only for bounded installed-package facts after Shizuku is ready. They cannot install, uninstall, launch, mutate, or run shell commands."
   ].join(" ");
   var PLAN_MODE_SYSTEM_PROMPT = [
     "PLAN MODE IS ACTIVE.",
@@ -11468,6 +11473,17 @@ ${additionalInstructions}` : skillBlock;
   var nativeScenarioState = null;
   var nextSkillParseId = 1;
   var skillParseStatus = null;
+  var LiveOnlySessionStorage = class extends InMemorySessionStorage {
+    constructor(options, liveToolImagesByData) {
+      super(options);
+      this.liveToolImagesByData = liveToolImagesByData;
+    }
+    async appendEntry(entry) {
+      await super.appendEntry(
+        expireLiveToolImages(entry, this.liveToolImagesByData)
+      );
+    }
+  };
   var NativeAssistantMessageEventStream = class extends EventStream {
     constructor() {
       super(
@@ -11740,7 +11756,7 @@ ${additionalInstructions}` : skillBlock;
     requirePrompt(prompt);
     return startNativeOpenRouterRun("prompt", prompt, modelId, env, false);
   }
-  function startNativeOpenRouterTaskSession(taskId, prompt, modelId, env, sessionId = `phone-local-task-${taskId}`, planMode = false, skillResources = [], imageInputs = [], textAttachmentInputs = [], projectToolsEnabled = false) {
+  function startNativeOpenRouterTaskSession(taskId, prompt, modelId, env, sessionId = `phone-local-task-${taskId}`, planMode = false, skillResources = [], imageInputs = [], textAttachmentInputs = []) {
     requireTaskId(taskId);
     const images = requireRuntimeImageInputs(imageInputs);
     const textAttachments = requireRuntimeTextAttachmentInputs(textAttachmentInputs);
@@ -11759,11 +11775,10 @@ ${additionalInstructions}` : skillBlock;
       planMode,
       requirePiMobileSkillResources(skillResources),
       images,
-      textAttachments,
-      projectToolsEnabled
+      textAttachments
     );
   }
-  function startNativeOpenRouterTaskSkillSession(taskId, skillName, additionalInstructions, modelId, env, sessionId = `phone-local-task-${taskId}`, skillResources = [], projectToolsEnabled = false) {
+  function startNativeOpenRouterTaskSkillSession(taskId, skillName, additionalInstructions, modelId, env, sessionId = `phone-local-task-${taskId}`, skillResources = []) {
     requireTaskId(taskId);
     requireSessionId(sessionId);
     const resources = requirePiMobileSkillResources(skillResources);
@@ -11778,14 +11793,11 @@ ${additionalInstructions}` : skillBlock;
       [],
       0,
       false,
-      resources,
-      [],
-      [],
-      projectToolsEnabled
+      resources
     );
     return invokeNativeOpenRouterTaskSkill(skillName, additionalInstructions);
   }
-  function restoreNativeOpenRouterTaskSession(taskId, sessionId, turnCount, entries, modelId, env, skillResources = [], imageInputs = [], projectToolsEnabled = false) {
+  function restoreNativeOpenRouterTaskSession(taskId, sessionId, turnCount, entries, modelId, env, skillResources = [], imageInputs = []) {
     requireTaskId(taskId);
     requireSessionId(sessionId);
     const images = requireRuntimeImageInputs(imageInputs);
@@ -11805,9 +11817,7 @@ ${additionalInstructions}` : skillBlock;
       turnCount,
       false,
       requirePiMobileSkillResources(skillResources),
-      images,
-      [],
-      projectToolsEnabled
+      images
     );
   }
   function continueNativeOpenRouterTaskPrompt(prompt, imageInputs = [], textAttachmentInputs = []) {
@@ -11985,7 +11995,7 @@ ${additionalInstructions}` : skillBlock;
     });
     return nativeOpenRouterScenarioStatus();
   }
-  function startNativeOpenRouterRun(kind, prompt, modelId, env, enableFixtureTool, taskId = null, sessionId = `phone-local-native-provider-${kind}`, restoredEntries = [], restoredTurnCount = 0, initialPlanMode = false, initialSkillResources = [], initialRuntimeImages = [], initialTextAttachments = [], projectToolsEnabled = false) {
+  function startNativeOpenRouterRun(kind, prompt, modelId, env, enableFixtureTool, taskId = null, sessionId = `phone-local-native-provider-${kind}`, restoredEntries = [], restoredTurnCount = 0, initialPlanMode = false, initialSkillResources = [], initialRuntimeImages = [], initialTextAttachments = []) {
     if (nativeScenarioState !== null && !nativeScenarioState.terminal) {
       throw new Error("PI_MOBILE_NATIVE_PROVIDER_SCENARIO_ALREADY_RUNNING");
     }
@@ -12028,14 +12038,19 @@ ${additionalInstructions}` : skillBlock;
       createModels: (binding) => childModelsForProvider(state, provider, binding),
       onEvent: (event) => childEventOutbox.push(event)
     });
+    const liveToolImagesByData = /* @__PURE__ */ new Map();
+    const consumedLiveToolImageData = /* @__PURE__ */ new Set();
     const session = new Session(
-      new InMemorySessionStorage({
-        entries: restoredEntries,
-        metadata: {
-          id: sessionId,
-          createdAt: "1970-01-01T00:00:00.000Z"
-        }
-      })
+      new LiveOnlySessionStorage(
+        {
+          entries: restoredEntries,
+          metadata: {
+            id: sessionId,
+            createdAt: "1970-01-01T00:00:00.000Z"
+          }
+        },
+        liveToolImagesByData
+      )
     );
     const restoredPlan = restoreTaskPlanState(restoredEntries);
     const fixtureTool = {
@@ -12062,10 +12077,8 @@ ${additionalInstructions}` : skillBlock;
     };
     const productTools = kind === "prompt" && taskId !== null ? [
       childAgents.delegateTool(),
-      ...projectToolsEnabled ? [
-        projectCommandTool(() => state, RUN_COMMAND_TOOL_NAME, "Run project command", 12e4),
-        projectCommandTool(() => state, RUN_TESTS_TOOL_NAME, "Run project tests", 3e5)
-      ] : [],
+      projectCommandTool(() => state, RUN_COMMAND_TOOL_NAME, "Run project command", 12e4),
+      projectCommandTool(() => state, RUN_TESTS_TOOL_NAME, "Run project tests", 3e5),
       {
         name: ATTACHMENT_READ_TOOL_NAME,
         label: "Read text attachment",
@@ -12099,7 +12112,7 @@ ${additionalInstructions}` : skillBlock;
       {
         name: CAPABILITIES_TOOL_NAME,
         label: "Get device capabilities",
-        description: "Return the current Android file capability manifest without host filesystem access.",
+        description: "Return the current live Android capability states, bounded tool mappings, and authorized file grants without host filesystem access.",
         parameters: { type: "object", properties: {}, additionalProperties: false },
         executionMode: "sequential",
         execute: async (toolCallId, params, signal) => await requestNativeTool2(state, "android_file_tool", CAPABILITIES_TOOL_NAME, toolCallId, params, signal)
@@ -12107,7 +12120,7 @@ ${additionalInstructions}` : skillBlock;
       {
         name: FILES_LIST_TOOL_NAME,
         label: "List authorized device files",
-        description: "List metadata inside the task's user-authorized Android SAF folder using opaque aliases.",
+        description: "List metadata in an Android-authorized SAF folder or synthetic shared-storage root using opaque grant and document aliases.",
         parameters: {
           type: "object",
           properties: {
@@ -12124,7 +12137,7 @@ ${additionalInstructions}` : skillBlock;
       {
         name: FILES_READ_TOOL_NAME,
         label: "Read authorized device files",
-        description: "Request bounded UTF-8 text for exact opaque aliases after Android-side user consent.",
+        description: "Request bounded UTF-8 text for exact opaque aliases under the current Android task approval policy.",
         parameters: {
           type: "object",
           properties: {
@@ -12156,7 +12169,7 @@ ${additionalInstructions}` : skillBlock;
       {
         name: MEDIA_LIST_TOOL_NAME,
         label: "List recent photo metadata",
-        description: "List metadata for at most 20 recent Android photos within the current photo-library grant. Returns no image bytes, names, paths, location, or EXIF data.",
+        description: "List metadata for at most 20 recent Android photos. If access is missing, Android requests photo permission at the moment of use. Returns no image bytes, names, paths, location, or EXIF data.",
         parameters: {
           type: "object",
           properties: {
@@ -12170,9 +12183,143 @@ ${additionalInstructions}` : skillBlock;
         execute: async (toolCallId, params, signal) => await requestNativeTool2(state, "android_media_tool", MEDIA_LIST_TOOL_NAME, toolCallId, params, signal)
       },
       {
+        name: SCREEN_CAPTURE_TOOL_NAME,
+        label: "Capture current Android screen",
+        description: "Capture one bounded image of the current Android screen when visual context is necessary. The image is available only in this tool turn and expires from task history.",
+        parameters: {
+          type: "object",
+          properties: {
+            purpose: { type: "string", minLength: 1, maxLength: 512 },
+            targetPackage: {
+              anyOf: [
+                { type: "string", minLength: 1, maxLength: 255 },
+                { type: "null" }
+              ]
+            }
+          },
+          required: ["purpose"],
+          additionalProperties: false
+        },
+        executionMode: "sequential",
+        execute: async (toolCallId, params, signal) => await requestNativeTool2(
+          state,
+          "android_screen_tool",
+          SCREEN_CAPTURE_TOOL_NAME,
+          toolCallId,
+          params,
+          signal
+        )
+      },
+      {
+        name: UI_INSPECT_TOOL_NAME,
+        label: "Inspect current Android interface",
+        description: "Inspect the current foreground Android interface as a bounded, redacted accessibility tree. Call this before every interface action and use only handles from the returned snapshot.",
+        parameters: {
+          type: "object",
+          properties: {
+            targetPackage: {
+              anyOf: [
+                { type: "string", minLength: 1, maxLength: 255 },
+                { type: "null" }
+              ]
+            },
+            maxNodes: { type: "integer", minimum: 1, maximum: 250, default: 250 }
+          },
+          additionalProperties: false
+        },
+        executionMode: "sequential",
+        execute: async (toolCallId, params, signal) => await requestNativeTool2(
+          state,
+          "android_ui_tool",
+          UI_INSPECT_TOOL_NAME,
+          toolCallId,
+          params,
+          signal
+        )
+      },
+      {
+        name: UI_ACTION_TOOL_NAME,
+        label: "Act on current Android interface",
+        description: "Perform exactly one locally validated click, scroll, draft input, or Back action against a fresh device_ui_inspect snapshot. Android applies task approval policy and verifies the resulting screen.",
+        parameters: {
+          type: "object",
+          properties: {
+            snapshotId: { type: "string", pattern: "^ui-[0-9a-f]{32}$" },
+            nodeHandle: { type: "string", minLength: 38, maxLength: 320 },
+            action: { type: "string", enum: ["click", "scroll", "input_draft", "back"] },
+            text: { type: "string", minLength: 1, maxLength: 4096 },
+            direction: { type: "string", enum: ["up", "down", "left", "right"] }
+          },
+          required: ["snapshotId", "action"],
+          additionalProperties: false
+        },
+        executionMode: "sequential",
+        execute: async (toolCallId, params, signal) => await requestNativeTool2(
+          state,
+          "android_ui_tool",
+          UI_ACTION_TOOL_NAME,
+          toolCallId,
+          params,
+          signal
+        )
+      },
+      {
+        name: PACKAGES_LIST_TOOL_NAME,
+        label: "List installed Android packages",
+        description: "List one bounded page of installed Android package facts through a ready Shizuku shell-UID session. This tool is read-only and cannot install, uninstall, launch, or run commands.",
+        parameters: {
+          type: "object",
+          properties: {
+            purpose: { type: "string", minLength: 1, maxLength: 512 },
+            includeSystem: { type: "boolean", default: false },
+            offset: { type: "integer", minimum: 0, maximum: 1e4, default: 0 },
+            limit: { type: "integer", minimum: 1, maximum: 100, default: 50 }
+          },
+          required: ["purpose"],
+          additionalProperties: false
+        },
+        executionMode: "sequential",
+        execute: async (toolCallId, params, signal) => await requestNativeTool2(
+          state,
+          "android_package_tool",
+          PACKAGES_LIST_TOOL_NAME,
+          toolCallId,
+          params,
+          signal
+        )
+      },
+      {
+        name: PACKAGE_INSPECT_TOOL_NAME,
+        label: "Inspect installed Android package",
+        description: "Read bounded metadata for one exact installed Android package through a ready Shizuku shell-UID session. This tool is read-only and cannot mutate the package.",
+        parameters: {
+          type: "object",
+          properties: {
+            purpose: { type: "string", minLength: 1, maxLength: 512 },
+            packageName: {
+              type: "string",
+              minLength: 3,
+              maxLength: 255,
+              pattern: "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)+$"
+            }
+          },
+          required: ["purpose", "packageName"],
+          additionalProperties: false
+        },
+        executionMode: "sequential",
+        execute: async (toolCallId, params, signal) => await requestNativeTool2(
+          state,
+          "android_package_tool",
+          PACKAGE_INSPECT_TOOL_NAME,
+          toolCallId,
+          params,
+          signal
+        )
+      },
+      {
         name: FILES_PREPARE_TOOL_NAME,
         label: "Prepare device file changes",
-        description: "Prepare and preview Android-side file changes without committing a mutation.",
+        description: "Prepare and preview changes in one Android-authorized SAF or shared-storage grant without committing a mutation.",
         parameters: filePrepareParameters(),
         executionMode: "sequential",
         execute: async (toolCallId, params, signal) => await requestNativeTool2(state, "android_file_tool", FILES_PREPARE_TOOL_NAME, toolCallId, params, signal)
@@ -12367,7 +12514,6 @@ ${additionalInstructions}` : skillBlock;
     if (planMode && restoredGoal?.state === "active") {
       throw new Error("PI_MOBILE_GOAL_PLAN_MODE_CONFLICT");
     }
-    const taskSystemPrompt = projectToolsEnabled ? BASE_TASK_SYSTEM_PROMPT : BASE_TASK_WITHOUT_SHELL_SYSTEM_PROMPT;
     const prePlanActiveToolNames = planMode ? restoredPlan.prePlanActiveToolNames ?? defaultActiveToolNames : null;
     const initialActiveToolNames = planMode ? PLAN_ALLOWED_TOOL_NAMES.filter((name) => tools.some((tool) => tool.name === name)) : restoredPlan.activeToolNames?.filter(
       (name) => name !== TASK_PLAN_UPDATE_TOOL_NAME && (restoredGoal?.state === "active" || !GOAL_TOOL_NAMES.includes(name)) && tools.some((tool) => tool.name === name)
@@ -12380,7 +12526,7 @@ ${additionalInstructions}` : skillBlock;
       tools,
       activeToolNames: initialActiveToolNames,
       resources: { skills: toPiSkills(normalizedSkillResources) },
-      systemPrompt: kind === "prompt" ? () => state.planMode ? `${taskSystemPrompt} ${PLAN_MODE_SYSTEM_PROMPT}` : state.goal?.state === "active" ? `${taskSystemPrompt} ${GOAL_MODE_SYSTEM_PROMPT} Active goal: ${state.goal.instruction}` : taskSystemPrompt : "Phone-local native OpenRouter Provider bridge gate"
+      systemPrompt: kind === "prompt" ? () => state.planMode ? `${BASE_TASK_SYSTEM_PROMPT} ${PLAN_MODE_SYSTEM_PROMPT}` : state.goal?.state === "active" ? `${BASE_TASK_SYSTEM_PROMPT} ${GOAL_MODE_SYSTEM_PROMPT} Active goal: ${state.goal.instruction}` : BASE_TASK_SYSTEM_PROMPT : "Phone-local native OpenRouter Provider bridge gate"
     });
     const releaseNativeResultHook = harness.on("tool_result", (event) => {
       const envelope = event.details;
@@ -12390,6 +12536,13 @@ ${additionalInstructions}` : skillBlock;
         isError: envelope.isError === true
       };
     });
+    const releaseLiveImageContextHook = harness.on("context", (event) => ({
+      messages: rehydrateLiveToolImages(
+        event.messages,
+        liveToolImagesByData,
+        consumedLiveToolImageData
+      )
+    }));
     state = {
       kind,
       harness,
@@ -12403,6 +12556,8 @@ ${additionalInstructions}` : skillBlock;
       runEventStartIndex: 0,
       sessionEntries: restoredEntries,
       imageAttachmentIdsByData: runtimeImageReferenceMap(initialRuntimeImages),
+      liveToolImagesByData,
+      consumedLiveToolImageData,
       stopRequested: false,
       stopCompleted: false,
       promptError: null,
@@ -12453,6 +12608,7 @@ ${additionalInstructions}` : skillBlock;
     state.unsubscribe = () => {
       releaseEventSubscription();
       releaseNativeResultHook();
+      releaseLiveImageContextHook();
     };
     nativeScenarioState = state;
     if (prompt !== null) {
@@ -13203,7 +13359,7 @@ ${additionalInstructions}` : skillBlock;
     const state = requireNativeScenario();
     return state.toolOutbox.splice(0);
   }
-  function resolveNativeProviderToolRequest(requestId, contentPayload, details = contentPayload, isError = false) {
+  function resolveNativeProviderToolRequest(requestId, contentPayload, details = contentPayload, isError = false, content) {
     const state = requireNativeScenario();
     const pending = state.pendingTools.get(requestId);
     if (pending === void 0) {
@@ -13212,8 +13368,10 @@ ${additionalInstructions}` : skillBlock;
     clearToolAbort(pending);
     state.pendingTools.delete(requestId);
     state.toolRequestsResolved += 1;
+    const nativeContent = content === void 0 ? [{ type: "text", text: JSON.stringify(contentPayload) }] : requireNativeToolContent(content);
+    registerLiveToolImages(state, pending.request, nativeContent, details, isError);
     pending.resolve({
-      content: [{ type: "text", text: JSON.stringify(contentPayload) }],
+      content: nativeContent,
       details: {
         [NATIVE_TOOL_RESULT_MARKER]: true,
         details,
@@ -13338,11 +13496,17 @@ ${additionalInstructions}` : skillBlock;
       state.lateProviderRequestsAfterStop += 1;
       return stream;
     }
+    const messages = toOpenRouterMessages(context);
+    consumeLiveToolImages(
+      messages,
+      state.liveToolImagesByData,
+      state.consumedLiveToolImageData
+    );
     const request = {
       id: `provider-${state.nextProviderRequestId++}`,
       kind: "openrouter_chat_stream",
       modelId: model.id,
-      messages: toOpenRouterMessages(context),
+      messages,
       ...context.tools && context.tools.length > 0 ? { tools: context.tools.map((tool) => ({
         type: "function",
         function: {
@@ -13714,7 +13878,8 @@ ${additionalInstructions}` : skillBlock;
     if (context.systemPrompt !== void 0 && context.systemPrompt.length > 0) {
       messages.push({ role: "system", content: context.systemPrompt });
     }
-    for (const message of context.messages) {
+    for (let index = 0; index < context.messages.length; index += 1) {
+      const message = context.messages[index];
       if (message.role === "user") {
         messages.push({ role: "user", content: openRouterUserContent(message.content) });
       } else if (message.role === "assistant") {
@@ -13733,12 +13898,38 @@ ${additionalInstructions}` : skillBlock;
           ...toolCalls.length > 0 ? { tool_calls: toolCalls } : {}
         });
       } else {
-        messages.push({
-          role: "tool",
-          tool_call_id: message.toolCallId,
-          name: message.toolName,
-          content: textContent(message.content)
-        });
+        const imageBlocks = [];
+        let toolIndex = index;
+        for (; toolIndex < context.messages.length && context.messages[toolIndex].role === "toolResult"; toolIndex += 1) {
+          const toolMessage = context.messages[toolIndex];
+          if (toolMessage.role !== "toolResult") break;
+          const text = toolMessage.content.filter((block) => block.type === "text").map((block) => block.text).join("\n");
+          const images = toolMessage.content.filter(
+            (block) => block.type === "image"
+          );
+          messages.push({
+            role: "tool",
+            tool_call_id: toolMessage.toolCallId,
+            name: toolMessage.toolName,
+            content: text.length > 0 ? text : images.length > 0 ? "(see attached image)" : "(no tool output)"
+          });
+          for (const block of images) {
+            imageBlocks.push({
+              type: "image_url",
+              image_url: { url: `data:${block.mimeType};base64,${block.data}` }
+            });
+          }
+        }
+        index = toolIndex - 1;
+        if (imageBlocks.length > 0) {
+          messages.push({
+            role: "user",
+            content: [
+              { type: "text", text: "Attached image(s) from tool result:" },
+              ...imageBlocks
+            ]
+          });
+        }
       }
     }
     return messages;
@@ -13764,13 +13955,6 @@ ${additionalInstructions}` : skillBlock;
       throw new Error("PI_MOBILE_OPENROUTER_USER_CONTENT_UNSUPPORTED");
     }
     return parts;
-  }
-  function textContent(content) {
-    if (typeof content === "string") return content;
-    if (content.some((block) => block.type !== "text")) {
-      throw new Error("PI_MOBILE_OPENROUTER_NON_TEXT_INPUT_UNSUPPORTED");
-    }
-    return content.map((block) => block.text ?? "").join("");
   }
   function initialAssistantMessage(model) {
     return {
@@ -13859,12 +14043,19 @@ ${additionalInstructions}` : skillBlock;
     } else {
       state.events.push(
         sanitizeImagesForAndroid(
-          JSON.parse(JSON.stringify(event)),
+          expireLiveToolImages(
+            JSON.parse(JSON.stringify(event)),
+            state.liveToolImagesByData
+          ),
           state.imageAttachmentIdsByData
         )
       );
     }
     state.eventTypes.push(event.type);
+    if (event.type === "settled") {
+      state.liveToolImagesByData.clear();
+      state.consumedLiveToolImageData.clear();
+    }
     if (event.type === "tool_execution_start") {
       state.toolExecutionsStarted += 1;
       if (state.stopRequested) state.lateToolStartsAfterStop += 1;
@@ -14045,6 +14236,96 @@ ${additionalInstructions}` : skillBlock;
     const attachmentIds = references.get(image.data) ?? [];
     if (!attachmentIds.includes(image.attachmentId)) attachmentIds.push(image.attachmentId);
     references.set(image.data, attachmentIds);
+  }
+  function requireNativeToolContent(value) {
+    if (!Array.isArray(value) || value.length < 1 || value.length > 2) {
+      throw new Error("PI_MOBILE_NATIVE_TOOL_CONTENT_INVALID");
+    }
+    let imageCount = 0;
+    return value.map((candidate) => {
+      if (!isRecord3(candidate)) {
+        throw new Error("PI_MOBILE_NATIVE_TOOL_CONTENT_INVALID");
+      }
+      if (candidate.type === "text" && typeof candidate.text === "string" && candidate.text.length <= 65536 && !candidate.text.includes("\0")) {
+        return { type: "text", text: candidate.text };
+      }
+      if (candidate.type === "image" && typeof candidate.data === "string" && candidate.data.length > 0 && candidate.data.length <= MAX_LIVE_TOOL_IMAGE_BASE64_CHARS && BASE64.test(candidate.data) && (candidate.mimeType === "image/png" || candidate.mimeType === "image/jpeg")) {
+        imageCount += 1;
+        if (imageCount > 1) throw new Error("PI_MOBILE_NATIVE_TOOL_IMAGE_LIMIT");
+        return {
+          type: "image",
+          data: candidate.data,
+          mimeType: candidate.mimeType
+        };
+      }
+      throw new Error("PI_MOBILE_NATIVE_TOOL_CONTENT_INVALID");
+    });
+  }
+  function registerLiveToolImages(state, request, content, details, isError) {
+    const images = content.filter((block) => block.type === "image");
+    if (images.length === 0) return;
+    if (!isRecord3(details)) throw new Error("PI_MOBILE_LIVE_IMAGE_DETAILS_INVALID");
+    const contentSha256 = details.contentSha256;
+    const width = details.width;
+    const height = details.height;
+    const mimeType = details.mimeType;
+    if (request.kind !== "android_screen_tool" || request.toolName !== SCREEN_CAPTURE_TOOL_NAME || isError || content.length !== 2 || content[0].type !== "text" || content[1].type !== "image" || details.liveOnly !== true || details.source !== "accessibility" && details.source !== "media_projection" || typeof contentSha256 !== "string" || !/^[0-9a-f]{64}$/.test(contentSha256) || !Number.isSafeInteger(width) || width < 1 || width > 16384 || !Number.isSafeInteger(height) || height < 1 || height > 16384 || mimeType !== "image/png" && mimeType !== "image/jpeg" || images[0].mimeType !== mimeType) {
+      throw new Error("PI_MOBILE_LIVE_IMAGE_DETAILS_INVALID");
+    }
+    state.liveToolImagesByData.set(images[0].data, {
+      contentSha256,
+      width,
+      height,
+      mimeType
+    });
+  }
+  function expireLiveToolImages(value, images) {
+    const visit3 = (candidate) => {
+      if (Array.isArray(candidate)) return candidate.map(visit3);
+      if (!isRecord3(candidate)) return candidate;
+      if (candidate.type === "image" && typeof candidate.data === "string" && images.has(candidate.data)) {
+        const descriptor = images.get(candidate.data);
+        return {
+          type: "text",
+          text: liveImageExpiredText(descriptor)
+        };
+      }
+      return Object.fromEntries(Object.entries(candidate).map(([key, item]) => [key, visit3(item)]));
+    };
+    return visit3(value);
+  }
+  function rehydrateLiveToolImages(value, images, consumedImageData) {
+    const imageByPlaceholder = new Map(
+      [...images.entries()].filter(([data]) => !consumedImageData.has(data)).map(([data, descriptor]) => [
+        liveImageExpiredText(descriptor),
+        { type: "image", data, mimeType: descriptor.mimeType }
+      ])
+    );
+    const visit3 = (candidate) => {
+      if (Array.isArray(candidate)) return candidate.map(visit3);
+      if (!isRecord3(candidate)) return candidate;
+      if (candidate.type === "text" && typeof candidate.text === "string") {
+        const image = imageByPlaceholder.get(candidate.text);
+        if (image !== void 0) return { ...image };
+      }
+      return Object.fromEntries(Object.entries(candidate).map(([key, item]) => [key, visit3(item)]));
+    };
+    return visit3(value);
+  }
+  function consumeLiveToolImages(providerMessages, images, consumedImageData) {
+    const serialized = JSON.stringify(providerMessages);
+    for (const data of images.keys()) {
+      if (serialized.includes(data)) consumedImageData.add(data);
+    }
+  }
+  function liveImageExpiredText(descriptor) {
+    return [
+      "[live screen image expired",
+      `sha256=${descriptor.contentSha256}`,
+      `${descriptor.width}x${descriptor.height}`,
+      descriptor.mimeType,
+      "]"
+    ].join(" ");
   }
   function sanitizeImagesForAndroid(value, references, orderedOccurrences = false) {
     const totalOccurrencesByData = /* @__PURE__ */ new Map();
@@ -14406,7 +14687,7 @@ ${additionalInstructions}` : skillBlock;
       ok: true,
       schemaVersion: "1",
       piVersion: "0.80.6",
-      buildRevision: "8fc329de41cb3a5a4376864947596e647713992a",
+      buildRevision: "b5786cff1e7e8cffd2f7a2534d7dc75c5d288d7b",
       runtime: "AgentHarness",
       modelId: harness.getModel().id,
       thinkingLevel: harness.getThinkingLevel(),
@@ -14458,7 +14739,7 @@ ${additionalInstructions}` : skillBlock;
       startNativeOpenRouterPrompt(prompt, modelId, createBootstrapEnv())
     );
   }
-  function startNativeOpenRouterTaskSessionJson(taskId, prompt, modelId, sessionId, planMode = false, skillResourcesJson = "[]", imageInputsJson = "[]", textAttachmentInputsJson = "[]", projectToolsEnabled = false) {
+  function startNativeOpenRouterTaskSessionJson(taskId, prompt, modelId, sessionId, planMode = false, skillResourcesJson = "[]", imageInputsJson = "[]", textAttachmentInputsJson = "[]") {
     if (runtimeState === null) throw new Error("PI_MOBILE_RUNTIME_NOT_BOOTED");
     return JSON.stringify(
       startNativeOpenRouterTaskSession(
@@ -14470,12 +14751,11 @@ ${additionalInstructions}` : skillBlock;
         planMode,
         requirePiMobileSkillResources(JSON.parse(skillResourcesJson)),
         requireRuntimeImageInputs(JSON.parse(imageInputsJson)),
-        requireRuntimeTextAttachmentInputs(JSON.parse(textAttachmentInputsJson)),
-        projectToolsEnabled
+        requireRuntimeTextAttachmentInputs(JSON.parse(textAttachmentInputsJson))
       )
     );
   }
-  function startNativeOpenRouterTaskSkillSessionJson(taskId, skillName, additionalInstructions, modelId, sessionId, skillResourcesJson = "[]", projectToolsEnabled = false) {
+  function startNativeOpenRouterTaskSkillSessionJson(taskId, skillName, additionalInstructions, modelId, sessionId, skillResourcesJson = "[]") {
     if (runtimeState === null) throw new Error("PI_MOBILE_RUNTIME_NOT_BOOTED");
     return JSON.stringify(
       startNativeOpenRouterTaskSkillSession(
@@ -14485,8 +14765,7 @@ ${additionalInstructions}` : skillBlock;
         modelId,
         createBootstrapEnv(),
         sessionId,
-        requirePiMobileSkillResources(JSON.parse(skillResourcesJson)),
-        projectToolsEnabled
+        requirePiMobileSkillResources(JSON.parse(skillResourcesJson))
       )
     );
   }
@@ -14543,7 +14822,7 @@ ${additionalInstructions}` : skillBlock;
       invokeNativeOpenRouterTaskSkill(skillName, additionalInstructions)
     );
   }
-  function restoreNativeOpenRouterTaskSessionJson(taskId, sessionId, turnCount, entriesJson, modelId, skillResourcesJson = "[]", imageInputsJson = "[]", projectToolsEnabled = false) {
+  function restoreNativeOpenRouterTaskSessionJson(taskId, sessionId, turnCount, entriesJson, modelId, skillResourcesJson = "[]", imageInputsJson = "[]") {
     if (runtimeState === null) throw new Error("PI_MOBILE_RUNTIME_NOT_BOOTED");
     return JSON.stringify(
       restoreNativeOpenRouterTaskSession(
@@ -14554,8 +14833,7 @@ ${additionalInstructions}` : skillBlock;
         modelId,
         createBootstrapEnv(),
         requirePiMobileSkillResources(JSON.parse(skillResourcesJson)),
-        requireRuntimeImageInputs(JSON.parse(imageInputsJson)),
-        projectToolsEnabled
+        requireRuntimeImageInputs(JSON.parse(imageInputsJson))
       )
     );
   }
@@ -14630,13 +14908,14 @@ ${additionalInstructions}` : skillBlock;
   function drainNativeProviderToolRequestsJson() {
     return JSON.stringify(drainNativeProviderToolRequests());
   }
-  function resolveNativeProviderToolRequestJson(requestId, contentPayloadJson, detailsJson, isError = false) {
+  function resolveNativeProviderToolRequestJson(requestId, contentPayloadJson, detailsJson, isError = false, contentJson) {
     return JSON.stringify(
       resolveNativeProviderToolRequest(
         requestId,
         JSON.parse(contentPayloadJson),
         detailsJson === void 0 ? void 0 : JSON.parse(detailsJson),
-        isError
+        isError,
+        contentJson === void 0 ? void 0 : JSON.parse(contentJson)
       )
     );
   }

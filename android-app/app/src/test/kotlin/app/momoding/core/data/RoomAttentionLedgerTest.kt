@@ -46,7 +46,7 @@ class RoomAttentionLedgerTest {
         context = ApplicationProvider.getApplicationContext()
         context.deleteDatabase(DATABASE_NAME)
         openDatabase()
-        database.momodingDao().upsertTask(task())
+        database.p2Dao().upsertTask(task())
     }
 
     @After
@@ -60,12 +60,12 @@ class RoomAttentionLedgerTest {
         val first = accept(questionRequest())
         assertEquals(AttentionLedgerState.RECEIVED.name, first.operation.ledgerState)
         assertEquals(AttentionResponseState.PENDING.name, first.attention.responseState)
-        assertEquals(1, database.momodingDao().deviceOperations(TASK_ID).size)
-        assertEquals(1, database.momodingDao().localPendingAttention(TASK_ID).size)
+        assertEquals(1, database.p2Dao().deviceOperations(TASK_ID).size)
+        assertEquals(1, database.p2Dao().localPendingAttention(TASK_ID).size)
 
         val duplicate = accept(questionRequest())
         assertEquals(first, duplicate)
-        assertEquals(1, database.momodingDao().deviceOperations(TASK_ID).size)
+        assertEquals(1, database.p2Dao().deviceOperations(TASK_ID).size)
 
         assertThrows(AttentionLedgerConflictException::class.java) {
             accept(
@@ -156,7 +156,7 @@ class RoomAttentionLedgerTest {
         assertEquals(DeviceToolTerminalKind.TIMED_OUT.wireValue, past.operation.terminalKind)
 
         assertEquals(7, ledger.terminalOperationsReadyForDelivery(DEVICE_ID).size)
-        assertTrue(database.momodingDao().localPendingAttention(TASK_ID).none {
+        assertTrue(database.p2Dao().localPendingAttention(TASK_ID).none {
             it.responseState in setOf(
                 AttentionResponseState.PENDING.name,
                 AttentionResponseState.RESPONDING.name,
@@ -183,8 +183,8 @@ class RoomAttentionLedgerTest {
         assertThrows(IllegalArgumentException::class.java) {
             accept(questionRequest(callId(22)).copy(toolName = ""))
         }
-        assertTrue(database.momodingDao().deviceOperations(TASK_ID).isEmpty())
-        assertTrue(database.momodingDao().localPendingAttention(TASK_ID).isEmpty())
+        assertTrue(database.p2Dao().deviceOperations(TASK_ID).isEmpty())
+        assertTrue(database.p2Dao().localPendingAttention(TASK_ID).isEmpty())
     }
 
     @Test
@@ -248,6 +248,52 @@ class RoomAttentionLedgerTest {
     }
 
     @Test
+    fun `ui action is an exact side effect and auto policy is distinct from user approval`() {
+        val callId = callId(32)
+        val valid = accept(uiActionRequest(callId))
+        assertTrue(valid.operation.sideEffect)
+        assertEquals(OPERATION_ID, valid.operation.operationId)
+
+        val terminal = ledger.recordTerminal(
+            AttentionTerminalWrite(
+                frame = DeviceToolResultClientFrame(
+                    callId = callId,
+                    taskId = TASK_ID,
+                    deviceId = DEVICE_ID,
+                    terminal = DeviceToolTerminalKind.SUCCEEDED,
+                    result = buildJsonObject {
+                        put("ok", true)
+                        put("action", "click")
+                        put("beforeSnapshotId", UI_SNAPSHOT_ID)
+                        put("afterSnapshotId", UI_AFTER_SNAPSHOT_ID)
+                        put("foregroundPackage", "dev.fixture")
+                        put("targetChanged", false)
+                        put("changed", true)
+                        put("noChangeCount", 0)
+                        put("sessionPaused", false)
+                        put("actionCount", 1)
+                    },
+                ),
+                origin = AttentionTerminalOrigin.AUTO_POLICY,
+                nowMillis = clock.get(),
+            ),
+        )
+
+        assertEquals(AttentionLedgerState.TERMINAL.name, terminal.operation.ledgerState)
+        assertEquals(DeviceToolTerminalKind.SUCCEEDED.wireValue, terminal.operation.terminalKind)
+
+        val unsafe = accept(
+            uiActionRequest(callId(33)).copy(sideEffect = false, operationId = null),
+        )
+        assertFailedClosed(
+            unsafe,
+            "device_ui_action",
+            sideEffect = false,
+            operationId = null,
+        )
+    }
+
+    @Test
     fun `failed closed terminal insert rolls back the authoritative request`() {
         database.openHelper.writableDatabase.execSQL(
             "CREATE TRIGGER fail_attention_insert BEFORE INSERT ON pending_attention " +
@@ -260,8 +306,8 @@ class RoomAttentionLedgerTest {
             ))
         }
         database.openHelper.writableDatabase.execSQL("DROP TRIGGER fail_attention_insert")
-        assertNull(database.momodingDao().deviceOperation(CALL_ID))
-        assertNull(database.momodingDao().pendingAttention(CALL_ID))
+        assertNull(database.p2Dao().deviceOperation(CALL_ID))
+        assertNull(database.p2Dao().pendingAttention(CALL_ID))
     }
 
     @Test
@@ -287,8 +333,8 @@ class RoomAttentionLedgerTest {
         assertThrows(IllegalArgumentException::class.java) {
             accept(questionRequest(conflictingCall))
         }
-        assertNull(database.momodingDao().deviceOperation(conflictingCall))
-        assertNull(database.momodingDao().pendingAttention(conflictingCall))
+        assertNull(database.p2Dao().deviceOperation(conflictingCall))
+        assertNull(database.p2Dao().pendingAttention(conflictingCall))
 
         val argumentsConflictCall = callId(10)
         writeProjection(
@@ -303,8 +349,8 @@ class RoomAttentionLedgerTest {
         assertThrows(IllegalArgumentException::class.java) {
             accept(questionRequest(argumentsConflictCall))
         }
-        assertNull(database.momodingDao().deviceOperation(argumentsConflictCall))
-        assertNull(database.momodingDao().pendingAttention(argumentsConflictCall))
+        assertNull(database.p2Dao().deviceOperation(argumentsConflictCall))
+        assertNull(database.p2Dao().pendingAttention(argumentsConflictCall))
 
         listOf("terminal" to callId(23), "reconciled" to callId(24)).forEach { (state, callId) ->
             writeProjection(
@@ -420,7 +466,7 @@ class RoomAttentionLedgerTest {
         assertEquals(AttentionDeliveryState.HOST_TERMINAL_DURABLE.name, handled.operation.deliveryState)
         assertEquals(AttentionResponseState.ALREADY_ANSWERED.name, handled.attention.responseState)
         assertNull(handled.operation.terminalSha256)
-        assertNotNull(runBlocking { database.momodingDao().observeLocalAttention(TASK_ID, CALL_ID).first() })
+        assertNotNull(runBlocking { database.p2Dao().observeLocalAttention(TASK_ID, CALL_ID).first() })
         assertEquals(0, runBlocking {
             TaskRepository(database, kotlinx.coroutines.Dispatchers.Unconfined)
                 .observeTaskRows().first().single().attentionCount
@@ -467,7 +513,7 @@ class RoomAttentionLedgerTest {
         assertEquals("running", restored.operation.hostObservationState)
         assertEquals(AttentionDeliveryState.NOT_READY.name, restored.operation.deliveryState)
         assertEquals(AttentionResponseState.PENDING.name, restored.attention.responseState)
-        assertEquals("running", database.momodingDao().hostDeviceCallObservation(TASK_ID, CALL_ID)?.hostState)
+        assertEquals("running", database.p2Dao().hostDeviceCallObservation(TASK_ID, CALL_ID)?.hostState)
     }
 
     @Test
@@ -589,7 +635,7 @@ class RoomAttentionLedgerTest {
 
         val secondCall = callId(2)
         accept(questionRequest(secondCall))
-        database.momodingDao().insertOutboundCommand(activeStopCommand())
+        database.p2Dao().insertOutboundCommand(activeStopCommand())
         assertThrows(IllegalArgumentException::class.java) {
             ledger.recordTerminal(
                 AttentionTerminalWrite(optionResult(secondCall, 0, "Balanced approach"),
@@ -635,7 +681,7 @@ class RoomAttentionLedgerTest {
             )
         }
 
-        assertEquals(1, database.momodingDao().releaseActiveStopFences(TASK_ID, NOW + 3))
+        assertEquals(1, database.p2Dao().releaseActiveStopFences(TASK_ID, NOW + 3))
         val thirdCall = callId(6)
         accept(questionRequest(thirdCall))
         val answered = ledger.recordTerminal(
@@ -747,7 +793,7 @@ class RoomAttentionLedgerTest {
 
         writeProjection(store, projection("running", includeLocalCall = false))
         assertNotNull(ledger.record(CALL_ID))
-        assertTrue(database.momodingDao().hostDeviceCallObservations(TASK_ID).isEmpty())
+        assertTrue(database.p2Dao().hostDeviceCallObservations(TASK_ID).isEmpty())
 
         assertThrows(ProjectionCorruptionException::class.java) {
             writeProjection(store, projection("terminal", includeLocalCall = true, operationId = OPERATION_ID))
@@ -880,6 +926,17 @@ class RoomAttentionLedgerTest {
         operationId = OPERATION_ID,
     )
 
+    private fun uiActionRequest(callId: String) = questionRequest(callId).copy(
+        toolName = "device_ui_action",
+        arguments = buildJsonObject {
+            put("snapshotId", UI_SNAPSHOT_ID)
+            put("nodeHandle", "$UI_SNAPSHOT_ID:n2")
+            put("action", "click")
+        },
+        sideEffect = true,
+        operationId = OPERATION_ID,
+    )
+
     private fun questionArguments() = buildJsonObject {
         put("question", "Choose an approach")
         put("options", buildJsonArray {
@@ -998,14 +1055,16 @@ class RoomAttentionLedgerTest {
     }
 
     private companion object {
-        const val DATABASE_NAME = "attention-ledger-attention-ledger-test.db"
+        const val DATABASE_NAME = "p2-7c-attention-ledger-test.db"
         const val TASK_ID = "11111111-1111-4111-8111-111111111111"
         const val CALL_ID = "22222222-2222-4222-8222-222222222221"
-        const val DEVICE_ID = "android-attention-device"
+        const val DEVICE_ID = "android-p2-7-device"
         const val OPERATION_ID = "33333333-3333-4333-8333-333333333333"
         const val PREPARED_ID = "66666666-6666-4666-8666-666666666666"
         const val RECEIPT_ID = "77777777-7777-4777-8777-777777777777"
         const val ITEM_OPERATION_ID = "88888888-8888-4888-8888-888888888888"
+        const val UI_SNAPSHOT_ID = "ui-11111111111111111111111111111111"
+        const val UI_AFTER_SNAPSHOT_ID = "ui-22222222222222222222222222222222"
         const val REQUEST_ID = "44444444-4444-4444-8444-444444444444"
         const val COMMAND_ID = "55555555-5555-4555-8555-555555555555"
         val NOW: Long = Instant.parse("2026-07-17T01:00:00.000Z").toEpochMilli()

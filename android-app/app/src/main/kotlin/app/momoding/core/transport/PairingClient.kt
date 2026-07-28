@@ -1,6 +1,6 @@
 package app.momoding.core.transport
 
-import app.momoding.wire.ReliabilityProtocol
+import app.momoding.wire.P1bProtocol
 import app.momoding.core.auth.DeviceNamePolicy
 import app.momoding.core.auth.HostClientProfile
 import app.momoding.core.auth.PairingIdentity
@@ -117,7 +117,7 @@ class PairingClient(
             configRevision = requireLong("configRevision"),
         ).also { profile ->
             require(profile.thinking == "default" && !profile.mutable) { "Client profile is mutable" }
-            require(profile.configRevision in 1..ReliabilityProtocol.MAX_SAFE_INTEGER) {
+            require(profile.configRevision in 1..P1bProtocol.MAX_SAFE_INTEGER) {
                 "Client profile revision is invalid"
             }
         }

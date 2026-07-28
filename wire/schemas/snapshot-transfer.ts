@@ -6,10 +6,10 @@ import type {
   TaskRunState,
 } from "./snapshot.js";
 
-export const RELIABILITY_SNAPSHOT_PAGE_MAX_PHYSICAL_BYTES = 768 * 1024;
-export const RELIABILITY_SNAPSHOT_MAX_LOGICAL_BYTES = 64 * 1024 * 1024;
-export const RELIABILITY_SNAPSHOT_MAX_PAGES = 256;
-export const RELIABILITY_HISTORY_MAX_BYTES = 8 * 1024 * 1024;
+export const P1B_SNAPSHOT_PAGE_MAX_PHYSICAL_BYTES = 768 * 1024;
+export const P1B_SNAPSHOT_MAX_LOGICAL_BYTES = 64 * 1024 * 1024;
+export const P1B_SNAPSHOT_MAX_PAGES = 256;
+export const P1B_HISTORY_MAX_BYTES = 8 * 1024 * 1024;
 
 export type SnapshotTransferMode = "replace" | "prepend_history";
 

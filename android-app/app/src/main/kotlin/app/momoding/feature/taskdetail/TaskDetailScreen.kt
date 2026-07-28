@@ -1,10 +1,10 @@
 package app.momoding.feature.taskdetail
 
-import android.content.ClipData
 import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -84,8 +84,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.ClipEntry
-import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.platform.testTag
@@ -111,6 +110,7 @@ import com.mikepenz.markdown.model.markdownPadding
 import com.mikepenz.markdown.model.rememberMarkdownState
 import app.momoding.wire.WireErrorCode
 import app.momoding.core.data.TaskAttentionKind
+import app.momoding.core.data.TaskFailureRecovery
 import app.momoding.feature.attention.AttentionIdentity
 import app.momoding.feature.attention.AttentionIntent
 import app.momoding.feature.attention.AttentionUiState
@@ -467,7 +467,7 @@ private fun TaskTimeline(
                 )
             }
             state.timeline.activeItem
-                ?.takeUnless { state.providerRecoveryAvailable && it.stableKey == state.latestError?.stableKey }
+                ?.takeUnless { state.failureRecoveryAvailable && it.stableKey == state.latestError?.stableKey }
                 ?.takeUnless { it.isPendingQuestion(state.attention) }
                 ?.let { active ->
                 item(key = active.stableKey) {
@@ -501,7 +501,7 @@ private fun TaskTimeline(
             followState.mode == TaskTimelineFollowMode.DETACHED &&
             (userDetached || followState.unseenCount > 0)
         ) {
-            Surface(
+            IconButton(
                 onClick = {
                     followState = TaskTimelineFollowState()
                     userDetached = false
@@ -512,24 +512,29 @@ private fun TaskTimeline(
                 },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .heightIn(min = 48.dp)
+                    .size(48.dp)
                     .testTag("action-JumpToLatest")
                     .taskDetailContractAction(policy, TaskDetailInteraction.JUMP_TO_LATEST),
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.inverseSurface,
-                contentColor = MaterialTheme.colorScheme.inverseOnSurface,
-                shadowElevation = 4.dp,
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                Surface(
+                    modifier = Modifier.size(40.dp),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    shadowElevation = 3.dp,
                 ) {
-                    Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text(
-                        if (followState.unseenCount > 0) "Jump to latest · ${followState.unseenCount}" else "Jump to latest",
-                        style = MaterialTheme.typography.labelLarge,
-                    )
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Outlined.KeyboardArrowDown,
+                            contentDescription = if (followState.unseenCount > 0) {
+                                "Jump to latest, ${followState.unseenCount} new updates"
+                            } else {
+                                "Jump to latest"
+                            },
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
                 }
             }
         }
@@ -537,7 +542,7 @@ private fun TaskTimeline(
 }
 
 private fun List<TimelineItem>.withoutProviderRecoveryError(state: TaskDetailUiState): List<TimelineItem> {
-    val hiddenErrorKey = state.latestError?.stableKey?.takeIf { state.providerRecoveryAvailable }
+    val hiddenErrorKey = state.latestError?.stableKey?.takeIf { state.failureRecoveryAvailable }
         ?: return this
     return filterNot { it.stableKey == hiddenErrorKey }
 }
@@ -556,7 +561,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.providerRecoveryBanne
     onAction: (TaskDetailAction) -> Unit,
     policy: TaskDetailInteractionPolicy,
 ) {
-    if (!state.providerRecoveryAvailable) return
+    if (!state.failureRecoveryAvailable) return
     item(key = "provider-recovery") {
         val colors = LocalMomodingStatusColors.current
         Column(
@@ -577,7 +582,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.providerRecoveryBanne
                     modifier = Modifier.size(20.dp),
                 )
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("Provider needs attention", style = MaterialTheme.typography.labelLarge, color = colors.danger)
+                    Text(state.failureTitle, style = MaterialTheme.typography.labelLarge, color = colors.danger)
                     Text(
                         requireNotNull(state.latestError).message,
                         style = MaterialTheme.typography.bodySmall,
@@ -590,25 +595,30 @@ private fun androidx.compose.foundation.lazy.LazyListScope.providerRecoveryBanne
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TextButton(
-                    onClick = { onAction(TaskDetailAction.FixProvider) },
-                    enabled = policy.allows(TaskDetailInteraction.FIX_PROVIDER),
-                    modifier = Modifier
-                        .heightIn(min = 48.dp)
-                        .testTag("action-FixProvider")
-                        .taskDetailContractAction(policy, TaskDetailInteraction.FIX_PROVIDER),
-                ) {
-                    Text("Fix Provider", color = colors.danger)
+                if (state.providerRecoveryAvailable) {
+                    TextButton(
+                        onClick = { onAction(TaskDetailAction.FixProvider) },
+                        enabled = policy.allows(TaskDetailInteraction.FIX_PROVIDER),
+                        modifier = Modifier
+                            .heightIn(min = 48.dp)
+                            .testTag("action-FixProvider")
+                            .taskDetailContractAction(policy, TaskDetailInteraction.FIX_PROVIDER),
+                    ) {
+                        Text("Fix Provider", color = colors.danger)
+                    }
                 }
-                TextButton(
-                    onClick = { onAction(TaskDetailAction.RetryOriginal) },
-                    enabled = state.canRetryOriginal && policy.allows(TaskDetailInteraction.RETRY_ORIGINAL),
-                    modifier = Modifier
-                        .heightIn(min = 48.dp)
-                        .testTag("action-RetryOriginal")
-                        .taskDetailContractAction(policy, TaskDetailInteraction.RETRY_ORIGINAL),
-                ) {
-                    Text("Retry original", color = colors.danger)
+                if (state.failure?.recovery == TaskFailureRecovery.RETRY) {
+                    TextButton(
+                        onClick = { onAction(TaskDetailAction.RetryOriginal) },
+                        enabled = state.canRetryOriginal &&
+                            policy.allows(TaskDetailInteraction.RETRY_ORIGINAL),
+                        modifier = Modifier
+                            .heightIn(min = 48.dp)
+                            .testTag("action-RetryOriginal")
+                            .taskDetailContractAction(policy, TaskDetailInteraction.RETRY_ORIGINAL),
+                    ) {
+                        Text("Retry original", color = colors.danger)
+                    }
                 }
             }
         }
@@ -969,8 +979,7 @@ private fun MarkdownTableRow(cells: List<String>, header: Boolean) {
 
 @Composable
 private fun AgentMarkdownCode(block: MarkdownPresentationBlock.Code) {
-    val clipboard = LocalClipboard.current
-    val scope = rememberCoroutineScope()
+    val clipboard = LocalClipboardManager.current
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(10.dp),
@@ -988,13 +997,7 @@ private fun AgentMarkdownCode(block: MarkdownPresentationBlock.Code) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 IconButton(
-                    onClick = {
-                        scope.launch {
-                            clipboard.setClipEntry(
-                                ClipEntry(ClipData.newPlainText("Code", block.code)),
-                            )
-                        }
-                    },
+                    onClick = { clipboard.setText(AnnotatedString(block.code)) },
                     modifier = Modifier
                         .testTag("copy-code")
                         .structuralAction("CopyCode"),

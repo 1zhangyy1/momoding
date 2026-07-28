@@ -14,6 +14,7 @@ fail() {
 for required in \
   README.md \
   README.zh-CN.md \
+  .public-source.json \
   LICENSE \
   CONTRIBUTING.md \
   CODE_OF_CONDUCT.md \
@@ -27,6 +28,8 @@ for required in \
   docs/SECURITY_MODEL.md \
   licenses/MIT.txt \
   licenses/Apache-2.0.txt \
+  licenses/GPL-2.0-only.txt \
+  licenses/LGPL-3.0-or-later.txt \
   licenses/SQLite-Public-Domain.txt \
   android-app/PHOSPHOR-NOTICE.md \
   android-app/gradle/verification-metadata.xml \
@@ -38,7 +41,11 @@ for required in \
   .github/ISSUE_TEMPLATE/bug_report.yml \
   .github/ISSUE_TEMPLATE/feature_request.yml \
   scripts/check-markdown-links.mjs \
-  scripts/verify-release-apk.mjs; do
+  scripts/check-public-sync.sh \
+  scripts/export-public-repo.sh \
+  scripts/public-export-paths.txt \
+  scripts/verify-release-apk.mjs \
+  third_party/patches/proot-5.1.107.86-android-ndk.patch; do
   if [[ ! -f "$required" ]]; then
     fail "required public file is missing: $required"
   fi
@@ -49,6 +56,36 @@ if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 fi
 if ! git rev-parse --verify HEAD >/dev/null 2>&1; then
   fail "the public snapshot must have a Git commit before it can pass"
+fi
+
+if [[ -f .public-source.json ]]; then
+  metadata_values="$(
+    node -e '
+      const fs = require("node:fs");
+      const value = JSON.parse(fs.readFileSync(".public-source.json", "utf8"));
+      process.stdout.write(`${value.sourceRevision ?? ""}\t${value.exportRevision ?? ""}`);
+    ' 2>/dev/null || true
+  )"
+  IFS=$'\t' read -r source_revision export_revision <<< "$metadata_values"
+  if [[ ! "$source_revision" =~ ^[0-9a-f]{40}$ ]]; then
+    fail ".public-source.json sourceRevision must be a full Git SHA"
+  fi
+  if [[ ! "$export_revision" =~ ^[0-9a-f]{40}$ ]]; then
+    fail ".public-source.json exportRevision must be a full Git SHA"
+  fi
+  runtime_revision="$(
+    node -e '
+      const fs = require("node:fs");
+      const value = JSON.parse(
+        fs.readFileSync("android-app/app/src/main/assets/pi-runtime/manifest.json", "utf8"),
+      ).buildRevision;
+      if (typeof value !== "string") process.exit(1);
+      process.stdout.write(value);
+    ' 2>/dev/null || true
+  )"
+  if [[ "$runtime_revision" != "$source_revision" ]]; then
+    fail "runtime buildRevision must match .public-source.json sourceRevision"
+  fi
 fi
 
 while IFS= read -r path; do
@@ -94,16 +131,27 @@ scan_forbidden() {
 
 scan_forbidden \
   "private brand, identity, host fixture, or local development trace found" \
-  'dev\.zyyai|codexmobile|Codex Mobile|nuomiji|7224cc47|localhost-test-key|Maxgent|MoClaw|StoryLens'
+  'dev\.zyyai|codexmobile|codex-mobile|codex_mobile|CodexMobile|Codex Mobile|nuomiji|7224cc47|localhost-test-key|Maxgent|MoClaw|StoryLens'
 scan_forbidden \
   "private-key material found" \
   'BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY'
 scan_forbidden \
   "credential-shaped token found" \
   'sk-or-v1-[A-Za-z0-9_-]{10,}|(^|[^A-Za-z0-9_-])sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9_]{20,}|AIza[0-9A-Za-z_-]{35}|xox[baprs]-[A-Za-z0-9-]{10,}'
-scan_forbidden \
-  "internal milestone identifier found" \
-  'P1A|P1B|P2-[0-9]|P3A|E5B|E6-[0-9]|E7-[0-9]|CAP-[0-9]'
+milestone_matches="$(
+  git grep -nI -E 'P2-[0-9]|P3A|E5B|E6-[0-9]|E7-[0-9]|CAP-[0-9]' -- \
+    . \
+    ':(exclude)wire/**' \
+    ':(exclude)docs/design/fixtures/r0-contract-fixtures.json' \
+    ':(exclude)scripts/lib/p2-fixture-projection.mjs' \
+    ':(exclude)android-app/app/src/main/assets/pi-runtime/pi-mobile.js' \
+    ':(exclude)scripts/check-public-repo.sh' \
+    2>/dev/null || true
+)"
+if [[ -n "$milestone_matches" ]]; then
+  fail "internal milestone identifier found outside the public wire protocol"
+  printf '%s\n' "$milestone_matches" >&2
+fi
 
 if ! grep -q 'namespace = "app.momoding"' android-app/app/build.gradle.kts; then
   fail "Android namespace must be app.momoding"
@@ -120,16 +168,28 @@ for metadata in \
 done
 
 actual_permissions="$(
-  grep -o 'android\.permission\.[A-Z_]*' android-app/app/src/main/AndroidManifest.xml |
-    sort -u
+  node -e '
+    const fs = require("node:fs");
+    const manifest = fs.readFileSync("android-app/app/src/main/AndroidManifest.xml", "utf8");
+    const permissions = [...manifest.matchAll(/<uses-permission\b[\s\S]*?\/>/g)]
+      .filter(match => !/tools:node="remove"/.test(match[0]))
+      .map(match => /android:name="([^"]+)"/.exec(match[0])?.[1])
+      .filter(Boolean)
+      .sort();
+    process.stdout.write(permissions.join("\n"));
+  '
 )"
 expected_permissions="$(
   printf '%s\n' \
     android.permission.ACCESS_NETWORK_STATE \
+    android.permission.FOREGROUND_SERVICE \
+    android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION \
     android.permission.INTERNET \
+    android.permission.MANAGE_EXTERNAL_STORAGE \
     android.permission.READ_EXTERNAL_STORAGE \
     android.permission.READ_MEDIA_IMAGES \
-    android.permission.READ_MEDIA_VISUAL_USER_SELECTED |
+    android.permission.READ_MEDIA_VISUAL_USER_SELECTED \
+    moe.shizuku.manager.permission.API_V23 |
     sort -u
 )"
 if [[ "$actual_permissions" != "$expected_permissions" ]]; then

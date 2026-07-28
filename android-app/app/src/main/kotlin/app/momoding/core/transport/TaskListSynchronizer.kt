@@ -1,8 +1,8 @@
 package app.momoding.core.transport
 
 import app.momoding.wire.CommandResponseFrame
-import app.momoding.wire.ReliabilityProtocol
-import app.momoding.wire.ReceivedReliabilityServerFrame
+import app.momoding.wire.P1bProtocol
+import app.momoding.wire.ReceivedP1bServerFrame
 import app.momoding.wire.WireErrorCode
 import app.momoding.core.data.HostTaskSummary
 import app.momoding.core.data.RoomTaskListMerger
@@ -16,7 +16,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.longOrNull
 
 fun interface TaskListWirePort {
-    suspend fun requestPage(cursor: String?, limit: Int): ReceivedReliabilityServerFrame
+    suspend fun requestPage(cursor: String?, limit: Int): ReceivedP1bServerFrame
 }
 
 fun interface TaskListPublisher {
@@ -193,7 +193,7 @@ object TaskListPageDecoder {
         val primitive = this[name] as? JsonPrimitive ?: error("$name is invalid")
         require(!primitive.isString) { "$name is invalid" }
         val value = primitive.longOrNull ?: error("$name is invalid")
-        require(value in 1..ReliabilityProtocol.MAX_SAFE_INTEGER) { "$name is invalid" }
+        require(value in 1..P1bProtocol.MAX_SAFE_INTEGER) { "$name is invalid" }
         return value
     }
 
