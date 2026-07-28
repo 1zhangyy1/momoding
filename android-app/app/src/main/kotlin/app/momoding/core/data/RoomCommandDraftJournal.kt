@@ -251,6 +251,36 @@ class RoomCommandDraftJournal(
         dao.draft(draftId)?.repairSelectionDurably()?.also { it.validate() }?.toRecord()
     }
 
+    /**
+     * The only post-bind grant mutation path. It is called after the user explicitly selects a
+     * new SAF tree for the running task; ordinary draft saves keep the grant immutable.
+     */
+    fun rebindTaskGrantFromExplicitSafSelection(
+        taskId: String,
+        grantId: String,
+    ): DraftRecord = database.runInTransaction<DraftRecord> {
+        val canonicalTaskId = normalizeUuid(taskId, "taskId")
+        val canonicalGrantId = normalizeUuid(grantId, "grantId")
+        val existing = dao.draftForTaskSync(canonicalTaskId)
+            ?.repairSelectionDurably()
+            ?: throw JournalConflictException("Cannot bind a folder to an unknown task draft")
+        existing.validate()
+        val timestamp = nowMillis()
+        check(
+            dao.updateTaskDraftGrant(
+                taskId = canonicalTaskId,
+                grantId = canonicalGrantId,
+                updatedAtMillis = timestamp,
+            ) == 1,
+        ) {
+            "Task folder grant update was lost"
+        }
+        existing.copy(
+            selectedGrantId = canonicalGrantId,
+            updatedAtMillis = timestamp,
+        ).toRecord()
+    }
+
     fun drafts(): List<DraftRecord> = database.runInTransaction<List<DraftRecord>> {
         dao.drafts().map { entity ->
             entity.repairSelectionDurably().also { it.validate() }.toRecord()

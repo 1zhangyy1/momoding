@@ -61,6 +61,7 @@ class PhoneLocalAttentionBridge(
     private val screenCaptureTools: PhoneLocalScreenCaptureToolHandler? = null,
     private val uiTools: PhoneLocalUiToolHandler? = null,
     private val packageTools: PhoneLocalPackageToolHandler? = null,
+    private val capabilityRequestTools: PhoneLocalCapabilityRequestToolHandler? = null,
     private val approvalModeForTask: suspend (String) -> TaskApprovalMode = {
         TaskApprovalMode.REQUEST_APPROVAL
     },
@@ -146,6 +147,13 @@ class PhoneLocalAttentionBridge(
         PACKAGE_NATIVE_KIND -> withContext(ioDispatcher) {
             val handler = requireNotNull(packageTools) {
                 "PI_MOBILE_PACKAGE_TOOL_EXECUTOR_MISSING"
+            }
+            require(handler.handles(request.toolName)) { "PI_MOBILE_NATIVE_TOOL_NOT_ALLOWED" }
+            handler.execute(taskId, request)
+        }
+        CAPABILITY_REQUEST_NATIVE_KIND -> {
+            val handler = requireNotNull(capabilityRequestTools) {
+                "PI_MOBILE_CAPABILITY_REQUEST_TOOL_EXECUTOR_MISSING"
             }
             require(handler.handles(request.toolName)) { "PI_MOBILE_NATIVE_TOOL_NOT_ALLOWED" }
             handler.execute(taskId, request)
@@ -1187,6 +1195,7 @@ class PhoneLocalAttentionBridge(
         const val SCREEN_NATIVE_KIND = "android_screen_tool"
         const val UI_NATIVE_KIND = "android_ui_tool"
         const val PACKAGE_NATIVE_KIND = "android_package_tool"
+        const val CAPABILITY_REQUEST_NATIVE_KIND = "android_capability_tool"
         const val MEDIA_LIST_TOOL = DeviceMediaListExecutor.TOOL_NAME
         const val UI_ACTION_TOOL = PhoneLocalUiToolExecutor.ACTION_TOOL
         const val DEVICE_ID = "phone-local-android"

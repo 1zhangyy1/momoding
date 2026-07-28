@@ -1458,6 +1458,64 @@ test("UI inspect and one bounded action use the Android mailbox in sequence", as
   assert.deepEqual(JSON.parse(call(context, "closeJson")), { ok: true, closed: true });
 });
 
+test("missing Android capability can open the exact native setup flow and resume Pi", async () => {
+  const context = await bootRuntime();
+  JSON.parse(call(
+    context,
+    "startNativeOpenRouterTaskSessionJson",
+    JSON.stringify("task-capability-request"),
+    JSON.stringify("Inspect the current Android interface."),
+    JSON.stringify("deepseek/deepseek-v4-pro"),
+  ));
+
+  const provider = await nextProviderRequest(context);
+  const schema = provider.tools.find(
+    (tool) => tool.function.name === "device_capability_request",
+  )?.function.parameters;
+  assert.ok(schema);
+  assert.deepEqual(schema.required, ["capability", "purpose"]);
+  assert.equal(schema.additionalProperties, false);
+  assert.deepEqual(schema.properties.capability.enum, [
+    "saf_folders",
+    "photo_library",
+    "accessibility_control",
+    "screen_capture",
+    "all_files",
+    "shizuku_shell_uid",
+  ]);
+
+  finishToolCall(
+    context,
+    provider,
+    "call-capability-request",
+    "device_capability_request",
+    {
+      capability: "accessibility_control",
+      purpose: "Inspect the current screen",
+    },
+  );
+  const nativeRequest = await nextNativeToolRequest(context);
+  assert.equal(nativeRequest.kind, "android_capability_tool");
+  assert.equal(nativeRequest.toolName, "device_capability_request");
+  assert.deepEqual(nativeRequest.arguments, {
+    capability: "accessibility_control",
+    purpose: "Inspect the current screen",
+  });
+  resolveNativeTool(context, nativeRequest.id, {
+    capability: "accessibility_control",
+    availability: "ready",
+    ready: true,
+    requested: true,
+  });
+
+  const resumed = await nextProviderRequest(context);
+  assert.match(JSON.stringify(resumed.messages), /accessibility_control/);
+  finishTextRequest(context, resumed, "Accessibility control is ready.");
+  const status = await waitForTerminal(context);
+  assert.equal(status.expectationMet, true, JSON.stringify(status));
+  assert.deepEqual(JSON.parse(call(context, "closeJson")), { ok: true, closed: true });
+});
+
 test("capability and package facts stay in one Pi task through the Android mailbox", async () => {
   const context = await bootRuntime();
   JSON.parse(call(

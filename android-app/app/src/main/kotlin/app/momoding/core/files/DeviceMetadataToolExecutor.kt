@@ -7,6 +7,7 @@ import app.momoding.wire.DeviceToolTerminalKind
 import app.momoding.core.capabilities.AndroidCapabilityId
 import app.momoding.core.capabilities.AndroidCapabilityRegistry
 import app.momoding.core.capabilities.AndroidCapabilityState
+import app.momoding.core.capabilities.DEVICE_CAPABILITY_REQUEST_TOOL
 import app.momoding.core.data.MomodingDatabase
 import java.io.FileNotFoundException
 import java.time.OffsetDateTime
@@ -348,6 +349,7 @@ class DeviceMetadataToolExecutor(
         )
         private val PHONE_LOCAL_CAPABILITY_TOOLS = listOf(
             *LEGACY_CAPABILITY_TOOLS.toTypedArray(),
+            DEVICE_CAPABILITY_REQUEST_TOOL,
             SCREEN_CAPTURE_TOOL,
             UI_INSPECT_TOOL,
             UI_ACTION_TOOL,

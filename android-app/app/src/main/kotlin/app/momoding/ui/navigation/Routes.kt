@@ -57,12 +57,15 @@ data object ExtensionsRoute : NavKey
 data class AuthorizedFoldersRoute(
     val startPicker: Boolean = false,
     val pickerRunId: String? = null,
+    val capabilityRequestId: String? = null,
 ) : NavKey
 
 @Serializable
 data class DeviceCapabilitiesRoute(
     val startFullAccessSetup: Boolean = false,
     val setupRunId: String? = null,
+    val capabilityRequestId: String? = null,
+    val requestedCapability: String? = null,
 ) : NavKey
 
 @Serializable

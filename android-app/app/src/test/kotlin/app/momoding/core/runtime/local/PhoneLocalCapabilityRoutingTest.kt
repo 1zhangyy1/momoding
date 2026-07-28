@@ -91,6 +91,34 @@ class PhoneLocalCapabilityRoutingTest {
         assertEquals("true", result.contentPayload["ok"]?.jsonPrimitive?.content)
     }
 
+    @Test
+    fun `capability request tool routes directly to the Android capability handler`() = runTest {
+        val capabilityHandler = FixtureCapabilityRequestHandler()
+        val bridge = PhoneLocalAttentionBridge(
+            ledger = RoomAttentionLedger(database),
+            capabilityRequestTools = capabilityHandler,
+            ioDispatcher = Dispatchers.Unconfined,
+        )
+
+        val result = requireNotNull(
+            bridge.handleNativeRequest(
+                taskId = "task-1",
+                request = request(
+                    kind = "android_capability_tool",
+                    toolName = "device_capability_request",
+                    arguments = buildJsonObject {
+                        put("capability", "accessibility_control")
+                        put("purpose", "Inspect the current screen")
+                    },
+                ),
+            ),
+        )
+
+        assertFalse(result.isError)
+        assertEquals("task-1", capabilityHandler.taskId)
+        assertEquals("accessibility_control", capabilityHandler.capability)
+    }
+
     private fun request(
         kind: String,
         toolName: String,
@@ -135,6 +163,22 @@ class PhoneLocalCapabilityRoutingTest {
             this.toolName = request.toolName
             return PiNativeAndroidToolResult(
                 contentPayload = buildJsonObject { put("ok", true) },
+            )
+        }
+    }
+
+    private class FixtureCapabilityRequestHandler : PhoneLocalCapabilityRequestToolHandler {
+        var taskId: String? = null
+        var capability: String? = null
+
+        override suspend fun execute(
+            taskId: String,
+            request: PiNativeToolRequest,
+        ): PiNativeAndroidToolResult {
+            this.taskId = taskId
+            capability = request.arguments["capability"]?.jsonPrimitive?.content
+            return PiNativeAndroidToolResult(
+                contentPayload = buildJsonObject { put("ready", true) },
             )
         }
     }

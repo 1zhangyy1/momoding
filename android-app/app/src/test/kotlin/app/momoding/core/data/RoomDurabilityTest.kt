@@ -178,6 +178,10 @@ class RoomDurabilityTest {
         onIo { journal.saveDraft(draft) }
         val bound = onIo { journal.bindDraftTask("draft-1", TASK_ID) }
         assertEquals(TASK_ID, bound.taskId)
+        val rebound = onIo {
+            journal.rebindTaskGrantFromExplicitSafSelection(TASK_ID, GRANT_ID)
+        }
+        assertEquals(GRANT_ID, rebound.selectedGrantId)
         assertThrows(JournalConflictException::class.java) {
             onIo { journal.bindDraftTask("draft-1", OTHER_TASK_ID) }
         }
@@ -200,6 +204,7 @@ class RoomDurabilityTest {
         assertEquals(TASK_ID, restoredDraft.taskId)
         assertEquals(CREATE_COMMAND_ID, restoredDraft.createCommandId)
         assertEquals(PROMPT_COMMAND_ID, restoredDraft.promptCommandId)
+        assertEquals(GRANT_ID, restoredDraft.selectedGrantId)
 
         onIo {
             database.openHelper.writableDatabase.execSQL(
@@ -1180,5 +1185,6 @@ class RoomDurabilityTest {
         const val ATTENTION_ID = "66666666-6666-4666-8666-666666666666"
         const val DEVICE_CALL_ID = "77777777-7777-4777-8777-777777777777"
         const val OPERATION_ID = "88888888-8888-4888-8888-888888888888"
+        const val GRANT_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
     }
 }

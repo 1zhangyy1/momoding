@@ -106,6 +106,7 @@ interface NativeToolRequest {
     | "android_screen_tool"
     | "android_ui_tool"
     | "android_package_tool"
+    | "android_capability_tool"
     | "android_project_tool"
     | "android_attachment_tool";
   toolCallId: string;
@@ -260,6 +261,7 @@ const SCENARIO_TOOL_NAME = "mobile_fixture_echo";
 const QUESTION_TOOL_NAME = "request_user_question";
 const CONFIRMATION_TOOL_NAME = "request_user_confirmation";
 const CAPABILITIES_TOOL_NAME = "device_capabilities_get";
+const CAPABILITY_REQUEST_TOOL_NAME = "device_capability_request";
 const FILES_LIST_TOOL_NAME = "device_files_list";
 const FILES_READ_TOOL_NAME = "device_files_read";
 const FILES_PREPARE_TOOL_NAME = "device_files_prepare_changes";
@@ -323,7 +325,7 @@ const BASE_TASK_SYSTEM_PROMPT = [
   "When either tool returns fileChanges.state=prepared, call device_files_commit_changes with the exact preparedId and planDigest so Android can apply the task approval policy before changing an authorized real folder or shared-storage root.",
   "Never claim that Android files changed until device_files_commit_changes succeeds.",
   "Text attachments explicitly sent with a task are identified in the user message. Read their contents only with attachment_read, using nextOffset until eof when more content is needed, and never claim to have read content before the tool succeeds.",
-  "Call device_capabilities_get before relying on Android file, media, screen, accessibility, or Shizuku capabilities; treat its current states as authoritative.",
+  "Call device_capabilities_get before relying on Android file, media, screen, accessibility, or Shizuku capabilities; treat its current states as authoritative. When a required capability is not ready, call device_capability_request with that exact capability and a concise user-facing purpose. For SAF work, also request saf_folders when no scope=task grant is returned, even if the device-wide SAF state is ready. Android will open the appropriate native permission or settings flow; after it succeeds, retry the original capability tool.",
   "When recent photo metadata is relevant, call device_media_list even if photo-library access is not yet granted. Android will show its native permission UI at the moment of use and the user decides; never claim that you cannot open the permission prompt. The tool never returns image bytes, names, paths, location, or EXIF data.",
   "Use device_screen_capture only when seeing the current Android screen is necessary. Its image is live for the current tool turn only and cannot be replayed from task history.",
   "Before controlling Android UI, call device_ui_inspect, choose only an opaque nodeHandle from that exact snapshot, then call device_ui_action. Never repeat a click automatically when Android reports an unknown or stale outcome.",
@@ -1197,6 +1199,40 @@ function startNativeOpenRouterRun(
           executionMode: "sequential",
           execute: async (toolCallId, params, signal) =>
             await requestNativeTool(state, "android_file_tool", CAPABILITIES_TOOL_NAME, toolCallId, params as Record<string, unknown>, signal),
+        },
+        {
+          name: CAPABILITY_REQUEST_TOOL_NAME,
+          label: "Request Android capability",
+          description: "Ask the user to enable one Android capability required for the current task. Android opens the corresponding native permission, SAF picker, special-access settings, screen-capture consent, or Shizuku flow.",
+          parameters: {
+            type: "object",
+            properties: {
+              capability: {
+                type: "string",
+                enum: [
+                  "saf_folders",
+                  "photo_library",
+                  "accessibility_control",
+                  "screen_capture",
+                  "all_files",
+                  "shizuku_shell_uid",
+                ],
+              },
+              purpose: { type: "string", minLength: 1, maxLength: 512 },
+            },
+            required: ["capability", "purpose"],
+            additionalProperties: false,
+          } as AgentTool["parameters"],
+          executionMode: "sequential",
+          execute: async (toolCallId, params, signal) =>
+            await requestNativeTool(
+              state,
+              "android_capability_tool",
+              CAPABILITY_REQUEST_TOOL_NAME,
+              toolCallId,
+              params as Record<string, unknown>,
+              signal,
+            ),
         },
         {
           name: FILES_LIST_TOOL_NAME,

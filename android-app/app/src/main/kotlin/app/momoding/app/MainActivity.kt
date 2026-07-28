@@ -36,6 +36,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -96,6 +97,8 @@ import app.momoding.feature.newtask.NewTaskScreen
 import app.momoding.feature.newtask.NewTaskViewModel
 import app.momoding.core.attachments.AttachmentFeatureGate
 import app.momoding.core.capabilities.AndroidCapabilityId
+import app.momoding.core.capabilities.AndroidCapabilityRequest
+import app.momoding.core.capabilities.AndroidCapabilityRequestResult
 import app.momoding.core.capabilities.AndroidPermissionRequest
 import app.momoding.core.capabilities.AndroidPermissionRequestResult
 import app.momoding.core.capabilities.CapabilityAvailability
@@ -205,6 +208,8 @@ class MainActivity : ComponentActivity() {
             val state by settingsViewModel.state.collectAsStateWithLifecycle()
             val providerState by providerSetupViewModel.state.collectAsStateWithLifecycle()
             val sharedRoute by externalNewTaskRoute.collectAsStateWithLifecycle()
+            val capabilityRequest by container.androidCapabilityRequestCoordinator.pending
+                .collectAsStateWithLifecycle()
             val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
             val dark = resolvesToDark(state.appearance, systemDark)
             SideEffect {
@@ -279,6 +284,7 @@ class MainActivity : ComponentActivity() {
                             container = container,
                             startPicker = route.startPicker,
                             pickerRunId = route.pickerRunId,
+                            capabilityRequestId = route.capabilityRequestId,
                             onBack = onBack,
                         )
                     },
@@ -287,6 +293,8 @@ class MainActivity : ComponentActivity() {
                             container = container,
                             startFullAccessSetup = route.startFullAccessSetup,
                             setupRunId = route.setupRunId,
+                            capabilityRequestId = route.capabilityRequestId,
+                            requestedCapability = route.requestedCapability,
                             onBack = onBack,
                             onOpenFolders = onOpenFolders,
                         )
@@ -307,6 +315,7 @@ class MainActivity : ComponentActivity() {
                     },
                     externalNewTaskRoute = sharedRoute,
                     onExternalNewTaskConsumed = { externalNewTaskRoute.value = null },
+                    capabilityRequest = capabilityRequest,
                     initialBackStack = listOf(ProviderSetupRoute(onboarding = true)),
                 )
             }
@@ -557,6 +566,7 @@ internal fun MomodingApp(
     outputsEntry: OutputsRouteEntry? = null,
     externalNewTaskRoute: NewTaskRoute? = null,
     onExternalNewTaskConsumed: () -> Unit = {},
+    capabilityRequest: AndroidCapabilityRequest? = null,
     initialBackStack: List<NavKey> = listOf(HostGateRoute),
     onAccessibilityAnnouncement: ((String) -> Unit)? = null,
 ) {
@@ -670,6 +680,8 @@ internal fun MomodingApp(
         val route = AuthorizedFoldersRoute(
             startPicker = startPicker,
             pickerRunId = UUID.randomUUID().toString().takeIf { startPicker },
+            capabilityRequestId = (current as? DeviceCapabilitiesRoute)
+                ?.capabilityRequestId,
         )
         if (authorizedFoldersEntry != null && backStack.lastOrNull() != route) {
             backStack.add(route)
@@ -685,14 +697,24 @@ internal fun MomodingApp(
         }
     }
 
-    fun openDeviceCapabilities(startFullAccessSetup: Boolean = false) {
+    fun openDeviceCapabilities(
+        startFullAccessSetup: Boolean = false,
+        request: AndroidCapabilityRequest? = null,
+    ) {
         val route = DeviceCapabilitiesRoute(
             startFullAccessSetup = startFullAccessSetup,
             setupRunId = UUID.randomUUID().toString().takeIf { startFullAccessSetup },
+            capabilityRequestId = request?.requestId,
+            requestedCapability = request?.capability?.name,
         )
         if (deviceCapabilitiesEntry != null && backStack.lastOrNull() != route) {
             backStack.add(route)
         }
+    }
+
+    LaunchedEffect(capabilityRequest?.requestId) {
+        val request = capabilityRequest ?: return@LaunchedEffect
+        openDeviceCapabilities(request = request)
     }
 
     fun handleTaskHomeAction(action: TaskHomeAction) {
@@ -1078,6 +1100,7 @@ private fun AuthorizedFoldersRouteContent(
     container: AppContainer,
     startPicker: Boolean,
     pickerRunId: String?,
+    capabilityRequestId: String?,
     onBack: () -> Unit,
 ) {
     val viewModel: AuthorizedFoldersViewModel = viewModel(
@@ -1085,13 +1108,26 @@ private fun AuthorizedFoldersRouteContent(
         factory = AuthorizedFoldersViewModel.Factory(container.authorizedFoldersRepository),
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
+    var capabilityPickerAccepted by rememberSaveable(capabilityRequestId) {
+        mutableStateOf(false)
+    }
     val treePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) { result ->
         val data = result.data
+        val selectedTree = result.resultCode == Activity.RESULT_OK && data?.data != null
+        if (capabilityRequestId != null && !selectedTree) {
+            container.androidCapabilityRequestCoordinator.respond(
+                capabilityRequestId,
+                AndroidCapabilityRequestResult.DENIED,
+            )
+            onBack()
+            return@rememberLauncherForActivityResult
+        }
+        capabilityPickerAccepted = capabilityRequestId != null && selectedTree
         viewModel.dispatch(
             AuthorizedFoldersAction.PickerFinished(
-                treeUri = if (result.resultCode == Activity.RESULT_OK) {
+                treeUri = if (selectedTree) {
                     data?.data?.toString()
                 } else {
                     null
@@ -1104,16 +1140,56 @@ private fun AuthorizedFoldersRouteContent(
     LaunchedEffect(pickerRunId, startPicker) {
         if (startPicker && !pickerAutoStarted) {
             pickerAutoStarted = true
+            if (capabilityRequestId != null) {
+                viewModel.dispatch(AuthorizedFoldersAction.ClearNotice)
+            }
             withFrameNanos { }
             withFrameNanos { }
             delay(300)
             treePicker.launch(folderTreePickerIntent())
         }
     }
+    LaunchedEffect(
+        capabilityRequestId,
+        capabilityPickerAccepted,
+        state.busyAction,
+        state.selectedGrantId,
+    ) {
+        val requestId = capabilityRequestId ?: return@LaunchedEffect
+        if (!capabilityPickerAccepted || state.busyAction != null) {
+            return@LaunchedEffect
+        }
+        val grantId = state.selectedGrantId
+        val authorized = grantId != null &&
+            container.androidCapabilityRegistry.refreshNow()
+                .first { it.id == AndroidCapabilityId.SAF_FOLDERS }
+                .availability == CapabilityAvailability.READY
+        if (
+            container.androidCapabilityRequestCoordinator.respond(
+                requestId = requestId,
+                result = if (authorized) {
+                    AndroidCapabilityRequestResult.READY
+                } else {
+                    AndroidCapabilityRequestResult.UNAVAILABLE
+                },
+                grantId = grantId.takeIf { authorized },
+            )
+        ) {
+            onBack()
+        }
+    }
     LaunchedEffect(viewModel) {
         viewModel.oneShots.collect { oneShot ->
             when (oneShot) {
-                AuthorizedFoldersOneShot.Back -> onBack()
+                AuthorizedFoldersOneShot.Back -> {
+                    capabilityRequestId?.let { requestId ->
+                        container.androidCapabilityRequestCoordinator.respond(
+                            requestId,
+                            AndroidCapabilityRequestResult.DENIED,
+                        )
+                    }
+                    onBack()
+                }
                 AuthorizedFoldersOneShot.LaunchSystemTreePicker ->
                     treePicker.launch(folderTreePickerIntent())
             }
@@ -1135,12 +1211,22 @@ private fun DeviceCapabilitiesRouteContent(
     container: AppContainer,
     startFullAccessSetup: Boolean,
     setupRunId: String?,
+    capabilityRequestId: String?,
+    requestedCapability: String?,
     onBack: () -> Unit,
     onOpenFolders: (Boolean) -> Unit,
 ) {
     val states by container.androidCapabilityRegistry.states.collectAsStateWithLifecycle()
+    val pendingCapabilityRequest by container.androidCapabilityRequestCoordinator.pending
+        .collectAsStateWithLifecycle()
     val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val requestedCapabilityId = remember(requestedCapability) {
+        requestedCapability?.let { wireValue ->
+            AndroidCapabilityId.entries.firstOrNull { it.name == wireValue }
+        }
+    }
     var continueToFoldersAfterPhoto by rememberSaveable { mutableStateOf(false) }
     var continueToFoldersAfterAllFiles by rememberSaveable { mutableStateOf(false) }
     val foldersNeedSetup = states.firstOrNull {
@@ -1149,14 +1235,16 @@ private fun DeviceCapabilitiesRouteContent(
     val allFilesNeedSetup = states.firstOrNull {
         it.id == AndroidCapabilityId.ALL_FILES
     }?.availability != CapabilityAvailability.READY
-    val openAllFilesSettings: () -> Unit = openSettings@{
+    val allFilesSettingsIntents = remember(context.packageName) {
         val packageUri = Uri.fromParts("package", context.packageName, null)
-        val candidates = listOf(
+        listOf(
             Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, packageUri),
             Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION),
             Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, packageUri),
         )
-        candidates.forEach { intent ->
+    }
+    val openAllFilesSettings: () -> Unit = openSettings@{
+        allFilesSettingsIntents.forEach { intent ->
             try {
                 context.startActivity(intent)
                 return@openSettings
@@ -1165,10 +1253,84 @@ private fun DeviceCapabilitiesRouteContent(
             }
         }
     }
+    fun isCapabilityReady(capability: AndroidCapabilityId): Boolean {
+        val availability = states.firstOrNull { it.id == capability }?.availability
+        return availability == CapabilityAvailability.READY ||
+            (
+                capability == AndroidCapabilityId.PHOTO_LIBRARY &&
+                    availability == CapabilityAvailability.PARTIAL
+                )
+    }
+    val finishCapabilityRequest: (AndroidCapabilityRequestResult) -> Unit = { result ->
+        capabilityRequestId?.let { requestId ->
+            if (container.androidCapabilityRequestCoordinator.respond(requestId, result)) {
+                onBack()
+            }
+        }
+    }
+    val latestFinishCapabilityRequest by rememberUpdatedState(finishCapabilityRequest)
+    fun refreshTargetAndFinish(
+        capability: AndroidCapabilityId,
+        fallback: AndroidCapabilityRequestResult,
+    ) {
+        scope.launch {
+            var availability = CapabilityAvailability.ERROR
+            repeat(CAPABILITY_RESULT_REFRESH_ATTEMPTS) { attempt ->
+                availability = container.androidCapabilityRegistry.refreshNow()
+                    .first { it.id == capability }
+                    .availability
+                val ready = availability == CapabilityAvailability.READY ||
+                    (
+                        capability == AndroidCapabilityId.PHOTO_LIBRARY &&
+                            availability == CapabilityAvailability.PARTIAL
+                        )
+                if (ready) {
+                    latestFinishCapabilityRequest(AndroidCapabilityRequestResult.READY)
+                    return@launch
+                }
+                if (
+                    availability != CapabilityAvailability.SESSION_REQUIRED ||
+                    attempt == CAPABILITY_RESULT_REFRESH_ATTEMPTS - 1
+                ) {
+                    latestFinishCapabilityRequest(fallback)
+                    return@launch
+                }
+                delay(CAPABILITY_RESULT_REFRESH_DELAY_MILLIS)
+            }
+        }
+    }
+    val specialAccessLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) {
+        requestedCapabilityId?.let { capability ->
+            refreshTargetAndFinish(capability, AndroidCapabilityRequestResult.DENIED)
+        }
+    }
+    fun launchTargetAllFilesSettings(): Boolean {
+        allFilesSettingsIntents.forEach { intent ->
+            try {
+                specialAccessLauncher.launch(intent)
+                return true
+            } catch (_: ActivityNotFoundException) {
+                // Try the next Android/OEM fallback.
+            }
+        }
+        return false
+    }
     val photoAccessLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) {
         container.androidCapabilityRegistry.refresh()
+        if (
+            capabilityRequestId != null &&
+            requestedCapabilityId == AndroidCapabilityId.PHOTO_LIBRARY
+        ) {
+            refreshTargetAndFinish(
+                AndroidCapabilityId.PHOTO_LIBRARY,
+                AndroidCapabilityRequestResult.DENIED,
+            )
+            return@rememberLauncherForActivityResult
+        }
         if (continueToFoldersAfterPhoto) {
             continueToFoldersAfterPhoto = false
             if (allFilesNeedSetup) {
@@ -1190,6 +1352,15 @@ private fun DeviceCapabilitiesRouteContent(
             )
         }
         container.androidCapabilityRegistry.refresh()
+        if (
+            capabilityRequestId != null &&
+            requestedCapabilityId == AndroidCapabilityId.SCREEN_CAPTURE
+        ) {
+            refreshTargetAndFinish(
+                AndroidCapabilityId.SCREEN_CAPTURE,
+                AndroidCapabilityRequestResult.DENIED,
+            )
+        }
     }
     val startAvailableAccessSetup = {
         val photoAccess = states.firstOrNull { it.id == AndroidCapabilityId.PHOTO_LIBRARY }
@@ -1226,6 +1397,109 @@ private fun DeviceCapabilitiesRouteContent(
             latestStartAvailableAccessSetup()
         }
     }
+    var shizukuPermissionAutoRequested by rememberSaveable(capabilityRequestId) {
+        mutableStateOf(false)
+    }
+    val launchRequestedCapability = {
+        val capability = requestedCapabilityId
+        when {
+            capabilityRequestId == null -> Unit
+            capability == null -> latestFinishCapabilityRequest(
+                AndroidCapabilityRequestResult.UNAVAILABLE,
+            )
+            isCapabilityReady(capability) &&
+                capability != AndroidCapabilityId.SAF_FOLDERS ->
+                latestFinishCapabilityRequest(AndroidCapabilityRequestResult.READY)
+            states.firstOrNull { it.id == capability }?.availability ==
+                CapabilityAvailability.UNSUPPORTED ->
+                latestFinishCapabilityRequest(AndroidCapabilityRequestResult.UNAVAILABLE)
+            capability == AndroidCapabilityId.SAF_FOLDERS -> onOpenFolders(true)
+            capability == AndroidCapabilityId.PHOTO_LIBRARY -> {
+                val permissions = photoLibraryPermissionRequest(Build.VERSION.SDK_INT)
+                if (permissions.isEmpty()) {
+                    latestFinishCapabilityRequest(AndroidCapabilityRequestResult.UNAVAILABLE)
+                } else {
+                    photoAccessLauncher.launch(permissions.toTypedArray())
+                }
+            }
+            capability == AndroidCapabilityId.ACCESSIBILITY_CONTROL -> {
+                specialAccessLauncher.launch(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            }
+            capability == AndroidCapabilityId.SCREEN_CAPTURE -> {
+                val manager = context.getSystemService(MediaProjectionManager::class.java)
+                screenCaptureLauncher.launch(manager.createScreenCaptureIntent())
+            }
+            capability == AndroidCapabilityId.ALL_FILES -> {
+                if (!launchTargetAllFilesSettings()) {
+                    latestFinishCapabilityRequest(AndroidCapabilityRequestResult.UNAVAILABLE)
+                }
+            }
+            capability == AndroidCapabilityId.SHIZUKU_SHELL_UID -> {
+                if (
+                    states.firstOrNull { it.id == capability }?.availability ==
+                    CapabilityAvailability.NOT_GRANTED
+                ) {
+                    shizukuPermissionAutoRequested = true
+                }
+                container.shizukuController.performPrimaryAction(context)
+            }
+        }
+    }
+    val latestLaunchRequestedCapability by rememberUpdatedState(launchRequestedCapability)
+    var capabilityAutoStarted by rememberSaveable(capabilityRequestId) {
+        mutableStateOf(false)
+    }
+    LaunchedEffect(capabilityRequestId, requestedCapabilityId, states.isNotEmpty()) {
+        if (
+            capabilityRequestId != null &&
+            requestedCapabilityId != null &&
+            states.isNotEmpty() &&
+            !capabilityAutoStarted
+        ) {
+            if (
+                requestedCapabilityId == AndroidCapabilityId.SHIZUKU_SHELL_UID &&
+                states.firstOrNull { it.id == requestedCapabilityId }?.availability ==
+                CapabilityAvailability.NOT_GRANTED
+            ) {
+                shizukuPermissionAutoRequested = true
+            }
+            capabilityAutoStarted = true
+            withFrameNanos { }
+            withFrameNanos { }
+            delay(300)
+            latestLaunchRequestedCapability()
+        }
+    }
+    LaunchedEffect(capabilityRequestId, requestedCapabilityId, states) {
+        val requestId = capabilityRequestId ?: return@LaunchedEffect
+        val capability = requestedCapabilityId ?: return@LaunchedEffect
+        val availability = states.firstOrNull { it.id == capability }?.availability
+        if (
+            capability == AndroidCapabilityId.SHIZUKU_SHELL_UID &&
+            capabilityAutoStarted &&
+            !shizukuPermissionAutoRequested &&
+            pendingCapabilityRequest?.requestId == requestId &&
+            availability == CapabilityAvailability.NOT_GRANTED
+        ) {
+            shizukuPermissionAutoRequested = true
+            container.shizukuController.performPrimaryAction(context)
+        }
+        if (
+            capability != AndroidCapabilityId.SAF_FOLDERS &&
+            pendingCapabilityRequest?.requestId == requestId &&
+            isCapabilityReady(capability)
+        ) {
+            latestFinishCapabilityRequest(AndroidCapabilityRequestResult.READY)
+        }
+    }
+    LaunchedEffect(capabilityRequestId, pendingCapabilityRequest?.requestId) {
+        if (
+            capabilityRequestId != null &&
+            pendingCapabilityRequest?.requestId != capabilityRequestId
+        ) {
+            onBack()
+        }
+    }
     DisposableEffect(lifecycleOwner, container.androidCapabilityRegistry) {
         container.androidCapabilityRegistry.refresh()
         val observer = LifecycleEventObserver { _, event ->
@@ -1234,10 +1508,19 @@ private fun DeviceCapabilitiesRouteContent(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
-    BackHandler(onBack = onBack)
+    val closeCapabilities = {
+        capabilityRequestId?.let { requestId ->
+            container.androidCapabilityRequestCoordinator.respond(
+                requestId,
+                AndroidCapabilityRequestResult.DENIED,
+            )
+        }
+        onBack()
+    }
+    BackHandler(onBack = closeCapabilities)
     DeviceCapabilitiesScreen(
         states = states,
-        onBack = onBack,
+        onBack = closeCapabilities,
         onRefresh = container.androidCapabilityRegistry::refresh,
         onSetUpFullAccess = startAvailableAccessSetup,
         onOpenFolders = { onOpenFolders(false) },
@@ -1281,6 +1564,9 @@ private fun DeviceCapabilitiesRouteContent(
         },
     )
 }
+
+private const val CAPABILITY_RESULT_REFRESH_ATTEMPTS = 10
+private const val CAPABILITY_RESULT_REFRESH_DELAY_MILLIS = 200L
 
 @Composable
 private fun ExtensionsRouteContent(

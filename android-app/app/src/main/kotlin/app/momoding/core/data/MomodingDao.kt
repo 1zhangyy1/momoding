@@ -467,6 +467,16 @@ interface MomodingDao {
     ): Int
 
     @Query(
+        "UPDATE drafts SET selectedGrantId = :grantId, updatedAtMillis = :updatedAtMillis " +
+            "WHERE taskId = :taskId",
+    )
+    fun updateTaskDraftGrant(
+        taskId: String,
+        grantId: String,
+        updatedAtMillis: Long,
+    ): Int
+
+    @Query(
         "UPDATE drafts SET selectedMode = :mode, updatedAtMillis = :updatedAtMillis " +
             "WHERE draftId = :draftId AND taskId IS NULL",
     )

@@ -8,6 +8,7 @@ import app.momoding.core.accessibility.MomodingAccessibilityRuntime
 import app.momoding.core.accessibility.ScreenCaptureCoordinator
 import app.momoding.core.attachments.AttachmentRepository
 import app.momoding.core.capabilities.AndroidCapabilityRegistry
+import app.momoding.core.capabilities.AndroidCapabilityRequestCoordinator
 import app.momoding.core.capabilities.AndroidPermissionRequestCoordinator
 import app.momoding.core.diagnostics.DiagnosticsExporter
 import app.momoding.core.files.AuthorizedContentReadPolicy
@@ -24,9 +25,11 @@ import app.momoding.core.runtime.local.PhoneLocalPiEventProjector
 import app.momoding.core.runtime.local.PhoneLocalPiOpenRouterRuntime
 import app.momoding.core.runtime.local.PhoneLocalAttentionBridge
 import app.momoding.core.runtime.local.PhoneLocalAttachmentToolExecutor
+import app.momoding.core.runtime.local.PhoneLocalCapabilityRequestToolExecutor
 import app.momoding.core.runtime.local.PhoneLocalLinuxRuntime
 import app.momoding.core.runtime.local.PhoneLocalProjectToolExecutor
 import app.momoding.core.runtime.local.PhoneLocalProjectWorkspace
+import app.momoding.core.runtime.local.TaskFolderGrantBinder
 import app.momoding.core.runtime.local.PhoneLocalScreenCaptureToolExecutor
 import app.momoding.core.runtime.local.PhoneLocalShizukuToolExecutor
 import app.momoding.core.runtime.local.PhoneLocalUiToolExecutor
@@ -74,6 +77,7 @@ class AppContainer(application: Application) {
     val sharedStorageRepository = SharedStorageRepository()
     val shizukuController = ShizukuController(application)
     val androidPermissionRequestCoordinator = AndroidPermissionRequestCoordinator()
+    val androidCapabilityRequestCoordinator = AndroidCapabilityRequestCoordinator()
     val androidCapabilityRegistry = AndroidCapabilityRegistry.create(
         context = application,
         folders = authorizedFoldersRepository,
@@ -163,6 +167,27 @@ class AppContainer(application: Application) {
     )
     private val phoneLocalShizukuToolExecutor =
         PhoneLocalShizukuToolExecutor(shizukuController)
+    private val phoneLocalCapabilityRequestToolExecutor =
+        PhoneLocalCapabilityRequestToolExecutor(
+            requester = androidCapabilityRequestCoordinator,
+            registry = androidCapabilityRegistry,
+            folderGrantBinder = TaskFolderGrantBinder { taskId, grantId ->
+                val folder = authorizedFoldersRepository.folders().firstOrNull {
+                    it.grantId == grantId && it.canRead
+                } ?: return@TaskFolderGrantBinder false
+                runCatching {
+                    phoneLocalProjectWorkspace.discardImportedTask(taskId)
+                }.getOrElse {
+                    return@TaskFolderGrantBinder false
+                }
+                runCatching {
+                    commandJournal.rebindTaskGrantFromExplicitSafSelection(
+                        taskId = taskId,
+                        grantId = folder.grantId,
+                    )
+                }.isSuccess
+            },
+        )
     val phoneLocalAttentionBridge = PhoneLocalAttentionBridge(
         ledger = RoomAttentionLedger(database),
         metadataTools = DeviceMetadataToolExecutor(
@@ -186,6 +211,7 @@ class AppContainer(application: Application) {
         screenCaptureTools = phoneLocalScreenCaptureToolExecutor,
         uiTools = phoneLocalUiToolExecutor,
         packageTools = phoneLocalShizukuToolExecutor,
+        capabilityRequestTools = phoneLocalCapabilityRequestToolExecutor,
         approvalModeForTask = { taskId ->
             database.momodingDao().task(taskId)?.approvalMode ?: TaskApprovalMode.REQUEST_APPROVAL
         },
