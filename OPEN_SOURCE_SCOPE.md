@@ -37,6 +37,11 @@ commit used to build the checked-in Pi runtime, while `exportRevision` identifie
 private commit from which the full public snapshot was copied. Keeping these separate makes the
 generated runtime reproducible even though the public repository has an independent Git history.
 
+Version labels such as P1A/P1B in the wire module and P2 in synthetic review fixtures are retained
+only where they identify a frozen compatibility contract. Product classes, build tasks, package
+names, and user-facing copy use Momoding or semantic capability names instead of internal phase
+labels.
+
 ## Public release gates
 
 A candidate is publishable only when:

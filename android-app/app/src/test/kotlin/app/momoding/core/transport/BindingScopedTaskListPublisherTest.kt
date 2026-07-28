@@ -72,7 +72,7 @@ class BindingScopedTaskListPublisherTest {
         finalPage.complete(taskListPage())
 
         assertTrue(synchronizing.await().isFailure)
-        assertEquals(emptyList<Any>(), database.p2Dao().allTasks())
+        assertEquals(emptyList<Any>(), database.momodingDao().allTasks())
     }
 
     private class MemoryStateStore(var snapshot: HostBindingSnapshot?) : HostStateStore {

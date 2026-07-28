@@ -68,7 +68,7 @@ class TaskListSynchronizerTest {
     fun partialFailurePreservesPreviousCacheExactly() = runTest {
         val old = summary(9, 9_000)
         merger.mergeCompleteList(1, listOf(old))
-        val before = database.p2Dao().allTasks()
+        val before = database.momodingDao().allTasks()
         val newer = summary(1, 3_000)
         val outOfOrder = summary(2, 4_000)
         val port = QueueTaskListPort(
@@ -80,7 +80,7 @@ class TaskListSynchronizerTest {
 
         expectFailure { TaskListSynchronizer(port, merger).synchronize() }
 
-        assertEquals(before, database.p2Dao().allTasks())
+        assertEquals(before, database.momodingDao().allTasks())
     }
 
     @Test

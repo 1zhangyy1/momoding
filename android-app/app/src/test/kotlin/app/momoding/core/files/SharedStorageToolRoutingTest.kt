@@ -52,8 +52,8 @@ class SharedStorageToolRoutingTest {
             ApplicationProvider.getApplicationContext<Context>(),
             MomodingDatabase::class.java,
         ).allowMainThreadQueries().build()
-        database.p2Dao().upsertTask(task())
-        database.p2Dao().insertDraft(draft())
+        database.momodingDao().upsertTask(task())
+        database.momodingDao().insertDraft(draft())
         temporary = Files.createTempDirectory("momoding-shared-routing").toFile()
         shared = SharedStorageRepository(
             rootDirectories = mapOf("downloads" to temporary),
@@ -230,7 +230,7 @@ class SharedStorageToolRoutingTest {
 
     @Test
     fun `wrong digest and cross task commit fail closed without mutation`() = runBlocking {
-        database.p2Dao().upsertTask(task(OTHER_TASK_ID))
+        database.momodingDao().upsertTask(task(OTHER_TASK_ID))
         val grant = shared.roots().single()
         val rootAlias = shared.metadata(grant.grantId).documents.single().alias
         val executor = DeviceFileChangeExecutor(
@@ -295,7 +295,7 @@ class SharedStorageToolRoutingTest {
                 ),
             )
             val record = requireNotNull(
-                database.p2Dao().deviceOperations(TASK_ID).single {
+                database.momodingDao().deviceOperations(TASK_ID).single {
                     it.piToolCallId == "pi-$id"
                 },
             )

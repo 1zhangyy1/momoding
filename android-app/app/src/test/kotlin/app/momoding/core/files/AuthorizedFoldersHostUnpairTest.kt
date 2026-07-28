@@ -51,7 +51,7 @@ class AuthorizedFoldersHostUnpairTest {
     @Test
     fun `host unpair erase preserves authorized folder until user revokes it`() = runTest {
         repository.authorize(TREE_URI, READ_WRITE_FLAGS)
-        val dao = database.p2Dao()
+        val dao = database.momodingDao()
         dao.upsertTask(hostTask())
         dao.insertDraft(hostDraft())
         dao.insertOutboundCommand(hostCommand())

@@ -46,7 +46,7 @@ class RoomAttentionLedgerTest {
         context = ApplicationProvider.getApplicationContext()
         context.deleteDatabase(DATABASE_NAME)
         openDatabase()
-        database.p2Dao().upsertTask(task())
+        database.momodingDao().upsertTask(task())
     }
 
     @After
@@ -60,12 +60,12 @@ class RoomAttentionLedgerTest {
         val first = accept(questionRequest())
         assertEquals(AttentionLedgerState.RECEIVED.name, first.operation.ledgerState)
         assertEquals(AttentionResponseState.PENDING.name, first.attention.responseState)
-        assertEquals(1, database.p2Dao().deviceOperations(TASK_ID).size)
-        assertEquals(1, database.p2Dao().localPendingAttention(TASK_ID).size)
+        assertEquals(1, database.momodingDao().deviceOperations(TASK_ID).size)
+        assertEquals(1, database.momodingDao().localPendingAttention(TASK_ID).size)
 
         val duplicate = accept(questionRequest())
         assertEquals(first, duplicate)
-        assertEquals(1, database.p2Dao().deviceOperations(TASK_ID).size)
+        assertEquals(1, database.momodingDao().deviceOperations(TASK_ID).size)
 
         assertThrows(AttentionLedgerConflictException::class.java) {
             accept(
@@ -156,7 +156,7 @@ class RoomAttentionLedgerTest {
         assertEquals(DeviceToolTerminalKind.TIMED_OUT.wireValue, past.operation.terminalKind)
 
         assertEquals(7, ledger.terminalOperationsReadyForDelivery(DEVICE_ID).size)
-        assertTrue(database.p2Dao().localPendingAttention(TASK_ID).none {
+        assertTrue(database.momodingDao().localPendingAttention(TASK_ID).none {
             it.responseState in setOf(
                 AttentionResponseState.PENDING.name,
                 AttentionResponseState.RESPONDING.name,
@@ -183,8 +183,8 @@ class RoomAttentionLedgerTest {
         assertThrows(IllegalArgumentException::class.java) {
             accept(questionRequest(callId(22)).copy(toolName = ""))
         }
-        assertTrue(database.p2Dao().deviceOperations(TASK_ID).isEmpty())
-        assertTrue(database.p2Dao().localPendingAttention(TASK_ID).isEmpty())
+        assertTrue(database.momodingDao().deviceOperations(TASK_ID).isEmpty())
+        assertTrue(database.momodingDao().localPendingAttention(TASK_ID).isEmpty())
     }
 
     @Test
@@ -306,8 +306,8 @@ class RoomAttentionLedgerTest {
             ))
         }
         database.openHelper.writableDatabase.execSQL("DROP TRIGGER fail_attention_insert")
-        assertNull(database.p2Dao().deviceOperation(CALL_ID))
-        assertNull(database.p2Dao().pendingAttention(CALL_ID))
+        assertNull(database.momodingDao().deviceOperation(CALL_ID))
+        assertNull(database.momodingDao().pendingAttention(CALL_ID))
     }
 
     @Test
@@ -333,8 +333,8 @@ class RoomAttentionLedgerTest {
         assertThrows(IllegalArgumentException::class.java) {
             accept(questionRequest(conflictingCall))
         }
-        assertNull(database.p2Dao().deviceOperation(conflictingCall))
-        assertNull(database.p2Dao().pendingAttention(conflictingCall))
+        assertNull(database.momodingDao().deviceOperation(conflictingCall))
+        assertNull(database.momodingDao().pendingAttention(conflictingCall))
 
         val argumentsConflictCall = callId(10)
         writeProjection(
@@ -349,8 +349,8 @@ class RoomAttentionLedgerTest {
         assertThrows(IllegalArgumentException::class.java) {
             accept(questionRequest(argumentsConflictCall))
         }
-        assertNull(database.p2Dao().deviceOperation(argumentsConflictCall))
-        assertNull(database.p2Dao().pendingAttention(argumentsConflictCall))
+        assertNull(database.momodingDao().deviceOperation(argumentsConflictCall))
+        assertNull(database.momodingDao().pendingAttention(argumentsConflictCall))
 
         listOf("terminal" to callId(23), "reconciled" to callId(24)).forEach { (state, callId) ->
             writeProjection(
@@ -466,7 +466,7 @@ class RoomAttentionLedgerTest {
         assertEquals(AttentionDeliveryState.HOST_TERMINAL_DURABLE.name, handled.operation.deliveryState)
         assertEquals(AttentionResponseState.ALREADY_ANSWERED.name, handled.attention.responseState)
         assertNull(handled.operation.terminalSha256)
-        assertNotNull(runBlocking { database.p2Dao().observeLocalAttention(TASK_ID, CALL_ID).first() })
+        assertNotNull(runBlocking { database.momodingDao().observeLocalAttention(TASK_ID, CALL_ID).first() })
         assertEquals(0, runBlocking {
             TaskRepository(database, kotlinx.coroutines.Dispatchers.Unconfined)
                 .observeTaskRows().first().single().attentionCount
@@ -513,7 +513,7 @@ class RoomAttentionLedgerTest {
         assertEquals("running", restored.operation.hostObservationState)
         assertEquals(AttentionDeliveryState.NOT_READY.name, restored.operation.deliveryState)
         assertEquals(AttentionResponseState.PENDING.name, restored.attention.responseState)
-        assertEquals("running", database.p2Dao().hostDeviceCallObservation(TASK_ID, CALL_ID)?.hostState)
+        assertEquals("running", database.momodingDao().hostDeviceCallObservation(TASK_ID, CALL_ID)?.hostState)
     }
 
     @Test
@@ -635,7 +635,7 @@ class RoomAttentionLedgerTest {
 
         val secondCall = callId(2)
         accept(questionRequest(secondCall))
-        database.p2Dao().insertOutboundCommand(activeStopCommand())
+        database.momodingDao().insertOutboundCommand(activeStopCommand())
         assertThrows(IllegalArgumentException::class.java) {
             ledger.recordTerminal(
                 AttentionTerminalWrite(optionResult(secondCall, 0, "Balanced approach"),
@@ -681,7 +681,7 @@ class RoomAttentionLedgerTest {
             )
         }
 
-        assertEquals(1, database.p2Dao().releaseActiveStopFences(TASK_ID, NOW + 3))
+        assertEquals(1, database.momodingDao().releaseActiveStopFences(TASK_ID, NOW + 3))
         val thirdCall = callId(6)
         accept(questionRequest(thirdCall))
         val answered = ledger.recordTerminal(
@@ -793,7 +793,7 @@ class RoomAttentionLedgerTest {
 
         writeProjection(store, projection("running", includeLocalCall = false))
         assertNotNull(ledger.record(CALL_ID))
-        assertTrue(database.p2Dao().hostDeviceCallObservations(TASK_ID).isEmpty())
+        assertTrue(database.momodingDao().hostDeviceCallObservations(TASK_ID).isEmpty())
 
         assertThrows(ProjectionCorruptionException::class.java) {
             writeProjection(store, projection("terminal", includeLocalCall = true, operationId = OPERATION_ID))

@@ -38,7 +38,7 @@ class PhoneLocalUiAttentionBridgeTest {
             ApplicationProvider.getApplicationContext<Context>(),
             MomodingDatabase::class.java,
         ).allowMainThreadQueries().build()
-        database.p2Dao().upsertTask(task())
+        database.momodingDao().upsertTask(task())
         ledger = RoomAttentionLedger(database) { 1_000L }
     }
 
@@ -56,7 +56,7 @@ class PhoneLocalUiAttentionBridgeTest {
 
         assertEquals(false, result?.isError)
         assertEquals("auto_policy", result?.details?.get("approvalOrigin")?.toString()?.trim('"'))
-        val operation = database.p2Dao().deviceOperations(TASK_ID).single()
+        val operation = database.momodingDao().deviceOperations(TASK_ID).single()
         assertEquals(AttentionLedgerState.TERMINAL.name, operation.ledgerState)
         assertEquals(AttentionResponseState.RESPONDING.name, ledger.record(operation.callId)?.attention?.responseState)
         assertEquals(1, handler.executionCount)
@@ -138,7 +138,7 @@ class PhoneLocalUiAttentionBridgeTest {
             "UI_ACTION_REAPPROVAL_REQUIRED",
             result?.contentPayload?.get("errorCode")?.toString()?.trim('"'),
         )
-        val operation = database.p2Dao().deviceOperations(TASK_ID).single()
+        val operation = database.momodingDao().deviceOperations(TASK_ID).single()
         assertEquals(AttentionLedgerState.TERMINAL.name, operation.ledgerState)
         assertEquals(DeviceToolTerminalKind.FAILED.wireValue, operation.terminalKind)
         assertTrue(

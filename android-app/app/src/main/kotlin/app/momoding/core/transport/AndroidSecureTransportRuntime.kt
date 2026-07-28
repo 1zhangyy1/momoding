@@ -68,7 +68,7 @@ class AndroidSecureTransportRuntime(
     private val coordinator = HostBindingCoordinator(
         stateStore = stateStore,
         vault = vault,
-        roomEraser = HostRoomEraser { database.p2Dao().eraseHostScopedData() },
+        roomEraser = HostRoomEraser { database.momodingDao().eraseHostScopedData() },
         connectionStopper = HostConnectionStopper { stopActiveActor() },
     )
     private val pairingAttemptOwner = PairingAttemptOwner(
@@ -355,7 +355,7 @@ class AndroidSecureTransportRuntime(
                 )
             },
             resumeCursorSource = ResumeCursorSource {
-                database.p2Dao().allTasks()
+                database.momodingDao().allTasks()
                     .asSequence()
                     .filter { it.streamId != null }
                     .sortedByDescending { it.updatedAtMillis }

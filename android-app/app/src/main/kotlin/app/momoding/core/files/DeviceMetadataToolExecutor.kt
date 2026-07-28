@@ -41,7 +41,7 @@ class DeviceMetadataToolExecutor(
     private val sharedStorage: SharedStorageRepository? = null,
     private val capabilityRegistry: AndroidCapabilityRegistry? = null,
 ) : DeviceMetadataToolHandler {
-    private val dao = database.p2Dao()
+    private val dao = database.momodingDao()
 
     override fun handles(toolName: String): Boolean = toolName in SUPPORTED_TOOLS
 

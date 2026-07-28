@@ -476,7 +476,7 @@ private val MIGRATION_15_16_STATEMENTS = listOf(
 )
 @TypeConverters(TaskApprovalModeRoomCodec::class)
 abstract class MomodingDatabase : RoomDatabase() {
-    abstract fun p2Dao(): P2Dao
+    abstract fun momodingDao(): MomodingDao
     abstract fun skillDao(): SkillDao
     abstract fun attachmentDao(): AttachmentDao
 

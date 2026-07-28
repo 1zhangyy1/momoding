@@ -32,7 +32,7 @@ class PhoneLocalChildAgentRepositoryTest {
             ApplicationProvider.getApplicationContext<Context>(),
             MomodingDatabase::class.java,
         ).allowMainThreadQueries().build()
-        database.p2Dao().upsertTask(task())
+        database.momodingDao().upsertTask(task())
         repository = PhoneLocalChildAgentRepository(database) { now }
     }
 
@@ -81,8 +81,8 @@ class PhoneLocalChildAgentRepositoryTest {
         assertEquals("COMPLETED", child.state)
         assertEquals("**Dependency** is pinned.", child.resultText)
         assertEquals(21, child.inputTokens)
-        assertEquals(1_000L, database.p2Dao().taskChildAgent(TASK_ID, "delegate-a")!!.createdAtMillis)
-        assertEquals(1_100L, database.p2Dao().taskChildAgent(TASK_ID, "delegate-a")!!.updatedAtMillis)
+        assertEquals(1_000L, database.momodingDao().taskChildAgent(TASK_ID, "delegate-a")!!.createdAtMillis)
+        assertEquals(1_100L, database.momodingDao().taskChildAgent(TASK_ID, "delegate-a")!!.updatedAtMillis)
     }
 
     @Test
@@ -92,7 +92,7 @@ class PhoneLocalChildAgentRepositoryTest {
 
         assertEquals(
             listOf("delegate-a", "delegate-b"),
-            database.p2Dao().taskChildAgents(TASK_ID).map { it.parentToolCallId },
+            database.momodingDao().taskChildAgents(TASK_ID).map { it.parentToolCallId },
         )
     }
 
@@ -110,7 +110,7 @@ class PhoneLocalChildAgentRepositoryTest {
                 listOf(completed.copy(state = "failed", terminalReason = "failed")),
             )
         }
-        assertEquals("COMPLETED", database.p2Dao().taskChildAgent(TASK_ID, "delegate-a")!!.state)
+        assertEquals("COMPLETED", database.momodingDao().taskChildAgent(TASK_ID, "delegate-a")!!.state)
     }
 
     @Test
@@ -120,7 +120,7 @@ class PhoneLocalChildAgentRepositoryTest {
         now += 1
         assertEquals(1, repository.recoverDestroyedRuntime())
         assertEquals(0, repository.recoverDestroyedRuntime())
-        val recovered = database.p2Dao().taskChildAgent(TASK_ID, "delegate-a")!!
+        val recovered = database.momodingDao().taskChildAgent(TASK_ID, "delegate-a")!!
         assertEquals("CANCELLED", recovered.state)
         assertEquals("runtime_rebuilt", recovered.terminalReason)
         assertEquals("aborted", recovered.stopReason)

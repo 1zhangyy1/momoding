@@ -11,7 +11,7 @@ import app.momoding.core.policy.TaskApprovalMode
 import kotlinx.coroutines.flow.Flow
 
 @Dao
-interface P2Dao {
+interface MomodingDao {
     @Query("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
     fun tableNames(): List<String>
 

@@ -49,7 +49,7 @@ class RoomAttentionPiDeliveryProofTest {
         context.deleteDatabase(DATABASE_NAME)
         tempRoot = Files.createTempDirectory("p2-7e-pi-proof-")
         openDatabase()
-        database.p2Dao().upsertTask(task(TASK_ID))
+        database.momodingDao().upsertTask(task(TASK_ID))
     }
 
     @After
@@ -484,7 +484,7 @@ class RoomAttentionPiDeliveryProofTest {
             receivedAtMillis = NOW,
             updatedAtMillis = NOW,
         )
-        database.p2Dao().insertDeviceOperation(operation)
+        database.momodingDao().insertDeviceOperation(operation)
         val fileToolResult = buildJsonObject {
             put("role", "toolResult")
             put("toolCallId", operation.piToolCallId)
@@ -509,7 +509,7 @@ class RoomAttentionPiDeliveryProofTest {
         )
 
         assertTrue(actions.toString(), actions.last() is AckReady)
-        assertEquals(operation, database.p2Dao().deviceOperation(callId))
+        assertEquals(operation, database.momodingDao().deviceOperation(callId))
         assertEquals(1, requireNotNull(store.read(TASK_ID)).messages.size)
     }
 
@@ -571,8 +571,8 @@ class RoomAttentionPiDeliveryProofTest {
         assertTrue(actions.toString(), actions.last() is AckReady)
         assertDelivered(callId, AttentionResponseState.RESOLVED)
         val visible = validatedAttentionRecords(
-            database.p2Dao().deviceOperations(TASK_ID),
-            database.p2Dao().localPendingAttention(TASK_ID),
+            database.momodingDao().deviceOperations(TASK_ID),
+            database.momodingDao().localPendingAttention(TASK_ID),
             ledger,
         ).filter { it.isTaskEntryVisible() }
         assertTrue(visible.isEmpty())
@@ -657,7 +657,7 @@ class RoomAttentionPiDeliveryProofTest {
         assertEquals(1, actions.size)
         assertTrue(actions.single() is ReceiverFailure)
         assertTrue(actions.none { it is AckReady })
-        assertNull(database.p2Dao().task(OTHER_TASK_ID))
+        assertNull(database.momodingDao().task(OTHER_TASK_ID))
         assertEquals(AttentionDeliveryState.READY_TO_SEND.name,
             requireNotNull(ledger.record(CALL_ID)).operation.deliveryState)
     }

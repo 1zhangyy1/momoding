@@ -84,10 +84,10 @@ class ShareImportCoordinatorTest {
                 .putExtra(Intent.EXTRA_TEXT, "Review https://example.test"),
         )
 
-        val draft = database.p2Dao().draft(result.draftId)
+        val draft = database.momodingDao().draft(result.draftId)
         assertEquals("Review https://example.test", draft?.text)
         assertEquals("Review https://example.test".length, draft?.selectionStart)
-        assertTrue(database.p2Dao().allTasks().isEmpty())
+        assertTrue(database.momodingDao().allTasks().isEmpty())
         assertTrue(attachments.observeDraftAttachments(result.draftId).first().isEmpty())
         assertTrue(result.notice.contains("Nothing has been sent"))
     }
@@ -105,7 +105,7 @@ class ShareImportCoordinatorTest {
         assertEquals(1, records.size)
         assertEquals(AttachmentKind.IMAGE, records.single().kind)
         assertFalse(records.single().displayName.contains("content://"))
-        assertTrue(database.p2Dao().allTasks().isEmpty())
+        assertTrue(database.momodingDao().allTasks().isEmpty())
     }
 
     @Test
@@ -123,7 +123,7 @@ class ShareImportCoordinatorTest {
         )
         assertTrue(attachments.observeDraftAttachments(invalid.draftId).first().isEmpty())
         assertTrue(invalid.notice.contains("could not be read"))
-        assertTrue(database.p2Dao().allTasks().isEmpty())
+        assertTrue(database.momodingDao().allTasks().isEmpty())
     }
 
     @Test
@@ -141,7 +141,7 @@ class ShareImportCoordinatorTest {
         assertEquals(AttachmentKind.VIDEO, record.kind)
         assertEquals("video/mp4", record.mimeType)
         assertTrue(result.notice.contains("cannot read video yet"))
-        assertTrue(database.p2Dao().allTasks().isEmpty())
+        assertTrue(database.momodingDao().allTasks().isEmpty())
     }
 
     private fun coordinator() = ShareImportCoordinator(

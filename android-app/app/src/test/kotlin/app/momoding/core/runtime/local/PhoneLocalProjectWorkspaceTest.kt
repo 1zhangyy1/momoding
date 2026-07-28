@@ -64,7 +64,7 @@ class PhoneLocalProjectWorkspaceTest {
             newGrantId = { GRANT_ID },
         )
         folders.authorize(TREE_URI, READ_WRITE_FLAGS)
-        database.p2Dao().upsertTask(
+        database.momodingDao().upsertTask(
             TaskEntity(
                 taskId = TASK_ID,
                 title = "Project terminal",
@@ -84,7 +84,7 @@ class PhoneLocalProjectWorkspaceTest {
                 updatedAtMillis = 100L,
             ),
         )
-        database.p2Dao().insertDraft(
+        database.momodingDao().insertDraft(
             DraftEntity(
                 draftId = "draft",
                 text = "Update the project",
@@ -142,8 +142,8 @@ class PhoneLocalProjectWorkspaceTest {
     fun `task grant change fails closed after import`() = runBlocking {
         val manager = manager()
         manager.importApprovedTask(TASK_ID)
-        val draft = requireNotNull(database.p2Dao().draft("draft"))
-        check(database.p2Dao().updateDraft(draft.copy(selectedGrantId = null)) == 1)
+        val draft = requireNotNull(database.momodingDao().draft("draft"))
+        check(database.momodingDao().updateDraft(draft.copy(selectedGrantId = null)) == 1)
 
         assertTrue(runCatching { manager.detectChanges(TASK_ID) }.exceptionOrNull() is SecurityException)
     }
@@ -239,7 +239,7 @@ class PhoneLocalProjectWorkspaceTest {
                 result.getValue("fileChanges").jsonObject
                     .getValue("state").jsonPrimitive.content,
             )
-            assertEquals(null, database.p2Dao().fileChangeSet(PREPARED_ID))
+            assertEquals(null, database.momodingDao().fileChangeSet(PREPARED_ID))
         }
 
     @Test
@@ -279,7 +279,7 @@ class PhoneLocalProjectWorkspaceTest {
                 listOf("src/Main.kt"),
                 changes.getValue("modifiedPaths").jsonArray.map { it.jsonPrimitive.content },
             )
-            assertEquals("PREPARED", database.p2Dao().fileChangeSet(PREPARED_ID)?.state)
+            assertEquals("PREPARED", database.momodingDao().fileChangeSet(PREPARED_ID)?.state)
         }
 
     @Test

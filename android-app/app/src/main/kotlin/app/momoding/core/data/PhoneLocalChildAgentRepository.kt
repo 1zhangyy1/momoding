@@ -12,7 +12,7 @@ class PhoneLocalChildAgentRepository(
     private val database: MomodingDatabase,
     private val nowMillis: () -> Long = System::currentTimeMillis,
 ) {
-    private val dao = database.p2Dao()
+    private val dao = database.momodingDao()
     private val json = Json { explicitNulls = false }
 
     /** Called synchronously from the Runtime owner thread after one destructive native outbox drain. */

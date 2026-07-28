@@ -122,10 +122,10 @@ android {
         layout.buildDirectory.get().dir("generated/p2-fixtures/debug").asFile,
     )
     sourceSets.getByName("debug").assets.srcDir(
-        layout.buildDirectory.get().dir("generated/e5b-runtime/assets").asFile,
+        layout.buildDirectory.get().dir("generated/phone-local-linux-runtime/assets").asFile,
     )
     sourceSets.getByName("debug").jniLibs.srcDir(
-        layout.buildDirectory.get().dir("generated/e5b-runtime/jniLibs").asFile,
+        layout.buildDirectory.get().dir("generated/phone-local-linux-runtime/jniLibs").asFile,
     )
 }
 
@@ -193,9 +193,11 @@ val p2FixtureSource = rootProject.layout.projectDirectory.file("../docs/design/f
 val p2FixtureGenerator = rootProject.layout.projectDirectory.file("../scripts/generate-p2-fixtures.mjs")
 val p2FixtureLibrary = rootProject.layout.projectDirectory.file("../scripts/lib/p2-fixture-projection.mjs")
 val p2FixtureOutput = layout.buildDirectory.file("generated/p2-fixtures/debug/p2-fixtures.json")
-val e5bRuntimeBuilder = rootProject.layout.projectDirectory.file("../scripts/build-phone-local-linux-runtime.sh")
-val e5bProotPatch = rootProject.layout.projectDirectory.file("../third_party/patches/proot-5.1.107.86-android-ndk.patch")
-val e5bRuntimeRoot = layout.buildDirectory.dir("generated/e5b-runtime")
+val phoneLocalLinuxRuntimeBuilder =
+    rootProject.layout.projectDirectory.file("../scripts/build-phone-local-linux-runtime.sh")
+val phoneLocalProotPatch =
+    rootProject.layout.projectDirectory.file("../third_party/patches/proot-5.1.107.86-android-ndk.patch")
+val phoneLocalLinuxRuntimeRoot = layout.buildDirectory.dir("generated/phone-local-linux-runtime")
 
 val generateP2FixtureProjection by tasks.registering(Exec::class) {
     inputs.files(p2FixtureSource, p2FixtureGenerator, p2FixtureLibrary)
@@ -208,15 +210,17 @@ val generateP2FixtureProjection by tasks.registering(Exec::class) {
     )
 }
 
-val prepareE5bRuntime by tasks.registering(Exec::class) {
-    inputs.files(e5bRuntimeBuilder, e5bProotPatch)
+val preparePhoneLocalLinuxRuntime by tasks.registering(Exec::class) {
+    inputs.files(phoneLocalLinuxRuntimeBuilder, phoneLocalProotPatch)
     outputs.files(
-        e5bRuntimeRoot.map { it.file("jniLibs/arm64-v8a/libmomoding_proot.so") },
-        e5bRuntimeRoot.map { it.file("jniLibs/arm64-v8a/libmomoding_proot_loader.so") },
-        e5bRuntimeRoot.map { it.file("assets/phone-local-runtime/alpine-minirootfs-3.23.5-aarch64.tgz") },
-        e5bRuntimeRoot.map { it.file("runtime-manifest.json") },
+        phoneLocalLinuxRuntimeRoot.map { it.file("jniLibs/arm64-v8a/libmomoding_proot.so") },
+        phoneLocalLinuxRuntimeRoot.map { it.file("jniLibs/arm64-v8a/libmomoding_proot_loader.so") },
+        phoneLocalLinuxRuntimeRoot.map {
+            it.file("assets/phone-local-runtime/alpine-minirootfs-3.23.5-aarch64.tgz")
+        },
+        phoneLocalLinuxRuntimeRoot.map { it.file("runtime-manifest.json") },
     )
-    commandLine(e5bRuntimeBuilder.asFile.absolutePath)
+    commandLine(phoneLocalLinuxRuntimeBuilder.asFile.absolutePath)
 }
 
 tasks.matching {
@@ -232,5 +236,5 @@ tasks.matching {
         it.name == "mergeDebugNativeLibs" ||
         (it.name.contains("Debug") && it.name.contains("lint", ignoreCase = true))
 }.configureEach {
-    dependsOn(prepareE5bRuntime)
+    dependsOn(preparePhoneLocalLinuxRuntime)
 }

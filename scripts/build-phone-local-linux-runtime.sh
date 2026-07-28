@@ -54,7 +54,7 @@ BUILD_ROOT="${MOMODING_LINUX_RUNTIME_BUILD_ROOT:-${TMPDIR:-/tmp}/momoding-linux-
 DOWNLOADS="$BUILD_ROOT/downloads"
 SOURCES="$BUILD_ROOT/sources"
 TALLOC_PREFIX="$BUILD_ROOT/talloc-prefix"
-GENERATED="$PROJECT_ROOT/android-app/app/build/generated/e5b-runtime"
+GENERATED="$PROJECT_ROOT/android-app/app/build/generated/phone-local-linux-runtime"
 JNI_OUT="$GENERATED/jniLibs/arm64-v8a"
 ASSET_OUT="$GENERATED/assets/phone-local-runtime"
 mkdir -p "$DOWNLOADS" "$SOURCES" "$TALLOC_PREFIX" "$JNI_OUT" "$ASSET_OUT"

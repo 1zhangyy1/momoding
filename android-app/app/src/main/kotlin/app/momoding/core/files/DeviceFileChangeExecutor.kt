@@ -71,7 +71,7 @@ class DeviceFileChangeExecutor(
     },
     private val sharedStorage: SharedStorageRepository? = null,
 ) {
-    private val dao = database.p2Dao()
+    private val dao = database.momodingDao()
 
     fun handlesPrepare(toolName: String): Boolean = toolName == PREPARE_TOOL
 

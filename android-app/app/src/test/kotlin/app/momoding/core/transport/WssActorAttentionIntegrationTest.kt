@@ -69,7 +69,7 @@ class WssActorAttentionIntegrationTest {
         database = Room.inMemoryDatabaseBuilder(context, MomodingDatabase::class.java)
             .allowMainThreadQueries()
             .build()
-        database.p2Dao().upsertTask(task())
+        database.momodingDao().upsertTask(task())
     }
 
     @After
@@ -212,7 +212,7 @@ class WssActorAttentionIntegrationTest {
             assertTrue(terminal.contains("\"terminal\":\"succeeded\""))
             assertEquals(null, RoomAttentionLedger(database).record(CALL_ID))
             assertTrue(
-                database.p2Dao().terminalOperationsReadyForDelivery(DEVICE_ID)
+                database.momodingDao().terminalOperationsReadyForDelivery(DEVICE_ID)
                     .none { it.callId == CALL_ID },
             )
         } finally {
@@ -262,7 +262,7 @@ class WssActorAttentionIntegrationTest {
             )
             assertEquals(null, RoomAttentionLedger(database).record(CALL_ID))
             assertTrue(
-                database.p2Dao().terminalOperationsReadyForDelivery(DEVICE_ID)
+                database.momodingDao().terminalOperationsReadyForDelivery(DEVICE_ID)
                     .none { it.callId == CALL_ID },
             )
         } finally {
@@ -320,7 +320,7 @@ class WssActorAttentionIntegrationTest {
 
     @Test
     fun `native replay continues during capability sync but readiness waits for both gates`() = runTest {
-        database.p2Dao().upsertTask(task().copy(streamId = STREAM_ID, throughSequence = 1))
+        database.momodingDao().upsertTask(task().copy(streamId = STREAM_ID, throughSequence = 1))
         val fixture = Fixture(
             this,
             database,
@@ -650,7 +650,7 @@ class WssActorAttentionIntegrationTest {
             val operation = ledger.record(CALL_ID)!!.operation
             assertEquals(
                 1,
-                database.p2Dao().updateDeviceOperation(
+                database.momodingDao().updateDeviceOperation(
                     operation.copy(requestSha256 = "0".repeat(64)),
                 ),
             )

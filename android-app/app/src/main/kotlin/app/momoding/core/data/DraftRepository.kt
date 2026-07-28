@@ -16,7 +16,7 @@ class DraftRepository(
     private val commandIdFactory: () -> String = { UUID.randomUUID().toString() },
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
-    private val dao = database.p2Dao()
+    private val dao = database.momodingDao()
     private val journal = RoomCommandDraftJournal(database, nowMillis = nowMillis)
 
     fun observeDraft(draftId: String): Flow<DraftRecord?> {

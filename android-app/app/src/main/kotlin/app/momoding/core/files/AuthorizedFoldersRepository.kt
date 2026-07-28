@@ -290,7 +290,7 @@ internal interface AuthorizedFolderStore {
 internal class RoomAuthorizedFolderStore(
     database: MomodingDatabase,
 ) : AuthorizedFolderStore {
-    private val dao = database.p2Dao()
+    private val dao = database.momodingDao()
 
     override suspend fun list(): List<AuthorizedFolderEntity> = dao.authorizedFolders()
 

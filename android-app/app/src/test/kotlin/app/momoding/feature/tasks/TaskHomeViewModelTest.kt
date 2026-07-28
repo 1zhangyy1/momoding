@@ -61,7 +61,7 @@ class TaskHomeViewModelTest {
     fun `open task durably marks read before navigation and submits read-only open afterward`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         Dispatchers.setMain(dispatcher)
-        database.p2Dao().upsertTask(task("task-1", readState = "UNREAD"))
+        database.momodingDao().upsertTask(task("task-1", readState = "UNREAD"))
         val repository = TaskRepository(database, dispatcher)
         val transport = MutableStateFlow(SecureTransportUiStatus(SecureTransportUiPhase.READY))
         val opened = mutableListOf<String>()
@@ -72,7 +72,7 @@ class TaskHomeViewModelTest {
             synchronizeTaskListAction = {},
             retryConnectionAction = {},
             openTaskAction = { taskId ->
-                readBeforeOpen = database.p2Dao().task(taskId)?.readState == "READ"
+                readBeforeOpen = database.momodingDao().task(taskId)?.readState == "READ"
                 opened += taskId
             },
             nowMillis = { 1_000L },
@@ -134,7 +134,7 @@ class TaskHomeViewModelTest {
     fun `exact attention marks read emits exact route then opens the same task best effort`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         Dispatchers.setMain(dispatcher)
-        database.p2Dao().upsertTask(task("task-attention", readState = "UNREAD"))
+        database.momodingDao().upsertTask(task("task-attention", readState = "UNREAD"))
         val repository = TaskRepository(database, dispatcher)
         val transport = MutableStateFlow(SecureTransportUiStatus(SecureTransportUiPhase.READY))
         val opened = mutableListOf<String>()
@@ -145,7 +145,7 @@ class TaskHomeViewModelTest {
             synchronizeTaskListAction = {},
             retryConnectionAction = {},
             openTaskAction = { taskId ->
-                readBeforeOpen = database.p2Dao().task(taskId)?.readState == "READ"
+                readBeforeOpen = database.momodingDao().task(taskId)?.readState == "READ"
                 opened += taskId
                 error("Host open is best effort after local navigation")
             },
@@ -169,7 +169,7 @@ class TaskHomeViewModelTest {
     fun `exact attention survives a late navigation collector without replaying twice`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         Dispatchers.setMain(dispatcher)
-        database.p2Dao().upsertTask(task("task-late-attention", readState = "UNREAD"))
+        database.momodingDao().upsertTask(task("task-late-attention", readState = "UNREAD"))
         val repository = TaskRepository(database, dispatcher)
         val opened = mutableListOf<String>()
         var readBeforeOpen = false
@@ -182,7 +182,7 @@ class TaskHomeViewModelTest {
             retryConnectionAction = {},
             openTaskAction = { taskId ->
                 readBeforeOpen =
-                    database.p2Dao().task(taskId)?.readState == "READ"
+                    database.momodingDao().task(taskId)?.readState == "READ"
                 opened += taskId
             },
         )
@@ -220,7 +220,7 @@ class TaskHomeViewModelTest {
     fun `attention without an exact call falls back to detail and still opens the same task`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         Dispatchers.setMain(dispatcher)
-        database.p2Dao().upsertTask(task("task-detail", readState = "UNREAD"))
+        database.momodingDao().upsertTask(task("task-detail", readState = "UNREAD"))
         val opened = mutableListOf<String>()
         val viewModel = TaskHomeViewModel(
             repository = TaskRepository(database, dispatcher),

@@ -44,8 +44,8 @@ class DeviceContentReadExecutorTest {
             ApplicationProvider.getApplicationContext<Context>(),
             MomodingDatabase::class.java,
         ).allowMainThreadQueries().build()
-        database.p2Dao().upsertTask(task())
-        database.p2Dao().insertDraft(draft())
+        database.momodingDao().upsertTask(task())
+        database.momodingDao().insertDraft(draft())
         access = FakeAccess()
         folders = AuthorizedFoldersRepository(
             store = RoomAuthorizedFolderStore(database),
@@ -76,14 +76,14 @@ class DeviceContentReadExecutorTest {
             .getValue("content").jsonPrimitive.content)
         assertFalse(result.toString().contains("content://"))
         assertFalse(result.toString().contains("provider-root"))
-        val grant = database.p2Dao().taskContentGrant(CALL_ID)
+        val grant = database.momodingDao().taskContentGrant(CALL_ID)
         assertNotNull(grant)
         assertEquals(5L, grant!!.consumedBytes)
         assertEquals(GRANT_ID, grant.grantId)
         assertTrue(grant.documentAliasesJson.contains(file.alias))
 
         folders.revoke(GRANT_ID)
-        assertNotNull(database.p2Dao().taskContentGrant(CALL_ID)?.revokedAtMillis)
+        assertNotNull(database.momodingDao().taskContentGrant(CALL_ID)?.revokedAtMillis)
         val revoked = runCatching { executor.execute(operation) }.exceptionOrNull()
         assertTrue(revoked is ContentReadExecutionFailure)
         assertEquals("CONTENT_SCOPE_EXPIRED", (revoked as ContentReadExecutionFailure).code)
@@ -124,7 +124,7 @@ class DeviceContentReadExecutorTest {
 
         assertTrue(failure is ContentReadExecutionFailure)
         assertEquals("CONTENT_READ_CANCELLED", (failure as ContentReadExecutionFailure).code)
-        assertEquals(null, database.p2Dao().taskContentGrant(CALL_ID))
+        assertEquals(null, database.momodingDao().taskContentGrant(CALL_ID))
     }
 
     private fun acceptRead(alias: String) = ledger.acceptRequest(

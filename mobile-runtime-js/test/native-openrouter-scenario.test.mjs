@@ -191,7 +191,7 @@ test("one phone-local task keeps the same real AgentHarness context across three
 
 test("phone-local task exposes real project terminal and test tools through the Android mailbox", async () => {
   const context = await bootRuntime();
-  const taskId = "task-e5b3-project-tools";
+  const taskId = "task-project-tools";
 
   JSON.parse(call(
     context,
@@ -388,8 +388,8 @@ test("a persisted Pi Session restores without replay and continues with full his
 
 test("Pi native images serialize to OpenRouter and restore only through attachment references", async () => {
   const firstProcess = await bootRuntime();
-  const taskId = "task-e7-native-images";
-  const sessionId = "session-e7-native-images";
+  const taskId = "task-native-images";
+  const sessionId = "session-native-images";
   const firstImage = {
     attachmentId: "11111111-1111-4111-8111-111111111111",
     mimeType: "image/jpeg",
@@ -502,8 +502,8 @@ test("Pi native images serialize to OpenRouter and restore only through attachme
 
 test("text attachments stay as Pi Session metadata and read through the Android task tool", async () => {
   const firstProcess = await bootRuntime();
-  const taskId = "task-e7-text-attachment";
-  const sessionId = "session-e7-text-attachment";
+  const taskId = "task-text-attachment";
+  const sessionId = "session-text-attachment";
   const attachment = {
     attachmentId: "55555555-5555-4555-8555-555555555555",
     displayName: "context.md",
@@ -603,11 +603,11 @@ test("image Session restore fails closed when private attachment bytes are unava
     () => call(
       context,
       "restoreNativeOpenRouterTaskSessionJson",
-      JSON.stringify("task-e7-missing-image"),
-      JSON.stringify("session-e7-missing-image"),
+      JSON.stringify("task-missing-image"),
+      JSON.stringify("session-missing-image"),
       JSON.stringify(1),
       JSON.stringify(JSON.stringify([{
-        id: "entry-e7-user",
+        id: "entry-user",
         parentId: null,
         timestamp: "2026-07-22T00:00:00.000Z",
         type: "message",
@@ -767,8 +767,8 @@ test("phone-local task stop cancels its active request and closes without late w
 
 test("Plan Mode restricts real Pi tools, restores exactly, survives rebuild, and rejects stale Implement", async () => {
   const context = await bootRuntime();
-  const taskId = "task-e6-plan";
-  const sessionId = "session-e6-plan";
+  const taskId = "task-plan";
+  const sessionId = "session-plan";
   JSON.parse(call(
     context,
     "startNativeOpenRouterTaskSessionJson",
@@ -1102,7 +1102,7 @@ test("delegate runs two isolated Pi child harnesses with overlapping Provider in
   JSON.parse(call(
     context,
     "startNativeOpenRouterTaskSessionJson",
-    JSON.stringify("task-e6-child-overlap"),
+    JSON.stringify("task-child-overlap"),
     JSON.stringify("Compare two Android release risks."),
     JSON.stringify("deepseek/deepseek-v4-pro"),
   ));
@@ -1122,7 +1122,7 @@ test("delegate runs two isolated Pi child harnesses with overlapping Provider in
     new Set(["delegate-build", "delegate-device"]),
   );
   for (const request of childRequests) {
-    assert.equal(request.parentTaskId, "task-e6-child-overlap");
+    assert.equal(request.parentTaskId, "task-child-overlap");
     assert.equal(request.tools, undefined, "child must not receive nested or side-effect tools");
     assert.equal(userTexts(request).length, 1, "each child must have isolated context");
     assert.equal(userTexts(request).includes("Compare two Android release risks."), false);
@@ -1646,7 +1646,7 @@ test("delegate keeps child failure explicit while the parent Pi turn can recover
   JSON.parse(call(
     context,
     "startNativeOpenRouterTaskSessionJson",
-    JSON.stringify("task-e6-child-failure"),
+    JSON.stringify("task-child-failure"),
     JSON.stringify("Delegate a risky analysis."),
     JSON.stringify("deepseek/deepseek-v4-pro"),
   ));
@@ -1697,7 +1697,7 @@ test("delegate enforces three children per parent turn and rejects the fourth", 
   JSON.parse(call(
     context,
     "startNativeOpenRouterTaskSessionJson",
-    JSON.stringify("task-e6-child-limit"),
+    JSON.stringify("task-child-limit"),
     JSON.stringify("Delegate the bounded release analysis."),
     JSON.stringify("deepseek/deepseek-v4-pro"),
   ));
@@ -1737,7 +1737,7 @@ test("one child can be cancelled without stopping the parent task", async () => 
   JSON.parse(call(
     context,
     "startNativeOpenRouterTaskSessionJson",
-    JSON.stringify("task-e6-child-cancel"),
+    JSON.stringify("task-child-cancel"),
     JSON.stringify("Delegate one cancellable analysis."),
     JSON.stringify("deepseek/deepseek-v4-pro"),
   ));
@@ -1796,7 +1796,7 @@ test("parent Stop cancels every running child without late Provider work", async
   JSON.parse(call(
     context,
     "startNativeOpenRouterTaskSessionJson",
-    JSON.stringify("task-e6-child-stop"),
+    JSON.stringify("task-child-stop"),
     JSON.stringify("Delegate two long analyses."),
     JSON.stringify("deepseek/deepseek-v4-pro"),
   ));
@@ -1976,7 +1976,7 @@ test("settled Harness replaces Skill resources exactly once and skips an identic
   JSON.parse(call(
     context,
     "startNativeOpenRouterTaskSessionJson",
-    JSON.stringify("task-e6-skills-resources"),
+    JSON.stringify("task-skills-resources"),
     JSON.stringify("Start without Skills."),
     JSON.stringify("deepseek/deepseek-v4-pro"),
   ));
@@ -2041,7 +2041,7 @@ test("invalid Skill resources and invocations fail before mutation or Provider w
   JSON.parse(call(
     context,
     "startNativeOpenRouterTaskSessionJson",
-    JSON.stringify("task-e6-skill-fail-closed"),
+    JSON.stringify("task-skill-fail-closed"),
     JSON.stringify("Establish one settled turn."),
     JSON.stringify("deepseek/deepseek-v4-pro"),
     "undefined",
@@ -2108,7 +2108,7 @@ test("explicit Skill invocation uses the same Pi Harness and fails before extra 
   JSON.parse(call(
     context,
     "startNativeOpenRouterTaskSessionJson",
-    JSON.stringify("task-e6-skill-turn"),
+    JSON.stringify("task-skill-turn"),
     JSON.stringify("Start a normal task."),
     JSON.stringify("deepseek/deepseek-v4-pro"),
     "undefined",
@@ -2167,7 +2167,7 @@ test("explicit Skill invocation uses the same Pi Harness and fails before extra 
   JSON.parse(call(
     context,
     "startNativeOpenRouterTaskGoalJson",
-    JSON.stringify("goal-e6-skill-conflict"),
+    JSON.stringify("goal-skill-conflict"),
     JSON.stringify("Keep the Skill conflict explicit."),
     "1",
     "1",
@@ -2188,7 +2188,7 @@ test("explicit Skill invocation uses the same Pi Harness and fails before extra 
   JSON.parse(call(
     context,
     "setNativeOpenRouterTaskGoalStateJson",
-    JSON.stringify("goal-e6-skill-conflict"),
+    JSON.stringify("goal-skill-conflict"),
     "1",
     JSON.stringify("cleared"),
   ));
@@ -2220,7 +2220,7 @@ test("a New Task can start with a Skill and restore its resources without replay
   JSON.parse(call(
     firstProcess,
     "startNativeOpenRouterTaskSkillSessionJson",
-    JSON.stringify("task-e6-new-skill"),
+    JSON.stringify("task-new-skill"),
     JSON.stringify("mobile-review"),
     JSON.stringify("Review the initial task."),
     JSON.stringify("deepseek/deepseek-v4-pro"),
@@ -2249,7 +2249,7 @@ test("a New Task can start with a Skill and restore its resources without replay
     restored,
     "restoreNativeOpenRouterTaskSessionJson",
     JSON.stringify(snapshot.taskId),
-    JSON.stringify("task-e6-new-skill"),
+    JSON.stringify("task-new-skill"),
     JSON.stringify(snapshot.turnCount),
     JSON.stringify(JSON.stringify(snapshot.entries)),
     JSON.stringify("deepseek/deepseek-v4-pro"),

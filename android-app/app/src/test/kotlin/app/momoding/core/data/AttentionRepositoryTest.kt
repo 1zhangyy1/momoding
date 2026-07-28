@@ -40,8 +40,8 @@ class AttentionRepositoryTest {
             ApplicationProvider.getApplicationContext<Context>(),
             MomodingDatabase::class.java,
         ).allowMainThreadQueries().build()
-        database.p2Dao().upsertTask(task(TASK_ID))
-        database.p2Dao().upsertTask(task(OTHER_TASK_ID))
+        database.momodingDao().upsertTask(task(TASK_ID))
+        database.momodingDao().upsertTask(task(OTHER_TASK_ID))
         ledger = RoomAttentionLedger(database) { 10L }
         repository = AttentionRepository(database, Dispatchers.Unconfined)
     }
@@ -128,8 +128,8 @@ class AttentionRepositoryTest {
             repository.current(TASK_ID, FAILED_CALL_ID),
         )
 
-        val valid = database.p2Dao().pendingAttention(CALL_ID)!!
-        database.p2Dao().updatePendingAttention(
+        val valid = database.momodingDao().pendingAttention(CALL_ID)!!
+        database.momodingDao().updatePendingAttention(
             valid.copy(responseState = AttentionResponseState.RESPONDING.name),
         )
         assertEquals(AttentionRecordState.Corrupt, repository.current(TASK_ID, CALL_ID))
@@ -146,7 +146,7 @@ class AttentionRepositoryTest {
                 }
                 .first()
         }
-        database.p2Dao().insertOutboundCommand(
+        database.momodingDao().insertOutboundCommand(
             OutboundCommandEntity(
                 requestId = REQUEST_ID,
                 commandId = COMMAND_ID,

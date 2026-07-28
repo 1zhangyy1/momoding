@@ -38,7 +38,7 @@ class TaskRepository(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val nowMillis: () -> Long = System::currentTimeMillis,
 ) {
-    private val dao = database.p2Dao()
+    private val dao = database.momodingDao()
     private val attentionValidator = RoomAttentionLedger(database)
 
     fun observeTaskRows(): Flow<List<TaskListRow>> = dao.observeTaskListRows().map { rows ->

@@ -281,7 +281,7 @@ class RoomDurabilityTest {
                 )
             }
         }
-        assertTrue(onIo { database.p2Dao().outboundCommands() }.isEmpty())
+        assertTrue(onIo { database.momodingDao().outboundCommands() }.isEmpty())
 
         val canonical = onIo {
             journal.persistAccepted(
@@ -339,7 +339,7 @@ class RoomDurabilityTest {
                 }
             }
         }
-        assertTrue(onIo { database.p2Dao().drafts() }.isEmpty())
+        assertTrue(onIo { database.momodingDao().drafts() }.isEmpty())
 
         val normalizedDraft = onIo {
             journal.saveDraft(
@@ -700,7 +700,7 @@ class RoomDurabilityTest {
             ),
         )
         onIo { writeProjection(store, baseline) }
-        val stableBefore = onIo { database.p2Dao().timeline(TASK_ID).single().stableItemId }
+        val stableBefore = onIo { database.momodingDao().timeline(TASK_ID).single().stableItemId }
 
         val actions = onIo {
             ReliabilityReceiver(tempRoot.resolve("history-success"), store).use { receiver ->
@@ -722,7 +722,7 @@ class RoomDurabilityTest {
         assertEquals(listOf(1L, 2L), committed.stagedRawFrameBatches.map { it.batchOrdinal })
         assertEquals(3, committed.stagedRawFrameBatches.last().frames.size)
         val stableAfter = onIo {
-            database.p2Dao().timeline(TASK_ID).single { it.ordinal == 1L }.stableItemId
+            database.momodingDao().timeline(TASK_ID).single { it.ordinal == 1L }.stableItemId
         }
         assertEquals(stableBefore, stableAfter)
 
@@ -753,7 +753,7 @@ class RoomDurabilityTest {
                 ),
             )
         }
-        val localBeforeList = onIo { database.p2Dao().task(TASK_ID) }!!
+        val localBeforeList = onIo { database.momodingDao().task(TASK_ID) }!!
         val merger = RoomTaskListMerger(
             database = database,
             nowMillis = { clock.getAndIncrement() },
@@ -777,7 +777,7 @@ class RoomDurabilityTest {
         assertEquals("existing", mergedExisting.title)
         assertEquals(2_000L, mergedExisting.hostUpdatedAtMillis)
         assertEquals(7L, mergedExisting.lastListRevision)
-        assertEquals(1, onIo { database.p2Dao().timeline(TASK_ID) }.size)
+        assertEquals(1, onIo { database.momodingDao().timeline(TASK_ID) }.size)
 
         onIo {
             writeProjection(
@@ -796,7 +796,7 @@ class RoomDurabilityTest {
                 ),
             )
         }
-        val afterProjection = onIo { database.p2Dao().task(TASK_ID) }!!
+        val afterProjection = onIo { database.momodingDao().task(TASK_ID) }!!
         assertTrue(afterProjection.updatedAtMillis > localBeforeList.updatedAtMillis)
         assertEquals("existing", afterProjection.title)
         assertEquals(2_000L, afterProjection.hostUpdatedAtMillis)
@@ -809,8 +809,8 @@ class RoomDurabilityTest {
             listOf(OTHER_TASK_ID, TASK_ID),
             onIo { RoomTaskListMerger(database).listedTasks() }.map { it.taskId },
         )
-        assertEquals(2_000L, onIo { database.p2Dao().task(TASK_ID) }?.hostUpdatedAtMillis)
-        assertEquals(1, onIo { database.p2Dao().timeline(TASK_ID) }.size)
+        assertEquals(2_000L, onIo { database.momodingDao().task(TASK_ID) }?.hostUpdatedAtMillis)
+        assertEquals(1, onIo { database.momodingDao().timeline(TASK_ID) }.size)
         assertNotNull(onIo { store.read(TASK_ID) })
 
         val secondMerger = RoomTaskListMerger(
@@ -825,11 +825,11 @@ class RoomDurabilityTest {
             )
         }
         assertEquals(listOf(OTHER_TASK_ID), onIo { secondMerger.listedTasks() }.map { it.taskId })
-        assertEquals("", onIo { database.p2Dao().task(OTHER_TASK_ID) }?.title)
-        assertFalse(onIo { database.p2Dao().task(TASK_ID) }!!.listedByHost)
-        assertEquals(1, onIo { database.p2Dao().timeline(TASK_ID) }.size)
+        assertEquals("", onIo { database.momodingDao().task(OTHER_TASK_ID) }?.title)
+        assertFalse(onIo { database.momodingDao().task(TASK_ID) }!!.listedByHost)
+        assertEquals(1, onIo { database.momodingDao().timeline(TASK_ID) }.size)
 
-        val beforeFault = onIo { database.p2Dao().allTasks() }
+        val beforeFault = onIo { database.momodingDao().allTasks() }
         installFaultTrigger("fail_list_merge", "tasks", "UPDATE")
         assertThrows(SQLiteException::class.java) {
             onIo {
@@ -847,13 +847,13 @@ class RoomDurabilityTest {
             }
         }
         dropTrigger("fail_list_merge")
-        assertEquals(beforeFault, onIo { database.p2Dao().allTasks() })
-        assertEquals(1, onIo { database.p2Dao().timeline(TASK_ID) }.size)
+        assertEquals(beforeFault, onIo { database.momodingDao().allTasks() })
+        assertEquals(1, onIo { database.momodingDao().timeline(TASK_ID) }.size)
     }
 
     @Test
     fun `schema is versioned adds Android private file state and rejects main-thread access`() {
-        val tables = onIo { database.p2Dao().tableNames() }.filterNot { it.startsWith("room_") }
+        val tables = onIo { database.momodingDao().tableNames() }.filterNot { it.startsWith("room_") }
         assertEquals(16, MomodingDatabase.SCHEMA_VERSION)
         assertEquals(
             setOf(
@@ -894,7 +894,7 @@ class RoomDurabilityTest {
         assertEquals(listOf("skills"), tables.filter { it == "skills" })
         assertEquals(listOf("attachments"), tables.filter { it == "attachments" })
         assertThrows(IllegalStateException::class.java) {
-            database.p2Dao().task(TASK_ID)
+            database.momodingDao().task(TASK_ID)
         }
     }
 

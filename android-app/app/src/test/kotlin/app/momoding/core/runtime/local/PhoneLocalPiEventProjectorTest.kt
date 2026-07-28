@@ -227,7 +227,7 @@ class PhoneLocalPiEventProjectorTest {
             )
 
             projector.markRunState(TASK_ID, TaskRunState.STARTING, isStreaming = true)
-            assertEquals(null, database.p2Dao().task(TASK_ID)?.failureKind)
+            assertEquals(null, database.momodingDao().task(TASK_ID)?.failureKind)
         }
 
     @Test
@@ -267,7 +267,7 @@ class PhoneLocalPiEventProjectorTest {
         assertEquals(events.size, durable?.rawEvents?.size)
         assertEquals(2, durable?.stagedRawFrameBatches?.size)
         assertEquals(events.size, durable?.stagedRawFrameBatches?.last()?.frames?.size)
-        assertEquals(1, database.p2Dao().timeline(TASK_ID).size)
+        assertEquals(1, database.momodingDao().timeline(TASK_ID).size)
     }
 
     @Test
@@ -284,7 +284,7 @@ class PhoneLocalPiEventProjectorTest {
             streamId = STREAM_ID,
             initialPrompt = "Keep this readable.",
         )
-        database.p2Dao().upsertPiSessionSnapshot(
+        database.momodingDao().upsertPiSessionSnapshot(
             PiSessionSnapshotEntity(
                 taskId = TASK_ID,
                 piSessionId = SESSION_ID,
@@ -322,24 +322,24 @@ class PhoneLocalPiEventProjectorTest {
         )
 
         projector.stabilizeTaskTitle(TASK_ID)
-        assertEquals("Review the Android project", database.p2Dao().task(TASK_ID)?.title)
-        assertEquals("AUTOMATIC", database.p2Dao().task(TASK_ID)?.titleSource)
+        assertEquals("Review the Android project", database.momodingDao().task(TASK_ID)?.title)
+        assertEquals("AUTOMATIC", database.momodingDao().task(TASK_ID)?.titleSource)
 
-        database.p2Dao().upsertTask(
-            requireNotNull(database.p2Dao().task(TASK_ID)).copy(
+        database.momodingDao().upsertTask(
+            requireNotNull(database.momodingDao().task(TASK_ID)).copy(
                 title = "Review the Android project · preserved after another turn",
             ),
         )
         projector.stabilizeTaskTitle(TASK_ID)
         assertEquals(
             "Review the Android project · preserved after another turn",
-            database.p2Dao().task(TASK_ID)?.title,
+            database.momodingDao().task(TASK_ID)?.title,
         )
 
-        database.p2Dao().renameTask(TASK_ID, "My durable task name")
+        database.momodingDao().renameTask(TASK_ID, "My durable task name")
         projector.stabilizeTaskTitle(TASK_ID)
-        assertEquals("My durable task name", database.p2Dao().task(TASK_ID)?.title)
-        assertEquals("USER", database.p2Dao().task(TASK_ID)?.titleSource)
+        assertEquals("My durable task name", database.momodingDao().task(TASK_ID)?.title)
+        assertEquals("USER", database.momodingDao().task(TASK_ID)?.titleSource)
     }
 
     @Test

@@ -80,7 +80,7 @@ class DraftRepositoryTest {
             val repaired = repository.repairDraft("draft-selection")!!
             assertEquals(0, repaired.selectionStart)
             assertEquals(0, repaired.selectionEnd)
-            val durable = database.p2Dao().draft("draft-selection")!!
+            val durable = database.momodingDao().draft("draft-selection")!!
             assertEquals(0, durable.selectionStart)
             assertEquals(0, durable.selectionEnd)
         }

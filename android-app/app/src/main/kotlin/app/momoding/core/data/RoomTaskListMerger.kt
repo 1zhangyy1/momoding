@@ -18,7 +18,7 @@ class RoomTaskListMerger(
     private val nowMillis: () -> Long = System::currentTimeMillis,
     private val generationFactory: () -> String = { UUID.randomUUID().toString() },
 ) {
-    private val dao = database.p2Dao()
+    private val dao = database.momodingDao()
 
     fun mergeCompleteList(
         listRevision: Long,

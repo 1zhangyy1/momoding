@@ -117,7 +117,7 @@ class RoomAttentionLedger(
     private val database: MomodingDatabase,
     private val nowMillis: () -> Long = System::currentTimeMillis,
 ) {
-    private val dao = database.p2Dao()
+    private val dao = database.momodingDao()
 
     fun record(callId: String): AttentionLedgerRecord? =
         database.runInTransaction<AttentionLedgerRecord?> {

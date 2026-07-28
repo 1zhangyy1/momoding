@@ -70,7 +70,7 @@ class AttentionApplicationCoordinatorTest {
             .allowMainThreadQueries()
             .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
             .build()
-        database.p2Dao().upsertTask(task())
+        database.momodingDao().upsertTask(task())
         ledger = RoomAttentionLedger(database) { now }
         journal = RoomCommandDraftJournal(database, nowMillis = { now })
         ids = ArrayDeque((100..180).map(::uuid))
@@ -213,7 +213,7 @@ class AttentionApplicationCoordinatorTest {
         val accepted = contentCoordinator.handleDeviceRequest(contentReadFrame(allowed))
         assertEquals("device.tool.progress", accepted.oneWayFrames.single().kind)
         assertTrue(accepted.oneWayFrames.single().canonicalPayload.contains("file content approval"))
-        database.p2Dao().insertTaskContentGrant(
+        database.momodingDao().insertTaskContentGrant(
             TaskContentGrantEntity(
                 callId = allowed,
                 taskId = TASK_ID,
@@ -242,7 +242,7 @@ class AttentionApplicationCoordinatorTest {
         assertNull(beforeDiscard.attention.terminalDisplayJson)
         contentCoordinator.discardLiveContentRead(TASK_ID, allowed)
         assertNull(ledger.record(allowed))
-        assertNull(database.p2Dao().taskContentGrant(allowed))
+        assertNull(database.momodingDao().taskContentGrant(allowed))
         assertTrue(ledger.terminalOperationsReadyForDelivery(DEVICE_ID).none { it.callId == allowed })
 
         val denied = uuid(31)
@@ -373,7 +373,7 @@ class AttentionApplicationCoordinatorTest {
         assertEquals(listOf(CALL_ID), expired.terminalCandidates.map { it.callId })
         assertEquals(AttentionLedgerState.TIMED_OUT.name, ledger.record(CALL_ID)!!.operation.ledgerState)
 
-        database.p2Dao().updateDeviceOperation(
+        database.momodingDao().updateDeviceOperation(
             ledger.record(CALL_ID)!!.operation.copy(hostObservationState = "terminal"),
         )
         coordinator.onProjectionCommitted(TASK_ID)
@@ -389,7 +389,7 @@ class AttentionApplicationCoordinatorTest {
         coordinator.handleDeviceRequest(questionFrame(CALL_ID))
         coordinator.submitDecision(AttentionUserDecision.Skip(CALL_ID))
         ledger.markSent(CALL_ID)
-        database.p2Dao().updateDeviceOperation(
+        database.momodingDao().updateDeviceOperation(
             ledger.record(CALL_ID)!!.operation.copy(hostObservationState = "terminal"),
         )
         val restarted = AttentionApplicationCoordinator(
@@ -845,7 +845,7 @@ class AttentionApplicationCoordinatorTest {
         )
         ready(restarted, generation = 2)
         restarted.handleDeviceRequest(questionFrame(CALL_ID))
-        database.p2Dao().upsertTask(task(unknownTask))
+        database.momodingDao().upsertTask(task(unknownTask))
         val wrong = restarted.handleReconcileRequest(
             reconcileRaw(
                 requestId = "wrong-task-reconcile",
@@ -1067,7 +1067,7 @@ class AttentionApplicationCoordinatorTest {
         coordinator.handleDeviceRequest(questionFrame(CALL_ID))
         coordinator.submitDecision(AttentionUserDecision.Skip(CALL_ID))
         val original = ledger.record(CALL_ID)!!.operation
-        database.p2Dao().updateDeviceOperation(
+        database.momodingDao().updateDeviceOperation(
             original.copy(requestSha256 = "0".repeat(64)),
         )
         val requestCorrupt = coordinator.handleReconcileRequest(
@@ -1087,7 +1087,7 @@ class AttentionApplicationCoordinatorTest {
                 .getValue("state").jsonPrimitive.content,
         )
 
-        database.p2Dao().updateDeviceOperation(original.copy(terminalKind = "failed"))
+        database.momodingDao().updateDeviceOperation(original.copy(terminalKind = "failed"))
         val terminalCorrupt = coordinator.handleReconcileRequest(
             reconcileRaw(
                 requestId = "terminal-corrupt-reconcile",
@@ -1107,7 +1107,7 @@ class AttentionApplicationCoordinatorTest {
 
         val corruptFrame = original.terminalFrameCanonicalJson!!
             .replace("\"deviceId\":\"$DEVICE_ID\"", "\"deviceId\":\"wrong-device\"")
-        database.p2Dao().updateDeviceOperation(original.copy(
+        database.momodingDao().updateDeviceOperation(original.copy(
             terminalFrameCanonicalJson = corruptFrame,
             terminalSha256 = sha256(corruptFrame.encodeToByteArray()),
         ))

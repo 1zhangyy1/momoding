@@ -53,7 +53,7 @@ class FileChangeRepository(
     database: MomodingDatabase,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
-    private val dao = database.p2Dao()
+    private val dao = database.momodingDao()
 
     fun observe(taskId: String, commitCallId: String?): Flow<FileChangeRecordState> =
         (commitCallId?.let(dao::observeFileChangeSetByCommitCall)

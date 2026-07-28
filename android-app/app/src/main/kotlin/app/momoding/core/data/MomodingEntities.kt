@@ -1,5 +1,7 @@
 package app.momoding.core.data
 
+// Persistent entities owned by the Momoding Room database.
+
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index

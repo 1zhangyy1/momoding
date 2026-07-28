@@ -43,7 +43,7 @@ class DeviceContentReadExecutor(
     private val sharedStorage: SharedStorageRepository? = null,
     private val nowMillis: () -> Long = System::currentTimeMillis,
 ) : DeviceContentReadHandler {
-    private val dao = database.p2Dao()
+    private val dao = database.momodingDao()
 
     override suspend fun execute(operation: DeviceOperationEntity): JsonObject = try {
         withTimeout(READ_TIMEOUT_MILLIS) {

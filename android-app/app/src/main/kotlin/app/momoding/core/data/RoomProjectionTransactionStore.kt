@@ -37,7 +37,7 @@ class RoomProjectionTransactionStore(
     private val database: MomodingDatabase,
     private val nowMillis: () -> Long = System::currentTimeMillis,
 ) : ProjectionTransactionStore {
-    private val dao: P2Dao = database.p2Dao()
+    private val dao: MomodingDao = database.momodingDao()
     private val attentionValidator = RoomAttentionLedger(database, nowMillis)
 
     override fun read(taskId: String): DurableTaskProjection? =

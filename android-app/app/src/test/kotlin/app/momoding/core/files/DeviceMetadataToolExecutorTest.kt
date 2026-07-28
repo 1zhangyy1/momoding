@@ -55,7 +55,7 @@ class DeviceMetadataToolExecutorTest {
             newGrantId = { GRANT_ID },
         )
         repository.authorize(TREE_URI, READ_WRITE_FLAGS)
-        database.p2Dao().insertDraft(draft(TASK_ID, GRANT_ID))
+        database.momodingDao().insertDraft(draft(TASK_ID, GRANT_ID))
         executor = DeviceMetadataToolExecutor(database, repository)
     }
 
@@ -178,7 +178,7 @@ class DeviceMetadataToolExecutorTest {
 
     @Test
     fun `task without a folder can query capabilities but cannot list files`() = runBlocking {
-        database.p2Dao().insertDraft(draft(OTHER_TASK_ID, null))
+        database.momodingDao().insertDraft(draft(OTHER_TASK_ID, null))
 
         val capabilities = executor.execute(request(
             taskId = OTHER_TASK_ID,

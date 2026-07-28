@@ -74,8 +74,8 @@ class PhoneLocalPiEventProjector(
             "PI_MOBILE_TASK_INPUT_EMPTY"
         }
         database.runInTransaction {
-            check(database.p2Dao().task(taskId) == null) { "PI_MOBILE_TASK_ALREADY_EXISTS" }
-            database.p2Dao().upsertTask(
+            check(database.momodingDao().task(taskId) == null) { "PI_MOBILE_TASK_ALREADY_EXISTS" }
+            database.momodingDao().upsertTask(
                 TaskEntity(
                     taskId = taskId,
                     title = title,
@@ -162,11 +162,11 @@ class PhoneLocalPiEventProjector(
 
     fun stabilizeTaskTitle(taskId: String) {
         database.runInTransaction {
-            val current = requireNotNull(database.p2Dao().task(taskId)) {
+            val current = requireNotNull(database.momodingDao().task(taskId)) {
                 "PI_MOBILE_TASK_NOT_FOUND"
             }
             if (current.titleSource in setOf("USER", "AUTOMATIC")) return@runInTransaction
-            database.p2Dao().setAutomaticTaskTitle(
+            database.momodingDao().setAutomaticTaskTitle(
                 taskId,
                 automaticTaskTitle(current.title),
             )
@@ -179,7 +179,7 @@ class PhoneLocalPiEventProjector(
         isStreaming: Boolean,
     ) {
         database.runInTransaction {
-            val current = requireNotNull(database.p2Dao().task(taskId)) {
+            val current = requireNotNull(database.momodingDao().task(taskId)) {
                 "PI_MOBILE_TASK_NOT_FOUND"
             }
             val messages = if (runState == TaskRunState.FAILED) {
@@ -193,7 +193,7 @@ class PhoneLocalPiEventProjector(
                 messages = messages,
                 previous = current.storedTaskFailure(),
             )
-            database.p2Dao().upsertTask(
+            database.momodingDao().upsertTask(
                 current.copy(
                     runState = runState.name,
                     isStreaming = isStreaming,
@@ -209,7 +209,7 @@ class PhoneLocalPiEventProjector(
     fun interruptStaleLocalRuns(): Int = database.runInTransaction<Int> {
         var interrupted = 0
         val failure = requireNotNull(taskFailureForRunState(TaskRunState.INTERRUPTED.name))
-        database.p2Dao().allTasks()
+        database.momodingDao().allTasks()
             .filter { task ->
                 task.lastListSyncGeneration == null &&
                     task.hostUpdatedAtMillis == null &&
@@ -217,7 +217,7 @@ class PhoneLocalPiEventProjector(
                     task.runState in ACTIVE_RUN_STATES
             }
             .forEach { task ->
-                database.p2Dao().upsertTask(
+                database.momodingDao().upsertTask(
                     task.copy(
                         runState = TaskRunState.INTERRUPTED.name,
                         recoveryState = RecoveryState.INTERRUPTED.name,

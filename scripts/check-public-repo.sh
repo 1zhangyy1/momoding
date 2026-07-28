@@ -152,6 +152,20 @@ if [[ -n "$milestone_matches" ]]; then
   fail "internal milestone identifier found outside the public wire protocol"
   printf '%s\n' "$milestone_matches" >&2
 fi
+source_naming_matches="$(
+  git grep -nI -E \
+    'P2Dao|p2Dao|e5b-runtime|prepareE5b|task-e[567]-|session-e[67]-|goal-e6-|entry-e7-' -- \
+      android-app/app/build.gradle.kts \
+      android-app/app/src/main \
+      android-app/app/src/test \
+      mobile-runtime-js/test \
+      scripts/build-phone-local-linux-runtime.sh \
+      2>/dev/null || true
+)"
+if [[ -n "$source_naming_matches" ]]; then
+  fail "internal phase name found in a public source or build identifier"
+  printf '%s\n' "$source_naming_matches" >&2
+fi
 
 if ! grep -q 'namespace = "app.momoding"' android-app/app/build.gradle.kts; then
   fail "Android namespace must be app.momoding"

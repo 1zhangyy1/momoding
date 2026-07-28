@@ -88,7 +88,7 @@ class TaskDetailRepository(
     database: MomodingDatabase,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
-    private val dao = database.p2Dao()
+    private val dao = database.momodingDao()
     private val attentionValidator = RoomAttentionLedger(database)
 
     fun observe(taskId: String): Flow<TaskDetailSnapshot?> {

@@ -41,7 +41,7 @@ class TaskDetailRepositoryTest {
 
     @Test
     fun `atomic task detail read includes ordered timeline and durable stop fence`() = runTest {
-        val dao = database.p2Dao()
+        val dao = database.momodingDao()
         dao.upsertTask(task(windowEnd = 2))
         dao.insertTimeline(
             listOf(
@@ -138,7 +138,7 @@ class TaskDetailRepositoryTest {
 
     @Test
     fun `noncontiguous timeline fails closed`() {
-        val dao = database.p2Dao()
+        val dao = database.momodingDao()
         dao.upsertTask(task(windowEnd = 2))
         dao.insertTimeline(
             listOf(timeline("message-2", 1, """{"role":"user","content":[{"type":"text","text":"gap"}]}""")),

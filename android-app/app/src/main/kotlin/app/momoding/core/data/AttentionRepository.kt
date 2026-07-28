@@ -158,7 +158,7 @@ class AttentionRepository(
         )
     },
 ) : AttentionDataSource {
-    private val dao = database.p2Dao()
+    private val dao = database.momodingDao()
     private val ledger = RoomAttentionLedger(database)
 
     override fun observe(taskId: String, callId: String): Flow<AttentionRecordState> =

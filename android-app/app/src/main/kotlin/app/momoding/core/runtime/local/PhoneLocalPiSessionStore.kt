@@ -64,14 +64,14 @@ class PhoneLocalPiSessionStore(
         snapshot: PiNativeTaskSessionSnapshot,
     ) {
         check(snapshot.taskId == taskId) { "PI_MOBILE_SESSION_SNAPSHOT_TASK_MISMATCH" }
-        val task = requireNotNull(database.p2Dao().task(taskId)) {
+        val task = requireNotNull(database.momodingDao().task(taskId)) {
             "PI_MOBILE_TASK_NOT_FOUND"
         }
         check(task.piSessionId == piSessionId) {
             "PI_MOBILE_SESSION_SNAPSHOT_SESSION_MISMATCH"
         }
         validateEntries(snapshot.entries)
-        database.p2Dao().upsertPiSessionSnapshot(
+        database.momodingDao().upsertPiSessionSnapshot(
             PiSessionSnapshotEntity(
                 taskId = taskId,
                 piSessionId = piSessionId,
@@ -83,8 +83,8 @@ class PhoneLocalPiSessionStore(
     }
 
     fun load(taskId: String): PersistedPiTaskSession? {
-        val entity = database.p2Dao().piSessionSnapshot(taskId) ?: return null
-        val task = requireNotNull(database.p2Dao().task(taskId)) {
+        val entity = database.momodingDao().piSessionSnapshot(taskId) ?: return null
+        val task = requireNotNull(database.momodingDao().task(taskId)) {
             "PI_MOBILE_TASK_NOT_FOUND"
         }
         check(entity.schemaVersion in SUPPORTED_SCHEMA_VERSIONS) {

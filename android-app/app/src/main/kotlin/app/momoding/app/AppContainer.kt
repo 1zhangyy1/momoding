@@ -187,7 +187,7 @@ class AppContainer(application: Application) {
         uiTools = phoneLocalUiToolExecutor,
         packageTools = phoneLocalShizukuToolExecutor,
         approvalModeForTask = { taskId ->
-            database.p2Dao().task(taskId)?.approvalMode ?: TaskApprovalMode.REQUEST_APPROVAL
+            database.momodingDao().task(taskId)?.approvalMode ?: TaskApprovalMode.REQUEST_APPROVAL
         },
     )
     val phoneLocalChildAgentRepository = PhoneLocalChildAgentRepository(database)
