@@ -4,26 +4,60 @@
 
 # Momoding
 
-Momoding is a local-first AI coding workspace for Android. Its Pi agent loop runs on the phone,
-connects to OpenRouter with the user's own API key, and routes every device-side action through
-Android-owned policy and permission checks.
+<p align="center"><strong>AI coding, shaped for Android.</strong></p>
+
+Momoding turns an Android device into a local-first AI coding workspace. It gives an AI agent a
+durable place to understand a project, plan work, use tools, review changes, and continue across
+sessions—without reducing the phone to a remote control for an agent running somewhere else.
 
 [简体中文](README.zh-CN.md)
-
-Momoding is an independent project. It is not affiliated with or endorsed by OpenAI, OpenRouter,
-Shizuku, or the upstream Pi maintainers.
 
 > **Developer preview:** this repository is suitable for source review and local development. It
 > is not yet a production or Play Store release, and it has not received an independent security
 > audit.
 
+## Positioning
+
+Momoding sits between a chat assistant and a desktop or cloud coding agent. It brings the working
+loop onto Android: the Pi agent runtime executes on the device, task and recovery state stay
+durable, and Android remains the authority for credentials, permissions, policy decisions, and
+device-side effects.
+
+“Local-first” does not mean fully offline. Authorized prompts, context, and tool results are sent to
+the OpenRouter model selected by the user. It means the workspace's control plane stays on the
+device: the API key, task state, capability state, approvals, and side-effect records are owned by
+the Android application.
+
+Momoding is built around three product principles:
+
+- **The phone is a workspace, not just a remote.** The agent loop and task lifecycle can run on the
+  Android device.
+- **Authority stays explicit.** A model request does not automatically grant file, screen,
+  accessibility, package, or shared-storage access.
+- **The interface tells the truth.** Capabilities reflect live Android availability and permission
+  state; unavailable paths should not be presented as working.
+
+```mermaid
+flowchart LR
+    user["You"] --> workspace["Momoding workspace<br/>on Android"]
+    workspace <-->|"authorized model context"| model["Your OpenRouter model"]
+    workspace -->|"reviewed access"| project["Project folders"]
+    workspace -->|"explicit permission"| device["Android capabilities"]
+```
+
 ## Who it is for
 
-Momoding is for developers who want to inspect and experiment with an AI coding workspace that runs
-its agent loop on Android, keeps the model credential under Android control, and makes device
-capabilities visible and reviewable.
+Momoding is for developers and researchers exploring what an Android-native coding agent can be,
+especially those who value bring-your-own-key model access, inspectable source, explicit permission
+boundaries, and review before side effects.
 
-## What works
+It is not currently a consumer-ready assistant, a hardened sandbox for hostile code, or a supported
+replacement for a production desktop IDE.
+
+Momoding is an independent project. It is not affiliated with or endorsed by OpenAI, OpenRouter,
+Shizuku, or the upstream Pi maintainers.
+
+## What Momoding can do today
 
 - On-device Pi agent loop in QuickJS; Node.js is used to build and test the bundled runtime.
 - OpenRouter bring-your-own-key setup with Android Keystore-backed credential encryption.
@@ -37,7 +71,7 @@ capabilities visible and reviewable.
 - Read-only installed-package listing and inspection through a separately installed and authorized
   Shizuku service.
 
-## Important trust boundaries
+## How Momoding keeps authority visible
 
 | Capability | Current boundary |
 | --- | --- |

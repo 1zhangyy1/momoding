@@ -4,23 +4,55 @@
 
 # Momoding
 
-Momoding 是一个 Android 本地优先的 AI 编程工作台。Pi Agent 循环运行在手机上，使用用户自己
-配置的 OpenRouter API Key；所有设备侧动作都要经过 Android 端持有的权限、策略和确认流程。
+<p align="center"><strong>让 AI 编程真正长在 Android 上。</strong></p>
+
+Momoding 把 Android 设备变成一个本地优先的 AI 编程工作台。AI Agent 可以在这里持续理解项目、
+制定计划、使用工具、审阅改动，并在多次会话之间延续任务；手机不只是另一台机器上 Agent 的
+遥控器。
 
 [English](README.md)
-
-Momoding 是一个独立项目，与 OpenAI、OpenRouter、Shizuku 及 Pi 上游维护者不存在隶属、官方
-合作或背书关系。
 
 > **开发者预览版：** 当前仓库适合源码审阅和本地开发，但还不是正式发行版或 Play 商店版本，
 > 也尚未经过独立安全审计。
 
+## 产品定位
+
+Momoding 位于聊天助手与桌面或云端编程 Agent 之间。它把工作循环带到 Android 上：Pi Agent
+运行时在设备上执行，任务和恢复状态能够持久保存，而模型凭据、系统权限、策略判断与设备侧
+副作用仍由 Android 掌控。
+
+“本地优先”不等于“完全离线”。用户授权的提示词、上下文和工具结果会发送给用户选择的
+OpenRouter 模型。本地优先指工作台的控制面留在设备上：API Key、任务状态、能力状态、审批
+记录和副作用记录都由 Android 应用持有。
+
+Momoding 坚持三个产品原则：
+
+- **手机是工作台，不只是遥控器。** Agent 循环和任务生命周期可以在 Android 设备上运行。
+- **每一种权限都要明确。** 发起模型请求并不自动获得文件、屏幕、无障碍、应用信息或共享
+  存储权限。
+- **界面必须反映真实能力。** 能力状态来自当前 Android 环境与授权情况；不可用的路径不会被
+  包装成已经可用。
+
+```mermaid
+flowchart LR
+    user["你"] --> workspace["Android 上的<br/>Momoding 工作台"]
+    workspace <-->|"经用户授权的模型上下文"| model["用户选择的 OpenRouter 模型"]
+    workspace -->|"审阅后访问"| project["项目目录"]
+    workspace -->|"明确授权"| device["Android 设备能力"]
+```
+
 ## 适合谁
 
-Momoding 面向希望审阅和尝试 Android 端 AI 编程工作台的开发者：Agent 循环运行在 Android
-设备上，模型凭据由 Android 端管理，设备能力及其授权状态对用户可见、可审查。
+Momoding 面向探索 Android 原生编程 Agent 的开发者和研究者，尤其适合重视自带模型密钥、
+源码可审阅、权限边界明确，以及副作用发生前可检查的人。
 
-## 当前能力
+它目前不是面向普通消费者的成熟助手，不是运行恶意代码的强化安全沙箱，也不能替代正式支持的
+桌面生产环境。
+
+Momoding 是一个独立项目，与 OpenAI、OpenRouter、Shizuku 及 Pi 上游维护者不存在隶属、官方
+合作或背书关系。
+
+## Momoding 目前能做什么
 
 - Pi Agent 循环在 QuickJS 中运行；Node.js 仅用于构建和测试运行时包。
 - 用户自带 OpenRouter API Key，并由 Android Keystore 支持的加密方案保存。
@@ -31,7 +63,7 @@ Momoding 面向希望审阅和尝试 Android 端 AI 编程工作台的开发者�
 - 用户主动开启的屏幕捕获，以及基于无障碍服务的界面检查和受控操作。
 - 通过用户另行安装并授权的 Shizuku，执行只读的应用列表与单应用信息查询。
 
-## 重要权限边界
+## Momoding 如何让权限保持可见
 
 | 能力 | 当前边界 |
 | --- | --- |
