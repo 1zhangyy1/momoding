@@ -1703,7 +1703,7 @@ private fun DeviceCapabilitiesRouteContent(
         }
     }
     fun launchNotificationPermission() {
-        val permission = Manifest.permission.POST_NOTIFICATIONS
+        val permission = POST_NOTIFICATIONS_PERMISSION
         val runtimePermissionGranted =
             Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             ContextCompat.checkSelfPermission(context, permission) ==
@@ -2116,6 +2116,7 @@ private fun markCapabilityPermissionsAsked(
 private const val CAPABILITY_RESULT_REFRESH_ATTEMPTS = 10
 private const val CAPABILITY_RESULT_REFRESH_DELAY_MILLIS = 200L
 private const val CAPABILITY_PERMISSION_PREFS = "tool_permission_requests"
+private const val POST_NOTIFICATIONS_PERMISSION = "android.permission.POST_NOTIFICATIONS"
 
 @Composable
 private fun ExtensionsRouteContent(
