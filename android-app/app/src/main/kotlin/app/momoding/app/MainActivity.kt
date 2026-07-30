@@ -1,5 +1,6 @@
 package app.momoding.app
 
+import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.ActivityNotFoundException
@@ -27,9 +28,11 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.Button
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -49,6 +52,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -97,12 +101,20 @@ import app.momoding.feature.newtask.NewTaskScreen
 import app.momoding.feature.newtask.NewTaskViewModel
 import app.momoding.core.attachments.AttachmentFeatureGate
 import app.momoding.core.capabilities.AndroidCapabilityId
+import app.momoding.core.capabilities.AndroidCapabilityRequirement
 import app.momoding.core.capabilities.AndroidCapabilityRequest
 import app.momoding.core.capabilities.AndroidCapabilityRequestResult
 import app.momoding.core.capabilities.AndroidPermissionRequest
 import app.momoding.core.capabilities.AndroidPermissionRequestResult
 import app.momoding.core.capabilities.CapabilityAvailability
+import app.momoding.core.capabilities.CalendarCapabilityAccess
+import app.momoding.core.capabilities.ContactsCapabilityAccess
+import app.momoding.core.capabilities.LocationCapabilityAccess
+import app.momoding.core.capabilities.calendarPermissionRequest
+import app.momoding.core.capabilities.contactsPermissionRequest
+import app.momoding.core.capabilities.locationPermissionRequest
 import app.momoding.core.capabilities.photoLibraryPermissionRequest
+import app.momoding.core.capabilities.shouldOpenAppSettingsForPermissions
 import app.momoding.core.accessibility.MomodingScreenCaptureRuntime
 import app.momoding.core.accessibility.ScreenCaptureSessionService
 import app.momoding.feature.outputs.TaskOutputsRoute
@@ -129,8 +141,9 @@ import app.momoding.feature.taskdetail.TaskDetailOneShot
 import app.momoding.feature.taskdetail.TaskDetailScreen
 import app.momoding.feature.taskdetail.TaskDetailViewModel
 import app.momoding.feature.taskdetail.TASK_DETAIL_TITLE_FOCUS_KEY
-import app.momoding.ui.components.MomodingScaffold
-import app.momoding.ui.components.TopLevelDestination
+import app.momoding.ui.components.MomodingNavigationDrawer
+import app.momoding.ui.components.NavigationDrawerButton
+import app.momoding.ui.components.ProductTopBar
 import app.momoding.ui.navigation.AttentionRoute
 import app.momoding.ui.navigation.AuthorizedFoldersRoute
 import app.momoding.ui.navigation.MomodingBottomSheetDismissRegistry
@@ -210,6 +223,18 @@ class MainActivity : ComponentActivity() {
             val sharedRoute by externalNewTaskRoute.collectAsStateWithLifecycle()
             val capabilityRequest by container.androidCapabilityRequestCoordinator.pending
                 .collectAsStateWithLifecycle()
+            val phoneLocalModelId = providerState.savedProfile?.modelId ?: providerState.modelId
+            val taskHomeViewModel: TaskHomeViewModel = viewModel(
+                key = "task-home-phone-local",
+                factory = TaskHomeViewModel.PhoneLocalFactory(
+                    container.taskRepository,
+                    phoneLocalModelId,
+                ),
+            )
+            val collectedTaskHomeState by taskHomeViewModel.state.collectAsStateWithLifecycle()
+            val taskHomeState = collectedTaskHomeState.copy(
+                hostAlias = "On-device · $phoneLocalModelId",
+            )
             val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
             val dark = resolvesToDark(state.appearance, systemDark)
             SideEffect {
@@ -230,25 +255,24 @@ class MainActivity : ComponentActivity() {
                     onAction = settingsViewModel::dispatch,
                     providerSetupState = providerState,
                     onProviderSetupAction = providerSetupViewModel::dispatch,
-                    taskHomeEntry = { padding, onRouteAction, onOneShot ->
-                        TaskHomeRouteContent(
-                            container = container,
-                            modelId = providerState.savedProfile?.modelId
-                                ?: providerState.modelId,
-                            padding = padding,
-                            onRouteAction = onRouteAction,
-                            onOneShot = onOneShot,
-                        )
-                    },
-                    newTaskEntry = { route, onOpenTask, onBack, onOpenFullAccessSetup ->
+                    taskHomeState = taskHomeState,
+                    onTaskHomeAction = taskHomeViewModel::dispatch,
+                    taskHomeOneShots = taskHomeViewModel.oneShots,
+                    newTaskEntry = {
+                        route,
+                        onOpenTask,
+                        onBack,
+                        onOpenFullAccessSetup,
+                        onOpenNavigation,
+                    ->
                         NewTaskRouteContent(
                             route = route,
                             container = container,
-                            modelId = providerState.savedProfile?.modelId
-                                ?: providerState.modelId,
+                            modelId = phoneLocalModelId,
                             onOpenTask = onOpenTask,
                             onBack = onBack,
                             onOpenFullAccessSetup = onOpenFullAccessSetup,
+                            onOpenNavigation = onOpenNavigation,
                         )
                     },
                     taskDetailEntry = {
@@ -258,6 +282,8 @@ class MainActivity : ComponentActivity() {
                             onFocusRestored,
                             onAttentionReturnConsumed,
                             onOneShot,
+                            onOpenNavigation,
+                            onNewTask,
                         ->
                         TaskDetailRouteContent(
                             route = route,
@@ -267,8 +293,9 @@ class MainActivity : ComponentActivity() {
                             onFocusRestored = onFocusRestored,
                             onAttentionReturnConsumed = onAttentionReturnConsumed,
                             onOneShot = onOneShot,
-                            modelId = providerState.savedProfile?.modelId
-                                ?: providerState.modelId,
+                            modelId = phoneLocalModelId,
+                            onOpenNavigation = onOpenNavigation,
+                            onNewTask = onNewTask,
                         )
                     },
                     attentionEntry = { route, dismissRegistry, onOneShot ->
@@ -481,6 +508,8 @@ typealias TaskDetailRouteEntry = @Composable (
     () -> Unit,
     () -> Unit,
     (TaskDetailOneShot) -> Unit,
+    () -> Unit,
+    () -> Unit,
 ) -> Unit
 
 internal typealias AttentionRouteEntry = @Composable (
@@ -554,8 +583,12 @@ internal fun MomodingApp(
     onTaskHomeAction: (TaskHomeAction) -> Unit = {},
     taskHomeOneShots: Flow<TaskHomeOneShot> = emptyFlow(),
     taskHomeEntry: TaskHomeRouteEntry? = null,
-    newTaskEntry: @Composable (NewTaskRoute, (String) -> Unit, () -> Unit, () -> Unit) -> Unit = { _, _, _, _ ->
-        StagePlaceholder("New task", "Task creation host is unavailable.", PaddingValues(24.dp))
+    newTaskEntry: @Composable (NewTaskRoute, (String) -> Unit, () -> Unit, () -> Unit, () -> Unit) -> Unit = { _, _, _, _, onOpenNavigation ->
+        TaskSurfacePlaceholder(
+            title = "New task",
+            body = "Task creation host is unavailable.",
+            onOpenNavigation = onOpenNavigation,
+        )
     },
     taskDetailEntry: TaskDetailRouteEntry? = null,
     attentionEntry: AttentionRouteEntry? = null,
@@ -576,6 +609,8 @@ internal fun MomodingApp(
     }
     val announcedAttentionEffects = remember { LinkedHashSet<String>() }
     val backStack = rememberNavBackStack(*initialBackStack.toTypedArray())
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val navigationScope = rememberCoroutineScope()
     val bottomSheetDismissRegistry = remember {
         MomodingBottomSheetDismissRegistry()
     }
@@ -583,19 +618,22 @@ internal fun MomodingApp(
         MomodingBottomSheetSceneStrategy<NavKey>(bottomSheetDismissRegistry)
     }
     val viewModelStoreDecorator = rememberViewModelStoreNavEntryDecorator<NavKey>()
-    val taskHomeSettingsFocus = remember { FocusRequester() }
-    val taskHomeSettingsFocused = remember { mutableStateOf(false) }
     val pendingFocusKey = remember { mutableStateOf<String?>(null) }
     val pendingAttentionReturn = remember { mutableStateOf<AttentionNavigationReturn?>(null) }
+    val pendingTaskHomeNavigation = remember { mutableStateOf<TaskHomeAction?>(null) }
     val attentionDismissGuard = remember { mutableStateOf<AttentionRoute?>(null) }
+
+    fun clearPrimaryNavigationState() {
+        pendingFocusKey.value = null
+        pendingAttentionReturn.value = null
+        pendingTaskHomeNavigation.value = null
+    }
 
     LaunchedEffect(externalNewTaskRoute) {
         val route = externalNewTaskRoute ?: return@LaunchedEffect
         backStack.clear()
-        backStack.add(TaskHomeRoute)
         backStack.add(route)
-        pendingFocusKey.value = null
-        pendingAttentionReturn.value = null
+        clearPrimaryNavigationState()
         onExternalNewTaskConsumed()
     }
 
@@ -620,10 +658,12 @@ internal fun MomodingApp(
                 if (top !is ProviderSetupRoute || !top.onboarding) {
                     backStack.clear()
                     backStack.add(ProviderSetupRoute(onboarding = true))
+                    clearPrimaryNavigationState()
                 }
             } else if (top is ProviderSetupRoute && top.onboarding) {
                 backStack.clear()
-                backStack.add(TaskHomeRoute)
+                backStack.add(NewTaskRoute(UUID.randomUUID().toString()))
+                clearPrimaryNavigationState()
             }
         } else {
             if (state.transport.phase == app.momoding.core.transport.SecureTransportUiPhase.STARTING) {
@@ -633,28 +673,52 @@ internal fun MomodingApp(
                 if (backStack.lastOrNull() != HostGateRoute) {
                     backStack.clear()
                     backStack.add(HostGateRoute)
+                    clearPrimaryNavigationState()
                 }
             } else if (backStack.lastOrNull() == HostGateRoute) {
                 backStack.clear()
-                backStack.add(TaskHomeRoute)
+                backStack.add(NewTaskRoute(UUID.randomUUID().toString()))
+                clearPrimaryNavigationState()
             }
         }
     }
 
     fun openTasks() {
-        if (backStack.lastOrNull() != TaskHomeRoute) {
-            backStack.clear()
-            backStack.add(TaskHomeRoute)
+        if (backStack.lastOrNull() != TaskHomeRoute) backStack.add(TaskHomeRoute)
+        clearPrimaryNavigationState()
+    }
+
+    fun replacePrimaryRoute(route: NavKey) {
+        backStack.clear()
+        backStack.add(route)
+        clearPrimaryNavigationState()
+    }
+
+    fun openNewTask() {
+        replacePrimaryRoute(NewTaskRoute(UUID.randomUUID().toString()))
+    }
+
+    fun openDrawer() {
+        navigationScope.launch { drawerState.open() }
+    }
+
+    fun closeDrawerThen(action: () -> Unit) {
+        navigationScope.launch {
+            drawerState.close()
+            action()
         }
-        pendingFocusKey.value = null
-        pendingAttentionReturn.value = null
     }
 
     fun openSettings() {
+        pendingTaskHomeNavigation.value = null
         if (backStack.lastOrNull() != SettingsRoute) backStack.add(SettingsRoute)
     }
 
     fun openProviderSetup(returnTaskId: String? = null) {
+        pendingTaskHomeNavigation.value = null
+        if (returnTaskId != null) {
+            replacePrimaryRoute(TaskDetailRoute(returnTaskId))
+        }
         val route = ProviderSetupRoute(
             onboarding = false,
             returnTaskId = returnTaskId,
@@ -663,6 +727,7 @@ internal fun MomodingApp(
     }
 
     fun openRemoteHost() {
+        pendingTaskHomeNavigation.value = null
         onAction(SettingsAction.EnableRemoteHost)
         if (backStack.lastOrNull() != HostGateRoute) backStack.add(HostGateRoute)
     }
@@ -718,9 +783,21 @@ internal fun MomodingApp(
     }
 
     fun handleTaskHomeAction(action: TaskHomeAction) {
+        pendingTaskHomeNavigation.value = when (action) {
+            is TaskHomeAction.OpenTask,
+            is TaskHomeAction.OpenCachedTask,
+            is TaskHomeAction.OpenAttention,
+            is TaskHomeAction.FixProvider,
+            -> action
+            TaskHomeAction.NewTask,
+            TaskHomeAction.PairHost,
+            TaskHomeAction.OpenSettings,
+            -> null
+            else -> pendingTaskHomeNavigation.value
+        }
         onTaskHomeAction(action)
         when (action) {
-            TaskHomeAction.NewTask -> backStack.add(NewTaskRoute(UUID.randomUUID().toString()))
+            TaskHomeAction.NewTask -> openNewTask()
             TaskHomeAction.PairHost -> {
                 if (providerSetupState == null) {
                     backStack.clear()
@@ -753,16 +830,30 @@ internal fun MomodingApp(
     }
 
     fun handleTaskHomeOneShot(oneShot: TaskHomeOneShot) {
-        if (backStack.lastOrNull() != TaskHomeRoute) return
+        val expected = pendingTaskHomeNavigation.value
+        val matches = when (oneShot) {
+            is TaskHomeOneShot.OpenTask -> when (expected) {
+                is TaskHomeAction.OpenTask -> expected.taskId == oneShot.taskId
+                is TaskHomeAction.OpenCachedTask -> expected.taskId == oneShot.taskId
+                else -> false
+            }
+            is TaskHomeOneShot.OpenAttention -> expected is TaskHomeAction.OpenAttention &&
+                expected.taskId == oneShot.taskId &&
+                (expected.callId == null || expected.callId == oneShot.callId)
+            is TaskHomeOneShot.OpenProvider -> expected is TaskHomeAction.FixProvider &&
+                expected.taskId == oneShot.taskId
+        }
+        if (!matches) return
+        pendingTaskHomeNavigation.value = null
         when (oneShot) {
             is TaskHomeOneShot.OpenTask -> if (oneShot.taskId.isNotBlank()) {
-                backStack.add(TaskDetailRoute(oneShot.taskId))
+                replacePrimaryRoute(TaskDetailRoute(oneShot.taskId))
             }
             is TaskHomeOneShot.OpenAttention -> if (
                 oneShot.taskId.isNotBlank() && oneShot.callId.isNotBlank()
             ) {
                 val detail = TaskDetailRoute(oneShot.taskId)
-                backStack.add(detail)
+                replacePrimaryRoute(detail)
                 backStack.add(
                     AttentionRoute(
                         taskId = oneShot.taskId,
@@ -789,11 +880,11 @@ internal fun MomodingApp(
             if (
                 soleRoute != null &&
                 soleRoute != HostGateRoute &&
-                soleRoute != TaskHomeRoute &&
+                soleRoute !is NewTaskRoute &&
+                soleRoute !is TaskDetailRoute &&
                 soleRoute != ProviderSetupRoute(onboarding = true)
             ) {
-                backStack.clear()
-                backStack.add(TaskHomeRoute)
+                openNewTask()
             }
             return
         }
@@ -885,32 +976,65 @@ internal fun MomodingApp(
     }
 
     val topRoute = backStack.lastOrNull()
+    val topAttentionRoute = topRoute as? AttentionRoute
+    val drawerEnabled = topRoute is NewTaskRoute || topRoute is TaskDetailRoute
+    val drawerActive =
+        drawerState.currentValue == DrawerValue.Open ||
+            drawerState.targetValue == DrawerValue.Open
+    LaunchedEffect(drawerEnabled) {
+        if (!drawerEnabled && drawerActive) drawerState.close()
+    }
     val handlesSystemBack = backStack.size > 1 ||
         (
             topRoute != null &&
                 topRoute != HostGateRoute &&
-                topRoute != TaskHomeRoute &&
+                topRoute !is NewTaskRoute &&
+                topRoute !is TaskDetailRoute &&
                 topRoute != ProviderSetupRoute(onboarding = true)
         )
     BackHandler(
-        enabled = handlesSystemBack && topRoute !is AttentionRoute,
+        enabled = handlesSystemBack && topRoute !is AttentionRoute && !drawerActive,
         onBack = ::popRoute,
     )
+    BackHandler(enabled = topAttentionRoute != null && !drawerActive) {
+        bottomSheetDismissRegistry.requestDismissForRoute(requireNotNull(topAttentionRoute))
+    }
+    BackHandler(enabled = drawerActive) {
+        navigationScope.launch { drawerState.close() }
+    }
 
-    NavDisplay(
-        backStack = backStack,
-        onBack = {
-            val route = backStack.lastOrNull()
-            if (route is AttentionRoute) {
-                bottomSheetDismissRegistry.requestDismissForRoute(route)
-            } else {
-                popRoute()
+    MomodingNavigationDrawer(
+        state = taskHomeState,
+        drawerState = drawerState,
+        gesturesEnabled = drawerEnabled,
+        currentTaskId = (topRoute as? TaskDetailRoute)?.taskId,
+        onTaskAction = { action ->
+            when (action) {
+                TaskHomeAction.Search,
+                is TaskHomeAction.EditSearch,
+                TaskHomeAction.ClearSearch,
+                -> handleTaskHomeAction(action)
+                else -> closeDrawerThen { handleTaskHomeAction(action) }
             }
         },
-        entryDecorators = listOf(viewModelStoreDecorator),
-        sceneStrategies = listOf(bottomSheetStrategy),
-        modifier = Modifier.fillMaxSize().systemBarsPadding(),
-        entryProvider = entryProvider {
+        onOpenAllTasks = { closeDrawerThen(::openTasks) },
+        onOpenSettings = { closeDrawerThen(::openSettings) },
+        onClose = { navigationScope.launch { drawerState.close() } },
+    ) {
+        NavDisplay(
+            backStack = backStack,
+            onBack = {
+                val route = backStack.lastOrNull()
+                if (route is AttentionRoute) {
+                    bottomSheetDismissRegistry.requestDismissForRoute(route)
+                } else {
+                    popRoute()
+                }
+            },
+            entryDecorators = listOf(viewModelStoreDecorator),
+            sceneStrategies = listOf(bottomSheetStrategy),
+            modifier = Modifier.fillMaxSize().systemBarsPadding(),
+            entryProvider = entryProvider {
             entry<HostGateRoute> {
                 HostGateScreen(
                     state = state,
@@ -947,68 +1071,57 @@ internal fun MomodingApp(
                 )
             }
             entry<TaskHomeRoute> {
-                RestoreFocusWhenResumed(
-                    pendingFocusKey = pendingFocusKey.value,
-                    expectedFocusKey = TASK_HOME_SETTINGS_FOCUS_KEY,
-                    requester = taskHomeSettingsFocus,
-                    isFocused = { taskHomeSettingsFocused.value },
-                    onRestored = { pendingFocusKey.value = null },
-                )
-                MomodingScaffold(
-                    selected = TopLevelDestination.TASKS,
-                    onTasks = ::openTasks,
-                    onSettings = ::openSettings,
-                    settingsItemDecoration = { modifier ->
-                        modifier
-                            .focusRequester(taskHomeSettingsFocus)
-                            .onFocusChanged { taskHomeSettingsFocused.value = it.isFocused }
-                            .focusable()
-                    },
-                ) { padding ->
-                    if (taskHomeEntry == null) {
-                        TaskHomeScreen(taskHomeState, padding, ::handleTaskHomeAction)
-                    } else {
-                        taskHomeEntry(padding, ::handleTaskHomeAction, ::handleTaskHomeOneShot)
-                    }
+                if (taskHomeEntry == null) {
+                    TaskHomeScreen(
+                        taskHomeState,
+                        PaddingValues(),
+                        ::handleTaskHomeAction,
+                        onBack = ::popRoute,
+                    )
+                } else {
+                    taskHomeEntry(
+                        PaddingValues(),
+                        ::handleTaskHomeAction,
+                        ::handleTaskHomeOneShot,
+                    )
                 }
             }
             entry<SettingsRoute> {
-                MomodingScaffold(TopLevelDestination.SETTINGS, ::openTasks, ::openSettings) { padding ->
-                    SettingsScreen(
-                        state = state,
-                        contentPadding = padding,
-                        onAction = onAction,
-                        onOpenMobileFiles = if (authorizedFoldersEntry != null) {
-                            { openMobileFiles() }
-                        } else {
-                            null
-                        },
-                        onOpenExtensions = if (extensionsEntry != null) {
-                            ::openExtensions
-                        } else {
-                            null
-                        },
-                        onOpenDeviceCapabilities = if (deviceCapabilitiesEntry != null) {
-                            { openDeviceCapabilities() }
-                        } else {
-                            null
-                        },
-                        providerProfile = providerSetupState?.savedProfile,
-                        onOpenProviderSetup = if (providerSetupState != null) {
-                            { openProviderSetup() }
-                        } else {
-                            null
-                        },
-                        onOpenRemoteHost = if (
-                            providerSetupState != null &&
-                            app.momoding.BuildConfig.DEBUG
-                        ) {
-                            ::openRemoteHost
-                        } else {
-                            null
-                        },
-                    )
-                }
+                SettingsScreen(
+                    state = state,
+                    contentPadding = PaddingValues(),
+                    onAction = onAction,
+                    onOpenMobileFiles = if (authorizedFoldersEntry != null) {
+                        { openMobileFiles() }
+                    } else {
+                        null
+                    },
+                    onOpenExtensions = if (extensionsEntry != null) {
+                        ::openExtensions
+                    } else {
+                        null
+                    },
+                    onOpenDeviceCapabilities = if (deviceCapabilitiesEntry != null) {
+                        { openDeviceCapabilities() }
+                    } else {
+                        null
+                    },
+                    providerProfile = providerSetupState?.savedProfile,
+                    onOpenProviderSetup = if (providerSetupState != null) {
+                        { openProviderSetup() }
+                    } else {
+                        null
+                    },
+                    onOpenRemoteHost = if (
+                        providerSetupState != null &&
+                        app.momoding.BuildConfig.DEBUG
+                    ) {
+                        ::openRemoteHost
+                    } else {
+                        null
+                    },
+                    onBack = ::popRoute,
+                )
             }
             entry<AuthorizedFoldersRoute> { key ->
                 authorizedFoldersEntry?.invoke(key, ::popRoute)
@@ -1045,11 +1158,17 @@ internal fun MomodingApp(
                     },
                     ::popRoute,
                     { openDeviceCapabilities(startFullAccessSetup = true) },
+                    ::openDrawer,
                 )
             }
             entry<TaskDetailRoute> { key ->
                 if (taskDetailEntry == null) {
-                    StagePlaceholder("Task ${key.taskId}", "Task timeline host is unavailable.", PaddingValues(24.dp))
+                    TaskSurfacePlaceholder(
+                        title = "Task ${key.taskId}",
+                        body = "Task timeline host is unavailable.",
+                        onOpenNavigation = ::openDrawer,
+                        onNewTask = ::openNewTask,
+                    )
                 } else {
                     taskDetailEntry(
                         key,
@@ -1057,7 +1176,10 @@ internal fun MomodingApp(
                         pendingAttentionReturn.value?.takeIf { it.taskId == key.taskId },
                         { pendingFocusKey.value = null },
                         { pendingAttentionReturn.value = null },
-                    ) { oneShot -> handleTaskDetailOneShot(key, oneShot) }
+                        { oneShot -> handleTaskDetailOneShot(key, oneShot) },
+                        ::openDrawer,
+                        ::openNewTask,
+                    )
                 }
             }
             entry<OutputsPlaceholderRoute> { key ->
@@ -1068,7 +1190,13 @@ internal fun MomodingApp(
                         PaddingValues(24.dp),
                     )
             }
-            entry<DiffPlaceholderRoute> { StagePlaceholder("Diff unavailable", "Diff content is not available for this task.", PaddingValues(24.dp)) }
+            entry<DiffPlaceholderRoute> {
+                StagePlaceholder(
+                    "Diff unavailable",
+                    "Diff content is not available for this task.",
+                    PaddingValues(24.dp),
+                )
+            }
             entry<FileChangeRoute> { key ->
                 fileChangeEntry?.invoke(key, ::popRoute)
                     ?: StagePlaceholder(
@@ -1091,8 +1219,39 @@ internal fun MomodingApp(
                     ) { oneShot -> handleAttentionOneShot(key, oneShot) }
                 }
             }
-        },
-    )
+            },
+        )
+    }
+}
+
+@Composable
+private fun TaskSurfacePlaceholder(
+    title: String,
+    body: String,
+    onOpenNavigation: () -> Unit,
+    onNewTask: (() -> Unit)? = null,
+) {
+    Column(modifier = Modifier.fillMaxSize().testTag("task-surface")) {
+        ProductTopBar(
+            title = title,
+            navigation = { NavigationDrawerButton(onClick = onOpenNavigation) },
+            actions = {
+                onNewTask?.let { createTask ->
+                    androidx.compose.material3.IconButton(onClick = createTask) {
+                        androidx.compose.material3.Icon(
+                            app.momoding.ui.icons.MomodingIcons.Add,
+                            contentDescription = "New task",
+                        )
+                    }
+                }
+            },
+        )
+        androidx.compose.foundation.layout.Box(
+            modifier = Modifier.fillMaxSize().padding(24.dp),
+        ) {
+            Text(body, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
 }
 
 @Composable
@@ -1227,6 +1386,24 @@ private fun DeviceCapabilitiesRouteContent(
             AndroidCapabilityId.entries.firstOrNull { it.name == wireValue }
         }
     }
+    val calendarRequiredAccess =
+        (
+            pendingCapabilityRequest
+                ?.takeIf { it.requestId == capabilityRequestId }
+                ?.requirement as? AndroidCapabilityRequirement.Calendar
+            )?.access
+    val contactsRequiredAccess =
+        (
+            pendingCapabilityRequest
+                ?.takeIf { it.requestId == capabilityRequestId }
+                ?.requirement as? AndroidCapabilityRequirement.Contacts
+            )?.access
+    val locationRequiredAccess =
+        (
+            pendingCapabilityRequest
+                ?.takeIf { it.requestId == capabilityRequestId }
+                ?.requirement as? AndroidCapabilityRequirement.Location
+            )?.access
     var continueToFoldersAfterPhoto by rememberSaveable { mutableStateOf(false) }
     var continueToFoldersAfterAllFiles by rememberSaveable { mutableStateOf(false) }
     val foldersNeedSetup = states.firstOrNull {
@@ -1259,6 +1436,21 @@ private fun DeviceCapabilitiesRouteContent(
             (
                 capability == AndroidCapabilityId.PHOTO_LIBRARY &&
                     availability == CapabilityAvailability.PARTIAL
+                ) ||
+            (
+                capability == AndroidCapabilityId.CALENDAR &&
+                    calendarRequiredAccess == CalendarCapabilityAccess.READ &&
+                    availability == CapabilityAvailability.PARTIAL
+                ) ||
+            (
+                capability == AndroidCapabilityId.CONTACTS &&
+                    contactsRequiredAccess == ContactsCapabilityAccess.READ &&
+                    availability == CapabilityAvailability.PARTIAL
+                ) ||
+            (
+                capability == AndroidCapabilityId.LOCATION &&
+                    locationRequiredAccess == LocationCapabilityAccess.APPROXIMATE &&
+                    availability == CapabilityAvailability.PARTIAL
                 )
     }
     val finishCapabilityRequest: (AndroidCapabilityRequestResult) -> Unit = { result ->
@@ -1283,6 +1475,21 @@ private fun DeviceCapabilitiesRouteContent(
                     (
                         capability == AndroidCapabilityId.PHOTO_LIBRARY &&
                             availability == CapabilityAvailability.PARTIAL
+                        ) ||
+                    (
+                        capability == AndroidCapabilityId.CALENDAR &&
+                            calendarRequiredAccess == CalendarCapabilityAccess.READ &&
+                            availability == CapabilityAvailability.PARTIAL
+                        ) ||
+                    (
+                        capability == AndroidCapabilityId.CONTACTS &&
+                            contactsRequiredAccess == ContactsCapabilityAccess.READ &&
+                            availability == CapabilityAvailability.PARTIAL
+                        ) ||
+                    (
+                        capability == AndroidCapabilityId.LOCATION &&
+                            locationRequiredAccess == LocationCapabilityAccess.APPROXIMATE &&
+                            availability == CapabilityAvailability.PARTIAL
                         )
                 if (ready) {
                     latestFinishCapabilityRequest(AndroidCapabilityRequestResult.READY)
@@ -1302,6 +1509,7 @@ private fun DeviceCapabilitiesRouteContent(
     val specialAccessLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) {
+        container.androidCapabilityRegistry.refresh()
         requestedCapabilityId?.let { capability ->
             refreshTargetAndFinish(capability, AndroidCapabilityRequestResult.DENIED)
         }
@@ -1339,6 +1547,190 @@ private fun DeviceCapabilitiesRouteContent(
             } else if (foldersNeedSetup) {
                 onOpenFolders(true)
             }
+        }
+    }
+    val calendarAccessLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) {
+        container.androidCapabilityRegistry.refresh()
+        if (
+            capabilityRequestId != null &&
+            requestedCapabilityId == AndroidCapabilityId.CALENDAR
+        ) {
+            refreshTargetAndFinish(
+                AndroidCapabilityId.CALENDAR,
+                AndroidCapabilityRequestResult.DENIED,
+            )
+        }
+    }
+    fun launchCalendarPermissions(permissions: List<String>) {
+        val missing = permissions.filter { permission ->
+            ContextCompat.checkSelfPermission(context, permission) !=
+                PackageManager.PERMISSION_GRANTED
+        }
+        if (missing.isEmpty()) {
+            refreshTargetAndFinish(
+                AndroidCapabilityId.CALENDAR,
+                AndroidCapabilityRequestResult.DENIED,
+            )
+            return
+        }
+        val activity = context as? Activity
+        val permanentlyDenied = activity != null && shouldOpenAppSettingsForPermissions(
+            missingPermissions = missing,
+            wasAsked = { permission -> wasCapabilityPermissionAsked(context, permission) },
+            shouldShowRationale = { permission ->
+                ActivityCompat.shouldShowRequestPermissionRationale(activity, permission)
+            },
+        )
+        if (permanentlyDenied) {
+            specialAccessLauncher.launch(
+                Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.fromParts("package", context.packageName, null),
+                ),
+            )
+        } else {
+            markCapabilityPermissionsAsked(context, missing)
+            calendarAccessLauncher.launch(missing.toTypedArray())
+        }
+    }
+    val contactsAccessLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) {
+        container.androidCapabilityRegistry.refresh()
+        if (
+            capabilityRequestId != null &&
+            requestedCapabilityId == AndroidCapabilityId.CONTACTS
+        ) {
+            refreshTargetAndFinish(
+                AndroidCapabilityId.CONTACTS,
+                AndroidCapabilityRequestResult.DENIED,
+            )
+        }
+    }
+    fun launchContactsPermissions(permissions: List<String>) {
+        val missing = permissions.filter { permission ->
+            ContextCompat.checkSelfPermission(context, permission) !=
+                PackageManager.PERMISSION_GRANTED
+        }
+        if (missing.isEmpty()) {
+            refreshTargetAndFinish(
+                AndroidCapabilityId.CONTACTS,
+                AndroidCapabilityRequestResult.DENIED,
+            )
+            return
+        }
+        val activity = context as? Activity
+        val permanentlyDenied = activity != null && shouldOpenAppSettingsForPermissions(
+            missingPermissions = missing,
+            wasAsked = { permission -> wasCapabilityPermissionAsked(context, permission) },
+            shouldShowRationale = { permission ->
+                ActivityCompat.shouldShowRequestPermissionRationale(activity, permission)
+            },
+        )
+        if (permanentlyDenied) {
+            specialAccessLauncher.launch(
+                Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.fromParts("package", context.packageName, null),
+                ),
+            )
+        } else {
+            markCapabilityPermissionsAsked(context, missing)
+            contactsAccessLauncher.launch(missing.toTypedArray())
+        }
+    }
+    val locationAccessLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) {
+        container.androidCapabilityRegistry.refresh()
+        if (
+            capabilityRequestId != null &&
+            requestedCapabilityId == AndroidCapabilityId.LOCATION
+        ) {
+            refreshTargetAndFinish(
+                AndroidCapabilityId.LOCATION,
+                AndroidCapabilityRequestResult.DENIED,
+            )
+        }
+    }
+    fun launchLocationPermissions(permissions: List<String>) {
+        val missing = permissions.filter { permission ->
+            ContextCompat.checkSelfPermission(context, permission) !=
+                PackageManager.PERMISSION_GRANTED
+        }
+        if (missing.isEmpty()) {
+            refreshTargetAndFinish(
+                AndroidCapabilityId.LOCATION,
+                AndroidCapabilityRequestResult.DENIED,
+            )
+            return
+        }
+        val activity = context as? Activity
+        val permanentlyDenied = activity != null && shouldOpenAppSettingsForPermissions(
+            missingPermissions = missing,
+            wasAsked = { permission -> wasCapabilityPermissionAsked(context, permission) },
+            shouldShowRationale = { permission ->
+                ActivityCompat.shouldShowRequestPermissionRationale(activity, permission)
+            },
+        )
+        if (permanentlyDenied) {
+            specialAccessLauncher.launch(
+                Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.fromParts("package", context.packageName, null),
+                ),
+            )
+        } else {
+            markCapabilityPermissionsAsked(context, missing)
+            // Keep coarse + fine together for Android 12+ precise-location requests.
+            locationAccessLauncher.launch(permissions.distinct().toTypedArray())
+        }
+    }
+    val notificationAccessLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) {
+        container.androidCapabilityRegistry.refresh()
+        if (
+            capabilityRequestId != null &&
+            requestedCapabilityId == AndroidCapabilityId.NOTIFICATIONS
+        ) {
+            refreshTargetAndFinish(
+                AndroidCapabilityId.NOTIFICATIONS,
+                AndroidCapabilityRequestResult.DENIED,
+            )
+        }
+    }
+    fun launchNotificationPermission() {
+        val permission = Manifest.permission.POST_NOTIFICATIONS
+        val runtimePermissionGranted =
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(context, permission) ==
+            PackageManager.PERMISSION_GRANTED
+        if (runtimePermissionGranted) {
+            specialAccessLauncher.launch(
+                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
+            )
+            return
+        }
+        val activity = context as? Activity
+        val permanentlyDenied = activity != null && shouldOpenAppSettingsForPermissions(
+            missingPermissions = listOf(permission),
+            wasAsked = { wasCapabilityPermissionAsked(context, permission) },
+            shouldShowRationale = {
+                ActivityCompat.shouldShowRequestPermissionRationale(activity, permission)
+            },
+        )
+        if (permanentlyDenied) {
+            specialAccessLauncher.launch(
+                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
+            )
+        } else {
+            markCapabilityPermissionsAsked(context, listOf(permission))
+            notificationAccessLauncher.launch(permission)
         }
     }
     val screenCaptureLauncher = rememberLauncherForActivityResult(
@@ -1421,6 +1813,66 @@ private fun DeviceCapabilitiesRouteContent(
                 } else {
                     photoAccessLauncher.launch(permissions.toTypedArray())
                 }
+            }
+            capability == AndroidCapabilityId.CALENDAR -> {
+                val access = calendarRequiredAccess
+                if (access == null) {
+                    latestFinishCapabilityRequest(AndroidCapabilityRequestResult.UNAVAILABLE)
+                } else {
+                    val permissions = calendarPermissionRequest(access) { permission ->
+                        ContextCompat.checkSelfPermission(context, permission) ==
+                            PackageManager.PERMISSION_GRANTED
+                    }
+                    if (permissions.isEmpty()) {
+                        refreshTargetAndFinish(
+                            AndroidCapabilityId.CALENDAR,
+                            AndroidCapabilityRequestResult.DENIED,
+                        )
+                    } else {
+                        launchCalendarPermissions(permissions)
+                    }
+                }
+            }
+            capability == AndroidCapabilityId.CONTACTS -> {
+                val access = contactsRequiredAccess
+                if (access == null) {
+                    latestFinishCapabilityRequest(AndroidCapabilityRequestResult.UNAVAILABLE)
+                } else {
+                    val permissions = contactsPermissionRequest(access) { permission ->
+                        ContextCompat.checkSelfPermission(context, permission) ==
+                            PackageManager.PERMISSION_GRANTED
+                    }
+                    if (permissions.isEmpty()) {
+                        refreshTargetAndFinish(
+                            AndroidCapabilityId.CONTACTS,
+                            AndroidCapabilityRequestResult.DENIED,
+                        )
+                    } else {
+                        launchContactsPermissions(permissions)
+                    }
+                }
+            }
+            capability == AndroidCapabilityId.LOCATION -> {
+                val access = locationRequiredAccess
+                if (access == null) {
+                    latestFinishCapabilityRequest(AndroidCapabilityRequestResult.UNAVAILABLE)
+                } else {
+                    val permissions = locationPermissionRequest(access) { permission ->
+                        ContextCompat.checkSelfPermission(context, permission) ==
+                            PackageManager.PERMISSION_GRANTED
+                    }
+                    if (permissions.isEmpty()) {
+                        refreshTargetAndFinish(
+                            AndroidCapabilityId.LOCATION,
+                            AndroidCapabilityRequestResult.DENIED,
+                        )
+                    } else {
+                        launchLocationPermissions(permissions)
+                    }
+                }
+            }
+            capability == AndroidCapabilityId.NOTIFICATIONS -> {
+                launchNotificationPermission()
             }
             capability == AndroidCapabilityId.ACCESSIBILITY_CONTROL -> {
                 specialAccessLauncher.launch(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
@@ -1562,11 +2014,108 @@ private fun DeviceCapabilitiesRouteContent(
                 )
             }
         },
+        onManageCalendarAccess = {
+            val calendarAccess = states.firstOrNull {
+                it.id == AndroidCapabilityId.CALENDAR
+            }
+            if (calendarAccess?.availability in setOf(
+                    CapabilityAvailability.READY,
+                    CapabilityAvailability.PARTIAL,
+                )
+            ) {
+                context.startActivity(
+                    Intent(
+                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.fromParts("package", context.packageName, null),
+                    ),
+                )
+            } else {
+                launchCalendarPermissions(
+                    listOf(Manifest.permission.READ_CALENDAR),
+                )
+            }
+        },
+        onManageContactsAccess = {
+            val contactsAccess = states.firstOrNull {
+                it.id == AndroidCapabilityId.CONTACTS
+            }
+            if (contactsAccess?.availability in setOf(
+                    CapabilityAvailability.READY,
+                    CapabilityAvailability.PARTIAL,
+                )
+            ) {
+                context.startActivity(
+                    Intent(
+                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.fromParts("package", context.packageName, null),
+                    ),
+                )
+            } else {
+                launchContactsPermissions(
+                    listOf(Manifest.permission.READ_CONTACTS),
+                )
+            }
+        },
+        onManageLocationAccess = {
+            val locationAccess = states.firstOrNull {
+                it.id == AndroidCapabilityId.LOCATION
+            }
+            if (locationAccess?.availability in setOf(
+                    CapabilityAvailability.READY,
+                    CapabilityAvailability.PARTIAL,
+                )
+            ) {
+                context.startActivity(
+                    Intent(
+                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.fromParts("package", context.packageName, null),
+                    ),
+                )
+            } else {
+                launchLocationPermissions(
+                    listOf(Manifest.permission.ACCESS_COARSE_LOCATION),
+                )
+            }
+        },
+        onManageNotificationAccess = {
+            val notificationAccess = states.firstOrNull {
+                it.id == AndroidCapabilityId.NOTIFICATIONS
+            }
+            if (notificationAccess?.availability == CapabilityAvailability.READY) {
+                context.startActivity(
+                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
+                )
+            } else {
+                launchNotificationPermission()
+            }
+        },
     )
+}
+
+private fun wasCapabilityPermissionAsked(
+    context: android.content.Context,
+    permission: String,
+): Boolean = context.getSharedPreferences(
+    CAPABILITY_PERMISSION_PREFS,
+    android.content.Context.MODE_PRIVATE,
+).getBoolean(permission, false)
+
+private fun markCapabilityPermissionsAsked(
+    context: android.content.Context,
+    permissions: List<String>,
+) {
+    context.getSharedPreferences(
+        CAPABILITY_PERMISSION_PREFS,
+        android.content.Context.MODE_PRIVATE,
+    ).edit {
+        permissions.forEach { permission -> putBoolean(permission, true) }
+    }
 }
 
 private const val CAPABILITY_RESULT_REFRESH_ATTEMPTS = 10
 private const val CAPABILITY_RESULT_REFRESH_DELAY_MILLIS = 200L
+private const val CAPABILITY_PERMISSION_PREFS = "tool_permission_requests"
 
 @Composable
 private fun ExtensionsRouteContent(
@@ -1636,32 +2185,6 @@ private fun FileChangeRouteContent(
 }
 
 @Composable
-private fun TaskHomeRouteContent(
-    container: AppContainer,
-    modelId: String,
-    padding: PaddingValues,
-    onRouteAction: (TaskHomeAction) -> Unit,
-    onOneShot: (TaskHomeOneShot) -> Unit,
-) {
-    val viewModel: TaskHomeViewModel = viewModel(
-        key = "task-home-phone-local:$modelId",
-        factory = TaskHomeViewModel.PhoneLocalFactory(container.taskRepository, modelId),
-    )
-    val state by viewModel.state.collectAsStateWithLifecycle()
-    LaunchedEffect(viewModel) {
-        viewModel.oneShots.collect(onOneShot)
-    }
-    TaskHomeScreen(
-        state = state,
-        contentPadding = padding,
-        onAction = { action ->
-            viewModel.dispatch(action)
-            onRouteAction(action)
-        },
-    )
-}
-
-@Composable
 private fun NewTaskRouteContent(
     route: NewTaskRoute,
     container: AppContainer,
@@ -1669,6 +2192,7 @@ private fun NewTaskRouteContent(
     onOpenTask: (String) -> Unit,
     onBack: () -> Unit,
     onOpenFullAccessSetup: () -> Unit,
+    onOpenNavigation: () -> Unit,
 ) {
     val viewModel: NewTaskViewModel = viewModel(
         key = "new-task-phone-local-${route.draftId}",
@@ -1731,12 +2255,12 @@ private fun NewTaskRouteContent(
             }
         }
     }
-    BackHandler { viewModel.dispatch(NewTaskAction.Back) }
     NewTaskScreen(
         state = state,
         onAction = viewModel::dispatch,
         interactionPolicy = NewTaskInteractionPolicy.All,
         importNotice = route.importNotice,
+        onOpenNavigation = onOpenNavigation,
     )
 }
 
@@ -1750,6 +2274,8 @@ private fun TaskDetailRouteContent(
     onAttentionReturnConsumed: () -> Unit,
     onOneShot: (TaskDetailOneShot) -> Unit,
     modelId: String,
+    onOpenNavigation: () -> Unit,
+    onNewTask: () -> Unit,
 ) {
     val viewModel: TaskDetailViewModel = viewModel(
         key = "task-detail-${route.taskId}",
@@ -1796,7 +2322,6 @@ private fun TaskDetailRouteContent(
             }
         }
     }
-    BackHandler { viewModel.dispatch(app.momoding.feature.taskdetail.TaskDetailAction.Back) }
     TaskDetailScreen(
         state = state,
         onAction = viewModel::dispatch,
@@ -1804,6 +2329,8 @@ private fun TaskDetailRouteContent(
         onQuestionIntent = { intent -> questionViewModel?.dispatch(intent) },
         restoreFocusKey = restoreFocusKey,
         onFocusRestored = onFocusRestored,
+        onOpenNavigation = onOpenNavigation,
+        onNewTask = onNewTask,
     )
 }
 
@@ -1982,5 +2509,3 @@ internal fun AttentionUiState.systemDismissIntent(): AttentionIntent? {
         else -> null
     }
 }
-
-const val TASK_HOME_SETTINGS_FOCUS_KEY = "task-home-settings"

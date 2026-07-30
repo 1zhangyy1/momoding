@@ -8,6 +8,8 @@ guarantee.
 - OpenRouter API keys and provider configuration
 - User-selected project files, shared-storage access, and persisted Android grants
 - Attachments, camera captures, screen captures, prepared file changes, and diagnostics
+- Calendar events, contacts, current location, clipboard text, Momoding-owned notifications, and
+  photo-library mutation targets
 - Task prompts, model responses, Pi session state, plans, goals, skills, and child-agent results
 - Pairing credentials and pinned remote-host identity when the optional client path is used
 
@@ -32,6 +34,11 @@ guarantee.
 | Credential disclosure | Keystore-backed AES-GCM envelope, no-backup storage, no credential passed into JS |
 | Project filesystem scope | User-selected SAF roots, task-scoped identities, and current-grant checks |
 | Shared-storage scope | Separate all-files access setting plus live capability reporting |
+| Calendar/contact overreach | Separate read/write permissions, opaque handles, bounded results, live conflict checks, and post-verification |
+| Location overcollection | Foreground current-location only; no background permission; explicit purpose and reported precision |
+| Clipboard disclosure | Foreground gate, bounded plain text, source-sensitive classification, and no clipboard body in approval history |
+| Notification overreach | App-owned channel and identities only; no notification-listener access to other apps |
+| Photo mutation | Current photo-library scope, opaque handles, policy checks, platform consent, and post-verification |
 | Unauthorized content read | Bounded tool schemas, task context, and Android-owned execution |
 | Unauthorized file write | Private preparation, exact diff, live preconditions, policy checks, and confirmation |
 | Screen overcollection | User-started MediaProjection session; images are live for one tool turn |
@@ -47,10 +54,12 @@ guarantee.
 
 ## Android permissions and services
 
-The main manifest declares network access, media metadata permissions, foreground MediaProjection
-service permissions, all-files access, and the Shizuku manager permission. The app also declares an
-accessibility service and a Shizuku provider. These are powerful capabilities and must be described
-as opt-in user authority; they must not be presented as blanket device access.
+The main manifest declares network access; calendar and contacts read/write access; coarse and
+precise foreground location; notification posting; media metadata permissions; foreground
+MediaProjection service permissions; all-files access; and the Shizuku manager permission. The app
+also declares an accessibility service, a non-exported media-consent activity, and a Shizuku
+provider. These are powerful capabilities and must be described as opt-in user authority; they
+must not be presented as blanket device access.
 
 `MANAGE_EXTERNAL_STORAGE` may be incompatible with some distribution channels or store policies.
 Its presence is a product and release-policy decision, not something the open-source exporter
@@ -71,6 +80,8 @@ the Android terminal record is authoritative.
   output; Android tool boundaries reduce but do not eliminate that risk.
 - Accessibility, screen capture, Shizuku, and all-files access materially increase the impact of a
   defect or compromised dependency.
+- Calendar and contacts providers vary by Android vendor and account type. A provider may reject,
+  redirect, or silently retain a mutation; an unverified result must not be reported as success.
 - Release signing, Play Integrity, update distribution, store policy, native binary corresponding
   source, and Alpine package-license review are separate distribution gates.
 

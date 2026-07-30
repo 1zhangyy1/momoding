@@ -124,6 +124,7 @@ import app.momoding.ui.components.ComposerMenuItem
 import app.momoding.ui.components.MessageGroup
 import app.momoding.ui.components.MessageRole
 import app.momoding.ui.components.MomodingPresence
+import app.momoding.ui.components.NavigationDrawerButton
 import app.momoding.ui.components.ProductTopBar
 import app.momoding.ui.components.WorkBlock
 import app.momoding.ui.components.WorkBlockTone
@@ -145,7 +146,10 @@ fun TaskDetailScreen(
     onQuestionIntent: (AttentionIntent) -> Unit = {},
     restoreFocusKey: String? = null,
     onFocusRestored: () -> Unit = {},
+    onOpenNavigation: (() -> Unit)? = null,
+    onNewTask: (() -> Unit)? = null,
 ) {
+    val brand = LocalMomodingBrandColors.current
     val focusManager = LocalFocusManager.current
     val photoPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickMultipleVisualMedia(MAX_DRAFT_ATTACHMENTS),
@@ -188,17 +192,44 @@ fun TaskDetailScreen(
             ProductTopBar(
                 title = state.title,
                 subtitle = state.statusSubtitle(),
+                navigation = onOpenNavigation?.let { open ->
+                    { NavigationDrawerButton(onClick = open) }
+                },
                 titleModifier = Modifier
                     .focusRequester(titleFocusRequester)
                     .onFocusChanged { titleFocused = it.isFocused }
                     .focusable()
                     .testTag(TASK_DETAIL_TITLE_FOCUS_KEY),
-                onBack = if (interactionPolicy.allows(TaskDetailInteraction.BACK)) {
+                onBack = if (
+                    onOpenNavigation == null &&
+                    interactionPolicy.allows(TaskDetailInteraction.BACK)
+                ) {
                     { onAction(TaskDetailAction.Back) }
                 } else null,
                 backModifier = Modifier
                     .testTag("action-Back")
                     .taskDetailContractAction(interactionPolicy, TaskDetailInteraction.BACK),
+                actions = {
+                    onNewTask?.let { createTask ->
+                        IconButton(
+                            onClick = createTask,
+                            modifier = Modifier.size(48.dp).testTag("action-NewTask"),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(brand.primary, RoundedCornerShape(10.dp)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    MomodingIcons.Add,
+                                    contentDescription = "New task",
+                                    tint = brand.onPrimary,
+                                )
+                            }
+                        }
+                    }
+                },
             )
             TaskTimeline(
                 state = state,

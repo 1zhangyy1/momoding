@@ -11,6 +11,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DeviceMediaListExecutorTest {
@@ -23,6 +24,7 @@ class DeviceMediaListExecutorTest {
                 requestedLimit = limit
                 List(25) { index ->
                     DevicePhotoMetadata(
+                        mediaId = index.toLong() + 100L,
                         mimeType = "image/jpeg",
                         byteCount = 1_000L + index,
                         width = 1080,
@@ -43,6 +45,12 @@ class DeviceMediaListExecutorTest {
         assertEquals(3, requestedLimit)
         assertEquals(3, result.result!!.jsonObject.getValue("items").jsonArray.size)
         assertEquals("full", result.result!!.jsonObject.getValue("access").jsonPrimitive.content)
+        result.result!!.jsonObject.getValue("items").jsonArray.forEach { item ->
+            assertTrue(
+                item.jsonObject.getValue("mediaHandle").jsonPrimitive.content
+                    .matches(Regex("^media-[0-9a-f]{24}$")),
+            )
+        }
         listOf("content://", "path", "fileName", "location", "exif", "latitude", "longitude")
             .forEach { forbidden -> assertFalse(result.result.toString().contains(forbidden, ignoreCase = true)) }
     }

@@ -83,6 +83,7 @@ import app.momoding.ui.components.ApprovalModeSelector
 import app.momoding.ui.components.ListGroup
 import app.momoding.ui.components.ListRow
 import app.momoding.ui.components.MomodingMark
+import app.momoding.ui.components.NavigationDrawerButton
 import app.momoding.ui.components.ProductIconTone
 import app.momoding.ui.components.ProductTopBar
 import app.momoding.ui.theme.LocalMomodingStatusColors
@@ -97,6 +98,7 @@ fun NewTaskScreen(
     onAction: (NewTaskAction) -> Unit,
     interactionPolicy: NewTaskInteractionPolicy = NewTaskInteractionPolicy.All,
     importNotice: String? = null,
+    onOpenNavigation: (() -> Unit)? = null,
 ) {
     val focusManager = LocalFocusManager.current
     val photoPicker = rememberLauncherForActivityResult(
@@ -123,7 +125,13 @@ fun NewTaskScreen(
         Column(modifier = Modifier.fillMaxSize()) {
             ProductTopBar(
                 title = "New task",
-                onBack = if (interactionPolicy.allows(NewTaskInteraction.BACK)) {
+                navigation = onOpenNavigation?.let { open ->
+                    { NavigationDrawerButton(onClick = open) }
+                },
+                onBack = if (
+                    onOpenNavigation == null &&
+                    interactionPolicy.allows(NewTaskInteraction.BACK)
+                ) {
                     { onAction(NewTaskAction.Back) }
                 } else null,
                 backModifier = Modifier.structuralAction("NavigateBack"),
@@ -777,9 +785,9 @@ private fun MobileFolderChooser(
             ) {
                 Text(
                     if (state.phoneLocal) {
-                        "Selecting a folder imports its bounded, readable project files into this task's private on-phone workspace so Pi can run commands. Sensitive and generated files are excluded; every write to the real folder still requires a diff review and confirmation."
+                        "Selecting a folder copies its readable project files into this task’s private workspace on your phone. Sensitive and generated files are excluded; every write to the real folder still shows a diff and asks for confirmation."
                     } else {
-                        "Pi can list names and metadata inside this task-scoped folder. Reading file content requires a separate approval; every write requires a diff review and confirmation. The real Android address stays on this phone."
+                        "Momoding can see names and metadata in the folder selected for this task. Reading a file asks separately; every write shows a diff and asks for confirmation. The Android folder address stays on this phone."
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -796,9 +804,9 @@ private fun MobileFolderChooser(
                     MobileFolderChoice(
                         label = folder.displayName,
                         detail = if (state.phoneLocal) {
-                            "Private project snapshot · Real writes need confirmation"
+                            "Private task workspace · Writes need confirmation"
                         } else {
-                            "Android SAF · Task-scoped · Content needs approval"
+                            "Only this task · File contents need your approval"
                         },
                         selected = state.selectedGrantId == folder.grantId,
                         enabled = folder.canRead &&
@@ -808,7 +816,7 @@ private fun MobileFolderChooser(
                 }
                 if (!state.mobileFoldersLoading && state.mobileFolders.isEmpty()) {
                     Text(
-                        "No readable folder is authorized. Add one in Settings → Mobile files.",
+                        "No readable folder is authorized. Add one in Settings → Phone access.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.tertiary,
                         modifier = Modifier.padding(top = 8.dp),

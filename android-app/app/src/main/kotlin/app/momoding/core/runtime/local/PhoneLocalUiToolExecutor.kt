@@ -346,7 +346,7 @@ class PhoneLocalUiToolExecutor(
     }
 
     override fun stopTask(taskId: String, reason: String) {
-        if (reason == PhoneLocalScreenCaptureToolExecutor.NORMAL_RUN_CLEANUP_REASON) return
+        if (reason == ANDROID_TOOL_TERMINAL_TURN_CLEANUP_REASON) return
         if (sessions.remove(taskId) != null) controller.stop()
     }
 

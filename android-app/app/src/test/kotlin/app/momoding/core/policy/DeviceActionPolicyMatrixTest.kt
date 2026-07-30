@@ -33,12 +33,27 @@ class DeviceActionPolicyMatrixTest(
         fun rows(): List<Array<Any>> {
             val readOnly = setOf(
                 CapabilityAction.READ_CAPABILITY_STATE,
+                CapabilityAction.READ_OWN_NOTIFICATIONS,
                 CapabilityAction.READ_SHARED_METADATA,
                 CapabilityAction.INSPECT_UI_TREE,
                 CapabilityAction.CAPTURE_SCREEN,
             )
             val lowRisk = setOf(
                 CapabilityAction.READ_SHARED_MEDIA_METADATA,
+                CapabilityAction.READ_PERSONAL_CALENDAR,
+                CapabilityAction.READ_PERSONAL_CONTACTS,
+                CapabilityAction.READ_CURRENT_LOCATION,
+                CapabilityAction.READ_CLIPBOARD,
+                CapabilityAction.WRITE_CLIPBOARD,
+                CapabilityAction.CLEAR_CLIPBOARD,
+                CapabilityAction.POST_OWN_NOTIFICATION,
+                CapabilityAction.UPDATE_OWN_NOTIFICATION,
+                CapabilityAction.CANCEL_OWN_NOTIFICATION,
+                CapabilityAction.OPEN_NOTIFICATION_SETTINGS,
+                CapabilityAction.CREATE_CALENDAR_EVENT,
+                CapabilityAction.UPDATE_CALENDAR_EVENT,
+                CapabilityAction.CREATE_CONTACT,
+                CapabilityAction.UPDATE_CONTACT,
                 CapabilityAction.READ_USER_FILE_CONTENT,
                 CapabilityAction.OPEN_ALLOWLIST_APP,
                 CapabilityAction.NAVIGATE_BACK,
@@ -52,6 +67,7 @@ class DeviceActionPolicyMatrixTest(
             val highRisk = setOf(
                 CapabilityAction.OVERWRITE_FILE,
                 CapabilityAction.DELETE_FILE,
+                CapabilityAction.READ_PRECISE_CURRENT_LOCATION,
                 CapabilityAction.CHANGE_SETTING,
                 CapabilityAction.SEND_MESSAGE,
                 CapabilityAction.PUBLISH_CONTENT,
@@ -61,6 +77,11 @@ class DeviceActionPolicyMatrixTest(
                 CapabilityAction.INSTALL_APP,
                 CapabilityAction.UNINSTALL_APP,
                 CapabilityAction.DISABLE_APP,
+                CapabilityAction.DELETE_CALENDAR_EVENT,
+                CapabilityAction.DELETE_CONTACT,
+                CapabilityAction.FAVORITE_MEDIA,
+                CapabilityAction.TRASH_MEDIA,
+                CapabilityAction.DELETE_MEDIA,
             )
             val hardDeny = setOf(
                 CapabilityAction.HANDLE_PASSWORD,
@@ -119,6 +140,7 @@ class DeviceActionPolicyMatrixTest(
             CapabilityAction.ACCESS_OTHER_APP_PRIVATE_DATA,
             -> CapabilityTargetKind.PACKAGE
             CapabilityAction.CHANGE_SETTING,
+            CapabilityAction.OPEN_NOTIFICATION_SETTINGS,
             CapabilityAction.CHANGE_ACCOUNT_SECURITY,
             CapabilityAction.ANDROID_PERMISSION_FLOW,
             -> CapabilityTargetKind.SYSTEM_SETTING
@@ -129,6 +151,26 @@ class DeviceActionPolicyMatrixTest(
             -> CapabilityTargetKind.EXTERNAL_COMMUNICATION
             CapabilityAction.HANDLE_PASSWORD,
             CapabilityAction.HANDLE_OTP,
+            CapabilityAction.READ_PERSONAL_CALENDAR,
+            CapabilityAction.READ_PERSONAL_CONTACTS,
+            CapabilityAction.READ_CURRENT_LOCATION,
+            CapabilityAction.READ_PRECISE_CURRENT_LOCATION,
+            CapabilityAction.READ_CLIPBOARD,
+            CapabilityAction.WRITE_CLIPBOARD,
+            CapabilityAction.CLEAR_CLIPBOARD,
+            CapabilityAction.READ_OWN_NOTIFICATIONS,
+            CapabilityAction.POST_OWN_NOTIFICATION,
+            CapabilityAction.UPDATE_OWN_NOTIFICATION,
+            CapabilityAction.CANCEL_OWN_NOTIFICATION,
+            CapabilityAction.CREATE_CALENDAR_EVENT,
+            CapabilityAction.UPDATE_CALENDAR_EVENT,
+            CapabilityAction.DELETE_CALENDAR_EVENT,
+            CapabilityAction.CREATE_CONTACT,
+            CapabilityAction.UPDATE_CONTACT,
+            CapabilityAction.DELETE_CONTACT,
+            CapabilityAction.FAVORITE_MEDIA,
+            CapabilityAction.TRASH_MEDIA,
+            CapabilityAction.DELETE_MEDIA,
             -> CapabilityTargetKind.SENSITIVE_DATA
         }
 

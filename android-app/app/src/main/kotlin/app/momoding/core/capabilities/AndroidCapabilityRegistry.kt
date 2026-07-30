@@ -1,6 +1,7 @@
 package app.momoding.core.capabilities
 
 import android.Manifest
+import android.app.NotificationManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
@@ -8,10 +9,12 @@ import android.os.Build
 import android.os.Environment
 import android.provider.Settings
 import androidx.core.content.ContextCompat
+import androidx.core.app.NotificationManagerCompat
 import app.momoding.core.accessibility.MomodingAccessibilityRuntime
 import app.momoding.core.accessibility.MomodingScreenCaptureRuntime
 import app.momoding.core.files.AuthorizedFolderStatus
 import app.momoding.core.files.AuthorizedFoldersRepository
+import app.momoding.core.notification.AGENT_NOTIFICATION_CHANNEL_ID
 import app.momoding.core.shizuku.ShizukuController
 import app.momoding.core.shizuku.ShizukuLifecycleStage
 import kotlinx.coroutines.CoroutineScope
@@ -25,6 +28,10 @@ import kotlinx.coroutines.sync.withLock
 enum class AndroidCapabilityId {
     SAF_FOLDERS,
     PHOTO_LIBRARY,
+    CALENDAR,
+    CONTACTS,
+    LOCATION,
+    NOTIFICATIONS,
     ACCESSIBILITY_CONTROL,
     SCREEN_CAPTURE,
     ALL_FILES,
@@ -117,6 +124,10 @@ class AndroidCapabilityRegistry(
                 probes = mapOf(
                     AndroidCapabilityId.SAF_FOLDERS to safFoldersProbe(folders),
                     AndroidCapabilityId.PHOTO_LIBRARY to photoLibraryProbe(applicationContext),
+                    AndroidCapabilityId.CALENDAR to calendarProbe(applicationContext),
+                    AndroidCapabilityId.CONTACTS to contactsProbe(applicationContext),
+                    AndroidCapabilityId.LOCATION to locationProbe(applicationContext),
+                    AndroidCapabilityId.NOTIFICATIONS to notificationProbe(applicationContext),
                     AndroidCapabilityId.ACCESSIBILITY_CONTROL to
                         accessibilityProbe(applicationContext),
                     AndroidCapabilityId.SCREEN_CAPTURE to screenCaptureProbe(),
@@ -127,6 +138,258 @@ class AndroidCapabilityRegistry(
             )
         }
     }
+}
+
+internal fun calendarAvailability(
+    readGranted: Boolean,
+    writeGranted: Boolean,
+): CapabilityAvailability = when {
+    readGranted && writeGranted -> CapabilityAvailability.READY
+    readGranted -> CapabilityAvailability.PARTIAL
+    else -> CapabilityAvailability.NOT_GRANTED
+}
+
+internal fun calendarPermissionRequest(
+    access: CalendarCapabilityAccess,
+    isGranted: (String) -> Boolean,
+): List<String> = buildList {
+    if (!isGranted(Manifest.permission.READ_CALENDAR)) {
+        add(Manifest.permission.READ_CALENDAR)
+    }
+    if (
+        access == CalendarCapabilityAccess.WRITE &&
+        !isGranted(Manifest.permission.WRITE_CALENDAR)
+    ) {
+        add(Manifest.permission.WRITE_CALENDAR)
+    }
+}
+
+internal fun contactsAvailability(
+    readGranted: Boolean,
+    writeGranted: Boolean,
+): CapabilityAvailability = when {
+    readGranted && writeGranted -> CapabilityAvailability.READY
+    readGranted -> CapabilityAvailability.PARTIAL
+    else -> CapabilityAvailability.NOT_GRANTED
+}
+
+internal fun contactsPermissionRequest(
+    access: ContactsCapabilityAccess,
+    isGranted: (String) -> Boolean,
+): List<String> = buildList {
+    if (!isGranted(Manifest.permission.READ_CONTACTS)) {
+        add(Manifest.permission.READ_CONTACTS)
+    }
+    if (
+        access == ContactsCapabilityAccess.WRITE &&
+        !isGranted(Manifest.permission.WRITE_CONTACTS)
+    ) {
+        add(Manifest.permission.WRITE_CONTACTS)
+    }
+}
+
+internal fun locationAvailability(
+    coarseGranted: Boolean,
+    fineGranted: Boolean,
+): CapabilityAvailability = when {
+    fineGranted -> CapabilityAvailability.READY
+    coarseGranted -> CapabilityAvailability.PARTIAL
+    else -> CapabilityAvailability.NOT_GRANTED
+}
+
+internal fun notificationAvailability(
+    declared: Boolean,
+    runtimePermissionGranted: Boolean,
+    appNotificationsEnabled: Boolean,
+    channelBlocked: Boolean,
+): CapabilityAvailability = when {
+    !declared -> CapabilityAvailability.UNSUPPORTED
+    !runtimePermissionGranted || !appNotificationsEnabled || channelBlocked ->
+        CapabilityAvailability.NOT_GRANTED
+    else -> CapabilityAvailability.READY
+}
+
+internal fun locationPermissionRequest(
+    access: LocationCapabilityAccess,
+    isGranted: (String) -> Boolean,
+): List<String> = when (access) {
+    LocationCapabilityAccess.APPROXIMATE ->
+        listOfNotNull(
+            Manifest.permission.ACCESS_COARSE_LOCATION.takeUnless(isGranted),
+        )
+    LocationCapabilityAccess.PRECISE -> if (
+        isGranted(Manifest.permission.ACCESS_FINE_LOCATION)
+    ) {
+        emptyList()
+    } else {
+        // Android 12+ requires coarse and fine in the same request. This also correctly upgrades an
+        // already-granted approximate choice without inventing a second permission flow.
+        listOf(
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+        )
+    }
+}
+
+internal fun shouldOpenAppSettingsForPermissions(
+    missingPermissions: List<String>,
+    wasAsked: (String) -> Boolean,
+    shouldShowRationale: (String) -> Boolean,
+): Boolean = missingPermissions.any { permission ->
+    wasAsked(permission) && !shouldShowRationale(permission)
+}
+
+private fun calendarProbe(context: Context) = AndroidCapabilityProbe { checkedAt ->
+    @Suppress("DEPRECATION")
+    val declared = context.packageManager
+        .getPackageInfo(context.packageName, PackageManager.GET_PERMISSIONS)
+        .requestedPermissions
+        .orEmpty()
+        .toSet()
+    val availability = if (Manifest.permission.READ_CALENDAR !in declared) {
+        CapabilityAvailability.UNSUPPORTED
+    } else {
+        calendarAvailability(
+            readGranted = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.READ_CALENDAR,
+            ) == PackageManager.PERMISSION_GRANTED,
+            writeGranted = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.WRITE_CALENDAR,
+            ) == PackageManager.PERMISSION_GRANTED,
+        )
+    }
+    AndroidCapabilityState(
+        id = AndroidCapabilityId.CALENDAR,
+        availability = availability,
+        source = "Android calendar permissions",
+        checkedAtMillis = checkedAt,
+        safeMessage = when (availability) {
+            CapabilityAvailability.READY -> "Calendar read and write access is enabled."
+            CapabilityAvailability.PARTIAL ->
+                "Calendar read access is enabled. Calendar changes are not enabled."
+            CapabilityAvailability.NOT_GRANTED -> "Calendar access is not enabled."
+            CapabilityAvailability.UNSUPPORTED ->
+                "Calendar access is not installed in this build."
+            else -> "Calendar access could not be checked."
+        },
+    )
+}
+
+private fun contactsProbe(context: Context) = AndroidCapabilityProbe { checkedAt ->
+    @Suppress("DEPRECATION")
+    val declared = context.packageManager
+        .getPackageInfo(context.packageName, PackageManager.GET_PERMISSIONS)
+        .requestedPermissions
+        .orEmpty()
+        .toSet()
+    val availability = if (Manifest.permission.READ_CONTACTS !in declared) {
+        CapabilityAvailability.UNSUPPORTED
+    } else {
+        contactsAvailability(
+            readGranted = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.READ_CONTACTS,
+            ) == PackageManager.PERMISSION_GRANTED,
+            writeGranted = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.WRITE_CONTACTS,
+            ) == PackageManager.PERMISSION_GRANTED,
+        )
+    }
+    AndroidCapabilityState(
+        id = AndroidCapabilityId.CONTACTS,
+        availability = availability,
+        source = "Android contacts permissions",
+        checkedAtMillis = checkedAt,
+        safeMessage = when (availability) {
+            CapabilityAvailability.READY -> "Contacts read and write access is enabled."
+            CapabilityAvailability.PARTIAL ->
+                "Contacts read access is enabled. Contacts changes are not enabled."
+            CapabilityAvailability.NOT_GRANTED -> "Contacts access is not enabled."
+            CapabilityAvailability.UNSUPPORTED ->
+                "Contacts access is not installed in this build."
+            else -> "Contacts access could not be checked."
+        },
+    )
+}
+
+private fun notificationProbe(context: Context) = AndroidCapabilityProbe { checkedAt ->
+    @Suppress("DEPRECATION")
+    val declared = context.packageManager
+        .getPackageInfo(context.packageName, PackageManager.GET_PERMISSIONS)
+        .requestedPermissions
+        .orEmpty()
+        .contains(POST_NOTIFICATIONS_PERMISSION)
+    val runtimeGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+        ContextCompat.checkSelfPermission(
+            context,
+            POST_NOTIFICATIONS_PERMISSION,
+        ) == PackageManager.PERMISSION_GRANTED
+    val enabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
+    val channelBlocked = context.getSystemService(NotificationManager::class.java)
+        .getNotificationChannel(AGENT_NOTIFICATION_CHANNEL_ID)
+        ?.importance == NotificationManager.IMPORTANCE_NONE
+    val availability = notificationAvailability(
+        declared,
+        runtimeGranted,
+        enabled,
+        channelBlocked,
+    )
+    AndroidCapabilityState(
+        id = AndroidCapabilityId.NOTIFICATIONS,
+        availability = availability,
+        source = "Android app notifications",
+        checkedAtMillis = checkedAt,
+        safeMessage = when (availability) {
+            CapabilityAvailability.READY -> "Momoding notifications are enabled."
+            CapabilityAvailability.NOT_GRANTED -> "Momoding notifications are not enabled."
+            CapabilityAvailability.UNSUPPORTED ->
+                "Notification access is not installed in this build."
+            else -> "Notification access could not be checked."
+        },
+    )
+}
+
+private fun locationProbe(context: Context) = AndroidCapabilityProbe { checkedAt ->
+    @Suppress("DEPRECATION")
+    val declared = context.packageManager
+        .getPackageInfo(context.packageName, PackageManager.GET_PERMISSIONS)
+        .requestedPermissions
+        .orEmpty()
+        .toSet()
+    val availability = if (
+        Manifest.permission.ACCESS_COARSE_LOCATION !in declared ||
+        Manifest.permission.ACCESS_FINE_LOCATION !in declared
+    ) {
+        CapabilityAvailability.UNSUPPORTED
+    } else {
+        locationAvailability(
+            coarseGranted = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+            ) == PackageManager.PERMISSION_GRANTED,
+            fineGranted = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+            ) == PackageManager.PERMISSION_GRANTED,
+        )
+    }
+    AndroidCapabilityState(
+        id = AndroidCapabilityId.LOCATION,
+        availability = availability,
+        source = "Android location permissions",
+        checkedAtMillis = checkedAt,
+        safeMessage = when (availability) {
+            CapabilityAvailability.READY -> "Precise location access is enabled."
+            CapabilityAvailability.PARTIAL -> "Approximate location access is enabled."
+            CapabilityAvailability.NOT_GRANTED -> "Location access is not enabled."
+            CapabilityAvailability.UNSUPPORTED ->
+                "Location access is not installed in this build."
+            else -> "Location access could not be checked."
+        },
+    )
 }
 
 internal fun photoLibraryPermissionRequest(sdkInt: Int = Build.VERSION.SDK_INT): List<String> = when {
@@ -330,6 +593,7 @@ private fun allFilesProbe(context: Context) = AndroidCapabilityProbe { checkedAt
 // Permission names are stable platform contract strings. Literal values keep minSdk 30 builds
 // from inlining fields introduced in API 33/34 before the guarded SDK checks above.
 private const val READ_MEDIA_IMAGES_PERMISSION = "android.permission.READ_MEDIA_IMAGES"
+private const val POST_NOTIFICATIONS_PERMISSION = "android.permission.POST_NOTIFICATIONS"
 private const val READ_MEDIA_VISUAL_USER_SELECTED_PERMISSION =
     "android.permission.READ_MEDIA_VISUAL_USER_SELECTED"
 

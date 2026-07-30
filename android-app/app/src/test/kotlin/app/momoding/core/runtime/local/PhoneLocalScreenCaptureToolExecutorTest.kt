@@ -77,7 +77,7 @@ class PhoneLocalScreenCaptureToolExecutorTest {
         executor.execute("task-1", request())
         executor.stopTask(
             "task-1",
-            PhoneLocalScreenCaptureToolExecutor.NORMAL_RUN_CLEANUP_REASON,
+            ANDROID_TOOL_TERMINAL_TURN_CLEANUP_REASON,
         )
         repeat(9) {
             val result = executor.execute("task-1", request())
@@ -130,7 +130,7 @@ class PhoneLocalScreenCaptureToolExecutorTest {
         executor.execute("task-1", request())
         executor.stopTask(
             "task-1",
-            PhoneLocalScreenCaptureToolExecutor.NORMAL_RUN_CLEANUP_REASON,
+            ANDROID_TOOL_TERMINAL_TURN_CLEANUP_REASON,
         )
         assertEquals(0, stopCount)
         executor.stopTask("task-1", "session_close")

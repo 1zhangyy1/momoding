@@ -50,15 +50,48 @@ internal object AttentionPiDeliveryProofVerifier {
         "operationId",
         "approvalOrigin",
     )
+    private val calendarMutationDetailKeys = coreDetailKeys + setOf(
+        "operationId",
+        "approvalOrigin",
+    )
+    private val contactsMutationDetailKeys = coreDetailKeys + setOf(
+        "operationId",
+        "approvalOrigin",
+    )
+    private val clipboardMutationDetailKeys = coreDetailKeys + setOf(
+        "operationId",
+        "approvalOrigin",
+    )
+    private val notificationMutationDetailKeys = coreDetailKeys + setOf(
+        "operationId",
+        "approvalOrigin",
+    )
+    private val mediaMutationDetailKeys = coreDetailKeys + setOf(
+        "operationId",
+        "approvalOrigin",
+        "systemConsent",
+    )
     private val sha256Pattern = Regex("^[0-9a-f]{64}$")
     private const val CONTENT_READ_TOOL = "device_files_read"
     private const val FILE_COMMIT_TOOL = "device_files_commit_changes"
+    private const val CALENDAR_TOOL = "device_calendar"
+    private const val CONTACTS_TOOL = "device_contacts"
+    private const val LOCATION_TOOL = "device_location"
+    private const val CLIPBOARD_TOOL = "device_clipboard"
+    private const val NOTIFICATION_TOOL = "device_notification"
+    private const val MEDIA_TOOL = "device_media"
     private const val UI_ACTION_TOOL = "device_ui_action"
     private val attentionTools = setOf(
         "request_user_question",
         "request_user_confirmation",
         CONTENT_READ_TOOL,
         FILE_COMMIT_TOOL,
+        CALENDAR_TOOL,
+        CONTACTS_TOOL,
+        LOCATION_TOOL,
+        CLIPBOARD_TOOL,
+        NOTIFICATION_TOOL,
+        MEDIA_TOOL,
         UI_ACTION_TOOL,
     )
     private val fileApprovalTools = setOf(CONTENT_READ_TOOL, FILE_COMMIT_TOOL)
@@ -154,11 +187,28 @@ internal object AttentionPiDeliveryProofVerifier {
         expectation: AttentionPiDeliveryExpectation?,
     ): VerifiedAttentionPiDeliveryProof? {
         if (operation.toolName !in attentionTools) return null
+        if (operation.deliveryState == AttentionDeliveryState.PI_DELIVERED.name) return null
         when (operation.toolName) {
             FILE_COMMIT_TOOL,
             UI_ACTION_TOOL,
+            CALENDAR_TOOL,
+            CONTACTS_TOOL,
+            CLIPBOARD_TOOL,
+            NOTIFICATION_TOOL,
+            MEDIA_TOOL,
             -> if (!operation.sideEffect || operation.operationId == null) {
-                corrupt("Exact Pi delivery proof targets an unsafe side-effect binding")
+                if (
+                    operation.toolName !in
+                    setOf(
+                        CALENDAR_TOOL,
+                        CONTACTS_TOOL,
+                        CLIPBOARD_TOOL,
+                        NOTIFICATION_TOOL,
+                        MEDIA_TOOL,
+                    )
+                ) {
+                    corrupt("Exact Pi delivery proof targets an unsafe side-effect binding")
+                }
             }
             else -> if (operation.sideEffect || operation.operationId != null) {
                 corrupt("Exact Pi delivery proof targets an unsafe attention binding")
@@ -184,6 +234,16 @@ internal object AttentionPiDeliveryProofVerifier {
             operation.toolName == CONTENT_READ_TOOL -> contentReadDetailKeys
             operation.toolName == FILE_COMMIT_TOOL -> fileCommitDetailKeys
             operation.toolName == UI_ACTION_TOOL -> uiActionDetailKeys
+            operation.toolName == CALENDAR_TOOL && operation.sideEffect ->
+                calendarMutationDetailKeys
+            operation.toolName == CONTACTS_TOOL && operation.sideEffect ->
+                contactsMutationDetailKeys
+            operation.toolName == CLIPBOARD_TOOL && operation.sideEffect ->
+                clipboardMutationDetailKeys
+            operation.toolName == NOTIFICATION_TOOL && operation.sideEffect ->
+                notificationMutationDetailKeys
+            operation.toolName == MEDIA_TOOL && operation.sideEffect ->
+                mediaMutationDetailKeys
             else -> coreDetailKeys
         }
         if (details.keys != expectedDetailKeys) {
@@ -204,7 +264,14 @@ internal object AttentionPiDeliveryProofVerifier {
         ) {
             corrupt("Exact Pi delivery proof side-effect binding conflicts")
         }
-        if (operation.toolName in setOf(FILE_COMMIT_TOOL, UI_ACTION_TOOL)) {
+        if (
+            operation.toolName in setOf(FILE_COMMIT_TOOL, UI_ACTION_TOOL) ||
+            (operation.toolName == CALENDAR_TOOL && operation.sideEffect) ||
+            (operation.toolName == CONTACTS_TOOL && operation.sideEffect)
+            || (operation.toolName == CLIPBOARD_TOOL && operation.sideEffect)
+            || (operation.toolName == NOTIFICATION_TOOL && operation.sideEffect)
+            || (operation.toolName == MEDIA_TOOL && operation.sideEffect)
+        ) {
             if (
                 details.getValue("operationId").requiredString("details.operationId") !=
                 operation.operationId
@@ -212,7 +279,15 @@ internal object AttentionPiDeliveryProofVerifier {
                 corrupt("Exact Pi delivery proof operationId conflicts")
             }
         }
-        if (operation.toolName in fileApprovalTools || operation.toolName == UI_ACTION_TOOL) {
+        if (
+            operation.toolName in fileApprovalTools ||
+            operation.toolName == UI_ACTION_TOOL ||
+            (operation.toolName == CALENDAR_TOOL && operation.sideEffect) ||
+            (operation.toolName == CONTACTS_TOOL && operation.sideEffect)
+            || (operation.toolName == CLIPBOARD_TOOL && operation.sideEffect)
+            || (operation.toolName == NOTIFICATION_TOOL && operation.sideEffect)
+            || (operation.toolName == MEDIA_TOOL && operation.sideEffect)
+        ) {
             val validOrigins = if (operation.toolName == FILE_COMMIT_TOOL) {
                 setOf("none", "user", "auto_policy")
             } else {
@@ -224,6 +299,13 @@ internal object AttentionPiDeliveryProofVerifier {
             ) {
                 corrupt("Exact Pi delivery proof approval origin is invalid")
             }
+        }
+        if (
+            operation.toolName == MEDIA_TOOL &&
+            details.getValue("systemConsent").requiredBoolean("details.systemConsent") !=
+            (operation.progressSequence >= MEDIA_MUTATION_DISPATCHED_SEQUENCE)
+        ) {
+            corrupt("Exact Pi delivery proof system consent conflicts")
         }
         if (operation.toolName in fileApprovalTools) {
             if (

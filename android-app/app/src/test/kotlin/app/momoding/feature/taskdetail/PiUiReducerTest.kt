@@ -520,6 +520,292 @@ class PiUiReducerTest {
     }
 
     @Test
+    fun `calendar attention remains a first-class confirmation in the task`() {
+        val output = PiUiReducer().reduce(
+            snapshot(
+                pendingAttention = listOf(
+                    TaskDetailAttentionRecord(
+                        callId = "calendar-create",
+                        toolName = "device_calendar",
+                        responseState = AttentionResponseState.PENDING,
+                        receivedAtMillis = 1L,
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals("calendar-create", output.attention?.callId)
+        assertEquals(TaskAttentionKind.CONFIRMATION, output.attention?.kind)
+        assertEquals("Calendar access needs approval", output.attention?.label)
+    }
+
+    @Test
+    fun `calendar tools render bounded human results without handles or raw json`() {
+        val output = PiUiReducer().reduce(
+            snapshot(
+                messages = listOf(
+                    toolCall("calendar-list", "device_calendar", 0),
+                    toolResult(
+                        "calendar-list",
+                        "device_calendar",
+                        1,
+                        """
+                            {
+                              "ok":true,
+                              "action":"list_events",
+                              "data":{
+                                "items":[{
+                                  "eventHandle":"event-0123456789abcdef01234567",
+                                  "title":"Project review",
+                                  "schedule":{
+                                    "kind":"timed",
+                                    "start":"2026-07-30T10:00:00+08:00",
+                                    "end":"2026-07-30T11:00:00+08:00"
+                                  },
+                                  "description":"PRIVATE_CALENDAR_BODY"
+                                }]
+                              }
+                            }
+                        """.trimIndent(),
+                    ),
+                    toolCall("calendar-create", "device_calendar", 2),
+                    toolResult(
+                        "calendar-create",
+                        "device_calendar",
+                        3,
+                        """
+                            {
+                              "ok":true,
+                              "action":"create_event",
+                              "data":{
+                                "event":{
+                                  "eventHandle":"event-fedcba9876543210fedcba98",
+                                  "title":"Design sync",
+                                  "schedule":{
+                                    "kind":"timed",
+                                    "start":"2026-07-31T09:00:00+08:00",
+                                    "end":"2026-07-31T09:30:00+08:00"
+                                  },
+                                  "location":"Room 2"
+                                }
+                              },
+                              "verification":{"status":"verified","planDigest":"${"a".repeat(64)}"}
+                            }
+                        """.trimIndent(),
+                    ),
+                    toolCall("calendar-unknown", "device_calendar", 4),
+                    toolResult(
+                        "calendar-unknown",
+                        "device_calendar",
+                        5,
+                        """
+                            {
+                              "ok":false,
+                              "action":"update_event",
+                              "error":{
+                                "code":"OUTCOME_UNKNOWN",
+                                "message":"PRIVATE_PROVIDER_DETAIL"
+                              }
+                            }
+                        """.trimIndent(),
+                        failed = true,
+                    ),
+                ),
+                windowEnd = 6,
+            ),
+        )
+
+        val tools = output.timeline.settledItems.filterIsInstance<TimelineItem.ToolActivity>()
+        assertEquals(
+            listOf(
+                "Listed calendar events",
+                "Created calendar event",
+                "Calendar action failed",
+            ),
+            tools.map(TimelineItem.ToolActivity::title),
+        )
+        assertEquals(
+            "1 event\n• Project review · 2026-07-30T10:00:00+08:00 → " +
+                "2026-07-30T11:00:00+08:00",
+            tools[0].result?.text,
+        )
+        assertEquals(
+            "Created Design sync · 2026-07-31T09:00:00+08:00 → " +
+                "2026-07-31T09:30:00+08:00 · Room 2",
+            tools[1].result?.text,
+        )
+        assertEquals(
+            "Calendar change outcome unknown. Check the live calendar before retrying.",
+            tools[2].result?.text,
+        )
+        assertTrue(
+            tools.none {
+                it.result?.text.orEmpty().contains("event-") ||
+                    it.result?.text.orEmpty().contains("PRIVATE_") ||
+                    it.result?.text.orEmpty().contains("\"ok\"")
+            },
+        )
+    }
+
+    @Test
+    fun `contacts attention and results stay human readable without handles or raw fields`() {
+        val attention = PiUiReducer().reduce(
+            snapshot(
+                pendingAttention = listOf(
+                    TaskDetailAttentionRecord(
+                        callId = "contacts-search",
+                        toolName = "device_contacts",
+                        responseState = AttentionResponseState.PENDING,
+                        receivedAtMillis = 1L,
+                    ),
+                ),
+            ),
+        ).attention
+        assertEquals(TaskAttentionKind.CONFIRMATION, attention?.kind)
+        assertEquals("Contacts access needs approval", attention?.label)
+
+        val output = PiUiReducer().reduce(
+            snapshot(
+                messages = listOf(
+                    toolCall("contacts-search", "device_contacts", 0),
+                    toolResult(
+                        "contacts-search",
+                        "device_contacts",
+                        1,
+                        """
+                            {
+                              "ok":true,
+                              "action":"search",
+                              "data":{
+                                "items":[{
+                                  "contactHandle":"contact-0123456789abcdef01234567",
+                                  "displayName":"Alex Chen",
+                                  "primaryPhone":{"value":"PRIVATE_PHONE","label":"Mobile"}
+                                }],
+                                "count":1
+                              }
+                            }
+                        """.trimIndent(),
+                    ),
+                    toolCall("contacts-get", "device_contacts", 2),
+                    toolResult(
+                        "contacts-get",
+                        "device_contacts",
+                        3,
+                        """
+                            {
+                              "ok":true,
+                              "action":"get_contact",
+                              "data":{
+                                "contact":{
+                                  "contactHandle":"contact-fedcba9876543210fedcba98",
+                                  "displayName":"Alex Chen",
+                                  "emails":[{"value":"PRIVATE_EMAIL"}]
+                                }
+                              }
+                            }
+                        """.trimIndent(),
+                    ),
+                    toolCall("contacts-create", "device_contacts", 4),
+                    toolResult(
+                        "contacts-create",
+                        "device_contacts",
+                        5,
+                        """
+                            {
+                              "ok":true,
+                              "action":"create_contact",
+                              "data":{
+                                "contact":{
+                                  "contactHandle":"contact-aaaaaaaaaaaaaaaaaaaaaaaa",
+                                  "displayName":"Temporary Alex",
+                                  "phones":[{"value":"PRIVATE_PHONE"}]
+                                }
+                              }
+                            }
+                        """.trimIndent(),
+                    ),
+                    toolCall("contacts-update", "device_contacts", 6),
+                    toolResult(
+                        "contacts-update",
+                        "device_contacts",
+                        7,
+                        """
+                            {
+                              "ok":true,
+                              "action":"update_contact",
+                              "data":{
+                                "contact":{
+                                  "contactHandle":"contact-aaaaaaaaaaaaaaaaaaaaaaaa",
+                                  "displayName":"Updated Alex",
+                                  "emails":[{"value":"PRIVATE_EMAIL"}]
+                                }
+                              }
+                            }
+                        """.trimIndent(),
+                    ),
+                    toolCall("contacts-delete", "device_contacts", 8),
+                    toolResult(
+                        "contacts-delete",
+                        "device_contacts",
+                        9,
+                        """{"ok":true,"action":"delete_contact","data":{"deleted":true}}""",
+                    ),
+                    toolCall("contacts-unknown", "device_contacts", 10),
+                    toolResult(
+                        "contacts-unknown",
+                        "device_contacts",
+                        11,
+                        """
+                            {
+                              "ok":false,
+                              "action":"update_contact",
+                              "error":{
+                                "code":"OUTCOME_UNKNOWN",
+                                "message":"PRIVATE_PROVIDER_ERROR"
+                              }
+                            }
+                        """.trimIndent(),
+                        failed = true,
+                    ),
+                ),
+                windowEnd = 12,
+            ),
+        )
+
+        val tools = output.timeline.settledItems.filterIsInstance<TimelineItem.ToolActivity>()
+        assertEquals(
+            listOf(
+                "Searched contacts",
+                "Checked contact",
+                "Created contact",
+                "Updated contact",
+                "Deleted contact",
+                "Contacts lookup failed",
+            ),
+            tools.map { it.title },
+        )
+        assertEquals(
+            listOf(
+                "Found 1: Alex Chen",
+                "Checked Alex Chen",
+                "Created Temporary Alex",
+                "Updated Updated Alex",
+                "Deleted contact",
+                "Contacts change outcome is unknown; inspect before retrying",
+            ),
+            tools.map { it.result?.text },
+        )
+        assertTrue(
+            tools.none {
+                it.result?.text.orEmpty().contains("contact-") ||
+                    it.result?.text.orEmpty().contains("PRIVATE_") ||
+                    it.result?.text.orEmpty().contains("\"ok\"")
+            },
+        )
+    }
+
+    @Test
     fun `successful file tools expose only their relevant contextual action`() {
         val output = PiUiReducer().reduce(
             snapshot(

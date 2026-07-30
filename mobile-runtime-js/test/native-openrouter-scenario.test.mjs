@@ -191,7 +191,7 @@ test("one phone-local task keeps the same real AgentHarness context across three
 
 test("phone-local task exposes real project terminal and test tools through the Android mailbox", async () => {
   const context = await bootRuntime();
-  const taskId = "task-project-tools";
+  const taskId = "task-e5b3-project-tools";
 
   JSON.parse(call(
     context,
@@ -215,6 +215,12 @@ test("phone-local task exposes real project terminal and test tools through the 
   assert.equal(
     first.messages.some((message) =>
       message.role === "system" &&
+      message.content.includes("App-private Scratch") &&
+      message.content.includes("fileChanges.state=private") &&
+      message.content.includes("apk add --no-cache python3 py3-pip") &&
+      message.content.includes("Alpine py3-*") &&
+      message.content.includes("without shell operators") &&
+      message.content.includes("never create a virtual environment") &&
       message.content.includes("device_files_commit_changes") &&
       message.content.includes("Never claim")
     ),
@@ -785,10 +791,11 @@ test("Plan Mode restricts real Pi tools, restores exactly, survives rebuild, and
     "request_user_confirmation",
     "device_capabilities_get",
     "device_files_list",
-    "device_files_read",
-    "device_media_list",
-    "device_screen_capture",
-    "device_ui_inspect",
+      "device_files_read",
+      "device_media_list",
+      "device_screen_capture",
+      "device_location",
+      "device_ui_inspect",
     "device_packages_list",
     "device_package_inspect",
     "attachment_read",
@@ -1387,6 +1394,311 @@ test("screen capture reaches only the current provider turn and expires from eve
   assert.deepEqual(JSON.parse(call(restored, "closeJson")), { ok: true, closed: true });
 });
 
+test("current location is typed for the LLM and expires after one provider turn", async () => {
+  const context = await bootRuntime();
+  JSON.parse(call(
+    context,
+    "startNativeOpenRouterTaskSessionJson",
+    JSON.stringify("task-live-location"),
+    JSON.stringify("Estimate my current area."),
+    JSON.stringify("deepseek/deepseek-v4-pro"),
+  ));
+  const first = await nextProviderRequest(context);
+  const locationTool = first.tools.find((tool) =>
+    tool.function.name === "device_location"
+  );
+  assert.ok(locationTool);
+  assert.equal(locationTool.function.parameters.additionalProperties, false);
+  assert.deepEqual(
+    locationTool.function.parameters.required,
+    ["action", "precision", "purpose"],
+  );
+  assert.equal(locationTool.function.parameters.properties.action.const, "get_current");
+  assert.deepEqual(
+    locationTool.function.parameters.properties.precision.enum,
+    ["approximate", "precise"],
+  );
+
+  finishToolCall(
+    context,
+    first,
+    "call-live-location",
+    "device_location",
+    {
+      action: "get_current",
+      precision: "approximate",
+      purpose: "Estimate my current area",
+    },
+  );
+  const nativeRequest = await nextNativeToolRequest(context);
+  assert.equal(nativeRequest.kind, "android_location_tool");
+  assert.equal(nativeRequest.toolName, "device_location");
+  const payload = {
+    ok: true,
+    action: "get_current",
+    data: {
+      precision: "approximate",
+      latitude: 31.23,
+      longitude: 121.47,
+      accuracyMeters: 1000,
+      capturedAt: "2026-07-29T04:00:00Z",
+      ageMillis: 1000,
+      providerCategory: "network",
+    },
+    verification: {
+      status: "observed",
+      observedAt: "2026-07-29T04:00:01Z",
+    },
+  };
+  const payloadText = JSON.stringify(payload);
+  const digest = createHash("sha256").update(payloadText, "utf8").digest("hex");
+  const details = {
+    liveOnly: true,
+    dataClass: "location",
+    contentSha256: digest,
+    precision: "approximate",
+  };
+  assert.throws(
+    () => JSON.parse(call(
+      context,
+      "resolveNativeProviderToolRequestJson",
+      JSON.stringify(nativeRequest.id),
+      JSON.stringify(payloadText),
+      JSON.stringify("{}"),
+      "false",
+    )),
+    /PI_MOBILE_LIVE_TEXT_DETAILS_INVALID/,
+  );
+  JSON.parse(call(
+    context,
+    "resolveNativeProviderToolRequestJson",
+    JSON.stringify(nativeRequest.id),
+    JSON.stringify(payloadText),
+    JSON.stringify(JSON.stringify(details)),
+    "false",
+  ));
+
+  const followUp = await nextProviderRequest(context);
+  const providerMessages = JSON.stringify(followUp.messages);
+  assert.match(providerMessages, /31\.23/);
+  assert.match(providerMessages, /121\.47/);
+  finishTextRequest(context, followUp, "You are currently in the estimated area.");
+  const status = await waitForTerminal(context);
+  const events = JSON.stringify(status.runEvents);
+  assert.equal(events.includes("31.23"), false);
+  assert.equal(events.includes("121.47"), false);
+  assert.match(events, /live Android location expired/);
+  assert.match(events, new RegExp(digest));
+
+  const snapshot = JSON.parse(call(context, "nativeOpenRouterTaskSessionSnapshotJson"));
+  const persisted = JSON.stringify(snapshot);
+  assert.equal(persisted.includes("31.23"), false);
+  assert.equal(persisted.includes("121.47"), false);
+  assert.match(persisted, /live Android location expired/);
+  assert.match(persisted, new RegExp(digest));
+  assert.deepEqual(JSON.parse(call(context, "closeJson")), { ok: true, closed: true });
+});
+
+test("clipboard uses strict action branches and expires read text after one provider turn", async () => {
+  const context = await bootRuntime();
+  JSON.parse(call(
+    context,
+    "startNativeOpenRouterTaskSessionJson",
+    JSON.stringify("task-live-clipboard"),
+    JSON.stringify("Read the text I just copied."),
+    JSON.stringify("deepseek/deepseek-v4-pro"),
+  ));
+  const first = await nextProviderRequest(context);
+  assert.ok(first.tools.length <= 24);
+  assert.ok(Buffer.byteLength(JSON.stringify(first.tools), "utf8") <= 36 * 1024);
+  const clipboardTool = first.tools.find((tool) =>
+    tool.function.name === "device_clipboard"
+  );
+  assert.ok(clipboardTool);
+  assert.equal(clipboardTool.function.parameters.additionalProperties, undefined);
+  assert.deepEqual(
+    clipboardTool.function.parameters.oneOf.map((branch) => ({
+      action: branch.properties.action.const,
+      required: branch.required,
+      additionalProperties: branch.additionalProperties,
+    })),
+    [
+      { action: "get", required: ["action", "purpose"], additionalProperties: false },
+      {
+        action: "set",
+        required: ["action", "purpose", "text"],
+        additionalProperties: false,
+      },
+      { action: "clear", required: ["action", "purpose"], additionalProperties: false },
+    ],
+  );
+  assert.equal(
+    clipboardTool.function.parameters.oneOf[1].properties.text.maxLength,
+    4096,
+  );
+  assert.ok(JSON.stringify(clipboardTool.function.parameters).length < 4096);
+
+  finishToolCall(
+    context,
+    first,
+    "call-live-clipboard",
+    "device_clipboard",
+    {
+      action: "get",
+      purpose: "Read the text the user just copied",
+    },
+  );
+  const nativeRequest = await nextNativeToolRequest(context);
+  assert.equal(nativeRequest.kind, "android_clipboard_tool");
+  assert.equal(nativeRequest.toolName, "device_clipboard");
+  const secretText = "ordinary clipboard note 7342f2";
+  const payload = {
+    ok: true,
+    action: "get",
+    data: {
+      state: "text",
+      text: secretText,
+      characterCount: secretText.length,
+    },
+    verification: {
+      status: "observed",
+      observedAt: "2026-07-29T05:00:00Z",
+    },
+  };
+  const payloadText = JSON.stringify(payload);
+  const digest = createHash("sha256").update(payloadText, "utf8").digest("hex");
+  assert.throws(
+    () => JSON.parse(call(
+      context,
+      "resolveNativeProviderToolRequestJson",
+      JSON.stringify(nativeRequest.id),
+      JSON.stringify(payloadText),
+      JSON.stringify("{}"),
+      "false",
+    )),
+    /PI_MOBILE_LIVE_TEXT_DETAILS_INVALID/,
+  );
+  JSON.parse(call(
+    context,
+    "resolveNativeProviderToolRequestJson",
+    JSON.stringify(nativeRequest.id),
+    JSON.stringify(payloadText),
+    JSON.stringify(JSON.stringify({
+      liveOnly: true,
+      dataClass: "clipboard",
+      contentSha256: digest,
+    })),
+    "false",
+  ));
+
+  const followUp = await nextProviderRequest(context);
+  assert.match(JSON.stringify(followUp.messages), new RegExp(secretText));
+  finishTextRequest(context, followUp, "The clipboard contains an ordinary note.");
+  const status = await waitForTerminal(context);
+  const events = JSON.stringify(status.runEvents);
+  assert.equal(events.includes(secretText), false);
+  assert.match(events, /live Android clipboard expired/);
+  assert.match(events, new RegExp(digest));
+
+  const snapshot = JSON.parse(call(context, "nativeOpenRouterTaskSessionSnapshotJson"));
+  const persisted = JSON.stringify(snapshot);
+  assert.equal(persisted.includes(secretText), false);
+  assert.match(persisted, /live Android clipboard expired/);
+  assert.match(persisted, new RegExp(digest));
+  assert.deepEqual(JSON.parse(call(context, "closeJson")), { ok: true, closed: true });
+});
+
+test("notification uses one bounded domain tool and forwards an exact native request", async () => {
+  const context = await bootRuntime();
+  JSON.parse(call(
+    context,
+    "startNativeOpenRouterTaskSessionJson",
+    JSON.stringify("task-notification-contract"),
+    JSON.stringify("Notify me that the export finished."),
+    JSON.stringify("deepseek/deepseek-v4-pro"),
+  ));
+  const provider = await nextProviderRequest(context);
+  assert.ok(provider.tools.length <= 24);
+  assert.ok(Buffer.byteLength(JSON.stringify(provider.tools), "utf8") <= 36 * 1024);
+  const tool = provider.tools.find((entry) =>
+    entry.function.name === "device_notification"
+  );
+  assert.ok(tool);
+  assert.ok(JSON.stringify(tool.function.parameters).length < 4096);
+  assert.deepEqual(
+    tool.function.parameters.oneOf.map((branch) => ({
+      action: branch.properties.action.const,
+      required: branch.required,
+      additionalProperties: branch.additionalProperties,
+    })),
+    [
+      { action: "status", required: ["action"], additionalProperties: false },
+      {
+        action: "post",
+        required: ["action", "title", "message"],
+        additionalProperties: false,
+      },
+      { action: "list_active", required: ["action"], additionalProperties: false },
+      {
+        action: "update",
+        required: ["action", "notificationHandle", "title", "message"],
+        additionalProperties: false,
+      },
+      {
+        action: "cancel",
+        required: ["action", "notificationHandle"],
+        additionalProperties: false,
+      },
+      { action: "open_settings", required: ["action"], additionalProperties: false },
+    ],
+  );
+  assert.equal(tool.function.parameters.oneOf[1].properties.title.maxLength, 80);
+  assert.equal(tool.function.parameters.oneOf[1].properties.message.maxLength, 240);
+  assert.equal(tool.function.parameters.oneOf[2].properties.limit.maximum, 20);
+  assert.equal(
+    tool.function.parameters.oneOf[3].properties.notificationHandle.pattern,
+    "^notification-[0-9a-f]{32}$",
+  );
+
+  finishToolCall(
+    context,
+    provider,
+    "call-notification-post",
+    "device_notification",
+    {
+      action: "post",
+      title: "Export complete",
+      message: "The requested export is ready.",
+    },
+  );
+  const nativeRequest = await nextNativeToolRequest(context);
+  assert.equal(nativeRequest.kind, "android_notification_tool");
+  assert.equal(nativeRequest.toolName, "device_notification");
+  assert.deepEqual(nativeRequest.arguments, {
+    action: "post",
+    title: "Export complete",
+    message: "The requested export is ready.",
+  });
+  resolveNativeTool(context, nativeRequest.id, {
+    ok: true,
+    action: "post",
+    data: {
+      notificationHandle: "notification-0123456789abcdef0123456789abcdef",
+      state: "active",
+    },
+    verification: {
+      status: "verified",
+      observedAt: "2026-07-29T06:00:00Z",
+      planDigest: "a".repeat(64),
+    },
+  });
+  const followUp = await nextProviderRequest(context);
+  assert.match(JSON.stringify(followUp.messages), /notificationHandle/);
+  finishTextRequest(context, followUp, "The notification was posted.");
+  await waitForTerminal(context);
+  assert.deepEqual(JSON.parse(call(context, "closeJson")), { ok: true, closed: true });
+});
+
 test("UI inspect and one bounded action use the Android mailbox in sequence", async () => {
   const context = await bootRuntime();
   const snapshotId = "ui-11111111111111111111111111111111";
@@ -1473,16 +1785,43 @@ test("missing Android capability can open the exact native setup flow and resume
     (tool) => tool.function.name === "device_capability_request",
   )?.function.parameters;
   assert.ok(schema);
-  assert.deepEqual(schema.required, ["capability", "purpose"]);
-  assert.equal(schema.additionalProperties, false);
-  assert.deepEqual(schema.properties.capability.enum, [
+  assert.equal(schema.type, "object");
+  assert.equal(schema.oneOf.length, 4);
+  const ordinaryCapability = schema.oneOf[0];
+  const calendarCapability = schema.oneOf[1];
+  const contactsCapability = schema.oneOf[2];
+  const locationCapability = schema.oneOf[3];
+  assert.deepEqual(ordinaryCapability.required, ["capability", "purpose"]);
+  assert.equal(ordinaryCapability.additionalProperties, false);
+  assert.deepEqual(ordinaryCapability.properties.capability.enum, [
     "saf_folders",
     "photo_library",
     "accessibility_control",
     "screen_capture",
     "all_files",
     "shizuku_shell_uid",
+    "notifications",
   ]);
+  assert.deepEqual(
+    calendarCapability.required,
+    ["capability", "requiredAccess", "purpose"],
+  );
+  assert.equal(calendarCapability.additionalProperties, false);
+  assert.equal(calendarCapability.properties.capability.const, "calendar");
+  assert.deepEqual(
+    calendarCapability.properties.requiredAccess.enum,
+    ["read", "write"],
+  );
+  assert.equal(contactsCapability.properties.capability.const, "contacts");
+  assert.deepEqual(
+    contactsCapability.properties.requiredAccess.enum,
+    ["read", "write"],
+  );
+  assert.equal(locationCapability.properties.capability.const, "location");
+  assert.deepEqual(
+    locationCapability.properties.requiredAccess.enum,
+    ["approximate", "precise"],
+  );
 
   finishToolCall(
     context,
@@ -1513,6 +1852,72 @@ test("missing Android capability can open the exact native setup flow and resume
   finishTextRequest(context, resumed, "Accessibility control is ready.");
   const status = await waitForTerminal(context);
   assert.equal(status.expectationMet, true, JSON.stringify(status));
+  assert.deepEqual(JSON.parse(call(context, "closeJson")), { ok: true, closed: true });
+});
+
+test("Calendar capability carries typed access and rejects missing access before Android", async () => {
+  const context = await bootRuntime();
+  JSON.parse(call(
+    context,
+    "startNativeOpenRouterTaskSessionJson",
+    JSON.stringify("task-calendar-capability-request"),
+    JSON.stringify("Find tomorrow's meetings."),
+    JSON.stringify("deepseek/deepseek-v4-pro"),
+  ));
+
+  let provider = await nextProviderRequest(context);
+  finishToolCall(
+    context,
+    provider,
+    "call-calendar-capability",
+    "device_capability_request",
+    {
+      capability: "calendar",
+      requiredAccess: "read",
+      purpose: "Find tomorrow's meetings",
+    },
+  );
+  const nativeRequest = await nextNativeToolRequest(context);
+  assert.equal(nativeRequest.kind, "android_capability_tool");
+  assert.deepEqual(nativeRequest.arguments, {
+    capability: "calendar",
+    requiredAccess: "read",
+    purpose: "Find tomorrow's meetings",
+  });
+  resolveNativeTool(context, nativeRequest.id, {
+    capability: "calendar",
+    requiredAccess: "read",
+    availability: "partial",
+    ready: true,
+    requested: true,
+  });
+
+  provider = await nextProviderRequest(context);
+  finishToolCall(
+    context,
+    provider,
+    "call-calendar-capability-invalid",
+    "device_capability_request",
+    {
+      capability: "calendar",
+      purpose: "SENSITIVE_PURPOSE_MUST_NOT_BE_ECHOED",
+    },
+  );
+  provider = await nextProviderRequest(context);
+  assert.deepEqual(JSON.parse(call(context, "drainNativeProviderToolRequestsJson")), []);
+  const failure = provider.messages.find(
+    (message) =>
+      message.role === "tool" &&
+      message.tool_call_id === "call-calendar-capability-invalid",
+  );
+  assert.ok(failure);
+  assert.match(failure.content, /"code":"INVALID_ARGUMENTS"/);
+  assert.doesNotMatch(failure.content, /SENSITIVE_PURPOSE/);
+
+  finishTextRequest(context, provider, "Calendar read access is ready.");
+  const status = await waitForTerminal(context);
+  assert.equal(status.toolRequestsIssued, 1);
+  assert.equal(status.toolRequestsResolved, 1);
   assert.deepEqual(JSON.parse(call(context, "closeJson")), { ok: true, closed: true });
 });
 
@@ -1696,6 +2101,976 @@ test("device media list uses the Android mailbox and preserves success and failu
     )?.isError,
     true,
   );
+  assert.deepEqual(JSON.parse(call(context, "closeJson")), { ok: true, closed: true });
+});
+
+test("device media exposes three strict handle-based consent mutations", async () => {
+  const context = await bootRuntime();
+  JSON.parse(call(
+    context,
+    "startNativeOpenRouterTaskSessionJson",
+    JSON.stringify("task-media-mutation"),
+    JSON.stringify("Favorite the selected photo."),
+    JSON.stringify("deepseek/deepseek-v4-pro"),
+  ));
+  const first = await nextProviderRequest(context);
+  const mediaTool = first.tools.find((tool) => tool.function.name === "device_media");
+  assert.ok(mediaTool);
+  assert.deepEqual(
+    mediaTool.function.parameters.oneOf.map((branch) => branch.properties.action.const),
+    ["set_favorite", "set_trashed", "delete"],
+  );
+  assert.ok(
+    mediaTool.function.parameters.oneOf.every(
+      (branch) => branch.additionalProperties === false &&
+        branch.required.includes("mediaHandle"),
+    ),
+  );
+  finishToolCall(
+    context,
+    first,
+    "call-media-favorite",
+    "device_media",
+    { action: "set_favorite", mediaHandle: `media-${"a".repeat(24)}`, favorite: true },
+  );
+  const request = await nextNativeToolRequest(context);
+  assert.equal(request.kind, "android_media_tool");
+  assert.equal(request.toolName, "device_media");
+  assert.deepEqual(request.arguments, {
+    action: "set_favorite",
+    mediaHandle: `media-${"a".repeat(24)}`,
+    favorite: true,
+  });
+  resolveNativeTool(context, request.id, {
+    ok: true,
+    action: "set_favorite",
+    data: { changed: true, favorite: true },
+    verification: {
+      status: "verified",
+      observedAt: "2026-07-29T08:00:00Z",
+      planDigest: "b".repeat(64),
+    },
+  });
+  const finalTurn = await nextProviderRequest(context);
+  assert.match(JSON.stringify(finalTurn.messages), /verified/);
+  finishTextRequest(context, finalTurn, "The photo is now a favorite.");
+  const status = await waitForTerminal(context);
+  assert.equal(status.expectationMet, true, JSON.stringify(status));
+  assert.deepEqual(JSON.parse(call(context, "closeJson")), { ok: true, closed: true });
+});
+
+test("calendar exposes six strict action branches and completes one deterministic fake chain", async () => {
+  const context = await bootRuntime();
+  JSON.parse(call(
+    context,
+    "startNativeOpenRouterTaskSessionJson",
+    JSON.stringify("task-calendar-contract"),
+    JSON.stringify("Review and change the project calendar."),
+    JSON.stringify("deepseek/deepseek-v4-pro"),
+  ));
+  let provider = await nextProviderRequest(context);
+  const calendar = provider.tools.find((tool) => tool.function.name === "device_calendar");
+  assert.ok(calendar);
+  assert.equal(calendar.function.parameters.type, "object");
+  assert.equal(calendar.function.parameters.oneOf.length, 6);
+  assert.deepEqual(
+    calendar.function.parameters.oneOf.map((branch) => branch.properties.action.const),
+    [
+      "list_calendars",
+      "list_events",
+      "get_event",
+      "create_event",
+      "update_event",
+      "delete_event",
+    ],
+  );
+  for (const branch of calendar.function.parameters.oneOf) {
+    assert.equal(branch.type, "object");
+    assert.equal(branch.additionalProperties, false);
+    assert.equal(branch.required.includes("action"), true);
+    assert.equal(branch.required.includes("purpose"), true);
+  }
+  const rfc3339Pattern =
+    "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,9})?(?:Z|[+-][0-9]{2}:[0-9]{2})$";
+  const listEvents = calendar.function.parameters.oneOf[1];
+  const createEvent = calendar.function.parameters.oneOf[3];
+  assert.equal(listEvents.properties.start.pattern, rfc3339Pattern);
+  assert.equal(listEvents.properties.end.pattern, rfc3339Pattern);
+  assert.equal(createEvent.properties.schedule.oneOf[0].properties.start.pattern, rfc3339Pattern);
+  assert.equal(createEvent.properties.schedule.oneOf[0].properties.end.pattern, rfc3339Pattern);
+  assert.ok(
+    Buffer.byteLength(JSON.stringify(calendar), "utf8") <= 6 * 1024,
+    "Calendar Tool definition must stay within its context budget",
+  );
+
+  const calendarHandle = "calendar-111111111111111111111111";
+  const eventHandle = "event-222222222222222222222222";
+  const createdHandle = "event-333333333333333333333333";
+  const calls = [
+    {
+      callId: "calendar-list-calendars",
+      arguments: { action: "list_calendars", purpose: "Find a writable project calendar" },
+      result: {
+        ok: true,
+        action: "list_calendars",
+        data: {
+          items: [{ calendarHandle, displayName: "Project", writable: true, timeZone: "Asia/Shanghai" }],
+          count: 1,
+        },
+        page: { truncated: false, nextCursor: null },
+        verification: { status: "observed", observedAt: "2026-07-29T10:00:00+08:00" },
+      },
+    },
+    {
+      callId: "calendar-list-events",
+      arguments: {
+        action: "list_events",
+        purpose: "Find the project review",
+        start: "2026-07-31T00:00:00+08:00",
+        end: "2026-08-01T00:00:00+08:00",
+        calendarHandle,
+        query: "review",
+        cursor: null,
+      },
+      result: {
+        ok: true,
+        action: "list_events",
+        data: {
+          items: [{ eventHandle, title: "Project review", start: "2026-07-31T15:00:00+08:00" }],
+          count: 1,
+        },
+        page: { truncated: false, nextCursor: null },
+        verification: { status: "observed", observedAt: "2026-07-29T10:00:01+08:00" },
+      },
+    },
+    {
+      callId: "calendar-get-event",
+      arguments: { action: "get_event", purpose: "Inspect the project review", eventHandle },
+      result: {
+        ok: true,
+        action: "get_event",
+        data: {
+          item: {
+            eventHandle,
+            title: "Project review",
+            schedule: {
+              kind: "timed",
+              start: "2026-07-31T15:00:00+08:00",
+              end: "2026-07-31T15:30:00+08:00",
+              timeZone: "Asia/Shanghai",
+            },
+          },
+        },
+        verification: { status: "observed", observedAt: "2026-07-29T10:00:02+08:00" },
+      },
+    },
+    {
+      callId: "calendar-create-event",
+      arguments: {
+        action: "create_event",
+        purpose: "Schedule the approved follow-up",
+        title: "Project follow-up",
+        schedule: {
+          kind: "timed",
+          start: "2026-07-31T16:00:00+08:00",
+          end: "2026-07-31T16:30:00+08:00",
+          timeZone: "Asia/Shanghai",
+        },
+        location: null,
+        description: null,
+        calendarHandle,
+      },
+      result: {
+        ok: true,
+        action: "create_event",
+        data: { change: "created", eventHandle: createdHandle, title: "Project follow-up" },
+        verification: { status: "verified", observedAt: "2026-07-29T10:00:03+08:00" },
+      },
+    },
+    {
+      callId: "calendar-update-event",
+      arguments: {
+        action: "update_event",
+        purpose: "Rename the approved follow-up",
+        eventHandle: createdHandle,
+        changes: { title: "Project follow-up notes" },
+      },
+      result: {
+        ok: true,
+        action: "update_event",
+        data: { change: "updated", eventHandle: createdHandle, title: "Project follow-up notes" },
+        verification: { status: "verified", observedAt: "2026-07-29T10:00:04+08:00" },
+      },
+    },
+    {
+      callId: "calendar-delete-event",
+      arguments: {
+        action: "delete_event",
+        purpose: "Delete the temporary approved follow-up",
+        eventHandle: createdHandle,
+      },
+      result: {
+        ok: true,
+        action: "delete_event",
+        data: { change: "deleted", eventHandle: createdHandle },
+        verification: { status: "verified", observedAt: "2026-07-29T10:00:05+08:00" },
+      },
+    },
+  ];
+
+  let firstTurnStatus = null;
+  for (const [index, expected] of calls.entries()) {
+    finishToolCall(
+      context,
+      provider,
+      expected.callId,
+      "device_calendar",
+      expected.arguments,
+    );
+    const nativeRequest = await nextNativeToolRequest(context);
+    assert.equal(nativeRequest.kind, "android_calendar_tool");
+    assert.equal(nativeRequest.toolName, "device_calendar");
+    assert.deepEqual(nativeRequest.arguments, expected.arguments);
+    assert.equal(JSON.stringify(nativeRequest).includes("content://"), false);
+    resolveNativeTool(context, nativeRequest.id, expected.result);
+    provider = await nextProviderRequest(context);
+    assert.match(JSON.stringify(provider.messages), new RegExp(expected.result.action));
+    if (index === 2) {
+      finishTextRequest(context, provider, "I found the event and retained only its opaque handles.");
+      firstTurnStatus = await waitForTerminal(context);
+      JSON.parse(call(
+        context,
+        "continueNativeOpenRouterTaskPromptJson",
+        JSON.stringify("Create the follow-up, rename it, then delete the temporary event."),
+      ));
+      provider = await nextProviderRequest(context);
+      assert.match(JSON.stringify(provider.messages), new RegExp(eventHandle));
+    }
+  }
+
+  finishTextRequest(context, provider, "The deterministic Calendar contract chain completed.");
+  const status = await waitForTerminal(context);
+  assert.equal(status.turnCount, 2);
+  assert.equal(firstTurnStatus.toolExecutionsStarted + status.toolExecutionsStarted, 6);
+  assert.equal(firstTurnStatus.toolExecutionsEnded + status.toolExecutionsEnded, 6);
+  assert.equal(firstTurnStatus.toolRequestsIssued + status.toolRequestsIssued, 6);
+  assert.equal(firstTurnStatus.toolRequestsResolved + status.toolRequestsResolved, 6);
+  assert.deepEqual(JSON.parse(call(context, "closeJson")), { ok: true, closed: true });
+});
+
+test("contacts exposes five strict bounded branches and keeps opaque handles across turns", async () => {
+  const context = await bootRuntime();
+  JSON.parse(call(
+    context,
+    "startNativeOpenRouterTaskSessionJson",
+    JSON.stringify("task-contacts-contract"),
+    JSON.stringify("Find Alex in my contacts."),
+    JSON.stringify("deepseek/deepseek-v4-pro"),
+  ));
+  let provider = await nextProviderRequest(context);
+  const contacts = provider.tools.find((tool) => tool.function.name === "device_contacts");
+  assert.ok(contacts);
+  assert.equal(contacts.function.parameters.type, "object");
+  assert.deepEqual(
+    contacts.function.parameters.oneOf.map((branch) => branch.properties.action.const),
+    ["search", "get_contact", "create_contact", "update_contact", "delete_contact"],
+  );
+  for (const branch of contacts.function.parameters.oneOf) {
+    assert.equal(branch.type, "object");
+    assert.equal(branch.additionalProperties, false);
+    assert.equal(branch.required.includes("purpose"), true);
+  }
+  const updateBranch = contacts.function.parameters.oneOf.find(
+    (branch) => branch.properties.action.const === "update_contact",
+  );
+  assert.equal(updateBranch.properties.changes.minProperties, 1);
+  assert.ok(
+    Buffer.byteLength(JSON.stringify(contacts), "utf8") <= 6 * 1024,
+    "Contacts Tool definition must stay within its context budget",
+  );
+
+  finishToolCall(
+    context,
+    provider,
+    "contacts-search",
+    "device_contacts",
+    {
+      action: "search",
+      purpose: "Find Alex",
+      query: "Alex",
+      cursor: null,
+    },
+  );
+  const searchRequest = await nextNativeToolRequest(context);
+  assert.equal(searchRequest.kind, "android_contacts_tool");
+  assert.equal(searchRequest.toolName, "device_contacts");
+  const contactHandle = "contact-111111111111111111111111";
+  resolveNativeTool(context, searchRequest.id, {
+    ok: true,
+    action: "search",
+    data: {
+      items: [{
+        contactHandle,
+        displayName: "Alex Chen",
+        primaryPhone: { value: "+8613800000000", label: "Mobile", primary: true },
+        phoneCount: 1,
+        emailCount: 1,
+      }],
+      count: 1,
+    },
+    page: { truncated: false, nextCursor: null },
+    verification: { status: "observed", observedAt: "2026-07-29T10:00:00.000Z" },
+  });
+  provider = await nextProviderRequest(context);
+  assert.match(JSON.stringify(provider.messages), new RegExp(contactHandle));
+  finishTextRequest(context, provider, "I found Alex and kept only the task contact handle.");
+  const firstTurn = await waitForTerminal(context);
+
+  JSON.parse(call(
+    context,
+    "continueNativeOpenRouterTaskPromptJson",
+    JSON.stringify("Read Alex's contact details."),
+  ));
+  provider = await nextProviderRequest(context);
+  assert.match(JSON.stringify(provider.messages), new RegExp(contactHandle));
+  finishToolCall(
+    context,
+    provider,
+    "contacts-get",
+    "device_contacts",
+    {
+      action: "get_contact",
+      purpose: "Read the selected Alex contact",
+      contactHandle,
+    },
+  );
+  const getRequest = await nextNativeToolRequest(context);
+  assert.equal(getRequest.kind, "android_contacts_tool");
+  assert.deepEqual(getRequest.arguments, {
+    action: "get_contact",
+    purpose: "Read the selected Alex contact",
+    contactHandle,
+  });
+  assert.equal(JSON.stringify(getRequest).includes("content://"), false);
+  resolveNativeTool(context, getRequest.id, {
+    ok: true,
+    action: "get_contact",
+    data: {
+      contact: {
+        contactHandle,
+        displayName: "Alex Chen",
+        phones: [{ value: "+8613800000000", label: "Mobile", primary: true }],
+        emails: [{ value: "alex@example.test", label: "Work", primary: true }],
+        organization: { company: "Example", title: "Engineer" },
+      },
+    },
+    verification: { status: "observed", observedAt: "2026-07-29T10:00:01.000Z" },
+  });
+  provider = await nextProviderRequest(context);
+  assert.match(JSON.stringify(provider.messages), /alex@example\.test/);
+  finishTextRequest(context, provider, "Alex's bounded contact details are available.");
+  const secondTurn = await waitForTerminal(context);
+
+  JSON.parse(call(
+    context,
+    "continueNativeOpenRouterTaskPromptJson",
+    JSON.stringify("Create a temporary contact, update it, then delete it."),
+  ));
+  provider = await nextProviderRequest(context);
+  const createdHandle = "contact-222222222222222222222222";
+  const mutations = [
+    {
+      callId: "contacts-create",
+      arguments: {
+        action: "create_contact",
+        purpose: "Create temporary Alex",
+        displayName: "Alex Temporary",
+        phones: [{ value: "+8613900000000", label: "Mobile", primary: true }],
+        emails: [],
+        organization: null,
+      },
+      result: {
+        ok: true,
+        action: "create_contact",
+        data: {
+          contact: {
+            contactHandle: createdHandle,
+            displayName: "Alex Temporary",
+            phones: [{ value: "+8613900000000", label: "Mobile", primary: true }],
+            emails: [],
+            organization: null,
+          },
+        },
+        verification: { status: "verified", observedAt: "2026-07-29T10:00:02.000Z" },
+      },
+    },
+    {
+      callId: "contacts-update",
+      arguments: {
+        action: "update_contact",
+        purpose: "Rename temporary Alex",
+        contactHandle: createdHandle,
+        changes: { displayName: "Alex Temporary Updated" },
+      },
+      result: {
+        ok: true,
+        action: "update_contact",
+        data: {
+          contact: {
+            contactHandle: createdHandle,
+            displayName: "Alex Temporary Updated",
+            phones: [{ value: "+8613900000000", label: "Mobile", primary: true }],
+            emails: [],
+            organization: null,
+          },
+        },
+        verification: { status: "verified", observedAt: "2026-07-29T10:00:03.000Z" },
+      },
+    },
+    {
+      callId: "contacts-delete",
+      arguments: {
+        action: "delete_contact",
+        purpose: "Delete temporary Alex",
+        contactHandle: createdHandle,
+      },
+      result: {
+        ok: true,
+        action: "delete_contact",
+        data: { deleted: true },
+        verification: { status: "verified", observedAt: "2026-07-29T10:00:04.000Z" },
+      },
+    },
+  ];
+  for (const expected of mutations) {
+    finishToolCall(
+      context,
+      provider,
+      expected.callId,
+      "device_contacts",
+      expected.arguments,
+    );
+    const nativeRequest = await nextNativeToolRequest(context);
+    assert.equal(nativeRequest.kind, "android_contacts_tool");
+    assert.equal(nativeRequest.toolName, "device_contacts");
+    assert.deepEqual(nativeRequest.arguments, expected.arguments);
+    assert.equal(JSON.stringify(nativeRequest).includes("content://"), false);
+    resolveNativeTool(context, nativeRequest.id, expected.result);
+    provider = await nextProviderRequest(context);
+    assert.match(JSON.stringify(provider.messages), new RegExp(expected.result.action));
+  }
+  finishTextRequest(context, provider, "The temporary contact was created, updated, and deleted.");
+  const thirdTurn = await waitForTerminal(context);
+  assert.equal(thirdTurn.turnCount, 3);
+  assert.equal(
+    firstTurn.toolRequestsIssued + secondTurn.toolRequestsIssued + thirdTurn.toolRequestsIssued,
+    5,
+  );
+  assert.equal(
+    firstTurn.toolRequestsResolved + secondTurn.toolRequestsResolved +
+      thirdTurn.toolRequestsResolved,
+    5,
+  );
+  assert.deepEqual(JSON.parse(call(context, "closeJson")), { ok: true, closed: true });
+});
+
+test("one real Pi task combines Contacts, Location, and Calendar within the Alpha context budget", async () => {
+  const context = await bootRuntime();
+  JSON.parse(call(
+    context,
+    "startNativeOpenRouterTaskSessionJson",
+    JSON.stringify("task-domain-cross-alpha"),
+    JSON.stringify("Find Alex, check my current area, then list tomorrow's calendars."),
+    JSON.stringify("deepseek/deepseek-v4-pro"),
+  ));
+
+  let provider = await nextProviderRequest(context);
+  const toolsByName = new Map(
+    provider.tools.map((tool) => [tool.function.name, tool]),
+  );
+  const domainToolNames = [
+    "device_calendar",
+    "device_contacts",
+    "device_location",
+    "device_clipboard",
+    "device_notification",
+    "device_media_list",
+    "device_media",
+  ];
+  assert.deepEqual(
+    domainToolNames.filter((name) => toolsByName.has(name)),
+    domainToolNames,
+  );
+  assert.ok(provider.tools.length <= 24);
+  assert.ok(Buffer.byteLength(JSON.stringify(provider.tools), "utf8") <= 36 * 1024);
+  const domainToolBytes = domainToolNames.map((name) =>
+    Buffer.byteLength(JSON.stringify(toolsByName.get(name)), "utf8")
+  );
+  assert.ok(
+    Math.max(...domainToolBytes) * 2 < domainToolBytes.reduce((sum, bytes) => sum + bytes, 0),
+    "No single domain Tool may consume half of the Android-domain schema budget",
+  );
+
+  finishToolCall(
+    context,
+    provider,
+    "cross-contacts-search",
+    "device_contacts",
+    {
+      action: "search",
+      purpose: "Find Alex for the requested cross-domain task",
+      query: "Alex",
+      cursor: null,
+    },
+  );
+  let nativeRequest = await nextNativeToolRequest(context);
+  assert.equal(nativeRequest.kind, "android_contacts_tool");
+  const contactHandle = "contact-aaaaaaaaaaaaaaaaaaaaaaaa";
+  resolveNativeTool(context, nativeRequest.id, {
+    ok: true,
+    action: "search",
+    data: {
+      items: [{ contactHandle, displayName: "Alex Chen", phoneCount: 1, emailCount: 0 }],
+      count: 1,
+    },
+    page: { truncated: false, nextCursor: null },
+    verification: { status: "observed", observedAt: "2026-07-29T12:00:00Z" },
+  });
+
+  provider = await nextProviderRequest(context);
+  assert.match(JSON.stringify(provider.messages), new RegExp(contactHandle));
+  finishToolCall(
+    context,
+    provider,
+    "cross-location-current",
+    "device_location",
+    {
+      action: "get_current",
+      precision: "approximate",
+      purpose: "Check the current area for the requested cross-domain task",
+    },
+  );
+  nativeRequest = await nextNativeToolRequest(context);
+  assert.equal(nativeRequest.kind, "android_location_tool");
+  const locationPayload = {
+    ok: true,
+    action: "get_current",
+    data: {
+      precision: "approximate",
+      latitude: 31.23,
+      longitude: 121.47,
+      accuracyMeters: 1000,
+      capturedAt: "2026-07-29T12:00:01Z",
+      ageMillis: 1000,
+      providerCategory: "network",
+    },
+    verification: { status: "observed", observedAt: "2026-07-29T12:00:02Z" },
+  };
+  const locationPayloadText = JSON.stringify(locationPayload);
+  JSON.parse(call(
+    context,
+    "resolveNativeProviderToolRequestJson",
+    JSON.stringify(nativeRequest.id),
+    JSON.stringify(locationPayloadText),
+    JSON.stringify(JSON.stringify({
+      liveOnly: true,
+      dataClass: "location",
+      contentSha256: createHash("sha256").update(locationPayloadText, "utf8").digest("hex"),
+      precision: "approximate",
+    })),
+    "false",
+  ));
+
+  provider = await nextProviderRequest(context);
+  assert.match(JSON.stringify(provider.messages), /31\.23/);
+  assert.match(JSON.stringify(provider.messages), new RegExp(contactHandle));
+  finishToolCall(
+    context,
+    provider,
+    "cross-calendar-list",
+    "device_calendar",
+    {
+      action: "list_calendars",
+      purpose: "List calendars for tomorrow's requested follow-up",
+    },
+  );
+  nativeRequest = await nextNativeToolRequest(context);
+  assert.equal(nativeRequest.kind, "android_calendar_tool");
+  resolveNativeTool(context, nativeRequest.id, {
+    ok: true,
+    action: "list_calendars",
+    data: {
+      items: [{
+        calendarHandle: "calendar-bbbbbbbbbbbbbbbbbbbbbbbb",
+        displayName: "Personal",
+        writable: true,
+        timeZone: "Asia/Shanghai",
+      }],
+      count: 1,
+    },
+    page: { truncated: false, nextCursor: null },
+    verification: { status: "observed", observedAt: "2026-07-29T12:00:03Z" },
+  });
+
+  provider = await nextProviderRequest(context);
+  const finalMessages = JSON.stringify(provider.messages);
+  assert.match(finalMessages, /list_calendars/);
+  assert.match(finalMessages, new RegExp(contactHandle));
+  assert.match(finalMessages, /31\.23/);
+  finishTextRequest(context, provider, "Alex, the current area, and the calendar were checked.");
+  const status = await waitForTerminal(context);
+  assert.equal(status.toolExecutionsStarted, 3);
+  assert.equal(status.toolExecutionsEnded, 3);
+  assert.equal(status.toolRequestsIssued, 3);
+  assert.equal(status.toolRequestsResolved, 3);
+  assert.equal(status.lateToolStartsAfterStop, 0);
+  assert.doesNotMatch(JSON.stringify(status.runEvents), /31\.23/);
+  assert.match(JSON.stringify(status.runEvents), /live Android location expired/);
+  const snapshot = JSON.parse(call(context, "nativeOpenRouterTaskSessionSnapshotJson"));
+  assert.doesNotMatch(JSON.stringify(snapshot), /31\.23/);
+  assert.match(JSON.stringify(snapshot), /live Android location expired/);
+  assert.deepEqual(JSON.parse(call(context, "closeJson")), { ok: true, closed: true });
+});
+
+test("one domain capability failure stays local and cross-domain Stop rejects late Android results", async () => {
+  const context = await bootRuntime();
+  JSON.parse(call(
+    context,
+    "startNativeOpenRouterTaskSessionJson",
+    JSON.stringify("task-domain-failure-isolation"),
+    JSON.stringify("Find Alex and list my calendars."),
+    JSON.stringify("deepseek/deepseek-v4-pro"),
+  ));
+  let provider = await nextProviderRequest(context);
+  finishToolCall(
+    context,
+    provider,
+    "cross-contacts-denied",
+    "device_contacts",
+    {
+      action: "search",
+      purpose: "Find Alex",
+      query: "Alex",
+      cursor: null,
+    },
+  );
+  const deniedRequest = await nextNativeToolRequest(context);
+  const deniedPayload = {
+    ok: false,
+    action: "search",
+    error: {
+      code: "CONTACTS_PERMISSION_REQUIRED",
+      message: "Grant Contacts permission before retrying.",
+      retryable: true,
+    },
+  };
+  JSON.parse(call(
+    context,
+    "resolveNativeProviderToolRequestJson",
+    JSON.stringify(deniedRequest.id),
+    JSON.stringify(JSON.stringify(deniedPayload)),
+    JSON.stringify(JSON.stringify(deniedPayload)),
+    "true",
+  ));
+
+  provider = await nextProviderRequest(context);
+  assert.match(JSON.stringify(provider.messages), /CONTACTS_PERMISSION_REQUIRED/);
+  finishToolCall(
+    context,
+    provider,
+    "cross-calendar-after-denial",
+    "device_calendar",
+    {
+      action: "list_calendars",
+      purpose: "Continue the unaffected Calendar part of the task",
+    },
+  );
+  const pendingCalendar = await nextNativeToolRequest(context);
+  assert.equal(pendingCalendar.kind, "android_calendar_tool");
+  JSON.parse(call(context, "abortNativeOpenRouterScenarioJson"));
+  const status = await waitForTerminal(context);
+  assert.equal(status.stopCompleted, true);
+  assert.equal(status.hasAbort, true);
+  assert.equal(status.toolRequestsIssued, 2);
+  assert.equal(status.toolRequestsResolved, 1);
+  assert.equal(status.lateToolStartsAfterStop, 0);
+  assert.throws(
+    () => resolveNativeTool(context, pendingCalendar.id, {
+      ok: true,
+      action: "list_calendars",
+      data: { items: [], count: 0 },
+    }),
+    /PI_MOBILE_NATIVE_PROVIDER_TOOL_NOT_FOUND/,
+  );
+  assert.deepEqual(JSON.parse(call(context, "closeJson")), { ok: true, closed: true });
+});
+
+test("Provider personal data remains inside the owning Pi task", async () => {
+  const privateMarker = "DNT7_PRIVATE_CONTACT_MARKER";
+  const ownerContext = await bootRuntime();
+  JSON.parse(call(
+    ownerContext,
+    "startNativeOpenRouterTaskSessionJson",
+    JSON.stringify("task-domain-private-owner"),
+    JSON.stringify("Find the private test contact."),
+    JSON.stringify("deepseek/deepseek-v4-pro"),
+  ));
+  let provider = await nextProviderRequest(ownerContext);
+  finishToolCall(
+    ownerContext,
+    provider,
+    "private-contact-search",
+    "device_contacts",
+    {
+      action: "search",
+      purpose: "Find the private test contact",
+      query: "private",
+      cursor: null,
+    },
+  );
+  const nativeRequest = await nextNativeToolRequest(ownerContext);
+  resolveNativeTool(ownerContext, nativeRequest.id, {
+    ok: true,
+    action: "search",
+    data: {
+      items: [{
+        contactHandle: "contact-cccccccccccccccccccccccc",
+        displayName: privateMarker,
+        phoneCount: 0,
+        emailCount: 0,
+      }],
+      count: 1,
+    },
+    page: { truncated: false, nextCursor: null },
+    verification: { status: "observed", observedAt: "2026-07-29T12:00:04Z" },
+  });
+  provider = await nextProviderRequest(ownerContext);
+  assert.match(JSON.stringify(provider.messages), new RegExp(privateMarker));
+  finishTextRequest(ownerContext, provider, "The private test contact was found.");
+  await waitForTerminal(ownerContext);
+
+  const otherContext = await bootRuntime();
+  JSON.parse(call(
+    otherContext,
+    "startNativeOpenRouterTaskSessionJson",
+    JSON.stringify("task-domain-private-other"),
+    JSON.stringify("List my calendars."),
+    JSON.stringify("deepseek/deepseek-v4-pro"),
+  ));
+  const otherProvider = await nextProviderRequest(otherContext);
+  assert.doesNotMatch(JSON.stringify(otherProvider.messages), new RegExp(privateMarker));
+  finishTextRequest(otherContext, otherProvider, "No data from another task is present.");
+  await waitForTerminal(otherContext);
+
+  assert.deepEqual(JSON.parse(call(ownerContext, "closeJson")), { ok: true, closed: true });
+  assert.deepEqual(JSON.parse(call(otherContext, "closeJson")), { ok: true, closed: true });
+});
+
+test("pre-native Contacts validation is redacted and never calls Android", async () => {
+  const context = await bootRuntime();
+  JSON.parse(call(
+    context,
+    "startNativeOpenRouterTaskSessionJson",
+    JSON.stringify("task-contacts-invalid"),
+    JSON.stringify("Find a contact."),
+    JSON.stringify("deepseek/deepseek-v4-pro"),
+  ));
+  let provider = await nextProviderRequest(context);
+  finishToolCall(
+    context,
+    provider,
+    "contacts-invalid",
+    "device_contacts",
+    {
+      action: "search",
+      purpose: "SENSITIVE_PURPOSE_MUST_NOT_BE_ECHOED",
+      query: "SENSITIVE_QUERY_MUST_NOT_BE_ECHOED",
+      unexpected: true,
+    },
+  );
+  provider = await nextProviderRequest(context);
+  assert.deepEqual(JSON.parse(call(context, "drainNativeProviderToolRequestsJson")), []);
+  const failure = provider.messages.find(
+    (message) => message.role === "tool" && message.tool_call_id === "contacts-invalid",
+  );
+  assert.ok(failure);
+  assert.match(failure.content, /"code":"INVALID_ARGUMENTS"/);
+  assert.match(failure.content, /"action":"search"/);
+  assert.doesNotMatch(failure.content, /SENSITIVE_PURPOSE/);
+  assert.doesNotMatch(failure.content, /SENSITIVE_QUERY/);
+  finishTextRequest(context, provider, "The invalid Contacts call was rejected before Android.");
+  const status = await waitForTerminal(context);
+  assert.equal(status.toolRequestsIssued, 0);
+  assert.equal(status.toolRequestsResolved, 0);
+  assert.deepEqual(JSON.parse(call(context, "closeJson")), { ok: true, closed: true });
+});
+
+test("pending Calendar work is cancelled on Stop and stable timeout recovery stays model-visible", async () => {
+  const stoppedContext = await bootRuntime();
+  JSON.parse(call(
+    stoppedContext,
+    "startNativeOpenRouterTaskSessionJson",
+    JSON.stringify("task-calendar-stop"),
+    JSON.stringify("List calendars, but stop if the task is cancelled."),
+    JSON.stringify("deepseek/deepseek-v4-pro"),
+  ));
+  const stoppedProvider = await nextProviderRequest(stoppedContext);
+  finishToolCall(
+    stoppedContext,
+    stoppedProvider,
+    "calendar-pending-stop",
+    "device_calendar",
+    { action: "list_calendars", purpose: "List calendars before cancellation" },
+  );
+  const stoppedNativeRequest = await nextNativeToolRequest(stoppedContext);
+  JSON.parse(call(stoppedContext, "abortNativeOpenRouterScenarioJson"));
+  const stoppedStatus = await waitForTerminal(stoppedContext);
+  assert.equal(stoppedStatus.stopCompleted, true);
+  assert.equal(stoppedStatus.hasAbort, true);
+  assert.equal(stoppedStatus.toolRequestsIssued, 1);
+  assert.equal(stoppedStatus.toolRequestsResolved, 0);
+  assert.equal(stoppedStatus.lateToolStartsAfterStop, 0);
+  assert.throws(
+    () => resolveNativeTool(
+      stoppedContext,
+      stoppedNativeRequest.id,
+      { ok: true, action: "list_calendars", data: { items: [] } },
+    ),
+    /PI_MOBILE_NATIVE_PROVIDER_TOOL_NOT_FOUND/,
+  );
+  assert.deepEqual(
+    JSON.parse(call(stoppedContext, "closeJson")),
+    { ok: true, closed: true },
+  );
+
+  const timedOutContext = await bootRuntime();
+  JSON.parse(call(
+    timedOutContext,
+    "startNativeOpenRouterTaskSessionJson",
+    JSON.stringify("task-calendar-timeout"),
+    JSON.stringify("List calendars and report a recoverable timeout accurately."),
+    JSON.stringify("deepseek/deepseek-v4-pro"),
+  ));
+  let provider = await nextProviderRequest(timedOutContext);
+  finishToolCall(
+    timedOutContext,
+    provider,
+    "calendar-timeout",
+    "device_calendar",
+    { action: "list_calendars", purpose: "List calendars within the bounded operation" },
+  );
+  const timedOutRequest = await nextNativeToolRequest(timedOutContext);
+  const timeoutPayload = {
+    ok: false,
+    action: "list_calendars",
+    error: {
+      code: "DEVICE_TOOL_TIMEOUT",
+      message: "Calendar operation timed out.",
+      retryable: true,
+    },
+  };
+  JSON.parse(call(
+    timedOutContext,
+    "resolveNativeProviderToolRequestJson",
+    JSON.stringify(timedOutRequest.id),
+    JSON.stringify(JSON.stringify(timeoutPayload)),
+    JSON.stringify(JSON.stringify(timeoutPayload)),
+    "true",
+  ));
+  provider = await nextProviderRequest(timedOutContext);
+  const timeoutResult = provider.messages.find((message) =>
+    message.role === "tool" && message.tool_call_id === "calendar-timeout"
+  );
+  assert.ok(timeoutResult);
+  assert.deepEqual(JSON.parse(timeoutResult.content), timeoutPayload);
+  finishTextRequest(timedOutContext, provider, "The Calendar operation timed out and can be retried.");
+  const timedOutStatus = await waitForTerminal(timedOutContext);
+  assert.equal(
+    timedOutStatus.runEvents.find((event) =>
+      event.type === "tool_execution_end" && event.toolCallId === "calendar-timeout"
+    )?.isError,
+    true,
+  );
+  assert.deepEqual(
+    JSON.parse(call(timedOutContext, "closeJson")),
+    { ok: true, closed: true },
+  );
+});
+
+test("pre-native Calendar validation returns redacted stable JSON and never calls Android", async () => {
+  const context = await bootRuntime();
+  JSON.parse(call(
+    context,
+    "startNativeOpenRouterTaskSessionJson",
+    JSON.stringify("task-calendar-invalid"),
+    JSON.stringify("Create a calendar event."),
+    JSON.stringify("deepseek/deepseek-v4-pro"),
+  ));
+  let provider = await nextProviderRequest(context);
+  finishToolCall(
+    context,
+    provider,
+    "calendar-invalid-known-action",
+    "device_calendar",
+    {
+      action: "create_event",
+      purpose: "Create a private fixture",
+      title: "SENSITIVE_CALENDAR_TITLE_MUST_NOT_BE_ECHOED",
+      unexpected: "SENSITIVE_LOCATION_MUST_NOT_BE_ECHOED",
+    },
+  );
+  provider = await nextProviderRequest(context);
+  assert.deepEqual(
+    JSON.parse(call(context, "drainNativeProviderToolRequestsJson")),
+    [],
+    "schema rejection must happen before the Android mailbox",
+  );
+  const knownFailure = provider.messages.find(
+    (message) =>
+      message.role === "tool" &&
+      message.tool_call_id === "calendar-invalid-known-action",
+  );
+  assert.ok(knownFailure);
+  assert.match(knownFailure.content, /"code":"INVALID_ARGUMENTS"/);
+  assert.match(knownFailure.content, /"action":"create_event"/);
+  assert.doesNotMatch(knownFailure.content, /SENSITIVE_CALENDAR_TITLE/);
+  assert.doesNotMatch(knownFailure.content, /SENSITIVE_LOCATION/);
+
+  finishToolCall(
+    context,
+    provider,
+    "calendar-invalid-unknown-action",
+    "device_calendar",
+    {
+      action: "SENSITIVE_UNKNOWN_ACTION_MUST_NOT_BE_ECHOED",
+      purpose: "Invalid fixture",
+    },
+  );
+  provider = await nextProviderRequest(context);
+  assert.deepEqual(JSON.parse(call(context, "drainNativeProviderToolRequestsJson")), []);
+  const unknownFailure = provider.messages.find(
+    (message) =>
+      message.role === "tool" &&
+      message.tool_call_id === "calendar-invalid-unknown-action",
+  );
+  assert.ok(unknownFailure);
+  assert.match(unknownFailure.content, /"action":null/);
+  assert.doesNotMatch(unknownFailure.content, /SENSITIVE_UNKNOWN_ACTION/);
+  finishTextRequest(context, provider, "The invalid Calendar calls were rejected before Android.");
+  const status = await waitForTerminal(context);
+  assert.equal(status.toolRequestsIssued, 0);
+  assert.equal(status.toolRequestsResolved, 0);
+  for (const callId of [
+    "calendar-invalid-known-action",
+    "calendar-invalid-unknown-action",
+  ]) {
+    assert.equal(
+      status.runEvents.find((event) =>
+        event.type === "tool_execution_end" && event.toolCallId === callId
+      )?.isError,
+      true,
+    );
+  }
   assert.deepEqual(JSON.parse(call(context, "closeJson")), { ok: true, closed: true });
 });
 

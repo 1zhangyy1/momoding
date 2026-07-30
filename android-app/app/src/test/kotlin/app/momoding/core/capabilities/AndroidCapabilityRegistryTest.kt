@@ -10,6 +10,55 @@ import org.junit.Test
 
 class AndroidCapabilityRegistryTest {
     @Test
+    fun notificationContractRequiresDeclarationRuntimeGrantAndAppEnablement() {
+        assertEquals(
+            CapabilityAvailability.UNSUPPORTED,
+            notificationAvailability(
+                declared = false,
+                runtimePermissionGranted = true,
+                appNotificationsEnabled = true,
+                channelBlocked = false,
+            ),
+        )
+        assertEquals(
+            CapabilityAvailability.NOT_GRANTED,
+            notificationAvailability(
+                declared = true,
+                runtimePermissionGranted = false,
+                appNotificationsEnabled = true,
+                channelBlocked = false,
+            ),
+        )
+        assertEquals(
+            CapabilityAvailability.NOT_GRANTED,
+            notificationAvailability(
+                declared = true,
+                runtimePermissionGranted = true,
+                appNotificationsEnabled = false,
+                channelBlocked = false,
+            ),
+        )
+        assertEquals(
+            CapabilityAvailability.NOT_GRANTED,
+            notificationAvailability(
+                declared = true,
+                runtimePermissionGranted = true,
+                appNotificationsEnabled = true,
+                channelBlocked = true,
+            ),
+        )
+        assertEquals(
+            CapabilityAvailability.READY,
+            notificationAvailability(
+                declared = true,
+                runtimePermissionGranted = true,
+                appNotificationsEnabled = true,
+                channelBlocked = false,
+            ),
+        )
+    }
+
+    @Test
     fun accessibilityIsReadyOnlyWhenTheDeclaredServiceIsActuallyConnected() {
         assertEquals(
             CapabilityAvailability.UNSUPPORTED,
@@ -81,6 +130,116 @@ class AndroidCapabilityRegistryTest {
         assertEquals(
             CapabilityAvailability.NOT_GRANTED,
             photoLibraryAvailability(Build.VERSION_CODES.UPSIDE_DOWN_CAKE) { false },
+        )
+    }
+
+    @Test
+    fun calendarContractSeparatesReadFromWriteWithoutOverRequesting() {
+        assertEquals(
+            CapabilityAvailability.NOT_GRANTED,
+            calendarAvailability(readGranted = false, writeGranted = false),
+        )
+        assertEquals(
+            CapabilityAvailability.PARTIAL,
+            calendarAvailability(readGranted = true, writeGranted = false),
+        )
+        assertEquals(
+            CapabilityAvailability.READY,
+            calendarAvailability(readGranted = true, writeGranted = true),
+        )
+        assertEquals(
+            listOf(Manifest.permission.READ_CALENDAR),
+            calendarPermissionRequest(CalendarCapabilityAccess.READ) { false },
+        )
+        assertEquals(
+            listOf(Manifest.permission.WRITE_CALENDAR),
+            calendarPermissionRequest(CalendarCapabilityAccess.WRITE) {
+                it == Manifest.permission.READ_CALENDAR
+            },
+        )
+        assertFalse(
+            shouldOpenAppSettingsForPermissions(
+                missingPermissions = listOf(Manifest.permission.READ_CALENDAR),
+                wasAsked = { false },
+                shouldShowRationale = { false },
+            ),
+        )
+        assertFalse(
+            shouldOpenAppSettingsForPermissions(
+                missingPermissions = listOf(Manifest.permission.READ_CALENDAR),
+                wasAsked = { true },
+                shouldShowRationale = { true },
+            ),
+        )
+        assertTrue(
+            shouldOpenAppSettingsForPermissions(
+                missingPermissions = listOf(Manifest.permission.READ_CALENDAR),
+                wasAsked = { true },
+                shouldShowRationale = { false },
+            ),
+        )
+    }
+
+    @Test
+    fun contactsContractDistinguishesReadOnlyPartialFromFullWriteAccess() {
+        assertEquals(
+            CapabilityAvailability.NOT_GRANTED,
+            contactsAvailability(readGranted = false, writeGranted = false),
+        )
+        assertEquals(
+            CapabilityAvailability.PARTIAL,
+            contactsAvailability(readGranted = true, writeGranted = false),
+        )
+        assertEquals(
+            CapabilityAvailability.READY,
+            contactsAvailability(readGranted = true, writeGranted = true),
+        )
+        assertEquals(
+            listOf(Manifest.permission.READ_CONTACTS),
+            contactsPermissionRequest(ContactsCapabilityAccess.READ) { false },
+        )
+        assertEquals(
+            listOf(Manifest.permission.WRITE_CONTACTS),
+            contactsPermissionRequest(ContactsCapabilityAccess.WRITE) { permission ->
+                permission == Manifest.permission.READ_CONTACTS
+            },
+        )
+        assertEquals(
+            listOf(Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS),
+            contactsPermissionRequest(ContactsCapabilityAccess.WRITE) { false },
+        )
+    }
+
+    @Test
+    fun locationContractDefaultsToCoarseAndKeepsPreciseRequestAndroidCompatible() {
+        assertEquals(
+            CapabilityAvailability.NOT_GRANTED,
+            locationAvailability(coarseGranted = false, fineGranted = false),
+        )
+        assertEquals(
+            CapabilityAvailability.PARTIAL,
+            locationAvailability(coarseGranted = true, fineGranted = false),
+        )
+        assertEquals(
+            CapabilityAvailability.READY,
+            locationAvailability(coarseGranted = true, fineGranted = true),
+        )
+        assertEquals(
+            listOf(Manifest.permission.ACCESS_COARSE_LOCATION),
+            locationPermissionRequest(LocationCapabilityAccess.APPROXIMATE) { false },
+        )
+        assertEquals(
+            listOf(
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+            ),
+            locationPermissionRequest(LocationCapabilityAccess.PRECISE) { permission ->
+                permission == Manifest.permission.ACCESS_COARSE_LOCATION
+            },
+        )
+        assertEquals(
+            emptyList<String>(),
+            locationPermissionRequest(LocationCapabilityAccess.PRECISE) { true },
         )
     }
 

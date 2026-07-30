@@ -740,7 +740,7 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
             check(!shuttingDown) { "PI_MOBILE_OPENROUTER_RUNTIME_SHUTTING_DOWN" }
             shuttingDown = true
             if (running) {
-                requestPump?.cancelAndroidTools("runtime_shutdown")
+                requestPump?.cancelAndroidTools("host_shutdown")
                 engine?.abortNativeOpenRouterScenario()
                 true
             } else {
@@ -810,7 +810,7 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
         }
         releasePersistedTerminalChildren(status)
         closeCommandMailbox("PI_MOBILE_TASK_RUN_SETTLED")
-        activePump.cancelAndroidTools("tool_abort")
+        activePump.cancelAndroidTools(ANDROID_TOOL_TERMINAL_TURN_CLEANUP_REASON)
         return status
     }
 
@@ -1108,7 +1108,7 @@ internal class OpenRouterRequestPump(
     }
 
     suspend fun close() {
-        cancelAndroidTools("session_close")
+        cancelAndroidTools("host_shutdown")
         jobs.values.toList().forEach { it.cancelAndJoin() }
         jobs.clear()
         networkEvents.clear()
@@ -1356,6 +1356,8 @@ internal class OpenRouterRequestPump(
         ) : AndroidToolEvent
     }
 }
+
+internal const val ANDROID_TOOL_TERMINAL_TURN_CLEANUP_REASON = "tool_abort"
 
 private fun PiMobileSkillParseStatus.toSkillDocumentParseResult(): SkillDocumentParseResult {
     if (phase == "failed") {

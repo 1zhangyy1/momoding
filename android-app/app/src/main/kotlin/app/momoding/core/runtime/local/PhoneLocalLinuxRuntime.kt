@@ -1,12 +1,16 @@
 package app.momoding.core.runtime.local
 
 import android.content.Context
+import android.net.ConnectivityManager
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -152,6 +156,7 @@ class PhoneLocalLinuxRuntime internal constructor(
                     if (!prepareUntilStopped(active.stopped::get) || active.stopped.get()) {
                         return@coroutineScope stoppedBeforeStartResult(request.runId, startedAt)
                     }
+                    refreshDns()
 
                     val workspace = workspace(request.workspaceId)
                     val prootTemp = File(runtimeHome, "proot-tmp").apply {
@@ -159,33 +164,42 @@ class PhoneLocalLinuxRuntime internal constructor(
                     }
                     val proot = nativeExecutable(PROOT_LIBRARY)
                     val loader = nativeExecutable(PROOT_LOADER_LIBRARY)
-                    val processBuilder = ProcessBuilder(
-            proot.absolutePath,
-            "--kill-on-exit",
-            "-0",
-            "-r",
-            rootfs.absolutePath,
-            "-b",
-            "/dev/null",
-            "-b",
-            "/dev/zero",
-            "-b",
-            "/dev/urandom",
-            "-b",
-            "/proc",
-            "-b",
-            "${workspace.absolutePath}:/workspace",
-            "-w",
-            "/workspace",
-            "/usr/bin/env",
-            "-i",
-            "HOME=/root",
-            "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-            "TMPDIR=/tmp",
-            "/bin/sh",
-            "-lc",
-            request.command,
-                    ).apply {
+                    val prootArguments = mutableListOf(
+                        proot.absolutePath,
+                        "--kill-on-exit",
+                        "-0",
+                    )
+                    if (requiresApkLinkCompatibility(request.command)) {
+                        // Android app UIDs cannot create every cross-directory hardlink used by
+                        // Alpine packages. Restrict this translation to a standalone apk mutation;
+                        // enabling it for project commands would change normal hardlink semantics.
+                        prootArguments += "--link2symlink"
+                    }
+                    prootArguments += listOf(
+                        "-r",
+                        rootfs.absolutePath,
+                        "-b",
+                        "/dev/null",
+                        "-b",
+                        "/dev/zero",
+                        "-b",
+                        "/dev/urandom",
+                        "-b",
+                        "/proc",
+                        "-b",
+                        "${workspace.absolutePath}:/workspace",
+                        "-w",
+                        "/workspace",
+                        "/usr/bin/env",
+                        "-i",
+                        "HOME=/root",
+                        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                        "TMPDIR=/tmp",
+                        "/bin/sh",
+                        "-lc",
+                        request.command,
+                    )
+                    val processBuilder = ProcessBuilder(prootArguments).apply {
                         environment().clear()
                         environment()["PROOT_LOADER"] = loader.absolutePath
                         environment()["PROOT_TMP_DIR"] = prootTemp.absolutePath
@@ -264,6 +278,39 @@ class PhoneLocalLinuxRuntime internal constructor(
     private fun isPrepared(): Boolean =
         File(runtimeHome, PREPARED_MARKER).readTextOrNull() == ALPINE_SHA256 &&
             File(rootfs, "bin/busybox").isFile
+
+    /**
+     * Alpine's musl resolver reads this file directly. Android exposes the active network DNS
+     * through ConnectivityManager rather than a stable host /etc/resolv.conf, so refresh it before
+     * every command. This keeps on-demand apk installs working after Wi-Fi, cellular or VPN changes.
+     */
+    private fun refreshDns() {
+        val currentServers = runCatching {
+            val connectivity = appContext.getSystemService(Context.CONNECTIVITY_SERVICE)
+                as ConnectivityManager
+            val network = connectivity.activeNetwork ?: return@runCatching emptyList()
+            connectivity.getLinkProperties(network)
+                ?.dnsServers
+                .orEmpty()
+                .mapNotNull { address -> address.hostAddress }
+        }.getOrDefault(emptyList())
+        val destination = File(rootfs, "etc/resolv.conf")
+        val temporary = File(destination.parentFile, ".resolv.conf.${UUID.randomUUID()}.tmp")
+        runCatching {
+            check(
+                destination.parentFile?.mkdirs() != false ||
+                    destination.parentFile?.isDirectory == true,
+            )
+            temporary.writeText(renderPhoneLocalResolvConf(currentServers))
+            Files.move(
+                temporary.toPath(),
+                destination.toPath(),
+                StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING,
+            )
+        }
+        runCatching { Files.deleteIfExists(temporary.toPath()) }
+    }
 
     private fun nativeExecutable(name: String): File {
         val file = File(appContext.applicationInfo.nativeLibraryDir, name)
@@ -395,3 +442,38 @@ private fun java.io.InputStream.readCapped(
         .decode(ByteBuffer.wrap(output.toByteArray()))
         .toString()
 }
+
+internal fun renderPhoneLocalResolvConf(servers: List<String>): String {
+    val safeServers = servers.asSequence()
+        .map(String::trim)
+        .filter { server ->
+            server.isNotEmpty() &&
+                server.length <= 64 &&
+                server.all { character ->
+                    character.isDigit() ||
+                        character.lowercaseChar() in 'a'..'f' ||
+                        character in setOf('.', ':', '%')
+                }
+        }
+        .distinct()
+        .take(MAX_DNS_SERVERS)
+        .toList()
+        .ifEmpty { FALLBACK_DNS_SERVERS }
+    return safeServers.joinToString(separator = "\n", postfix = "\n") { server ->
+        "nameserver $server"
+    }
+}
+
+internal fun requiresApkLinkCompatibility(command: String): Boolean {
+    val trimmed = command.trim()
+    if (trimmed.any { it in APK_STANDALONE_FORBIDDEN_CHARACTERS }) return false
+    val tokens = trimmed.split(Regex("\\s+"))
+    if (tokens.size < 2 || tokens.first() !in setOf("apk", "/sbin/apk")) return false
+    return tokens[1] in APK_MUTATION_COMMANDS
+}
+
+private const val MAX_DNS_SERVERS = 4
+private val FALLBACK_DNS_SERVERS = listOf("1.1.1.1", "8.8.8.8")
+private val APK_MUTATION_COMMANDS = setOf("add", "del", "fix", "upgrade")
+private val APK_STANDALONE_FORBIDDEN_CHARACTERS =
+    setOf('\n', '\r', ';', '&', '|', '<', '>', '`', '$', '(', ')')

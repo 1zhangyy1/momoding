@@ -1,13 +1,17 @@
 package app.momoding.core.runtime.local
 
 import app.momoding.core.capabilities.AndroidCapabilityId
+import app.momoding.core.capabilities.AndroidCapabilityRequirement
 import app.momoding.core.capabilities.AndroidCapabilityRequestOutcome
 import app.momoding.core.capabilities.AndroidCapabilityRequestResult
 import app.momoding.core.capabilities.AndroidCapabilityRequester
 import app.momoding.core.capabilities.AndroidCapabilityRegistry
 import app.momoding.core.capabilities.AndroidCapabilityState
+import app.momoding.core.capabilities.CalendarCapabilityAccess
 import app.momoding.core.capabilities.CapabilityAvailability
+import app.momoding.core.capabilities.ContactsCapabilityAccess
 import app.momoding.core.capabilities.DEVICE_CAPABILITY_REQUEST_TOOL
+import app.momoding.core.capabilities.LocationCapabilityAccess
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -37,14 +41,41 @@ class PhoneLocalCapabilityRequestToolExecutor(
         request: PiNativeToolRequest,
     ): PiNativeAndroidToolResult {
         require(handles(request.toolName)) { "PI_MOBILE_NATIVE_TOOL_NOT_ALLOWED" }
-        require(request.arguments.keys == setOf("capability", "purpose")) {
-            "PI_MOBILE_CAPABILITY_REQUEST_ARGUMENTS_INVALID"
-        }
         val capabilityValue = request.arguments["capability"]?.jsonPrimitive?.contentOrNull
             ?.trim()
             .orEmpty()
         val capability = CAPABILITIES_BY_WIRE[capabilityValue]
             ?: throw IllegalArgumentException("PI_MOBILE_CAPABILITY_REQUEST_ARGUMENTS_INVALID")
+        val requirement = if (
+            capability == AndroidCapabilityId.CALENDAR ||
+            capability == AndroidCapabilityId.CONTACTS ||
+            capability == AndroidCapabilityId.LOCATION
+        ) {
+            require(request.arguments.keys == TYPED_ACCESS_ARGUMENT_KEYS) {
+                "PI_MOBILE_CAPABILITY_REQUEST_ARGUMENTS_INVALID"
+            }
+            val access = request.arguments["requiredAccess"]?.jsonPrimitive?.contentOrNull
+            when (capability) {
+                AndroidCapabilityId.CALENDAR -> AndroidCapabilityRequirement.Calendar(
+                    access?.let(CalendarCapabilityAccess::fromWireValue)
+                        ?: invalidArguments(),
+                )
+                AndroidCapabilityId.CONTACTS -> AndroidCapabilityRequirement.Contacts(
+                    access?.let(ContactsCapabilityAccess::fromWireValue)
+                        ?: invalidArguments(),
+                )
+                AndroidCapabilityId.LOCATION -> AndroidCapabilityRequirement.Location(
+                    access?.let(LocationCapabilityAccess::fromWireValue)
+                        ?: invalidArguments(),
+                )
+                else -> error("Typed capability branch changed")
+            }
+        } else {
+            require(request.arguments.keys == DEFAULT_ARGUMENT_KEYS) {
+                "PI_MOBILE_CAPABILITY_REQUEST_ARGUMENTS_INVALID"
+            }
+            AndroidCapabilityRequirement.Default
+        }
         val purpose = request.arguments["purpose"]?.jsonPrimitive?.contentOrNull
             ?.trim()
             .orEmpty()
@@ -55,9 +86,9 @@ class PhoneLocalCapabilityRequestToolExecutor(
         val before = registry.refreshNow().first { it.id == capability }
         if (
             capability != AndroidCapabilityId.SAF_FOLDERS &&
-            before.isReadyForUse()
+            before.isReadyForUse(requirement)
         ) {
-            return ready(capability, before, requested = false)
+            return ready(capability, requirement, before, requested = false)
         }
         if (before.availability == CapabilityAvailability.UNSUPPORTED) {
             return failed(
@@ -68,7 +99,7 @@ class PhoneLocalCapabilityRequestToolExecutor(
         }
 
         val outcome = try {
-            requester.request(taskId, capability, purpose)
+            requester.request(taskId, capability, requirement, purpose)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
@@ -90,8 +121,14 @@ class PhoneLocalCapabilityRequestToolExecutor(
         val after = registry.refreshNow().first { it.id == capability }
         return when (outcome.result) {
             AndroidCapabilityRequestResult.READY -> {
-                if (after.isReadyForUse()) {
-                    ready(capability, after, requested = true, grantId = outcome.grantId)
+                if (after.isReadyForUse(requirement)) {
+                    ready(
+                        capability,
+                        requirement,
+                        after,
+                        requested = true,
+                        grantId = outcome.grantId,
+                    )
                 } else {
                     failed(
                         capability,
@@ -120,12 +157,14 @@ class PhoneLocalCapabilityRequestToolExecutor(
 
     private fun ready(
         capability: AndroidCapabilityId,
+        requirement: AndroidCapabilityRequirement,
         state: AndroidCapabilityState,
         requested: Boolean,
         grantId: String? = null,
     ) = PiNativeAndroidToolResult(
         contentPayload = buildJsonObject {
             put("capability", capability.wireValue())
+            requirement.wireValueOrNull()?.let { put("requiredAccess", it) }
             put("availability", state.availability.name.lowercase())
             put("ready", true)
             put("requested", requested)
@@ -147,15 +186,47 @@ class PhoneLocalCapabilityRequestToolExecutor(
         isError = true,
     )
 
-    private fun AndroidCapabilityState.isReadyForUse(): Boolean =
-        availability == CapabilityAvailability.READY ||
-            (id == AndroidCapabilityId.PHOTO_LIBRARY &&
-                availability == CapabilityAvailability.PARTIAL)
+    private fun AndroidCapabilityState.isReadyForUse(
+        requirement: AndroidCapabilityRequirement,
+    ): Boolean = when {
+        availability == CapabilityAvailability.READY -> true
+        id == AndroidCapabilityId.PHOTO_LIBRARY &&
+            availability == CapabilityAvailability.PARTIAL -> true
+        id == AndroidCapabilityId.CALENDAR &&
+            availability == CapabilityAvailability.PARTIAL &&
+            requirement == AndroidCapabilityRequirement.Calendar(
+                CalendarCapabilityAccess.READ,
+            ) -> true
+        id == AndroidCapabilityId.CONTACTS &&
+            availability == CapabilityAvailability.PARTIAL &&
+            requirement == AndroidCapabilityRequirement.Contacts(
+                ContactsCapabilityAccess.READ,
+            ) -> true
+        id == AndroidCapabilityId.LOCATION &&
+            availability == CapabilityAvailability.PARTIAL &&
+            requirement == AndroidCapabilityRequirement.Location(
+                LocationCapabilityAccess.APPROXIMATE,
+            ) -> true
+        else -> false
+    }
+
+    private fun AndroidCapabilityRequirement.wireValueOrNull(): String? = when (this) {
+        AndroidCapabilityRequirement.Default -> null
+        is AndroidCapabilityRequirement.Calendar -> access.wireValue
+        is AndroidCapabilityRequirement.Contacts -> access.wireValue
+        is AndroidCapabilityRequirement.Location -> access.wireValue
+    }
+
+    private fun invalidArguments(): Nothing = throw IllegalArgumentException(
+        "PI_MOBILE_CAPABILITY_REQUEST_ARGUMENTS_INVALID",
+    )
 
     private fun AndroidCapabilityId.wireValue(): String = name.lowercase()
 
     private companion object {
         const val MAX_PURPOSE_UTF16 = 512
+        val DEFAULT_ARGUMENT_KEYS = setOf("capability", "purpose")
+        val TYPED_ACCESS_ARGUMENT_KEYS = setOf("capability", "requiredAccess", "purpose")
         val CAPABILITIES_BY_WIRE = AndroidCapabilityId.entries.associateBy { it.name.lowercase() }
     }
 }

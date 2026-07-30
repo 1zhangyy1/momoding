@@ -14,6 +14,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -80,6 +81,10 @@ class PiUiReducer {
                         "request_user_question" -> TaskAttentionKind.QUESTION
                         "request_user_confirmation" -> TaskAttentionKind.CONFIRMATION
                         "device_media_list" -> TaskAttentionKind.CONFIRMATION
+                        "device_calendar" -> TaskAttentionKind.CONFIRMATION
+                        "device_contacts" -> TaskAttentionKind.CONFIRMATION
+                        "device_location" -> TaskAttentionKind.CONFIRMATION
+                        "device_clipboard" -> TaskAttentionKind.CONFIRMATION
                         "device_ui_action" -> TaskAttentionKind.CONFIRMATION
                         "device_files_read" -> TaskAttentionKind.FILE_CONTENT
                         else -> TaskAttentionKind.UNSUPPORTED
@@ -91,6 +96,10 @@ class PiUiReducer {
                             "request_user_question" -> "Momoding asked a question"
                             "request_user_confirmation" -> "An action needs confirmation"
                             "device_media_list" -> "Photo metadata access needs approval"
+                            "device_calendar" -> "Calendar access needs approval"
+                            "device_contacts" -> "Contacts access needs approval"
+                            "device_location" -> "Current location access needs approval"
+                            "device_clipboard" -> "Clipboard access needs approval"
                             "device_ui_action" -> "Interface action needs approval"
                             "device_files_read" -> "File content access needs approval"
                             "device_files_commit_changes" -> "Review proposed file changes"
@@ -522,6 +531,16 @@ class PiUiReducer {
         }
         val kind = toolKind(toolName)
         val title = when {
+            toolName == "device_calendar" ->
+                calendarToolTitle(state, resultContainer)
+            toolName == "device_contacts" ->
+                contactsToolTitle(state, resultContainer)
+            toolName == "device_location" ->
+                locationToolTitle(state)
+            toolName == "device_clipboard" ->
+                clipboardToolTitle(state, resultContainer)
+            toolName == "device_notification" ->
+                notificationToolTitle(state, resultContainer)
             kind == ToolActivityKind.TEST && state == ToolActivityState.RUNNING -> "Running tests"
             kind == ToolActivityKind.TEST && state == ToolActivityState.SUCCESS -> "Tests passed"
             kind == ToolActivityKind.TEST && state == ToolActivityState.FAILURE -> "Tests failed"
@@ -535,6 +554,10 @@ class PiUiReducer {
             "device_files_list" -> "Listed authorized files"
             "device_files_read" -> "Requested file content"
             "device_media_list" -> "Listed recent photo metadata"
+            "device_contacts" -> "Used Android Contacts"
+            "device_location" -> "Checked current location"
+            "device_clipboard" -> "Used Android Clipboard"
+            "device_notification" -> "Managed Momoding notifications"
             "device_ui_inspect" -> "Inspected the current interface"
             "device_ui_action" -> "Performed an interface action"
             "attachment_read" -> "Read text attachment"
@@ -706,8 +729,399 @@ class PiUiReducer {
                 else -> "Decision recorded"
             }
         }
+        "device_calendar" -> calendarResultText(state, text)
+        "device_contacts" -> contactsResultText(state, text)
+        "device_location" -> locationResultText(state, text)
+        "device_clipboard" -> clipboardResultText(state, text)
+        "device_notification" -> notificationResultText(state, text)
         else -> null
     }
+
+    private fun notificationToolTitle(
+        state: ToolActivityState,
+        resultContainer: JsonObject?,
+    ): String {
+        if (state == ToolActivityState.RUNNING) return "Managing Momoding notifications"
+        if (state == ToolActivityState.CANCELLED) return "Notification request cancelled"
+        if (state == ToolActivityState.FAILURE) return "Notification request failed"
+        if (state == ToolActivityState.UNSUPPORTED) return "Notifications unavailable"
+        val action = resultContainer
+            ?.let { extractContentText(it["content"], setOf("text")) }
+            ?.trim()
+            ?.let(::parseObject)
+            ?.string("action")
+        return when (action) {
+            "status" -> "Checked notification access"
+            "post" -> "Posted a notification"
+            "list_active" -> "Listed active notifications"
+            "update" -> "Updated a notification"
+            "cancel" -> "Cancelled a notification"
+            "open_settings" -> "Opened notification settings"
+            else -> "Managed Momoding notifications"
+        }
+    }
+
+    private fun notificationResultText(
+        state: ToolActivityState,
+        text: String,
+    ): String {
+        val result = parseObject(text.trim())
+            ?: return if (state == ToolActivityState.FAILURE) {
+                "Notification request failed"
+            } else {
+                "Notification result unavailable"
+            }
+        if (state == ToolActivityState.FAILURE || result.strictBoolean("ok") != true) {
+            val error = result["error"] as? JsonObject
+            return when (error?.string("code")) {
+                "CAPABILITY_NOT_READY" -> "Notification permission is needed."
+                "STALE_HANDLE" -> "Refresh active notifications and try again."
+                "APP_NOT_FOREGROUND" -> "Open Momoding to manage notification settings."
+                "USER_DECLINED" -> "Notification request declined."
+                "DEVICE_TOOL_TIMEOUT" -> "Notification request timed out."
+                "OUTCOME_UNKNOWN" -> "Notification outcome is unknown; refresh before retrying."
+                else -> error?.nonBlankString("message")
+                    ?.let(::sanitizeText)
+                    ?: "Notification request failed"
+            }
+        }
+        val action = result.string("action")
+        val data = result["data"] as? JsonObject
+        return when (action) {
+            "status" -> if (data?.strictBoolean("readyToPost") == true) {
+                "Notifications are ready"
+            } else {
+                "Notification permission is needed"
+            }
+            "post" -> "Notification posted"
+            "list_active" -> {
+                val count = data?.get("returnedCount")?.jsonPrimitive?.contentOrNull ?: "0"
+                "Listed $count active notifications"
+            }
+            "update" -> "Notification updated"
+            "cancel" -> "Notification cancelled"
+            "open_settings" -> "Notification settings opened"
+            else -> "Notification action completed"
+        }
+    }
+
+    private fun clipboardToolTitle(
+        state: ToolActivityState,
+        resultContainer: JsonObject?,
+    ): String {
+        if (state == ToolActivityState.RUNNING) return "Using Android Clipboard"
+        if (state == ToolActivityState.CANCELLED) return "Clipboard request cancelled"
+        if (state == ToolActivityState.FAILURE) return "Clipboard request failed"
+        if (state == ToolActivityState.UNSUPPORTED) return "Clipboard unavailable"
+        val action = resultContainer
+            ?.let { extractContentText(it["content"], setOf("text")) }
+            ?.trim()
+            ?.let(::parseObject)
+            ?.string("action")
+        return when (action) {
+            "get" -> "Read clipboard text"
+            "set" -> "Copied text"
+            "clear" -> "Cleared clipboard"
+            else -> "Used Android Clipboard"
+        }
+    }
+
+    private fun clipboardResultText(
+        state: ToolActivityState,
+        text: String,
+    ): String {
+        val result = parseObject(text.trim())
+            ?: return if (state == ToolActivityState.FAILURE) {
+                "Clipboard request failed"
+            } else {
+                "Clipboard result unavailable"
+            }
+        if (state == ToolActivityState.FAILURE || result.strictBoolean("ok") != true) {
+            val error = result["error"] as? JsonObject
+            return when (error?.string("code")) {
+                "CLIPBOARD_CONTENT_RESTRICTED" ->
+                    "Sensitive clipboard content was withheld."
+                "CLIPBOARD_EMPTY" -> "Clipboard has no plain text."
+                "CLIPBOARD_FORMAT_UNSUPPORTED" -> "Clipboard item is not plain text."
+                "APP_NOT_FOREGROUND" -> "Open Momoding to use the clipboard."
+                "USER_DECLINED" -> "Clipboard request declined."
+                "DEVICE_TOOL_TIMEOUT" -> "Clipboard request timed out."
+                else -> error?.nonBlankString("message")
+                    ?.let(::sanitizeText)
+                    ?: "Clipboard request failed"
+            }
+        }
+        val action = result.string("action")
+        val data = result["data"] as? JsonObject
+        val count = data?.get("characterCount")?.jsonPrimitive?.contentOrNull
+        return when (action) {
+            "get" -> "Read clipboard text${count?.let { " · $it characters" }.orEmpty()}"
+            "set" -> "Copied text${count?.let { " · $it characters" }.orEmpty()}"
+            "clear" -> "Clipboard cleared"
+            else -> "Clipboard action completed"
+        }
+    }
+
+    private fun locationToolTitle(state: ToolActivityState): String = when (state) {
+        ToolActivityState.RUNNING -> "Getting current location"
+        ToolActivityState.SUCCESS -> "Checked current location"
+        ToolActivityState.FAILURE -> "Location unavailable"
+        ToolActivityState.CANCELLED -> "Location request cancelled"
+        ToolActivityState.UNSUPPORTED -> "Location unavailable"
+    }
+
+    private fun locationResultText(
+        state: ToolActivityState,
+        text: String,
+    ): String {
+        val result = parseObject(text.trim())
+            ?: return if (state == ToolActivityState.FAILURE) {
+                "Location request failed"
+            } else {
+                "Location result unavailable"
+            }
+        if (state == ToolActivityState.FAILURE || result.strictBoolean("ok") != true) {
+            val error = result["error"] as? JsonObject
+            return when (error?.string("code")) {
+                "CAPABILITY_NOT_READY" -> "Location permission is needed."
+                "LOCATION_SERVICES_DISABLED" -> "Android location services are turned off."
+                "DEVICE_TOOL_TIMEOUT" -> "Location request timed out."
+                "APP_NOT_FOREGROUND" -> "Open Momoding to request location."
+                "USER_DECLINED" -> "Location request declined."
+                "STOPPED" -> "Location request stopped."
+                else -> error?.nonBlankString("message")
+                    ?.let(::sanitizeText)
+                    ?: "Location request failed"
+            }
+        }
+        val data = result["data"] as? JsonObject
+        val precision = when (data?.string("precision")) {
+            "precise" -> "Precise"
+            else -> "Approximate"
+        }
+        val accuracy = data?.get("accuracyMeters")?.jsonPrimitive?.contentOrNull
+        return if (accuracy == null) {
+            "$precision current location"
+        } else {
+            "$precision current location · accuracy ±$accuracy m"
+        }
+    }
+
+    private fun contactsToolTitle(
+        state: ToolActivityState,
+        resultContainer: JsonObject?,
+    ): String {
+        if (state == ToolActivityState.RUNNING) return "Using Android Contacts"
+        if (state == ToolActivityState.CANCELLED) return "Contacts lookup cancelled"
+        if (state == ToolActivityState.FAILURE) return "Contacts lookup failed"
+        if (state == ToolActivityState.UNSUPPORTED) return "Contacts unavailable"
+        val action = resultContainer
+            ?.let { extractContentText(it["content"], setOf("text")) }
+            ?.trim()
+            ?.let(::parseObject)
+            ?.string("action")
+        return when (action) {
+            "search" -> "Searched contacts"
+            "get_contact" -> "Checked contact"
+            "create_contact" -> "Created contact"
+            "update_contact" -> "Updated contact"
+            "delete_contact" -> "Deleted contact"
+            else -> "Used Android Contacts"
+        }
+    }
+
+    private fun contactsResultText(
+        state: ToolActivityState,
+        text: String,
+    ): String {
+        val result = parseObject(text.trim())
+            ?: return if (state == ToolActivityState.FAILURE) {
+                "Contacts lookup failed"
+            } else {
+                "Contacts result unavailable"
+            }
+        if (state == ToolActivityState.FAILURE || result.strictBoolean("ok") != true) {
+            val code = (result["error"] as? JsonObject)?.string("code")
+            return when (code) {
+                "CAPABILITY_NOT_READY" -> "Contacts access is not enabled"
+                "STALE_HANDLE" -> "Contact selection expired; search again"
+                "NOT_FOUND" -> "Contact no longer exists"
+                "READ_ONLY" -> "This contact cannot be changed"
+                "AMBIGUOUS_TARGET" -> "Contact belongs to multiple accounts"
+                "CONFLICT" -> "Contact changed; inspect it again"
+                "VERIFICATION_FAILED" -> "Contacts change could not be verified"
+                "OUTCOME_UNKNOWN" -> "Contacts change outcome is unknown; inspect before retrying"
+                "DEVICE_TOOL_TIMEOUT" -> "Contacts lookup timed out"
+                else -> "Contacts lookup failed"
+            }
+        }
+        val data = result["data"] as? JsonObject
+        return when (result.string("action")) {
+            "search" -> {
+                val items = data?.get("items") as? JsonArray
+                val names = items.orEmpty().mapNotNull { item ->
+                    (item as? JsonObject)?.nonBlankString("displayName")
+                }.take(3)
+                val count = data?.get("count")?.jsonPrimitive?.intOrNull ?: names.size
+                when {
+                    count == 0 -> "No matching contacts"
+                    names.isEmpty() -> "Found $count contact${if (count == 1) "" else "s"}"
+                    else -> "Found $count: ${names.joinToString(", ")}"
+                }
+            }
+            "get_contact" -> {
+                val contact = data?.get("contact") as? JsonObject
+                contact?.nonBlankString("displayName")?.let { "Checked $it" }
+                    ?: "Checked contact"
+            }
+            "create_contact" -> {
+                val contact = data?.get("contact") as? JsonObject
+                contact?.nonBlankString("displayName")?.let { "Created $it" }
+                    ?: "Created contact"
+            }
+            "update_contact" -> {
+                val contact = data?.get("contact") as? JsonObject
+                contact?.nonBlankString("displayName")?.let { "Updated $it" }
+                    ?: "Updated contact"
+            }
+            "delete_contact" -> "Deleted contact"
+            else -> "Contacts lookup completed"
+        }
+    }
+
+    private fun calendarToolTitle(
+        state: ToolActivityState,
+        resultContainer: JsonObject?,
+    ): String {
+        if (state == ToolActivityState.RUNNING) return "Using Android Calendar"
+        if (state == ToolActivityState.CANCELLED) return "Calendar action cancelled"
+        if (state == ToolActivityState.FAILURE) return "Calendar action failed"
+        if (state == ToolActivityState.UNSUPPORTED) return "Calendar unavailable"
+        val action = resultContainer
+            ?.let { extractContentText(it["content"], setOf("text")) }
+            ?.trim()
+            ?.let(::parseObject)
+            ?.string("action")
+        return when (action) {
+            "list_calendars" -> "Listed calendars"
+            "list_events" -> "Listed calendar events"
+            "get_event" -> "Checked calendar event"
+            "create_event" -> "Created calendar event"
+            "update_event" -> "Updated calendar event"
+            "delete_event" -> "Deleted calendar event"
+            else -> "Used Android Calendar"
+        }
+    }
+
+    private fun calendarResultText(
+        state: ToolActivityState,
+        text: String,
+    ): String {
+        val result = parseObject(text.trim())
+            ?: return if (state == ToolActivityState.FAILURE) {
+                "Calendar action failed"
+            } else {
+                "Calendar result unavailable"
+            }
+        if (state == ToolActivityState.FAILURE || result.strictBoolean("ok") != true) {
+            return calendarFailureText(result)
+        }
+        val data = result["data"] as? JsonObject
+        return when (result.string("action")) {
+            "list_calendars" -> {
+                val items = data?.get("items") as? JsonArray
+                val names = items.orEmpty().mapNotNull { item ->
+                    (item as? JsonObject)?.nonBlankString("displayName")
+                }
+                buildCalendarListText(
+                    "${names.size} calendar${if (names.size == 1) "" else "s"}",
+                    names,
+                    items?.size.orZero(),
+                )
+            }
+            "list_events" -> {
+                val items = data?.get("items") as? JsonArray
+                val labels = items.orEmpty().mapNotNull { item ->
+                    (item as? JsonObject)?.let(::calendarEventLabel)
+                }
+                buildCalendarListText(
+                    "${labels.size} event${if (labels.size == 1) "" else "s"}",
+                    labels,
+                    items?.size.orZero(),
+                )
+            }
+            "get_event" -> data?.get("event")
+                ?.let { it as? JsonObject }
+                ?.let(::calendarEventLabel)
+                ?.let { "Calendar event\n$it" }
+                ?: "Calendar event checked"
+            "create_event" -> data?.get("event")
+                ?.let { it as? JsonObject }
+                ?.let(::calendarEventLabel)
+                ?.let { "Created $it" }
+                ?: "Calendar event created"
+            "update_event" -> data?.get("event")
+                ?.let { it as? JsonObject }
+                ?.let(::calendarEventLabel)
+                ?.let { "Updated $it" }
+                ?: "Calendar event updated"
+            "delete_event" -> "Calendar event deleted"
+            else -> "Calendar action completed"
+        }
+    }
+
+    private fun calendarFailureText(result: JsonObject): String {
+        val error = result["error"] as? JsonObject
+        return when (error?.string("code")) {
+            "USER_DECLINED" -> "Calendar action declined"
+            "OUTCOME_UNKNOWN" ->
+                "Calendar change outcome unknown. Check the live calendar before retrying."
+            "CAPABILITY_NOT_READY" ->
+                "Calendar permission is needed before this action."
+            "STALE_HANDLE" ->
+                "Calendar data changed. Refresh the calendar before retrying."
+            "CALENDAR_CONFLICT" ->
+                "Calendar data changed before the action. Refresh and review it again."
+            else -> error?.nonBlankString("message")
+                ?.let(::sanitizeText)
+                ?: "Calendar action failed"
+        }
+    }
+
+    private fun buildCalendarListText(
+        heading: String,
+        items: List<String>,
+        rawCount: Int,
+    ): String = buildString {
+        append(heading)
+        items.take(MAX_CALENDAR_PRESENTATION_ITEMS).forEach { item ->
+            append("\n• ").append(item)
+        }
+        val hidden = rawCount - MAX_CALENDAR_PRESENTATION_ITEMS
+        if (hidden > 0) append("\n+ ").append(hidden).append(" more")
+    }
+
+    private fun calendarEventLabel(event: JsonObject): String? {
+        val title = event.nonBlankString("title") ?: return null
+        val schedule = event["schedule"] as? JsonObject
+        val time = when (schedule?.string("kind")) {
+            "timed" -> listOfNotNull(
+                schedule.nonBlankString("start"),
+                schedule.nonBlankString("end"),
+            ).joinToString(" → ").takeIf(String::isNotBlank)
+            "all_day" -> listOfNotNull(
+                schedule.nonBlankString("startDate"),
+                schedule.nonBlankString("endDateExclusive"),
+            ).joinToString(" → ").takeIf(String::isNotBlank)
+            else -> null
+        }
+        val location = event.nonBlankString("location")
+        return listOfNotNull(title, time, location)
+            .joinToString(" · ")
+            .let(::sanitizeText)
+    }
+
+    private fun Int?.orZero(): Int = this ?: 0
 
     private fun prettyStructuredText(text: String): String {
         val trimmed = text.trim()
@@ -849,6 +1263,7 @@ class PiUiReducer {
             "^attachment:([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$",
         )
         const val MAX_TOOL_SOURCES = 12
+        const val MAX_CALENDAR_PRESENTATION_ITEMS = 5
         const val MAX_PRESENTATION_CHARS = 32_768
 
         fun sha256(value: String): String = MessageDigest.getInstance("SHA-256")

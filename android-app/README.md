@@ -11,7 +11,8 @@ official OpenAI application.
 - Durable state: Room with the bundled SQLite driver
 - Local agent runtime: Pi AgentHarness in QuickJS
 - Project access: Android SAF plus optional shared-storage access
-- Optional device capabilities: media metadata, MediaProjection screen capture, accessibility UI
+- Optional device capabilities: calendar, contacts, foreground location, clipboard, Momoding-owned
+  notifications, media metadata/mutations, MediaProjection screen capture, accessibility UI
   inspection/actions, and Shizuku read-only package inspection
 - Debug project runtime: pinned PRoot/talloc/Alpine build
 

@@ -579,6 +579,403 @@ class RoomAttentionPiDeliveryProofTest {
     }
 
     @Test
+    fun `exact Calendar mutation proof compacts sensitive audit payload after Pi delivery`() {
+        val callId = callId(94)
+        val planDigest = "a".repeat(64)
+        val approvalArguments = buildJsonObject {
+            put("approvalKind", "mutation")
+            put("action", "create_event")
+            put("requestDigest", "b".repeat(64))
+            put("planDigest", planDigest)
+            put("summary", "Create “PRIVATE CALENDAR TITLE”?")
+            put("details", "PRIVATE CALENDAR LOCATION")
+            put("approvalOrigin", "auto")
+        }
+        ledger.acceptRequest(
+            request(callId, "device_calendar", approvalArguments).copy(
+                sideEffect = true,
+                operationId = OPERATION_ID,
+            ),
+            scope(),
+        )
+        ledger.markCalendarMutationDispatched(callId, planDigest)
+        ledger.recordTerminal(
+            AttentionTerminalWrite(
+                DeviceToolResultClientFrame(
+                    callId = callId,
+                    taskId = TASK_ID,
+                    deviceId = DEVICE_ID,
+                    terminal = DeviceToolTerminalKind.SUCCEEDED,
+                    result = calendarMutationResult(planDigest),
+                ),
+                AttentionTerminalOrigin.AUTO_POLICY,
+                NOW,
+            ),
+        )
+        val expectation = expectation(callId)
+        val proof = buildJsonObject {
+            put("role", "toolResult")
+            put("toolCallId", operation(callId).piToolCallId)
+            put("toolName", "device_calendar")
+            put("content", buildJsonArray { add(textContent(expectation.contentPayload)) })
+            put(
+                "details",
+                buildJsonObject {
+                    put("callId", callId)
+                    put("toolName", "device_calendar")
+                    put("terminalSemanticSha256", expectation.terminalSemanticSha256)
+                    put("sideEffect", true)
+                    put("operationId", OPERATION_ID)
+                    put("approvalOrigin", "auto_policy")
+                },
+            )
+            put("isError", false)
+            put("timestamp", NOW)
+        }
+        val frame = directSnapshotFrame(1, 0, listOf(proof))
+
+        assertTrue(receive(frame, "calendar-proof").last() is AckReady)
+
+        val delivered = requireNotNull(ledger.record(callId))
+        assertEquals(AttentionDeliveryState.PI_DELIVERED.name, delivered.operation.deliveryState)
+        assertFalse(delivered.operation.argumentsCanonicalJson.contains("PRIVATE"))
+        assertFalse(delivered.operation.terminalFrameCanonicalJson.orEmpty().contains("PRIVATE"))
+        assertTrue(
+            delivered.operation.terminalFrameCanonicalJson.orEmpty()
+                .contains("\"redacted\":true"),
+        )
+        assertTrue(receive(frame, "calendar-proof-replay").last() is AckReady)
+    }
+
+    @Test
+    fun `exact Contacts mutation proof compacts sensitive audit payload after Pi delivery`() {
+        val callId = callId(95)
+        val planDigest = "c".repeat(64)
+        val approvalArguments = buildJsonObject {
+            put("approvalKind", "mutation")
+            put("action", "create_contact")
+            put("requestDigest", "d".repeat(64))
+            put("planDigest", planDigest)
+            put("summary", "Create “PRIVATE CONTACT NAME”?")
+            put("details", "PRIVATE CONTACT PREVIEW")
+            put("approvalOrigin", "auto")
+        }
+        ledger.acceptRequest(
+            request(callId, "device_contacts", approvalArguments).copy(
+                sideEffect = true,
+                operationId = OPERATION_ID,
+            ),
+            scope(),
+        )
+        ledger.markContactsMutationDispatched(callId, planDigest)
+        ledger.recordTerminal(
+            AttentionTerminalWrite(
+                DeviceToolResultClientFrame(
+                    callId = callId,
+                    taskId = TASK_ID,
+                    deviceId = DEVICE_ID,
+                    terminal = DeviceToolTerminalKind.SUCCEEDED,
+                    result = contactsMutationResult(planDigest),
+                ),
+                AttentionTerminalOrigin.AUTO_POLICY,
+                NOW,
+            ),
+        )
+        val expectation = expectation(callId)
+        val proof = buildJsonObject {
+            put("role", "toolResult")
+            put("toolCallId", operation(callId).piToolCallId)
+            put("toolName", "device_contacts")
+            put("content", buildJsonArray { add(textContent(expectation.contentPayload)) })
+            put(
+                "details",
+                buildJsonObject {
+                    put("callId", callId)
+                    put("toolName", "device_contacts")
+                    put("terminalSemanticSha256", expectation.terminalSemanticSha256)
+                    put("sideEffect", true)
+                    put("operationId", OPERATION_ID)
+                    put("approvalOrigin", "auto_policy")
+                },
+            )
+            put("isError", false)
+            put("timestamp", NOW)
+        }
+        val frame = directSnapshotFrame(1, 0, listOf(proof))
+
+        assertTrue(receive(frame, "contacts-proof").last() is AckReady)
+
+        val delivered = requireNotNull(ledger.record(callId))
+        assertEquals(AttentionDeliveryState.PI_DELIVERED.name, delivered.operation.deliveryState)
+        assertFalse(delivered.operation.argumentsCanonicalJson.contains("PRIVATE"))
+        assertFalse(delivered.operation.terminalFrameCanonicalJson.orEmpty().contains("PRIVATE"))
+        assertTrue(
+            delivered.operation.terminalFrameCanonicalJson.orEmpty()
+                .contains("\"redacted\":true"),
+        )
+        assertTrue(receive(frame, "contacts-proof-replay").last() is AckReady)
+    }
+
+    @Test
+    fun `exact Clipboard mutation proof validates stable operation and delivers once`() {
+        val callId = callId(93)
+        val planDigest = "e".repeat(64)
+        val approvalArguments = buildJsonObject {
+            put("approvalKind", "mutation")
+            put("action", "set")
+            put("requestDigest", "f".repeat(64))
+            put("planDigest", planDigest)
+            put("characterCount", 10)
+            put("sensitive", false)
+            put("summary", "Copy text to the Android clipboard?")
+            put("details", "Writes 10 characters and verifies the current clipboard.")
+            put("approvalOrigin", "auto")
+        }
+        ledger.acceptRequest(
+            request(callId, "device_clipboard", approvalArguments).copy(
+                sideEffect = true,
+                operationId = OPERATION_ID,
+            ),
+            scope(),
+        )
+        ledger.markClipboardMutationDispatched(callId, planDigest)
+        ledger.recordTerminal(
+            AttentionTerminalWrite(
+                DeviceToolResultClientFrame(
+                    callId = callId,
+                    taskId = TASK_ID,
+                    deviceId = DEVICE_ID,
+                    terminal = DeviceToolTerminalKind.SUCCEEDED,
+                    result = clipboardMutationResult(planDigest),
+                ),
+                AttentionTerminalOrigin.AUTO_POLICY,
+                NOW,
+            ),
+        )
+        val expectation = expectation(callId)
+        val proof = buildJsonObject {
+            put("role", "toolResult")
+            put("toolCallId", operation(callId).piToolCallId)
+            put("toolName", "device_clipboard")
+            put("content", buildJsonArray { add(textContent(expectation.contentPayload)) })
+            put(
+                "details",
+                buildJsonObject {
+                    put("callId", callId)
+                    put("toolName", "device_clipboard")
+                    put("terminalSemanticSha256", expectation.terminalSemanticSha256)
+                    put("sideEffect", true)
+                    put("operationId", OPERATION_ID)
+                    put("approvalOrigin", "auto_policy")
+                },
+            )
+            put("isError", false)
+            put("timestamp", NOW)
+        }
+        val frame = directSnapshotFrame(1, 0, listOf(proof))
+
+        assertTrue(receive(frame, "clipboard-proof").last() is AckReady)
+        assertDelivered(callId, AttentionResponseState.RESOLVED)
+        assertTrue(receive(frame, "clipboard-proof-replay").last() is AckReady)
+    }
+
+    @Test
+    fun `exact Notification mutation proof validates stable operation and delivers once`() {
+        val callId = callId(92)
+        val planDigest = "9".repeat(64)
+        val approvalArguments = buildJsonObject {
+            put("approvalKind", "mutation")
+            put("action", "post")
+            put("requestDigest", "8".repeat(64))
+            put("planDigest", planDigest)
+            put("titleLength", 6)
+            put("messageLength", 5)
+            put("summary", "Post a Momoding notification?")
+            put(
+                "details",
+                "Posts one bounded notification and verifies it in Android active notifications.",
+            )
+            put("approvalOrigin", "auto")
+        }
+        ledger.acceptRequest(
+            request(callId, "device_notification", approvalArguments).copy(
+                sideEffect = true,
+                operationId = OPERATION_ID,
+            ),
+            scope(),
+        )
+        ledger.markNotificationMutationDispatched(callId, planDigest)
+        ledger.recordTerminal(
+            AttentionTerminalWrite(
+                DeviceToolResultClientFrame(
+                    callId = callId,
+                    taskId = TASK_ID,
+                    deviceId = DEVICE_ID,
+                    terminal = DeviceToolTerminalKind.SUCCEEDED,
+                    result = notificationMutationResult(planDigest),
+                ),
+                AttentionTerminalOrigin.AUTO_POLICY,
+                NOW,
+            ),
+        )
+        val expectation = expectation(callId)
+        val proof = buildJsonObject {
+            put("role", "toolResult")
+            put("toolCallId", operation(callId).piToolCallId)
+            put("toolName", "device_notification")
+            put("content", buildJsonArray { add(textContent(expectation.contentPayload)) })
+            put(
+                "details",
+                buildJsonObject {
+                    put("callId", callId)
+                    put("toolName", "device_notification")
+                    put("terminalSemanticSha256", expectation.terminalSemanticSha256)
+                    put("sideEffect", true)
+                    put("operationId", OPERATION_ID)
+                    put("approvalOrigin", "auto_policy")
+                },
+            )
+            put("isError", false)
+            put("timestamp", NOW)
+        }
+        val frame = directSnapshotFrame(1, 0, listOf(proof))
+
+        assertTrue(receive(frame, "notification-proof").last() is AckReady)
+        assertDelivered(callId, AttentionResponseState.RESOLVED)
+        assertTrue(receive(frame, "notification-proof-replay").last() is AckReady)
+    }
+
+    @Test
+    fun `exact Media mutation proof validates dispatch state and delivers once`() {
+        val callId = callId(93)
+        val planDigest = "7".repeat(64)
+        val approvalArguments = buildJsonObject {
+            put("approvalKind", "mutation")
+            put("action", "set_favorite")
+            put("requestDigest", "6".repeat(64))
+            put("planDigest", planDigest)
+            put("summary", "Favorite this photo?")
+            put(
+                "details",
+                "Android will show its own confirmation and Momoding will verify the favorite state.",
+            )
+        }
+        ledger.acceptRequest(
+            request(callId, "device_media", approvalArguments).copy(
+                sideEffect = true,
+                operationId = OPERATION_ID,
+            ),
+            scope(),
+        )
+        ledger.markMediaMutationDispatched(callId, planDigest)
+        ledger.recordTerminal(
+            AttentionTerminalWrite(
+                DeviceToolResultClientFrame(
+                    callId = callId,
+                    taskId = TASK_ID,
+                    deviceId = DEVICE_ID,
+                    terminal = DeviceToolTerminalKind.SUCCEEDED,
+                    result = mediaMutationResult(planDigest),
+                ),
+                AttentionTerminalOrigin.USER,
+                NOW,
+            ),
+        )
+        val expectation = expectation(callId)
+        val proof = buildJsonObject {
+            put("role", "toolResult")
+            put("toolCallId", operation(callId).piToolCallId)
+            put("toolName", "device_media")
+            put("content", buildJsonArray { add(textContent(expectation.contentPayload)) })
+            put(
+                "details",
+                buildJsonObject {
+                    put("callId", callId)
+                    put("toolName", "device_media")
+                    put("terminalSemanticSha256", expectation.terminalSemanticSha256)
+                    put("sideEffect", true)
+                    put("operationId", OPERATION_ID)
+                    put("approvalOrigin", "user")
+                    put("systemConsent", true)
+                },
+            )
+            put("isError", false)
+            put("timestamp", NOW)
+        }
+        val frame = directSnapshotFrame(1, 0, listOf(proof))
+
+        assertTrue(receive(frame, "media-proof").last() is AckReady)
+        assertDelivered(callId, AttentionResponseState.RESOLVED)
+        assertTrue(receive(frame, "media-proof-replay").last() is AckReady)
+    }
+
+    @Test
+    fun `exact Media decline proof preserves undispatched system consent state`() {
+        val callId = callId(95)
+        val approvalArguments = buildJsonObject {
+            put("approvalKind", "mutation")
+            put("action", "delete")
+            put("requestDigest", "5".repeat(64))
+            put("planDigest", "4".repeat(64))
+            put("summary", "Permanently delete this photo?")
+            put(
+                "details",
+                "Android will show its own confirmation. This permanently removes one photo and cannot be undone.",
+            )
+        }
+        ledger.acceptRequest(
+            request(callId, "device_media", approvalArguments).copy(
+                sideEffect = true,
+                operationId = OPERATION_ID,
+            ),
+            scope(),
+        )
+        ledger.recordTerminal(
+            AttentionTerminalWrite(
+                DeviceToolResultClientFrame(
+                    callId = callId,
+                    taskId = TASK_ID,
+                    deviceId = DEVICE_ID,
+                    terminal = DeviceToolTerminalKind.REJECTED,
+                    error = DeviceClientWireError(
+                        "USER_DECLINED",
+                        "User declined the confirmation",
+                    ),
+                ),
+                AttentionTerminalOrigin.USER,
+                NOW,
+            ),
+        )
+        val expectation = expectation(callId)
+        val proof = buildJsonObject {
+            put("role", "toolResult")
+            put("toolCallId", operation(callId).piToolCallId)
+            put("toolName", "device_media")
+            put("content", buildJsonArray { add(textContent(expectation.contentPayload)) })
+            put(
+                "details",
+                buildJsonObject {
+                    put("callId", callId)
+                    put("toolName", "device_media")
+                    put("terminalSemanticSha256", expectation.terminalSemanticSha256)
+                    put("sideEffect", true)
+                    put("operationId", OPERATION_ID)
+                    put("approvalOrigin", "user")
+                    put("systemConsent", false)
+                },
+            )
+            put("isError", true)
+            put("timestamp", NOW)
+        }
+
+        assertTrue(
+            receive(directSnapshotFrame(1, 0, listOf(proof)), "media-decline-proof").last() is
+                AckReady,
+        )
+        assertDelivered(callId, AttentionResponseState.REJECTED)
+    }
+
+    @Test
     fun `file commit preapproval failure proof uses explicit none origin`() {
         val callId = callId(94)
         ledger.acceptRequest(
@@ -969,6 +1366,150 @@ class RoomAttentionPiDeliveryProofTest {
                 put("resultAlias", "doc-${"b".repeat(24)}")
             })
         })
+    }
+
+    private fun calendarMutationResult(planDigest: String) = buildJsonObject {
+        put("ok", true)
+        put("action", "create_event")
+        put(
+            "data",
+            buildJsonObject {
+                put(
+                    "event",
+                    buildJsonObject {
+                        put("eventHandle", "event-${"a".repeat(24)}")
+                        put("title", "PRIVATE CALENDAR TITLE")
+                        put(
+                            "schedule",
+                            buildJsonObject {
+                                put("kind", "timed")
+                                put("start", "2026-07-30T09:00:00+08:00")
+                                put("end", "2026-07-30T10:00:00+08:00")
+                                put("timeZone", "Asia/Shanghai")
+                            },
+                        )
+                        put(
+                            "calendar",
+                            buildJsonObject {
+                                put("calendarHandle", "calendar-${"b".repeat(24)}")
+                                put("displayName", "Work")
+                            },
+                        )
+                        put("readOnly", false)
+                        put("recurring", false)
+                        put("location", "PRIVATE CALENDAR LOCATION")
+                    },
+                )
+            },
+        )
+        put(
+            "verification",
+            buildJsonObject {
+                put("status", "verified")
+                put("observedAt", "2026-07-29T08:00:00Z")
+                put("planDigest", planDigest)
+            },
+        )
+    }
+
+    private fun clipboardMutationResult(planDigest: String) = buildJsonObject {
+        put("ok", true)
+        put("action", "set")
+        put(
+            "data",
+            buildJsonObject {
+                put("state", "text")
+                put("characterCount", 10)
+                put("sensitive", false)
+            },
+        )
+        put(
+            "verification",
+            buildJsonObject {
+                put("status", "verified")
+                put("observedAt", "2026-07-29T05:00:00Z")
+                put("planDigest", planDigest)
+            },
+        )
+    }
+
+    private fun notificationMutationResult(planDigest: String) = buildJsonObject {
+        put("ok", true)
+        put("action", "post")
+        put(
+            "data",
+            buildJsonObject {
+                put("notificationHandle", "notification-${"7".repeat(32)}")
+                put("state", "active")
+            },
+        )
+        put(
+            "verification",
+            buildJsonObject {
+                put("status", "verified")
+                put("observedAt", "2026-07-29T06:00:00Z")
+                put("planDigest", planDigest)
+            },
+        )
+    }
+
+    private fun mediaMutationResult(planDigest: String) = buildJsonObject {
+        put("ok", true)
+        put("action", "set_favorite")
+        put(
+            "data",
+            buildJsonObject {
+                put("changed", true)
+                put("favorite", true)
+            },
+        )
+        put(
+            "verification",
+            buildJsonObject {
+                put("status", "verified")
+                put("observedAt", "2026-07-29T07:00:00Z")
+                put("planDigest", planDigest)
+            },
+        )
+    }
+
+    private fun contactsMutationResult(planDigest: String) = buildJsonObject {
+        put("ok", true)
+        put("action", "create_contact")
+        put(
+            "data",
+            buildJsonObject {
+                put(
+                    "contact",
+                    buildJsonObject {
+                        put("contactHandle", "contact-${"c".repeat(24)}")
+                        put("displayName", "PRIVATE CONTACT NAME")
+                        put(
+                            "phones",
+                            buildJsonArray {
+                                add(
+                                    buildJsonObject {
+                                        put("value", "PRIVATE CONTACT PHONE")
+                                        put("label", "Mobile")
+                                        put("primary", true)
+                                    },
+                                )
+                            },
+                        )
+                        put("emails", buildJsonArray {})
+                        put("organization", JsonNull)
+                    },
+                )
+            },
+        )
+        put(
+            "verification",
+            buildJsonObject {
+                put("status", "verified")
+                put("observedAt", "2026-07-29T08:00:00Z")
+                put("planDigest", planDigest)
+            },
+        )
     }
 
     private fun optionResult(callId: String) = DeviceToolResultClientFrame(

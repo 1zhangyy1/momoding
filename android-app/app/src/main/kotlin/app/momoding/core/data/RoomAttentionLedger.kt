@@ -10,6 +10,7 @@ import java.time.format.DateTimeParseException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -21,6 +22,8 @@ import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+
+internal const val MEDIA_MUTATION_DISPATCHED_SEQUENCE = 2L
 
 enum class AttentionLedgerState {
     RECEIVED,
@@ -211,14 +214,27 @@ class RoomAttentionLedger(
             }
         }
 
-    /**
-     * Drops a successful content-read request after its one live socket delivery attempt.
-     *
-     * Raw file content is never written to this ledger. Deleting the operation also cascades to
-     * the pending consent row and one-call content grant, so reconnect/restart can only request a
-     * fresh Pi call and fresh user approval.
-     */
     fun discardLiveContentRead(taskId: String, callId: String) {
+        discardLiveApprovedRead(taskId, callId, setOf(CONTENT_READ_TOOL))
+    }
+
+    /**
+     * Drops one approved personal-data read after its single live Pi delivery attempt.
+     *
+     * Raw file content, personal-domain reads, and task-scoped Media handles are never duplicated
+     * in this ledger. Deleting the operation also cascades to its approval row, so
+     * reconnect/restart requires a fresh Tool call and, in request-approval mode, a fresh user
+     * decision.
+     */
+    fun discardLiveApprovedRead(taskId: String, callId: String) {
+        discardLiveApprovedRead(taskId, callId, LIVE_ONLY_APPROVED_READ_TOOLS)
+    }
+
+    private fun discardLiveApprovedRead(
+        taskId: String,
+        callId: String,
+        allowedTools: Set<String>,
+    ) {
         database.runInTransaction {
             val normalizedTaskId = normalizeUuid(taskId, "taskId")
             val normalizedCallId = normalizeUuid(callId, "callId")
@@ -227,8 +243,16 @@ class RoomAttentionLedger(
             require(operation.taskId == normalizedTaskId) {
                 "Live content read belongs to another task"
             }
-            require(operation.toolName == "device_files_read") {
-                "Only content reads may use live-only delivery"
+            require(operation.toolName in allowedTools) {
+                "Only approved personal-data reads may use live-only delivery"
+            }
+            if (operation.toolName == CALENDAR_TOOL) {
+                val arguments = STRICT_JSON.parseToJsonElement(
+                    operation.argumentsCanonicalJson,
+                ).jsonObject
+                require(
+                    arguments["approvalKind"]?.jsonPrimitive?.contentOrNull == "read",
+                ) { "Calendar mutations cannot use live-only delivery" }
             }
             require(operation.terminalSha256 == null &&
                 operation.terminalFrameCanonicalJson == null
@@ -385,6 +409,256 @@ class RoomAttentionLedger(
         )
     }
 
+    internal fun markCalendarMutationDispatched(
+        callId: String,
+        planDigest: String,
+    ): AttentionLedgerRecord = updatePair(callId) { operation, attention ->
+        require(operation.terminalSha256 == null) {
+            "Terminal Calendar mutation cannot enter the dispatch fence"
+        }
+        require(operation.toolName == CALENDAR_TOOL && operation.sideEffect) {
+            "Dispatch fence is only valid for a Calendar mutation"
+        }
+        require(operation.operationId != null) {
+            "Calendar mutation dispatch requires a stable operation identity"
+        }
+        val arguments = STRICT_JSON.parseToJsonElement(
+            operation.argumentsCanonicalJson,
+        ).jsonObject
+        require(arguments["approvalKind"]?.jsonPrimitive?.contentOrNull == "mutation") {
+            "Calendar read cannot enter the mutation dispatch fence"
+        }
+        require(
+            arguments["planDigest"]?.jsonPrimitive?.contentOrNull == planDigest &&
+                SHA256_PATTERN.matches(planDigest),
+        ) { "Calendar mutation dispatch plan changed" }
+        require(dao.activeStopFenceCount(operation.taskId) == 0) {
+            "Task stop fence blocks Calendar mutation dispatch"
+        }
+        val timestamp = nowMillis()
+        operation.copy(
+            progressSequence = maxOf(
+                operation.progressSequence,
+                CALENDAR_MUTATION_DISPATCHED_SEQUENCE,
+            ),
+            updatedAtMillis = timestamp,
+        ) to attention.copy(updatedAtMillis = timestamp)
+    }
+
+    internal fun calendarMutationWasDispatched(operation: DeviceOperationEntity): Boolean {
+        if (
+            operation.toolName != CALENDAR_TOOL ||
+            !operation.sideEffect ||
+            operation.progressSequence < CALENDAR_MUTATION_DISPATCHED_SEQUENCE
+        ) {
+            return false
+        }
+        val arguments = STRICT_JSON.parseToJsonElement(
+            operation.argumentsCanonicalJson,
+        ).jsonObject
+        return arguments["approvalKind"]?.jsonPrimitive?.contentOrNull == "mutation"
+    }
+
+    internal fun markContactsMutationDispatched(
+        callId: String,
+        planDigest: String,
+    ): AttentionLedgerRecord = updatePair(callId) { operation, attention ->
+        require(operation.terminalSha256 == null) {
+            "Terminal Contacts mutation cannot enter the dispatch fence"
+        }
+        require(operation.toolName == CONTACTS_TOOL && operation.sideEffect) {
+            "Dispatch fence is only valid for a Contacts mutation"
+        }
+        require(operation.operationId != null) {
+            "Contacts mutation dispatch requires a stable operation identity"
+        }
+        val arguments = STRICT_JSON.parseToJsonElement(
+            operation.argumentsCanonicalJson,
+        ).jsonObject
+        require(arguments["approvalKind"]?.jsonPrimitive?.contentOrNull == "mutation") {
+            "Contacts read cannot enter the mutation dispatch fence"
+        }
+        require(
+            arguments["planDigest"]?.jsonPrimitive?.contentOrNull == planDigest &&
+                SHA256_PATTERN.matches(planDigest),
+        ) { "Contacts mutation dispatch plan changed" }
+        require(dao.activeStopFenceCount(operation.taskId) == 0) {
+            "Task stop fence blocks Contacts mutation dispatch"
+        }
+        val timestamp = nowMillis()
+        operation.copy(
+            progressSequence = maxOf(
+                operation.progressSequence,
+                CONTACTS_MUTATION_DISPATCHED_SEQUENCE,
+            ),
+            updatedAtMillis = timestamp,
+        ) to attention.copy(updatedAtMillis = timestamp)
+    }
+
+    internal fun contactsMutationWasDispatched(operation: DeviceOperationEntity): Boolean {
+        if (
+            operation.toolName != CONTACTS_TOOL ||
+            !operation.sideEffect ||
+            operation.progressSequence < CONTACTS_MUTATION_DISPATCHED_SEQUENCE
+        ) {
+            return false
+        }
+        val arguments = STRICT_JSON.parseToJsonElement(
+            operation.argumentsCanonicalJson,
+        ).jsonObject
+        return arguments["approvalKind"]?.jsonPrimitive?.contentOrNull == "mutation"
+    }
+
+    internal fun markClipboardMutationDispatched(
+        callId: String,
+        planDigest: String,
+    ): AttentionLedgerRecord = updatePair(callId) { operation, attention ->
+        require(operation.terminalSha256 == null) {
+            "Terminal clipboard mutation cannot enter the dispatch fence"
+        }
+        require(operation.toolName == CLIPBOARD_TOOL && operation.sideEffect) {
+            "Dispatch fence is only valid for a clipboard mutation"
+        }
+        require(operation.operationId != null) {
+            "Clipboard mutation dispatch requires a stable operation identity"
+        }
+        val arguments = STRICT_JSON.parseToJsonElement(
+            operation.argumentsCanonicalJson,
+        ).jsonObject
+        require(arguments["approvalKind"]?.jsonPrimitive?.contentOrNull == "mutation") {
+            "Clipboard read cannot enter the mutation dispatch fence"
+        }
+        require(
+            arguments["planDigest"]?.jsonPrimitive?.contentOrNull == planDigest &&
+                SHA256_PATTERN.matches(planDigest),
+        ) { "Clipboard mutation dispatch plan changed" }
+        require(dao.activeStopFenceCount(operation.taskId) == 0) {
+            "Task stop fence blocks clipboard mutation dispatch"
+        }
+        val timestamp = nowMillis()
+        operation.copy(
+            progressSequence = maxOf(
+                operation.progressSequence,
+                CLIPBOARD_MUTATION_DISPATCHED_SEQUENCE,
+            ),
+            updatedAtMillis = timestamp,
+        ) to attention.copy(updatedAtMillis = timestamp)
+    }
+
+    internal fun clipboardMutationWasDispatched(operation: DeviceOperationEntity): Boolean {
+        if (
+            operation.toolName != CLIPBOARD_TOOL ||
+            !operation.sideEffect ||
+            operation.progressSequence < CLIPBOARD_MUTATION_DISPATCHED_SEQUENCE
+        ) {
+            return false
+        }
+        val arguments = STRICT_JSON.parseToJsonElement(
+            operation.argumentsCanonicalJson,
+        ).jsonObject
+        return arguments["approvalKind"]?.jsonPrimitive?.contentOrNull == "mutation"
+    }
+
+    internal fun markNotificationMutationDispatched(
+        callId: String,
+        planDigest: String,
+    ): AttentionLedgerRecord = updatePair(callId) { operation, attention ->
+        require(operation.terminalSha256 == null) {
+            "Terminal notification mutation cannot enter the dispatch fence"
+        }
+        require(operation.toolName == NOTIFICATION_TOOL && operation.sideEffect) {
+            "Dispatch fence is only valid for a notification mutation"
+        }
+        require(operation.operationId != null) {
+            "Notification mutation dispatch requires a stable operation identity"
+        }
+        val arguments = STRICT_JSON.parseToJsonElement(
+            operation.argumentsCanonicalJson,
+        ).jsonObject
+        require(arguments["approvalKind"]?.jsonPrimitive?.contentOrNull == "mutation") {
+            "Notification read cannot enter the mutation dispatch fence"
+        }
+        require(
+            arguments["planDigest"]?.jsonPrimitive?.contentOrNull == planDigest &&
+                SHA256_PATTERN.matches(planDigest),
+        ) { "Notification mutation dispatch plan changed" }
+        require(dao.activeStopFenceCount(operation.taskId) == 0) {
+            "Task stop fence blocks notification mutation dispatch"
+        }
+        val timestamp = nowMillis()
+        operation.copy(
+            progressSequence = maxOf(
+                operation.progressSequence,
+                NOTIFICATION_MUTATION_DISPATCHED_SEQUENCE,
+            ),
+            updatedAtMillis = timestamp,
+        ) to attention.copy(updatedAtMillis = timestamp)
+    }
+
+    internal fun notificationMutationWasDispatched(operation: DeviceOperationEntity): Boolean {
+        if (
+            operation.toolName != NOTIFICATION_TOOL ||
+            !operation.sideEffect ||
+            operation.progressSequence < NOTIFICATION_MUTATION_DISPATCHED_SEQUENCE
+        ) {
+            return false
+        }
+        val arguments = STRICT_JSON.parseToJsonElement(
+            operation.argumentsCanonicalJson,
+        ).jsonObject
+        return arguments["approvalKind"]?.jsonPrimitive?.contentOrNull == "mutation"
+    }
+
+    internal fun markMediaMutationDispatched(
+        callId: String,
+        planDigest: String,
+    ): AttentionLedgerRecord = updatePair(callId) { operation, attention ->
+        require(operation.terminalSha256 == null) {
+            "Terminal media mutation cannot enter the dispatch fence"
+        }
+        require(operation.toolName == MEDIA_TOOL && operation.sideEffect) {
+            "Dispatch fence is only valid for a media mutation"
+        }
+        require(operation.operationId != null) {
+            "Media mutation dispatch requires a stable operation identity"
+        }
+        val arguments = STRICT_JSON.parseToJsonElement(
+            operation.argumentsCanonicalJson,
+        ).jsonObject
+        require(arguments["approvalKind"]?.jsonPrimitive?.contentOrNull == "mutation") {
+            "Media discovery cannot enter the mutation dispatch fence"
+        }
+        require(
+            arguments["planDigest"]?.jsonPrimitive?.contentOrNull == planDigest &&
+                SHA256_PATTERN.matches(planDigest),
+        ) { "Media mutation dispatch plan changed" }
+        require(dao.activeStopFenceCount(operation.taskId) == 0) {
+            "Task stop fence blocks media mutation dispatch"
+        }
+        val timestamp = nowMillis()
+        operation.copy(
+            progressSequence = maxOf(
+                operation.progressSequence,
+                MEDIA_MUTATION_DISPATCHED_SEQUENCE,
+            ),
+            updatedAtMillis = timestamp,
+        ) to attention.copy(updatedAtMillis = timestamp)
+    }
+
+    internal fun mediaMutationWasDispatched(operation: DeviceOperationEntity): Boolean {
+        if (
+            operation.toolName != MEDIA_TOOL ||
+            !operation.sideEffect ||
+            operation.progressSequence < MEDIA_MUTATION_DISPATCHED_SEQUENCE
+        ) {
+            return false
+        }
+        val arguments = STRICT_JSON.parseToJsonElement(
+            operation.argumentsCanonicalJson,
+        ).jsonObject
+        return arguments["approvalKind"]?.jsonPrimitive?.contentOrNull == "mutation"
+    }
+
     fun saveDraft(
         taskId: String,
         callId: String,
@@ -533,6 +807,10 @@ class RoomAttentionLedger(
                     require(operation.toolName in setOf(
                         CONTENT_READ_TOOL,
                         FILE_COMMIT_TOOL,
+                        CALENDAR_TOOL,
+                        CONTACTS_TOOL,
+                        CLIPBOARD_TOOL,
+                        NOTIFICATION_TOOL,
                         UI_ACTION_TOOL,
                     )) {
                         "Automatic policy origin is only valid for policy-controlled actions"
@@ -626,7 +904,176 @@ class RoomAttentionLedger(
         require(expectation.terminalSemanticSha256 == terminalSemanticSha256) {
             "Verified Pi delivery proof differs from the durable local terminal"
         }
-        advanceDeliveryPair(operation, attention, AttentionDeliveryState.PI_DELIVERED)
+        val delivered = advanceDeliveryPair(
+            operation,
+            attention,
+            AttentionDeliveryState.PI_DELIVERED,
+        )
+        if (isCalendarMutation(delivered.first)) {
+            compactDeliveredCalendarMutation(delivered.first, delivered.second)
+        } else if (isContactsMutation(delivered.first)) {
+            compactDeliveredContactsMutation(delivered.first, delivered.second)
+        } else {
+            delivered
+        }
+    }
+
+    private fun isCalendarMutation(operation: DeviceOperationEntity): Boolean {
+        if (operation.toolName != CALENDAR_TOOL || !operation.sideEffect) return false
+        val arguments = STRICT_JSON.parseToJsonElement(
+            operation.argumentsCanonicalJson,
+        ).jsonObject
+        return arguments["approvalKind"]?.jsonPrimitive?.contentOrNull == "mutation"
+    }
+
+    private fun compactDeliveredCalendarMutation(
+        operation: DeviceOperationEntity,
+        attention: PendingAttentionEntity,
+    ): Pair<DeviceOperationEntity, PendingAttentionEntity> {
+        val arguments = STRICT_JSON.parseToJsonElement(
+            operation.argumentsCanonicalJson,
+        ).jsonObject
+        if (arguments["compacted"]?.jsonPrimitive?.booleanOrNull == true) {
+            return operation to attention
+        }
+        val compactArguments = buildJsonObject {
+            put("approvalKind", "mutation")
+            put("action", arguments.getValue("action"))
+            put("requestDigest", arguments.getValue("requestDigest"))
+            put("planDigest", arguments.getValue("planDigest"))
+            put("summary", "Calendar change completed")
+            put("details", "Sensitive Calendar preview removed after verified Pi delivery.")
+            arguments["approvalOrigin"]?.let { put("approvalOrigin", it) }
+            put("compacted", true)
+        }
+        val argumentsCanonicalJson = canonicalJson(compactArguments)
+        val frame = STRICT_JSON.parseToJsonElement(
+            requireNotNull(operation.terminalFrameCanonicalJson),
+        ).jsonObject
+        val compactFrame = if (
+            operation.terminalKind == DeviceToolTerminalKind.SUCCEEDED.wireValue
+        ) {
+            val result = frame.getValue("result").jsonObject
+            buildJsonObject {
+                TERMINAL_BASE_KEYS.forEach { key -> put(key, frame.getValue(key)) }
+                put(
+                    "result",
+                    buildJsonObject {
+                        put("ok", true)
+                        put("action", result.getValue("action"))
+                        put("data", buildJsonObject { put("redacted", true) })
+                        put("verification", result.getValue("verification"))
+                    },
+                )
+            }
+        } else {
+            frame
+        }
+        val terminalFrameCanonicalJson = canonicalJson(compactFrame)
+        val requestBinding = buildJsonObject {
+            put("callId", operation.callId)
+            put("taskId", operation.taskId)
+            put("piToolCallId", operation.piToolCallId)
+            put("deviceId", operation.deviceId)
+            put("toolName", operation.toolName)
+            put("arguments", compactArguments)
+            put("sideEffect", operation.sideEffect)
+            operation.operationId?.let { put("operationId", it) }
+            put("expiresAt", operation.expiresAt)
+            put("capabilityVersion", operation.capabilityVersion)
+        }
+        val compactOperation = operation.copy(
+            argumentsCanonicalJson = argumentsCanonicalJson,
+            requestSha256 = sha256(canonicalJson(requestBinding).encodeToByteArray()),
+            terminalFrameCanonicalJson = terminalFrameCanonicalJson,
+            terminalSha256 = sha256(terminalFrameCanonicalJson.encodeToByteArray()),
+        )
+        val storedFrame = STRICT_JSON.parseToJsonElement(
+            terminalFrameCanonicalJson,
+        ).jsonObject
+        val display = storedFrame["result"] ?: storedFrame["error"]
+        return compactOperation to attention.copy(
+            terminalDisplayJson = display?.toString(),
+        )
+    }
+
+    private fun isContactsMutation(operation: DeviceOperationEntity): Boolean {
+        if (operation.toolName != CONTACTS_TOOL || !operation.sideEffect) return false
+        val arguments = STRICT_JSON.parseToJsonElement(
+            operation.argumentsCanonicalJson,
+        ).jsonObject
+        return arguments["approvalKind"]?.jsonPrimitive?.contentOrNull == "mutation"
+    }
+
+    private fun compactDeliveredContactsMutation(
+        operation: DeviceOperationEntity,
+        attention: PendingAttentionEntity,
+    ): Pair<DeviceOperationEntity, PendingAttentionEntity> {
+        val arguments = STRICT_JSON.parseToJsonElement(
+            operation.argumentsCanonicalJson,
+        ).jsonObject
+        if (arguments["compacted"]?.jsonPrimitive?.booleanOrNull == true) {
+            return operation to attention
+        }
+        val compactArguments = buildJsonObject {
+            put("approvalKind", "mutation")
+            put("action", arguments.getValue("action"))
+            put("requestDigest", arguments.getValue("requestDigest"))
+            put("planDigest", arguments.getValue("planDigest"))
+            put("summary", "Contacts change completed")
+            put("details", "Sensitive Contacts preview removed after verified Pi delivery.")
+            arguments["approvalOrigin"]?.let { put("approvalOrigin", it) }
+            put("compacted", true)
+        }
+        val argumentsCanonicalJson = canonicalJson(compactArguments)
+        val frame = STRICT_JSON.parseToJsonElement(
+            requireNotNull(operation.terminalFrameCanonicalJson),
+        ).jsonObject
+        val compactFrame = if (
+            operation.terminalKind == DeviceToolTerminalKind.SUCCEEDED.wireValue
+        ) {
+            val result = frame.getValue("result").jsonObject
+            buildJsonObject {
+                TERMINAL_BASE_KEYS.forEach { key -> put(key, frame.getValue(key)) }
+                put(
+                    "result",
+                    buildJsonObject {
+                        put("ok", true)
+                        put("action", result.getValue("action"))
+                        put("data", buildJsonObject { put("redacted", true) })
+                        put("verification", result.getValue("verification"))
+                    },
+                )
+            }
+        } else {
+            frame
+        }
+        val terminalFrameCanonicalJson = canonicalJson(compactFrame)
+        val requestBinding = buildJsonObject {
+            put("callId", operation.callId)
+            put("taskId", operation.taskId)
+            put("piToolCallId", operation.piToolCallId)
+            put("deviceId", operation.deviceId)
+            put("toolName", operation.toolName)
+            put("arguments", compactArguments)
+            put("sideEffect", operation.sideEffect)
+            operation.operationId?.let { put("operationId", it) }
+            put("expiresAt", operation.expiresAt)
+            put("capabilityVersion", operation.capabilityVersion)
+        }
+        val compactOperation = operation.copy(
+            argumentsCanonicalJson = argumentsCanonicalJson,
+            requestSha256 = sha256(canonicalJson(requestBinding).encodeToByteArray()),
+            terminalFrameCanonicalJson = terminalFrameCanonicalJson,
+            terminalSha256 = sha256(terminalFrameCanonicalJson.encodeToByteArray()),
+        )
+        val storedFrame = STRICT_JSON.parseToJsonElement(
+            terminalFrameCanonicalJson,
+        ).jsonObject
+        val display = storedFrame["result"] ?: storedFrame["error"]
+        return compactOperation to attention.copy(
+            terminalDisplayJson = display?.toString(),
+        )
     }
 
     /**
@@ -770,7 +1217,7 @@ class RoomAttentionLedger(
         val operationId = request.operationId?.let { normalizeUuid(it, "operationId") }
         val expiresAt = normalizeTimestamp(request.expiresAt)
         val argumentsCanonicalJson = canonicalJson(request.arguments)
-        val safeBinding = if (request.toolName in SIDE_EFFECT_TOOLS) {
+        val safeBinding = if (isSideEffectTool(request.toolName, request.arguments.jsonObject)) {
             request.sideEffect && operationId != null
         } else {
             !request.sideEffect && operationId == null
@@ -1018,7 +1465,7 @@ class RoomAttentionLedger(
             require(operation.toolName in ATTENTION_TOOLS) {
                 "Actionable attention request tool is unsafe"
             }
-            if (operation.toolName in SIDE_EFFECT_TOOLS) {
+            if (isSideEffectTool(operation.toolName, arguments.jsonObject)) {
                 require(operation.sideEffect && operation.operationId != null) {
                     "Side-effect attention binding is unsafe"
                 }
@@ -1173,7 +1620,95 @@ class RoomAttentionLedger(
         const val CONTENT_READ_TOOL = "device_files_read"
         const val FILE_COMMIT_TOOL = "device_files_commit_changes"
         const val MEDIA_LIST_TOOL = "device_media_list"
+        const val MEDIA_TOOL = "device_media"
+        const val CALENDAR_TOOL = "device_calendar"
+        const val CONTACTS_TOOL = "device_contacts"
+        const val LOCATION_TOOL = "device_location"
+        const val CLIPBOARD_TOOL = "device_clipboard"
+        const val NOTIFICATION_TOOL = "device_notification"
+        const val CALENDAR_MUTATION_DISPATCHED_SEQUENCE = 2L
+        const val CONTACTS_MUTATION_DISPATCHED_SEQUENCE = 2L
+        const val CLIPBOARD_MUTATION_DISPATCHED_SEQUENCE = 2L
+        const val NOTIFICATION_MUTATION_DISPATCHED_SEQUENCE = 2L
         const val UI_ACTION_TOOL = "device_ui_action"
+        val LIVE_ONLY_APPROVED_READ_TOOLS =
+            setOf(
+                CONTENT_READ_TOOL,
+                MEDIA_LIST_TOOL,
+                CALENDAR_TOOL,
+                CONTACTS_TOOL,
+                LOCATION_TOOL,
+                CLIPBOARD_TOOL,
+            )
+        val CALENDAR_READ_ACTIONS = setOf("list_calendars", "list_events", "get_event")
+        val CONTACTS_READ_ACTIONS = setOf("search", "get_contact")
+        val CONTACTS_MUTATION_ACTIONS =
+            setOf("create_contact", "update_contact", "delete_contact")
+        val CLIPBOARD_MUTATION_ACTIONS = setOf("set", "clear")
+        val NOTIFICATION_MUTATION_ACTIONS = setOf("post", "update", "cancel")
+        val MEDIA_MUTATION_ACTIONS = setOf("set_favorite", "set_trashed", "delete")
+        val CALENDAR_MUTATION_ACTIONS =
+            setOf("create_event", "update_event", "delete_event")
+        val CALENDAR_MUTATION_FAILURE_CODES = setOf(
+            "CAPABILITY_NOT_READY",
+            "STALE_HANDLE",
+            "NOT_FOUND",
+            "READ_ONLY",
+            "AMBIGUOUS_TARGET",
+            "CONFLICT",
+            "PROVIDER_UNAVAILABLE",
+            "DEVICE_TOOL_TIMEOUT",
+            "VERIFICATION_FAILED",
+            "OUTCOME_UNKNOWN",
+            "CALENDAR_MUTATION_FAILED",
+        )
+        val CONTACTS_MUTATION_FAILURE_CODES = setOf(
+            "CAPABILITY_NOT_READY",
+            "STALE_HANDLE",
+            "NOT_FOUND",
+            "READ_ONLY",
+            "AMBIGUOUS_TARGET",
+            "CONFLICT",
+            "PROVIDER_UNAVAILABLE",
+            "DEVICE_TOOL_TIMEOUT",
+            "VERIFICATION_FAILED",
+            "OUTCOME_UNKNOWN",
+            "CONTACTS_MUTATION_FAILED",
+        )
+        val CLIPBOARD_MUTATION_FAILURE_CODES = setOf(
+            "CONFLICT",
+            "APP_NOT_FOREGROUND",
+            "CLIPBOARD_REQUEST_IN_PROGRESS",
+            "PROVIDER_UNAVAILABLE",
+            "DEVICE_TOOL_TIMEOUT",
+            "VERIFICATION_FAILED",
+            "OUTCOME_UNKNOWN",
+            "CLIPBOARD_MUTATION_FAILED",
+        )
+        val NOTIFICATION_MUTATION_FAILURE_CODES = setOf(
+            "CAPABILITY_NOT_READY",
+            "STALE_HANDLE",
+            "CONFLICT",
+            "NOTIFICATION_REQUEST_IN_PROGRESS",
+            "PROVIDER_UNAVAILABLE",
+            "DEVICE_TOOL_TIMEOUT",
+            "VERIFICATION_FAILED",
+            "OUTCOME_UNKNOWN",
+            "NOTIFICATION_MUTATION_FAILED",
+        )
+        val MEDIA_MUTATION_FAILURE_CODES = setOf(
+            "CAPABILITY_NOT_READY",
+            "STALE_HANDLE",
+            "CONFLICT",
+            "MEDIA_REQUEST_IN_PROGRESS",
+            "MEDIA_SYSTEM_CONSENT_DECLINED",
+            "MEDIA_SYSTEM_CONSENT_UNAVAILABLE",
+            "MEDIA_PROVIDER_UNAVAILABLE",
+            "DEVICE_TOOL_TIMEOUT",
+            "VERIFICATION_FAILED",
+            "OUTCOME_UNKNOWN",
+            "MEDIA_MUTATION_FAILED",
+        )
         val SIDE_EFFECT_TOOLS = setOf(FILE_COMMIT_TOOL, UI_ACTION_TOOL)
         val ATTENTION_TOOLS = setOf(
             "request_user_question",
@@ -1181,6 +1716,12 @@ class RoomAttentionLedger(
             CONTENT_READ_TOOL,
             FILE_COMMIT_TOOL,
             MEDIA_LIST_TOOL,
+            MEDIA_TOOL,
+            CALENDAR_TOOL,
+            CONTACTS_TOOL,
+            LOCATION_TOOL,
+            CLIPBOARD_TOOL,
+            NOTIFICATION_TOOL,
             UI_ACTION_TOOL,
         )
         val ATTENTION_VALIDATION_CODES = setOf("ANSWER_REQUIRED", "ANSWER_TOO_LONG")
@@ -1188,6 +1729,10 @@ class RoomAttentionLedger(
             "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
             RegexOption.IGNORE_CASE,
         )
+        val MEDIA_HANDLE = Regex("^media-[0-9a-f]{24}$")
+        val CALENDAR_HANDLE = Regex("^calendar-[0-9a-f]{24}$")
+        val EVENT_HANDLE = Regex("^event-[0-9a-f]{24}$")
+        val CONTACT_HANDLE = Regex("^contact-[0-9a-f]{24}$")
         val RFC3339_PATTERN = Regex(
             "^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2})(?:\\.\\d{3})?(Z|[+-]\\d{2}:\\d{2})$",
         )
@@ -1211,6 +1756,30 @@ class RoomAttentionLedger(
             require(UUID_PATTERN.matches(normalized)) { "$field is not a UUID" }
             return normalized.lowercase()
         }
+
+        fun isSideEffectTool(toolName: String, arguments: JsonObject): Boolean =
+            toolName in SIDE_EFFECT_TOOLS ||
+                (
+                    toolName == CALENDAR_TOOL &&
+                        arguments["approvalKind"]?.jsonPrimitive?.contentOrNull == "mutation"
+                    ) ||
+                (
+                    toolName == CONTACTS_TOOL &&
+                        arguments["approvalKind"]?.jsonPrimitive?.contentOrNull == "mutation"
+                    ) ||
+                (
+                    toolName == CLIPBOARD_TOOL &&
+                        arguments["approvalKind"]?.jsonPrimitive?.contentOrNull == "mutation"
+                    )
+                ||
+                (
+                    toolName == NOTIFICATION_TOOL &&
+                        arguments["approvalKind"]?.jsonPrimitive?.contentOrNull == "mutation"
+                    ) ||
+                (
+                    toolName == MEDIA_TOOL &&
+                        arguments["approvalKind"]?.jsonPrimitive?.contentOrNull == "mutation"
+                    )
 
         fun normalizeString(value: String, field: String, maximum: Int): String {
             val normalized = value.trim()
@@ -1308,6 +1877,302 @@ class RoomAttentionLedger(
                 objectValue["limit"]?.let { limit ->
                     require(limit.jsonPrimitive.intOrNull in 1..20) { "limit is outside media policy" }
                 }
+                return
+            }
+            if (toolName == MEDIA_TOOL) {
+                requireExactKeys(
+                    objectValue,
+                    setOf(
+                        "approvalKind",
+                        "action",
+                        "requestDigest",
+                        "planDigest",
+                        "summary",
+                        "details",
+                    ),
+                    emptySet(),
+                )
+                require(
+                    objectValue["approvalKind"]?.jsonPrimitive?.contentOrNull == "mutation",
+                ) { "Media approval kind is invalid" }
+                require(
+                    objectValue["action"]?.jsonPrimitive?.contentOrNull in
+                        MEDIA_MUTATION_ACTIONS,
+                ) { "Media mutation action is invalid" }
+                listOf("requestDigest", "planDigest").forEach { field ->
+                    val digest = requireSizedString(
+                        objectValue.getValue(field),
+                        field,
+                        64,
+                        64,
+                        true,
+                    )
+                    require(SHA256_PATTERN.matches(digest)) { "$field is invalid" }
+                }
+                requireSizedString(objectValue.getValue("summary"), "summary", 1, 256, false)
+                requireSizedString(objectValue.getValue("details"), "details", 1, 512, false)
+                return
+            }
+            if (toolName == CALENDAR_TOOL) {
+                val kind = objectValue["approvalKind"]?.jsonPrimitive?.contentOrNull
+                if (kind == "read") {
+                    requireExactKeys(
+                        objectValue,
+                        setOf("approvalKind", "action", "summary", "details"),
+                        emptySet(),
+                    )
+                    require(
+                        objectValue["action"]?.jsonPrimitive?.contentOrNull in
+                            CALENDAR_READ_ACTIONS,
+                    ) { "Calendar approval action is invalid" }
+                } else {
+                    require(kind == "mutation") { "Calendar approval kind is invalid" }
+                    requireExactKeys(
+                        objectValue,
+                        setOf(
+                            "approvalKind",
+                            "action",
+                            "requestDigest",
+                            "planDigest",
+                            "summary",
+                            "details",
+                        ),
+                        setOf("approvalOrigin", "compacted"),
+                    )
+                    require(
+                        objectValue["action"]?.jsonPrimitive?.contentOrNull in
+                            CALENDAR_MUTATION_ACTIONS,
+                    ) { "Calendar mutation action is invalid" }
+                    listOf("requestDigest", "planDigest").forEach { field ->
+                        val digest = requireSizedString(
+                            objectValue.getValue(field),
+                            field,
+                            64,
+                            64,
+                            true,
+                        )
+                        require(SHA256_PATTERN.matches(digest)) { "$field is invalid" }
+                    }
+                    objectValue["approvalOrigin"]?.let {
+                        require(it.jsonPrimitive.contentOrNull == "auto") {
+                            "Calendar approval origin is invalid"
+                        }
+                    }
+                    objectValue["compacted"]?.let {
+                        require(it.jsonPrimitive.booleanOrNull == true) {
+                            "Calendar compaction marker is invalid"
+                        }
+                        require(
+                            objectValue["summary"]?.jsonPrimitive?.contentOrNull ==
+                                "Calendar change completed" &&
+                                objectValue["details"]?.jsonPrimitive?.contentOrNull ==
+                                "Sensitive Calendar preview removed after verified Pi delivery.",
+                        ) { "Compacted Calendar preview differs from the fixed contract" }
+                    }
+                }
+                requireSizedString(objectValue.getValue("summary"), "summary", 1, 256, false)
+                requireSizedString(objectValue.getValue("details"), "details", 1, 512, false)
+                return
+            }
+            if (toolName == CONTACTS_TOOL) {
+                val kind = objectValue["approvalKind"]?.jsonPrimitive?.contentOrNull
+                if (kind == "read") {
+                    requireExactKeys(
+                        objectValue,
+                        setOf("approvalKind", "action", "summary", "details"),
+                        emptySet(),
+                    )
+                    require(
+                        objectValue["action"]?.jsonPrimitive?.contentOrNull in
+                            CONTACTS_READ_ACTIONS,
+                    ) { "Contacts approval action is invalid" }
+                } else {
+                    require(kind == "mutation") { "Contacts approval kind is invalid" }
+                    requireExactKeys(
+                        objectValue,
+                        setOf(
+                            "approvalKind",
+                            "action",
+                            "requestDigest",
+                            "planDigest",
+                            "summary",
+                            "details",
+                        ),
+                        setOf("approvalOrigin", "compacted"),
+                    )
+                    require(
+                        objectValue["action"]?.jsonPrimitive?.contentOrNull in
+                            CONTACTS_MUTATION_ACTIONS,
+                    ) { "Contacts mutation action is invalid" }
+                    listOf("requestDigest", "planDigest").forEach { field ->
+                        val digest = requireSizedString(
+                            objectValue.getValue(field),
+                            field,
+                            64,
+                            64,
+                            true,
+                        )
+                        require(SHA256_PATTERN.matches(digest)) { "$field is invalid" }
+                    }
+                    objectValue["approvalOrigin"]?.let {
+                        require(it.jsonPrimitive.contentOrNull == "auto") {
+                            "Contacts approval origin is invalid"
+                        }
+                    }
+                    objectValue["compacted"]?.let {
+                        require(it.jsonPrimitive.booleanOrNull == true) {
+                            "Contacts compaction marker is invalid"
+                        }
+                        require(
+                            objectValue["summary"]?.jsonPrimitive?.contentOrNull ==
+                                "Contacts change completed" &&
+                                objectValue["details"]?.jsonPrimitive?.contentOrNull ==
+                                "Sensitive Contacts preview removed after verified Pi delivery.",
+                        ) { "Compacted Contacts preview differs from the fixed contract" }
+                    }
+                }
+                requireSizedString(objectValue.getValue("summary"), "summary", 1, 256, false)
+                requireSizedString(objectValue.getValue("details"), "details", 1, 512, false)
+                return
+            }
+            if (toolName == LOCATION_TOOL) {
+                requireExactKeys(
+                    objectValue,
+                    setOf(
+                        "approvalKind",
+                        "action",
+                        "precision",
+                        "summary",
+                        "details",
+                    ),
+                    emptySet(),
+                )
+                require(
+                    objectValue["approvalKind"]?.jsonPrimitive?.contentOrNull == "read" &&
+                        objectValue["action"]?.jsonPrimitive?.contentOrNull == "get_current" &&
+                        objectValue["precision"]?.jsonPrimitive?.contentOrNull in
+                        setOf("approximate", "precise"),
+                ) { "Location approval arguments are invalid" }
+                requireSizedString(objectValue.getValue("summary"), "summary", 1, 256, false)
+                requireSizedString(objectValue.getValue("details"), "details", 1, 512, false)
+                return
+            }
+            if (toolName == CLIPBOARD_TOOL) {
+                val kind = objectValue["approvalKind"]?.jsonPrimitive?.contentOrNull
+                if (kind == "read") {
+                    requireExactKeys(
+                        objectValue,
+                        setOf("approvalKind", "action", "summary", "details"),
+                        emptySet(),
+                    )
+                    require(
+                        objectValue["action"]?.jsonPrimitive?.contentOrNull == "get",
+                    ) { "Clipboard read action is invalid" }
+                } else {
+                    require(kind == "mutation") { "Clipboard approval kind is invalid" }
+                    requireExactKeys(
+                        objectValue,
+                        setOf(
+                            "approvalKind",
+                            "action",
+                            "requestDigest",
+                            "planDigest",
+                            "characterCount",
+                            "sensitive",
+                            "summary",
+                            "details",
+                        ),
+                        setOf("approvalOrigin"),
+                    )
+                    require(
+                        objectValue["action"]?.jsonPrimitive?.contentOrNull in
+                            CLIPBOARD_MUTATION_ACTIONS,
+                    ) { "Clipboard mutation action is invalid" }
+                    listOf("requestDigest", "planDigest").forEach { field ->
+                        val digest = requireSizedString(
+                            objectValue.getValue(field),
+                            field,
+                            64,
+                            64,
+                            true,
+                        )
+                        require(SHA256_PATTERN.matches(digest)) { "$field is invalid" }
+                    }
+                    val characterCount =
+                        objectValue["characterCount"]?.jsonPrimitive?.intOrNull
+                    require(characterCount != null && characterCount in 0..4_096) {
+                        "Clipboard character count is invalid"
+                    }
+                    require(
+                        objectValue["sensitive"]?.jsonPrimitive?.booleanOrNull != null,
+                    ) { "Clipboard sensitivity marker is invalid" }
+                    objectValue["approvalOrigin"]?.let {
+                        require(it.jsonPrimitive.contentOrNull == "auto") {
+                            "Clipboard approval origin is invalid"
+                        }
+                    }
+                }
+                requireSizedString(objectValue.getValue("summary"), "summary", 1, 256, false)
+                requireSizedString(objectValue.getValue("details"), "details", 1, 512, false)
+                return
+            }
+            if (toolName == NOTIFICATION_TOOL) {
+                val kind = objectValue["approvalKind"]?.jsonPrimitive?.contentOrNull
+                if (kind == "open_settings") {
+                    requireExactKeys(
+                        objectValue,
+                        setOf("approvalKind", "action", "summary", "details"),
+                        emptySet(),
+                    )
+                    require(
+                        objectValue["action"]?.jsonPrimitive?.contentOrNull == "open_settings",
+                    ) { "Notification settings action is invalid" }
+                } else {
+                    require(kind == "mutation") { "Notification approval kind is invalid" }
+                    requireExactKeys(
+                        objectValue,
+                        setOf(
+                            "approvalKind",
+                            "action",
+                            "requestDigest",
+                            "planDigest",
+                            "titleLength",
+                            "messageLength",
+                            "summary",
+                            "details",
+                        ),
+                        setOf("approvalOrigin"),
+                    )
+                    require(
+                        objectValue["action"]?.jsonPrimitive?.contentOrNull in
+                            NOTIFICATION_MUTATION_ACTIONS,
+                    ) { "Notification mutation action is invalid" }
+                    listOf("requestDigest", "planDigest").forEach { field ->
+                        val digest = requireSizedString(
+                            objectValue.getValue(field),
+                            field,
+                            64,
+                            64,
+                            true,
+                        )
+                        require(SHA256_PATTERN.matches(digest)) { "$field is invalid" }
+                    }
+                    val titleLength = objectValue["titleLength"]?.jsonPrimitive?.intOrNull
+                    val messageLength = objectValue["messageLength"]?.jsonPrimitive?.intOrNull
+                    require(titleLength != null && titleLength in 0..80) {
+                        "Notification title length is invalid"
+                    }
+                    require(messageLength != null && messageLength in 0..240) {
+                        "Notification message length is invalid"
+                    }
+                    objectValue["approvalOrigin"]?.let {
+                        require(it.jsonPrimitive.contentOrNull == "auto") {
+                            "Notification approval origin is invalid"
+                        }
+                    }
+                }
+                requireSizedString(objectValue.getValue("summary"), "summary", 1, 256, false)
+                requireSizedString(objectValue.getValue("details"), "details", 1, 512, false)
                 return
             }
             if (toolName == UI_ACTION_TOOL) {
@@ -1506,6 +2371,70 @@ class RoomAttentionLedger(
                     validateMediaListResult(result)
                     return
                 }
+                if (operation.toolName == CALENDAR_TOOL) {
+                    val arguments = STRICT_JSON.parseToJsonElement(
+                        operation.argumentsCanonicalJson,
+                    ).jsonObject
+                    require(
+                        arguments["approvalKind"]?.jsonPrimitive?.contentOrNull == "mutation",
+                    ) { "Calendar read results must use live-only delivery" }
+                    if (arguments["compacted"]?.jsonPrimitive?.booleanOrNull == true) {
+                        require(
+                            operation.deliveryState == AttentionDeliveryState.PI_DELIVERED.name,
+                        ) { "Calendar result was compacted before verified Pi delivery" }
+                    }
+                    validateCalendarMutationResult(arguments, result)
+                    return
+                }
+                if (operation.toolName == CONTACTS_TOOL) {
+                    val arguments = STRICT_JSON.parseToJsonElement(
+                        operation.argumentsCanonicalJson,
+                    ).jsonObject
+                    require(
+                        arguments["approvalKind"]?.jsonPrimitive?.contentOrNull == "mutation",
+                    ) { "Contacts read results must use live-only delivery" }
+                    if (arguments["compacted"]?.jsonPrimitive?.booleanOrNull == true) {
+                        require(
+                            operation.deliveryState == AttentionDeliveryState.PI_DELIVERED.name,
+                        ) { "Contacts result was compacted before verified Pi delivery" }
+                    }
+                    validateContactsMutationResult(arguments, result)
+                    return
+                }
+                if (operation.toolName == CLIPBOARD_TOOL) {
+                    val arguments = STRICT_JSON.parseToJsonElement(
+                        operation.argumentsCanonicalJson,
+                    ).jsonObject
+                    require(
+                        arguments["approvalKind"]?.jsonPrimitive?.contentOrNull == "mutation",
+                    ) { "Clipboard read results must use live-only delivery" }
+                    validateClipboardMutationResult(arguments, result)
+                    return
+                }
+                if (operation.toolName == NOTIFICATION_TOOL) {
+                    val arguments = STRICT_JSON.parseToJsonElement(
+                        operation.argumentsCanonicalJson,
+                    ).jsonObject
+                    if (
+                        arguments["approvalKind"]?.jsonPrimitive?.contentOrNull ==
+                        "open_settings"
+                    ) {
+                        validateNotificationSettingsResult(result)
+                    } else {
+                        require(
+                            arguments["approvalKind"]?.jsonPrimitive?.contentOrNull == "mutation",
+                        ) { "Notification approval kind is invalid" }
+                        validateNotificationMutationResult(arguments, result)
+                    }
+                    return
+                }
+                if (operation.toolName == MEDIA_TOOL) {
+                    val arguments = STRICT_JSON.parseToJsonElement(
+                        operation.argumentsCanonicalJson,
+                    ).jsonObject
+                    validateMediaMutationResult(arguments, result)
+                    return
+                }
                 if (operation.toolName == UI_ACTION_TOOL) {
                     validateUiActionResult(operation, result)
                     return
@@ -1569,6 +2498,30 @@ class RoomAttentionLedger(
                 validateMediaListError(terminal, error)
                 return
             }
+            if (operation.toolName == CALENDAR_TOOL) {
+                validateCalendarApprovalError(terminal, error)
+                return
+            }
+            if (operation.toolName == CONTACTS_TOOL) {
+                validateContactsApprovalError(operation, terminal, error)
+                return
+            }
+            if (operation.toolName == LOCATION_TOOL) {
+                validateLocationApprovalError(terminal, error)
+                return
+            }
+            if (operation.toolName == CLIPBOARD_TOOL) {
+                validateClipboardApprovalError(operation, terminal, error)
+                return
+            }
+            if (operation.toolName == NOTIFICATION_TOOL) {
+                validateNotificationApprovalError(operation, terminal, error)
+                return
+            }
+            if (operation.toolName == MEDIA_TOOL) {
+                validateMediaMutationApprovalError(terminal, error)
+                return
+            }
             if (operation.toolName == UI_ACTION_TOOL) {
                 validateUiActionError(terminal, error)
                 return
@@ -1615,13 +2568,27 @@ class RoomAttentionLedger(
                 requireExactKeys(
                     item,
                     setOf("index", "mimeType"),
-                    setOf("byteCount", "width", "height", "capturedAtMillis", "addedAtMillis"),
+                    setOf(
+                        "mediaHandle",
+                        "byteCount",
+                        "width",
+                        "height",
+                        "capturedAtMillis",
+                        "addedAtMillis",
+                    ),
                 )
                 require(item["index"]?.jsonPrimitive?.intOrNull == index + 1) {
                     "Media item index is invalid"
                 }
                 requireSizedString(item.getValue("mimeType"), "mimeType", 6, 128, true)
                     .also { require(it.startsWith("image/")) { "Media mimeType is not an image" } }
+                item["mediaHandle"]?.let { handle ->
+                    require(
+                        MEDIA_HANDLE.matches(
+                            requireSizedString(handle, "mediaHandle", 30, 30, true),
+                        ),
+                    ) { "Media handle is invalid" }
+                }
                 item["byteCount"]?.let { require(it.jsonPrimitive.longOrNull?.let { n -> n >= 0L } == true) }
                 item["width"]?.let { require(it.jsonPrimitive.intOrNull?.let { n -> n > 0 } == true) }
                 item["height"]?.let { require(it.jsonPrimitive.intOrNull?.let { n -> n > 0 } == true) }
@@ -1728,6 +2695,575 @@ class RoomAttentionLedger(
                     error["message"]?.jsonPrimitive?.contentOrNull == expected.second &&
                     error["retryable"]?.jsonPrimitive?.booleanOrNull == false
             ) { "Media error differs from the fixed contract" }
+        }
+
+        fun validateCalendarApprovalError(terminal: String, error: JsonObject) {
+            val allowedCodes = when (terminal) {
+                DeviceToolTerminalKind.REJECTED.wireValue -> setOf("USER_DECLINED")
+                DeviceToolTerminalKind.TIMED_OUT.wireValue -> setOf("ATTENTION_EXPIRED")
+                DeviceToolTerminalKind.CANCELLED.wireValue -> setOf("ATTENTION_CANCELLED")
+                DeviceToolTerminalKind.FAILED.wireValue -> CALENDAR_MUTATION_FAILURE_CODES +
+                    "UNSUPPORTED_DEVICE_CAPABILITY"
+                else -> throw IllegalArgumentException(
+                    "Calendar approval terminal kind is invalid",
+                )
+            }
+            require(
+                error["code"]?.jsonPrimitive?.contentOrNull in allowedCodes &&
+                    !error["message"]?.jsonPrimitive?.contentOrNull.isNullOrBlank() &&
+                    error["retryable"]?.jsonPrimitive?.booleanOrNull == false,
+            ) { "Calendar approval error differs from the fixed contract" }
+        }
+
+        fun validateContactsApprovalError(
+            operation: DeviceOperationEntity,
+            terminal: String,
+            error: JsonObject,
+        ) {
+            val allowedCodes = when (terminal) {
+                DeviceToolTerminalKind.REJECTED.wireValue -> setOf("USER_DECLINED")
+                DeviceToolTerminalKind.TIMED_OUT.wireValue -> setOf("ATTENTION_EXPIRED")
+                DeviceToolTerminalKind.CANCELLED.wireValue -> setOf("ATTENTION_CANCELLED")
+                DeviceToolTerminalKind.FAILED.wireValue -> if (operation.sideEffect) {
+                    CONTACTS_MUTATION_FAILURE_CODES
+                } else {
+                    setOf("UNSUPPORTED_DEVICE_CAPABILITY")
+                }
+                else -> throw IllegalArgumentException(
+                    "Contacts approval terminal kind is invalid",
+                )
+            }
+            require(
+                error["code"]?.jsonPrimitive?.contentOrNull in allowedCodes &&
+                    !error["message"]?.jsonPrimitive?.contentOrNull.isNullOrBlank() &&
+                    error["retryable"]?.jsonPrimitive?.booleanOrNull == false,
+            ) { "Contacts approval error differs from the fixed contract" }
+        }
+
+        fun validateLocationApprovalError(
+            terminal: String,
+            error: JsonObject,
+        ) {
+            val allowedCodes = when (terminal) {
+                DeviceToolTerminalKind.REJECTED.wireValue -> setOf("USER_DECLINED")
+                DeviceToolTerminalKind.TIMED_OUT.wireValue -> setOf("ATTENTION_EXPIRED")
+                DeviceToolTerminalKind.CANCELLED.wireValue -> setOf("ATTENTION_CANCELLED")
+                DeviceToolTerminalKind.FAILED.wireValue ->
+                    setOf("UNSUPPORTED_DEVICE_CAPABILITY")
+                else -> throw IllegalArgumentException(
+                    "Location approval terminal kind is invalid",
+                )
+            }
+            require(
+                error["code"]?.jsonPrimitive?.contentOrNull in allowedCodes &&
+                    !error["message"]?.jsonPrimitive?.contentOrNull.isNullOrBlank() &&
+                    error["retryable"]?.jsonPrimitive?.booleanOrNull == false,
+            ) { "Location approval error differs from the fixed contract" }
+        }
+
+        fun validateClipboardApprovalError(
+            operation: DeviceOperationEntity,
+            terminal: String,
+            error: JsonObject,
+        ) {
+            val allowedCodes = when (terminal) {
+                DeviceToolTerminalKind.REJECTED.wireValue -> setOf("USER_DECLINED")
+                DeviceToolTerminalKind.TIMED_OUT.wireValue -> setOf("ATTENTION_EXPIRED")
+                DeviceToolTerminalKind.CANCELLED.wireValue -> setOf("ATTENTION_CANCELLED")
+                DeviceToolTerminalKind.FAILED.wireValue -> if (operation.sideEffect) {
+                    CLIPBOARD_MUTATION_FAILURE_CODES
+                } else {
+                    setOf("UNSUPPORTED_DEVICE_CAPABILITY")
+                }
+                else -> throw IllegalArgumentException(
+                    "Clipboard approval terminal kind is invalid",
+                )
+            }
+            require(
+                error["code"]?.jsonPrimitive?.contentOrNull in allowedCodes &&
+                    !error["message"]?.jsonPrimitive?.contentOrNull.isNullOrBlank() &&
+                    error["retryable"]?.jsonPrimitive?.booleanOrNull == false,
+            ) { "Clipboard approval error differs from the fixed contract" }
+        }
+
+        fun validateNotificationApprovalError(
+            operation: DeviceOperationEntity,
+            terminal: String,
+            error: JsonObject,
+        ) {
+            val allowedCodes = when (terminal) {
+                DeviceToolTerminalKind.REJECTED.wireValue -> setOf("USER_DECLINED")
+                DeviceToolTerminalKind.TIMED_OUT.wireValue -> setOf("ATTENTION_EXPIRED")
+                DeviceToolTerminalKind.CANCELLED.wireValue -> setOf("ATTENTION_CANCELLED")
+                DeviceToolTerminalKind.FAILED.wireValue -> if (operation.sideEffect) {
+                    NOTIFICATION_MUTATION_FAILURE_CODES
+                } else {
+                    setOf(
+                        "APP_NOT_FOREGROUND",
+                        "PROVIDER_UNAVAILABLE",
+                        "DEVICE_TOOL_TIMEOUT",
+                        "UNSUPPORTED_DEVICE_CAPABILITY",
+                    )
+                }
+                else -> throw IllegalArgumentException(
+                    "Notification approval terminal kind is invalid",
+                )
+            }
+            require(
+                error["code"]?.jsonPrimitive?.contentOrNull in allowedCodes &&
+                    !error["message"]?.jsonPrimitive?.contentOrNull.isNullOrBlank() &&
+                    error["retryable"]?.jsonPrimitive?.booleanOrNull == false,
+            ) { "Notification approval error differs from the fixed contract" }
+        }
+
+        fun validateMediaMutationApprovalError(
+            terminal: String,
+            error: JsonObject,
+        ) {
+            val allowedCodes = when (terminal) {
+                DeviceToolTerminalKind.REJECTED.wireValue -> setOf("USER_DECLINED")
+                DeviceToolTerminalKind.TIMED_OUT.wireValue -> setOf("ATTENTION_EXPIRED")
+                DeviceToolTerminalKind.CANCELLED.wireValue -> setOf("ATTENTION_CANCELLED")
+                DeviceToolTerminalKind.FAILED.wireValue -> MEDIA_MUTATION_FAILURE_CODES
+                else -> throw IllegalArgumentException(
+                    "Media mutation terminal kind is invalid",
+                )
+            }
+            require(
+                error["code"]?.jsonPrimitive?.contentOrNull in allowedCodes &&
+                    !error["message"]?.jsonPrimitive?.contentOrNull.isNullOrBlank() &&
+                    error["retryable"]?.jsonPrimitive?.booleanOrNull == false,
+            ) { "Media mutation error differs from the fixed contract" }
+        }
+
+        fun validateCalendarMutationResult(
+            arguments: JsonObject,
+            result: JsonObject,
+        ) {
+            requireExactKeys(
+                result,
+                setOf("ok", "action", "data", "verification"),
+                emptySet(),
+            )
+            require(result["ok"]?.jsonPrimitive?.booleanOrNull == true)
+            val action = arguments.getValue("action").jsonPrimitive.content
+            require(result["action"]?.jsonPrimitive?.contentOrNull == action)
+            val data = result["data"] as? JsonObject
+                ?: throw IllegalArgumentException("Calendar mutation data must be an object")
+            if (arguments["compacted"]?.jsonPrimitive?.booleanOrNull == true) {
+                requireExactKeys(data, setOf("redacted"), emptySet())
+                require(data["redacted"]?.jsonPrimitive?.booleanOrNull == true)
+            } else if (action == "delete_event") {
+                requireExactKeys(data, setOf("deleted"), emptySet())
+                require(data["deleted"]?.jsonPrimitive?.booleanOrNull == true)
+            } else {
+                requireExactKeys(data, setOf("event"), emptySet())
+                validateCalendarEventResult(
+                    data["event"] as? JsonObject
+                        ?: throw IllegalArgumentException(
+                            "Calendar mutation event must be an object",
+                        ),
+                )
+            }
+            val verification = result["verification"] as? JsonObject
+                ?: throw IllegalArgumentException(
+                    "Calendar mutation verification must be an object",
+                )
+            requireExactKeys(
+                verification,
+                setOf("status", "observedAt", "planDigest"),
+                emptySet(),
+            )
+            require(verification["status"]?.jsonPrimitive?.contentOrNull == "verified")
+            normalizeTimestamp(
+                requireSizedString(
+                    verification.getValue("observedAt"),
+                    "observedAt",
+                    20,
+                    64,
+                    true,
+                ),
+            )
+            require(verification.getValue("planDigest") == arguments.getValue("planDigest"))
+        }
+
+        fun validateContactsMutationResult(
+            arguments: JsonObject,
+            result: JsonObject,
+        ) {
+            requireExactKeys(
+                result,
+                setOf("ok", "action", "data", "verification"),
+                emptySet(),
+            )
+            require(result["ok"]?.jsonPrimitive?.booleanOrNull == true)
+            val action = arguments.getValue("action").jsonPrimitive.content
+            require(result["action"]?.jsonPrimitive?.contentOrNull == action)
+            val data = result["data"] as? JsonObject
+                ?: throw IllegalArgumentException("Contacts mutation data must be an object")
+            if (arguments["compacted"]?.jsonPrimitive?.booleanOrNull == true) {
+                requireExactKeys(data, setOf("redacted"), emptySet())
+                require(data["redacted"]?.jsonPrimitive?.booleanOrNull == true)
+            } else if (action == "delete_contact") {
+                requireExactKeys(data, setOf("deleted"), emptySet())
+                require(data["deleted"]?.jsonPrimitive?.booleanOrNull == true)
+            } else {
+                requireExactKeys(data, setOf("contact"), emptySet())
+                validateContactsMutationContact(
+                    data["contact"] as? JsonObject
+                        ?: throw IllegalArgumentException(
+                            "Contacts mutation contact must be an object",
+                        ),
+                )
+            }
+            val verification = result["verification"] as? JsonObject
+                ?: throw IllegalArgumentException(
+                    "Contacts mutation verification must be an object",
+                )
+            requireExactKeys(
+                verification,
+                setOf("status", "observedAt", "planDigest"),
+                emptySet(),
+            )
+            require(verification["status"]?.jsonPrimitive?.contentOrNull == "verified")
+            normalizeTimestamp(
+                requireSizedString(
+                    verification.getValue("observedAt"),
+                    "observedAt",
+                    20,
+                    64,
+                    true,
+                ),
+            )
+            require(verification.getValue("planDigest") == arguments.getValue("planDigest"))
+        }
+
+        fun validateClipboardMutationResult(
+            arguments: JsonObject,
+            result: JsonObject,
+        ) {
+            requireExactKeys(
+                result,
+                setOf("ok", "action", "data", "verification"),
+                emptySet(),
+            )
+            require(result["ok"]?.jsonPrimitive?.booleanOrNull == true)
+            val action = arguments.getValue("action").jsonPrimitive.content
+            require(result["action"]?.jsonPrimitive?.contentOrNull == action)
+            val data = result["data"] as? JsonObject
+                ?: throw IllegalArgumentException("Clipboard mutation data must be an object")
+            requireExactKeys(
+                data,
+                setOf("state", "characterCount", "sensitive"),
+                emptySet(),
+            )
+            val expectedCount = arguments["characterCount"]?.jsonPrimitive?.intOrNull
+                ?: throw IllegalArgumentException("Clipboard character count is missing")
+            require(data["characterCount"]?.jsonPrimitive?.intOrNull == expectedCount)
+            require(
+                data["sensitive"]?.jsonPrimitive?.booleanOrNull ==
+                    arguments["sensitive"]?.jsonPrimitive?.booleanOrNull,
+            )
+            require(
+                data["state"]?.jsonPrimitive?.contentOrNull ==
+                    if (action == "set") "text" else "empty",
+            )
+            val verification = result["verification"] as? JsonObject
+                ?: throw IllegalArgumentException(
+                    "Clipboard mutation verification must be an object",
+                )
+            requireExactKeys(
+                verification,
+                setOf("status", "observedAt", "planDigest"),
+                emptySet(),
+            )
+            require(verification["status"]?.jsonPrimitive?.contentOrNull == "verified")
+            normalizeTimestamp(
+                requireSizedString(
+                    verification.getValue("observedAt"),
+                    "observedAt",
+                    20,
+                    64,
+                    true,
+                ),
+            )
+            require(verification.getValue("planDigest") == arguments.getValue("planDigest"))
+        }
+
+        fun validateNotificationMutationResult(
+            arguments: JsonObject,
+            result: JsonObject,
+        ) {
+            requireExactKeys(
+                result,
+                setOf("ok", "action", "data", "verification"),
+                emptySet(),
+            )
+            require(result["ok"]?.jsonPrimitive?.booleanOrNull == true)
+            val action = arguments.getValue("action").jsonPrimitive.content
+            require(result["action"]?.jsonPrimitive?.contentOrNull == action)
+            val data = result["data"] as? JsonObject
+                ?: throw IllegalArgumentException("Notification mutation data must be an object")
+            requireExactKeys(
+                data,
+                setOf("notificationHandle", "state"),
+                emptySet(),
+            )
+            require(
+                Regex("^notification-[0-9a-f]{32}$").matches(
+                    data["notificationHandle"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                ),
+            ) { "Notification handle is invalid" }
+            require(
+                data["state"]?.jsonPrimitive?.contentOrNull ==
+                    if (action == "cancel") "cancelled" else "active",
+            ) { "Notification mutation state is invalid" }
+            val verification = result["verification"] as? JsonObject
+                ?: throw IllegalArgumentException(
+                    "Notification mutation verification must be an object",
+                )
+            requireExactKeys(
+                verification,
+                setOf("status", "observedAt", "planDigest"),
+                emptySet(),
+            )
+            require(verification["status"]?.jsonPrimitive?.contentOrNull == "verified")
+            normalizeTimestamp(
+                requireSizedString(
+                    verification.getValue("observedAt"),
+                    "observedAt",
+                    20,
+                    64,
+                    true,
+                ),
+            )
+            require(verification.getValue("planDigest") == arguments.getValue("planDigest"))
+        }
+
+        fun validateMediaMutationResult(
+            arguments: JsonObject,
+            result: JsonObject,
+        ) {
+            requireExactKeys(
+                result,
+                setOf("ok", "action", "data", "verification"),
+                emptySet(),
+            )
+            require(result["ok"]?.jsonPrimitive?.booleanOrNull == true)
+            val action = arguments.getValue("action").jsonPrimitive.content
+            require(action in MEDIA_MUTATION_ACTIONS)
+            require(result["action"]?.jsonPrimitive?.contentOrNull == action)
+            val data = result["data"] as? JsonObject
+                ?: throw IllegalArgumentException("Media mutation data must be an object")
+            when (action) {
+                "set_favorite" -> {
+                    requireExactKeys(data, setOf("changed", "favorite"), emptySet())
+                    require(data["changed"]?.jsonPrimitive?.booleanOrNull != null)
+                    require(data["favorite"]?.jsonPrimitive?.booleanOrNull != null)
+                }
+                "set_trashed" -> {
+                    requireExactKeys(data, setOf("changed", "trashed"), emptySet())
+                    require(data["changed"]?.jsonPrimitive?.booleanOrNull != null)
+                    require(data["trashed"]?.jsonPrimitive?.booleanOrNull != null)
+                }
+                "delete" -> {
+                    requireExactKeys(data, setOf("changed", "deleted"), emptySet())
+                    require(data["changed"]?.jsonPrimitive?.booleanOrNull == true)
+                    require(data["deleted"]?.jsonPrimitive?.booleanOrNull == true)
+                }
+            }
+            val verification = result["verification"] as? JsonObject
+                ?: throw IllegalArgumentException(
+                    "Media mutation verification must be an object",
+                )
+            requireExactKeys(
+                verification,
+                setOf("status", "observedAt", "planDigest"),
+                emptySet(),
+            )
+            require(verification["status"]?.jsonPrimitive?.contentOrNull == "verified")
+            normalizeTimestamp(
+                requireSizedString(
+                    verification.getValue("observedAt"),
+                    "observedAt",
+                    20,
+                    64,
+                    true,
+                ),
+            )
+            require(verification.getValue("planDigest") == arguments.getValue("planDigest"))
+        }
+
+        fun validateNotificationSettingsResult(result: JsonObject) {
+            requireExactKeys(
+                result,
+                setOf("ok", "action", "data", "verification"),
+                emptySet(),
+            )
+            require(result["ok"]?.jsonPrimitive?.booleanOrNull == true)
+            require(result["action"]?.jsonPrimitive?.contentOrNull == "open_settings")
+            val data = result["data"] as? JsonObject
+                ?: throw IllegalArgumentException("Notification settings data must be an object")
+            requireExactKeys(data, setOf("opened"), emptySet())
+            require(data["opened"]?.jsonPrimitive?.booleanOrNull == true)
+            val verification = result["verification"] as? JsonObject
+                ?: throw IllegalArgumentException(
+                    "Notification settings verification must be an object",
+                )
+            requireExactKeys(
+                verification,
+                setOf("status", "observedAt"),
+                emptySet(),
+            )
+            require(verification["status"]?.jsonPrimitive?.contentOrNull == "observed")
+            normalizeTimestamp(
+                requireSizedString(
+                    verification.getValue("observedAt"),
+                    "observedAt",
+                    20,
+                    64,
+                    true,
+                ),
+            )
+        }
+
+        fun validateContactsMutationContact(contact: JsonObject) {
+            requireExactKeys(
+                contact,
+                setOf("contactHandle", "displayName", "phones", "emails", "organization"),
+                setOf("truncated"),
+            )
+            require(
+                CONTACT_HANDLE.matches(
+                    requireSizedString(
+                        contact.getValue("contactHandle"),
+                        "contactHandle",
+                        32,
+                        32,
+                        true,
+                    ),
+                ),
+            )
+            requireSizedString(contact.getValue("displayName"), "displayName", 1, 200, false)
+            listOf("phones" to 128, "emails" to 320).forEach { (field, maximum) ->
+                val values = contact[field] as? JsonArray
+                    ?: throw IllegalArgumentException("$field must be an array")
+                require(values.size <= 10) { "$field exceeds Contacts result bound" }
+                values.forEachIndexed { index, element ->
+                    val value = element as? JsonObject
+                        ?: throw IllegalArgumentException("$field[$index] must be an object")
+                    requireExactKeys(
+                        value,
+                        setOf("value", "label", "primary"),
+                        emptySet(),
+                    )
+                    requireSizedString(
+                        value.getValue("value"),
+                        "$field[$index].value",
+                        1,
+                        maximum,
+                        false,
+                    )
+                    requireSizedString(
+                        value.getValue("label"),
+                        "$field[$index].label",
+                        1,
+                        64,
+                        false,
+                    )
+                    require(value["primary"]?.jsonPrimitive?.booleanOrNull != null)
+                }
+            }
+            contact["truncated"]?.let {
+                require(it.jsonPrimitive.booleanOrNull == true)
+            }
+            val organization = contact.getValue("organization")
+            if (organization !is JsonNull) {
+                val value = organization as? JsonObject
+                    ?: throw IllegalArgumentException("organization must be object or null")
+                requireExactKeys(value, emptySet(), setOf("company", "title"))
+                require(value.isNotEmpty()) { "organization must not be empty" }
+                value["company"]?.let {
+                    requireSizedString(it, "organization.company", 1, 256, false)
+                }
+                value["title"]?.let {
+                    requireSizedString(it, "organization.title", 1, 160, false)
+                }
+            }
+        }
+
+        fun validateCalendarEventResult(event: JsonObject) {
+            requireExactKeys(
+                event,
+                setOf(
+                    "eventHandle",
+                    "title",
+                    "schedule",
+                    "calendar",
+                    "readOnly",
+                    "recurring",
+                ),
+                setOf("location", "description"),
+            )
+            require(
+                EVENT_HANDLE.matches(
+                    requireSizedString(
+                        event.getValue("eventHandle"),
+                        "eventHandle",
+                        30,
+                        30,
+                        true,
+                    ),
+                ),
+            )
+            requireSizedString(event.getValue("title"), "title", 1, 200, false)
+            event["location"]?.let {
+                requireSizedString(it, "location", 1, 256, false)
+            }
+            event["description"]?.let {
+                requireSizedString(it, "description", 1, 1_024, false)
+            }
+            require(event["readOnly"]?.jsonPrimitive?.booleanOrNull == false)
+            require(event["recurring"]?.jsonPrimitive?.booleanOrNull == false)
+            val calendar = event["calendar"] as? JsonObject
+                ?: throw IllegalArgumentException("Calendar result calendar must be an object")
+            requireExactKeys(
+                calendar,
+                setOf("calendarHandle", "displayName"),
+                emptySet(),
+            )
+            require(
+                CALENDAR_HANDLE.matches(
+                    requireSizedString(
+                        calendar.getValue("calendarHandle"),
+                        "calendarHandle",
+                        33,
+                        33,
+                        true,
+                    ),
+                ),
+            )
+            requireSizedString(calendar.getValue("displayName"), "displayName", 0, 160, false)
+            val schedule = event["schedule"] as? JsonObject
+                ?: throw IllegalArgumentException("Calendar result schedule must be an object")
+            val kind = schedule["kind"]?.jsonPrimitive?.contentOrNull
+            if (kind == "timed") {
+                requireExactKeys(
+                    schedule,
+                    setOf("kind", "start", "end", "timeZone"),
+                    emptySet(),
+                )
+            } else {
+                require(kind == "all_day")
+                requireExactKeys(
+                    schedule,
+                    setOf("kind", "startDate", "endDateExclusive", "timeZone"),
+                    emptySet(),
+                )
+            }
+            schedule.forEach { (key, value) ->
+                if (key != "kind") requireSizedString(value, key, 1, 64, true)
+            }
         }
 
         fun validateContentReadResult(

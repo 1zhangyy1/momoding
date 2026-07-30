@@ -28,7 +28,8 @@ the phone-local agent loop.
   app's no-backup directory.
 - Android Storage Access Framework grants are the source of truth for project-folder access.
 - Android-owned tools handle project commands, authorized files, shared storage, attachments,
-  photo metadata, screen capture, accessibility UI actions, and read-only Shizuku package facts.
+  calendar, contacts, foreground location, clipboard, Momoding-owned notifications, photo metadata
+  and mutations, screen capture, accessibility UI actions, and read-only Shizuku package facts.
 
 Model output is never treated as Android authority. The model can request a tool; Android policy,
 durable state, current permission state, and user decisions determine whether it runs.
@@ -51,6 +52,12 @@ a hostile-code sandbox.
 Screen images are injected only into the live provider turn that requested them. UI actions require
 a fresh accessibility snapshot and snapshot-specific opaque node handle. Shizuku integration is
 limited to bounded installed-package listing and exact-package inspection.
+
+Calendar, contacts, notifications, and media mutations are split into prepare and execute stages.
+Android permissions and tool approval are separate decisions; execution uses opaque handles, live
+conflict checks, bounded result payloads, and post-operation verification. Clipboard and current
+location are foreground-gated, and Momoding does not request background location or notification
+listener access.
 
 ## Wire contracts
 
@@ -77,6 +84,11 @@ the same implementation through an included Gradle build.
 | Screen capture | User-started MediaProjection session and turn-local image |
 | UI action | Enabled accessibility service plus fresh snapshot handle |
 | Package fact | Authorized Shizuku session and read-only bounded tool |
+| Calendar/contact mutation | Android provider plus current permissions, approved plan, live preconditions, and post-verification |
+| Current location | Foreground Android location provider plus requested coarse/precise permission |
+| Clipboard | Foreground Android clipboard plus sensitive-content and output bounds |
+| Agent notification | Momoding-owned channel and opaque notification identity |
+| Photo mutation | Current MediaStore scope, approved plan, Android system consent, and post-verification |
 
 ## Process-death and replay behavior
 

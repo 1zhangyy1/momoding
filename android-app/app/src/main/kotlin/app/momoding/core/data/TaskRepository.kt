@@ -37,6 +37,7 @@ class TaskRepository(
     private val database: MomodingDatabase,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val nowMillis: () -> Long = System::currentTimeMillis,
+    private val onTaskDeleted: (String) -> Unit = {},
 ) {
     private val dao = database.momodingDao()
     private val attentionValidator = RoomAttentionLedger(database)
@@ -88,6 +89,7 @@ class TaskRepository(
         require(dao.deleteArchivedSettledTaskAndPayload(exactTaskId) == 1) {
             "The archived task became active before it could be deleted"
         }
+        onTaskDeleted(exactTaskId)
     }
 
     private fun requireTaskId(taskId: String): String = taskId.trim().also {
@@ -119,6 +121,9 @@ private fun TaskListRowEntity.toTaskListRow(
             primaryToolName == "request_user_question" -> TaskAttentionKind.QUESTION
             primaryToolName == "request_user_confirmation" -> TaskAttentionKind.CONFIRMATION
             primaryToolName == "device_media_list" -> TaskAttentionKind.CONFIRMATION
+            primaryToolName == "device_calendar" -> TaskAttentionKind.CONFIRMATION
+            primaryToolName == "device_contacts" -> TaskAttentionKind.CONFIRMATION
+            primaryToolName == "device_clipboard" -> TaskAttentionKind.CONFIRMATION
             primaryToolName == "device_ui_action" -> TaskAttentionKind.CONFIRMATION
             primaryToolName == "device_files_read" -> TaskAttentionKind.FILE_CONTENT
             else -> TaskAttentionKind.UNSUPPORTED

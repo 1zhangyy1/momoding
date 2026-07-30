@@ -47,6 +47,7 @@ class PhoneLocalProjectWorkspaceTest {
     private lateinit var database: MomodingDatabase
     private lateinit var root: File
     private lateinit var folders: AuthorizedFoldersRepository
+    private lateinit var folderStore: FakeStore
 
     @Before
     fun setUp() = runBlocking {
@@ -56,8 +57,9 @@ class PhoneLocalProjectWorkspaceTest {
             .build()
         root = File(context.cacheDir, "project-workspace-${System.nanoTime()}")
         check(root.mkdirs())
+        folderStore = FakeStore()
         folders = AuthorizedFoldersRepository(
-            store = FakeStore(),
+            store = folderStore,
             access = FakeAccess(),
             ioDispatcher = Dispatchers.Unconfined,
             nowMillis = { 100L },
@@ -241,6 +243,155 @@ class PhoneLocalProjectWorkspaceTest {
             )
             assertEquals(null, database.momodingDao().fileChangeSet(PREPARED_ID))
         }
+
+    @Test
+    fun `scratch command runs without a folder and persists private files`() = runBlocking {
+        clearSelectedGrant()
+        var executionCount = 0
+        val executor = toolExecutor { request ->
+            val note = File(root, "workspaces/$TASK_ID/note.txt")
+            executionCount += 1
+            if (executionCount == 1) {
+                note.writeText("persistent scratch\n")
+            } else {
+                assertEquals("persistent scratch\n", note.readText())
+            }
+            PhoneLocalCommandResult(
+                runId = request.runId,
+                stdout = if (executionCount == 1) "created" else "reused",
+                stderr = "",
+                exitCode = 0,
+                timedOut = false,
+                stopped = false,
+                outputTruncated = false,
+                durationMillis = 5,
+            )
+        }
+
+        val first = executor.execute(
+            TASK_ID,
+            projectRequest("run_command", "printf persistent > note.txt"),
+        )
+        val second = executor.execute(
+            TASK_ID,
+            projectRequest("run_command", "cat note.txt"),
+        )
+
+        assertTrue(first.toString(), first.getValue("ok").jsonPrimitive.content.toBoolean())
+        assertEquals(
+            "private",
+            first.getValue("fileChanges").jsonObject.getValue("state").jsonPrimitive.content,
+        )
+        assertTrue(
+            first.getValue("fileChanges").jsonObject
+                .getValue("persisted").jsonPrimitive.content.toBoolean(),
+        )
+        assertEquals("reused", second.getValue("stdout").jsonPrimitive.content)
+        assertEquals(
+            "persistent scratch\n",
+            File(root, "workspaces/$TASK_ID/note.txt").readText(),
+        )
+        assertFalse(File(root, "manifests/$TASK_ID.json").exists())
+        assertEquals(null, database.momodingDao().fileChangeSet(PREPARED_ID))
+    }
+
+    @Test
+    fun `switching an imported project to scratch clears it once then preserves scratch`() =
+        runBlocking {
+            val manager = manager()
+            manager.importApprovedTask(TASK_ID)
+            assertTrue(File(root, "workspaces/$TASK_ID/src/Main.kt").exists())
+
+            clearSelectedGrant()
+            assertEquals(
+                PhoneLocalWorkspaceMode.PRIVATE_SCRATCH,
+                manager.prepareTaskWorkspace(TASK_ID),
+            )
+            val scratchFile = File(root, "workspaces/$TASK_ID/scratch.txt")
+            assertFalse(File(root, "workspaces/$TASK_ID/src/Main.kt").exists())
+            assertFalse(File(root, "manifests/$TASK_ID.json").exists())
+            scratchFile.writeText("keep me")
+
+            assertEquals(
+                PhoneLocalWorkspaceMode.PRIVATE_SCRATCH,
+                manager.prepareTaskWorkspace(TASK_ID),
+            )
+            assertEquals("keep me", scratchFile.readText())
+        }
+
+    @Test
+    fun `rebinding from one authorized grant replaces the stale project snapshot`() = runBlocking {
+        val manager = manager()
+        manager.importApprovedTask(TASK_ID)
+        folderStore.copyGrant(GRANT_ID, SECOND_GRANT_ID)
+        replaceSelectedGrant(SECOND_GRANT_ID)
+
+        assertEquals(
+            PhoneLocalWorkspaceMode.AUTHORIZED_PROJECT,
+            manager.prepareTaskWorkspace(TASK_ID),
+        )
+        val changes = manager.detectChanges(TASK_ID)
+
+        assertEquals(SECOND_GRANT_ID, changes.grantId)
+        assertTrue(changes.operations.isEmpty())
+        assertTrue(
+            File(root, "manifests/$TASK_ID.json").readText()
+                .contains(SECOND_GRANT_ID),
+        )
+    }
+
+    @Test
+    fun `revoked grant clears its private snapshot and can recover after reauthorization`() =
+        runBlocking {
+            val manager = manager()
+            manager.importApprovedTask(TASK_ID)
+            val revoked = folderStore.removeGrant(GRANT_ID)
+
+            val failure = runCatching {
+                manager.prepareTaskWorkspace(TASK_ID)
+            }.exceptionOrNull()
+
+            assertTrue(failure is SecurityException)
+            assertTrue(File(root, "workspaces/$TASK_ID").listFiles().orEmpty().isEmpty())
+            assertFalse(File(root, "manifests/$TASK_ID.json").exists())
+            assertFalse(File(root, "manifests/$TASK_ID.workspace-state").exists())
+
+            folderStore.putGrant(revoked)
+            assertEquals(
+                PhoneLocalWorkspaceMode.AUTHORIZED_PROJECT,
+                manager.prepareTaskWorkspace(TASK_ID),
+            )
+            assertTrue(File(root, "workspaces/$TASK_ID/src/Main.kt").isFile)
+        }
+
+    @Test
+    fun `interrupted project import is never preserved as private scratch`() = runBlocking {
+        val interrupted = manager(
+            beforeManifestWrite = { error("simulated manifest failure") },
+        )
+
+        val failure = runCatching {
+            interrupted.importApprovedTask(TASK_ID)
+        }.exceptionOrNull()
+        assertTrue(failure is IllegalStateException)
+        assertTrue(File(root, "workspaces/$TASK_ID/src/Main.kt").isFile)
+        assertEquals(
+            "IMPORTING\n",
+            File(root, "manifests/$TASK_ID.workspace-state").readText(),
+        )
+
+        clearSelectedGrant()
+        assertEquals(
+            PhoneLocalWorkspaceMode.PRIVATE_SCRATCH,
+            manager().prepareTaskWorkspace(TASK_ID),
+        )
+        assertTrue(File(root, "workspaces/$TASK_ID").listFiles().orEmpty().isEmpty())
+        assertFalse(File(root, "manifests/$TASK_ID.json").exists())
+        assertEquals(
+            "SCRATCH\n",
+            File(root, "manifests/$TASK_ID.workspace-state").readText(),
+        )
+    }
 
     @Test
     fun `project edits become a prepared Android diff and never commit during command execution`() =
@@ -432,6 +583,67 @@ class PhoneLocalProjectWorkspaceTest {
         assertFalse(File(root, "manifests/$TASK_ID.json").exists())
     }
 
+    @Test
+    fun `stopping a scratch command preserves its private files`() = runBlocking {
+        clearSelectedGrant()
+        val started = CompletableDeferred<String>()
+        val stopped = CompletableDeferred<Unit>()
+        val activeRunId = AtomicReference<String?>()
+        val executor = PhoneLocalProjectToolExecutor(
+            executeCommand = { request ->
+                File(root, "workspaces/$TASK_ID/partial.txt").writeText("keep partial work")
+                activeRunId.set(request.runId)
+                started.complete(request.runId)
+                stopped.await()
+                PhoneLocalCommandResult(
+                    runId = request.runId,
+                    stdout = "",
+                    stderr = "",
+                    exitCode = 143,
+                    timedOut = false,
+                    stopped = true,
+                    outputTruncated = false,
+                    durationMillis = 25,
+                )
+            },
+            stopCommand = { runId ->
+                if (activeRunId.get() == runId) {
+                    stopped.complete(Unit)
+                    true
+                } else {
+                    false
+                }
+            },
+            projects = manager(),
+            fileChanges = DeviceFileChangeExecutor(
+                database,
+                folders,
+                nowMillis = { 100L },
+            ),
+            nowMillis = { 100L },
+            newPreparedId = { PREPARED_ID },
+        )
+        val running = async(Dispatchers.Default) {
+            executor.execute(
+                TASK_ID,
+                projectRequest("run_command", "write-then-sleep"),
+            )
+        }
+
+        started.await()
+        assertTrue(executor.stopTask(TASK_ID))
+        val result = running.await()
+        val changes = result.getValue("fileChanges").jsonObject
+
+        assertEquals("private", changes.getValue("state").jsonPrimitive.content)
+        assertTrue(changes.getValue("persisted").jsonPrimitive.content.toBoolean())
+        assertTrue(changes.getValue("possiblyModified").jsonPrimitive.content.toBoolean())
+        assertEquals(
+            "keep partial work",
+            File(root, "workspaces/$TASK_ID/partial.txt").readText(),
+        )
+    }
+
     private fun toolExecutor(
         execute: suspend (PhoneLocalCommandRequest) -> PhoneLocalCommandResult,
     ) = PhoneLocalProjectToolExecutor(
@@ -455,15 +667,38 @@ class PhoneLocalProjectWorkspaceTest {
         arguments = buildJsonObject { put("command", command) },
     )
 
-    private fun manager() = PhoneLocalProjectWorkspace(
+    private fun manager(
+        beforeManifestWrite: () -> Unit = {},
+    ) = PhoneLocalProjectWorkspace(
         database = database,
         folders = folders,
         workspaceRoot = { taskId -> File(root, "workspaces/$taskId").apply { mkdirs() } },
         manifestRoot = File(root, "manifests"),
+        beforeManifestWrite = beforeManifestWrite,
     )
+
+    private fun clearSelectedGrant() {
+        replaceSelectedGrant(null)
+    }
+
+    private fun replaceSelectedGrant(grantId: String?) {
+        val draft = requireNotNull(database.momodingDao().draft("draft"))
+        check(database.momodingDao().updateDraft(draft.copy(selectedGrantId = grantId)) == 1)
+    }
 
     private class FakeStore : AuthorizedFolderStore {
         private val rows = linkedMapOf<String, AuthorizedFolderEntity>()
+
+        fun copyGrant(sourceGrantId: String, targetGrantId: String) {
+            rows[targetGrantId] = rows.getValue(sourceGrantId).copy(grantId = targetGrantId)
+        }
+
+        fun removeGrant(grantId: String): AuthorizedFolderEntity =
+            requireNotNull(rows.remove(grantId))
+
+        fun putGrant(entity: AuthorizedFolderEntity) {
+            rows[entity.grantId] = entity
+        }
 
         override suspend fun list(): List<AuthorizedFolderEntity> = rows.values.toList()
         override suspend fun get(grantId: String): AuthorizedFolderEntity? = rows[grantId]
@@ -542,6 +777,7 @@ class PhoneLocalProjectWorkspaceTest {
     private companion object {
         const val TASK_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
         const val GRANT_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+        const val SECOND_GRANT_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
         const val TREE_URI = "content://provider.example/tree/root"
         const val PREPARED_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
         const val READ_WRITE_FLAGS =

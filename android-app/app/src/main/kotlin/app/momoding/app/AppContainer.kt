@@ -10,6 +10,11 @@ import app.momoding.core.attachments.AttachmentRepository
 import app.momoding.core.capabilities.AndroidCapabilityRegistry
 import app.momoding.core.capabilities.AndroidCapabilityRequestCoordinator
 import app.momoding.core.capabilities.AndroidPermissionRequestCoordinator
+import app.momoding.core.calendar.PhoneLocalCalendarToolExecutor
+import app.momoding.core.clipboard.PhoneLocalClipboardToolExecutor
+import app.momoding.core.contacts.PhoneLocalContactsToolExecutor
+import app.momoding.core.location.PhoneLocalLocationToolExecutor
+import app.momoding.core.notification.PhoneLocalNotificationToolExecutor
 import app.momoding.core.diagnostics.DiagnosticsExporter
 import app.momoding.core.files.AuthorizedContentReadPolicy
 import app.momoding.core.files.AuthorizedFoldersRepository
@@ -18,6 +23,11 @@ import app.momoding.core.files.DeviceFileChangeExecutor
 import app.momoding.core.files.DeviceMetadataToolExecutor
 import app.momoding.core.files.SharedStorageRepository
 import app.momoding.core.media.DeviceMediaListExecutor
+import app.momoding.core.media.AndroidMediaConsentCoordinator
+import app.momoding.core.media.AndroidMediaGateway
+import app.momoding.core.media.MediaHandleRegistry
+import app.momoding.core.media.PhoneLocalMediaToolExecutor
+import app.momoding.core.media.PhotoLibraryScopeProvider
 import app.momoding.core.policy.TaskApprovalMode
 import app.momoding.core.provider.OpenRouterNativeClient
 import app.momoding.core.provider.ProviderCredentialVault
@@ -69,15 +79,20 @@ class MomodingApplication : Application() {
 
 class AppContainer(application: Application) {
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val mediaHandles = MediaHandleRegistry()
     val database = MomodingDatabase.open(application)
     val commandJournal = RoomCommandDraftJournal(database)
-    val taskRepository = TaskRepository(database)
+    val taskRepository = TaskRepository(
+        database = database,
+        onTaskDeleted = mediaHandles::clearTask,
+    )
     val taskDetailRepository = TaskDetailRepository(database)
     val authorizedFoldersRepository = AuthorizedFoldersRepository(application, database)
     val sharedStorageRepository = SharedStorageRepository()
     val shizukuController = ShizukuController(application)
     val androidPermissionRequestCoordinator = AndroidPermissionRequestCoordinator()
     val androidCapabilityRequestCoordinator = AndroidCapabilityRequestCoordinator()
+    val androidMediaConsentCoordinator = AndroidMediaConsentCoordinator(application)
     val androidCapabilityRegistry = AndroidCapabilityRegistry.create(
         context = application,
         folders = authorizedFoldersRepository,
@@ -188,6 +203,17 @@ class AppContainer(application: Application) {
                 }.isSuccess
             },
         )
+    private val mediaListToolExecutor = DeviceMediaListExecutor.create(
+        application,
+        androidPermissionRequestCoordinator,
+        mediaHandles,
+    )
+    private val mediaMutationToolExecutor = PhoneLocalMediaToolExecutor(
+        scopeProvider = PhotoLibraryScopeProvider(mediaListToolExecutor::currentScope),
+        gateway = AndroidMediaGateway(application.contentResolver),
+        handles = mediaHandles,
+        consentRequester = androidMediaConsentCoordinator,
+    )
     val phoneLocalAttentionBridge = PhoneLocalAttentionBridge(
         ledger = RoomAttentionLedger(database),
         metadataTools = DeviceMetadataToolExecutor(
@@ -204,10 +230,22 @@ class AppContainer(application: Application) {
         fileChangeHandler = phoneLocalFileChangeExecutor,
         projectTools = phoneLocalProjectToolExecutor,
         attachmentTools = phoneLocalAttachmentToolExecutor,
-        mediaTools = DeviceMediaListExecutor.create(
+        mediaTools = mediaListToolExecutor,
+        mediaMutationTools = mediaMutationToolExecutor,
+        calendarTools = PhoneLocalCalendarToolExecutor.create(
             application,
-            androidPermissionRequestCoordinator,
+            androidCapabilityRegistry,
         ),
+        contactsTools = PhoneLocalContactsToolExecutor.create(
+            application,
+            androidCapabilityRegistry,
+        ),
+        clipboardTools = PhoneLocalClipboardToolExecutor.create(application),
+        locationTools = PhoneLocalLocationToolExecutor.create(
+            application,
+            androidCapabilityRegistry,
+        ),
+        notificationTools = PhoneLocalNotificationToolExecutor.create(application),
         screenCaptureTools = phoneLocalScreenCaptureToolExecutor,
         uiTools = phoneLocalUiToolExecutor,
         packageTools = phoneLocalShizukuToolExecutor,

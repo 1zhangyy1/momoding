@@ -73,6 +73,16 @@ Shizuku, or the upstream Pi maintainers.
 - On-device Pi agent loop in QuickJS with a user-selected OpenRouter model.
 - Bring-your-own-key setup with Android Keystore-backed credential encryption.
 - Photo metadata, camera capture, share-sheet import, text attachments, and shared-storage tools.
+- Bounded calendar and contact lookup plus create, update, and delete flows that use opaque handles,
+  Android runtime permissions, approval policy, and post-operation verification.
+- Foreground current-location lookup with an explicit purpose and requested coarse or precise
+  accuracy; Momoding does not request background location.
+- Foreground clipboard read, set, and clear flows with sensitive-content filtering and bounded
+  output.
+- Momoding-owned notification post, list, update, and cancel flows; it does not read or control
+  other apps' notifications.
+- Opaque-handle photo-library favorite, trash, restore, and delete flows with Android system consent
+  where the platform requires it.
 - User-started screen capture plus accessibility-based UI inspection and bounded UI actions.
 - Read-only installed-package listing and inspection through a separately installed and authorized
   Shizuku service.
@@ -80,6 +90,13 @@ Shizuku, or the upstream Pi maintainers.
   confirmation.
 - A phone-local Linux project runtime with model-visible command and test tools in supported debug
   builds.
+
+These Android domain tools are still experimental. The current physical-device gate is not a full
+release pass: calendar CRUD, precise location, clipboard, Momoding-owned notifications, and a core
+media favorite flow were exercised on a Xiaomi 12X running Android 13, but lifecycle coverage
+remains incomplete. Deleting a contact stored in a Xiaomi account could not be verified because
+that device's contacts provider retained the record. Provider-dependent mutations must therefore
+fail closed and should not be treated as universally supported.
 
 ## How Momoding keeps authority visible
 
@@ -90,6 +107,12 @@ Shizuku, or the upstream Pi maintainers.
 | File contents | Read through task-scoped tools and current Android grants |
 | File changes | Prepared first, shown for review, and committed only after Android policy checks |
 | Shared storage | Requires the Android all-files access setting; the app reports the live state |
+| Calendar | Separate read/write permissions; mutations are prepared, policy-checked, and verified |
+| Contacts | Separate read/write permissions; opaque handles and live conflict checks; provider behavior varies |
+| Current location | Foreground only; coarse/precise permission and capture time/accuracy are reported |
+| Clipboard | Foreground only; bounded text, sensitive-content filtering, and verified mutations |
+| Notifications | Android notification permission; only the app's own bounded notification channel |
+| Photo mutations | Current photo-library scope, opaque handles, policy checks, and Android consent |
 | Screen capture | Requires a user-started MediaProjection session; captured images are turn-local |
 | UI control | Requires the accessibility service; actions use fresh opaque node handles |
 | Package facts | Requires Shizuku; limited to bounded read-only list and inspection operations |

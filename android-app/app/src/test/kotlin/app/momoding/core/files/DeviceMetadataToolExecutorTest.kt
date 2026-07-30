@@ -141,6 +141,19 @@ class DeviceMetadataToolExecutorTest {
                 assertTrue(tools.contains("device_screen_capture"))
                 assertTrue(tools.contains("device_ui_action"))
                 assertTrue(tools.contains("device_packages_list"))
+                assertTrue(tools.contains("device_contacts"))
+                assertTrue(tools.contains("device_location"))
+                assertTrue(tools.contains("device_clipboard"))
+                assertTrue(tools.contains("device_notification"))
+                val location = capabilities.single { item ->
+                    item.jsonObject.getValue("id").jsonPrimitive.content == "location"
+                }.jsonObject
+                assertEquals(
+                    listOf("device_location"),
+                    location.getValue("toolNames").jsonArray.map {
+                        it.jsonPrimitive.content
+                    },
+                )
                 assertFalse(payload.toString().contains("content://"))
             } finally {
                 scope.cancel()

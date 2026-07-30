@@ -22,6 +22,7 @@ class AndroidCapabilityRequestCoordinatorTest {
                 coordinator.request(
                     taskId = "task-1",
                     capability = AndroidCapabilityId.SAF_FOLDERS,
+                    requirement = AndroidCapabilityRequirement.Default,
                     purpose = "Read the project selected for this task",
                 )
             }
@@ -31,6 +32,7 @@ class AndroidCapabilityRequestCoordinatorTest {
             assertEquals("capability-request", pending.requestId)
             assertEquals("task-1", pending.taskId)
             assertEquals(AndroidCapabilityId.SAF_FOLDERS, pending.capability)
+            assertEquals(AndroidCapabilityRequirement.Default, pending.requirement)
             assertEquals(
                 "Read the project selected for this task",
                 pending.purpose,
@@ -63,6 +65,7 @@ class AndroidCapabilityRequestCoordinatorTest {
             coordinator.request(
                 taskId = "task-1",
                 capability = AndroidCapabilityId.PHOTO_LIBRARY,
+                requirement = AndroidCapabilityRequirement.Default,
                 purpose = "Find recent screenshots",
             )
         }
@@ -71,5 +74,68 @@ class AndroidCapabilityRequestCoordinatorTest {
 
         assertEquals(AndroidCapabilityRequestResult.TIMEOUT, result.await().result)
         assertNull(coordinator.pending.value)
+    }
+
+    @Test
+    fun `calendar request publishes exact typed access and rejects a mismatched requirement`() =
+        runTest {
+            val coordinator = AndroidCapabilityRequestCoordinator(
+                timeoutMillis = 5_000,
+                requestIdFactory = { "calendar-request" },
+            )
+            val result = async {
+                coordinator.request(
+                    taskId = "task-calendar",
+                    capability = AndroidCapabilityId.CALENDAR,
+                    requirement = AndroidCapabilityRequirement.Calendar(
+                        CalendarCapabilityAccess.READ,
+                    ),
+                    purpose = "Find meetings tomorrow",
+                )
+            }
+            runCurrent()
+
+            assertEquals(
+                AndroidCapabilityRequirement.Calendar(CalendarCapabilityAccess.READ),
+                requireNotNull(coordinator.pending.value).requirement,
+            )
+            coordinator.respond("calendar-request", AndroidCapabilityRequestResult.DENIED)
+            assertEquals(AndroidCapabilityRequestResult.DENIED, result.await().result)
+
+            val mismatch = runCatching {
+                coordinator.request(
+                    taskId = "task-calendar",
+                    capability = AndroidCapabilityId.CALENDAR,
+                    requirement = AndroidCapabilityRequirement.Default,
+                    purpose = "Find meetings tomorrow",
+                )
+            }.exceptionOrNull()
+            assertEquals(IllegalArgumentException::class.java, mismatch?.javaClass)
+        }
+
+    @Test
+    fun `contacts request preserves exact typed access`() = runTest {
+        val coordinator = AndroidCapabilityRequestCoordinator(
+            timeoutMillis = 5_000,
+            requestIdFactory = { "contacts-request" },
+        )
+        val result = async {
+            coordinator.request(
+                taskId = "task-contacts",
+                capability = AndroidCapabilityId.CONTACTS,
+                requirement = AndroidCapabilityRequirement.Contacts(
+                    ContactsCapabilityAccess.READ,
+                ),
+                purpose = "Find Alex",
+            )
+        }
+        runCurrent()
+
+        assertEquals(
+            AndroidCapabilityRequirement.Contacts(ContactsCapabilityAccess.READ),
+            requireNotNull(coordinator.pending.value).requirement,
+        )
+        coordinator.respond("contacts-request", AndroidCapabilityRequestResult.READY)
+        assertEquals(AndroidCapabilityRequestResult.READY, result.await().result)
     }
 }

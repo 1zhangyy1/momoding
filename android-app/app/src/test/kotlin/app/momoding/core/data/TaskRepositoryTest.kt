@@ -307,11 +307,17 @@ class TaskRepositoryTest {
                 ),
             )
 
-            val repository = TaskRepository(database, Dispatchers.Unconfined)
+            val deletedTaskIds = mutableListOf<String>()
+            val repository = TaskRepository(
+                database = database,
+                ioDispatcher = Dispatchers.Unconfined,
+                onTaskDeleted = deletedTaskIds::add,
+            )
             repository.archive(NEWER_TASK_ID)
             repository.deleteArchived(NEWER_TASK_ID)
 
             assertNull(dao.task(NEWER_TASK_ID))
+            assertEquals(listOf(NEWER_TASK_ID), deletedTaskIds)
             assertEquals(listOf(UNRELATED_DRAFT_ID), dao.drafts().map(DraftEntity::draftId))
             assertEquals(
                 listOf("request-unrelated-create"),

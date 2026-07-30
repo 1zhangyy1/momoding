@@ -244,6 +244,10 @@ class DeviceMetadataToolExecutor(
         AndroidCapabilityId.ALL_FILES,
         -> FILE_CAPABILITY_TOOLS
         AndroidCapabilityId.PHOTO_LIBRARY -> listOf(MEDIA_LIST_TOOL)
+        AndroidCapabilityId.CALENDAR -> listOf(CALENDAR_TOOL)
+        AndroidCapabilityId.CONTACTS -> listOf(CONTACTS_TOOL)
+        AndroidCapabilityId.LOCATION -> listOf(LOCATION_TOOL)
+        AndroidCapabilityId.NOTIFICATIONS -> listOf(NOTIFICATION_TOOL)
         AndroidCapabilityId.ACCESSIBILITY_CONTROL -> listOf(
             UI_INSPECT_TOOL,
             UI_ACTION_TOOL,
@@ -330,6 +334,11 @@ class DeviceMetadataToolExecutor(
         const val FILES_PREPARE_TOOL = "device_files_prepare_changes"
         const val FILES_COMMIT_TOOL = "device_files_commit_changes"
         const val MEDIA_LIST_TOOL = "device_media_list"
+        const val CALENDAR_TOOL = "device_calendar"
+        const val CONTACTS_TOOL = "device_contacts"
+        const val LOCATION_TOOL = "device_location"
+        const val CLIPBOARD_TOOL = "device_clipboard"
+        const val NOTIFICATION_TOOL = "device_notification"
         const val SCREEN_CAPTURE_TOOL = "device_screen_capture"
         const val UI_INSPECT_TOOL = "device_ui_inspect"
         const val UI_ACTION_TOOL = "device_ui_action"
@@ -350,6 +359,11 @@ class DeviceMetadataToolExecutor(
         private val PHONE_LOCAL_CAPABILITY_TOOLS = listOf(
             *LEGACY_CAPABILITY_TOOLS.toTypedArray(),
             DEVICE_CAPABILITY_REQUEST_TOOL,
+            CALENDAR_TOOL,
+            CONTACTS_TOOL,
+            LOCATION_TOOL,
+            CLIPBOARD_TOOL,
+            NOTIFICATION_TOOL,
             SCREEN_CAPTURE_TOOL,
             UI_INSPECT_TOOL,
             UI_ACTION_TOOL,

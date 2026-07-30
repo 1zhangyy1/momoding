@@ -37,14 +37,21 @@ const actualPermissions = [
   ...permissionDump.matchAll(/^uses-permission: name='([^']+)'/gm),
 ].map((match) => match[1]).sort();
 const expectedPermissions = [
+  "android.permission.ACCESS_COARSE_LOCATION",
+  "android.permission.ACCESS_FINE_LOCATION",
   "android.permission.ACCESS_NETWORK_STATE",
   "android.permission.FOREGROUND_SERVICE",
   "android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION",
   "android.permission.INTERNET",
   "android.permission.MANAGE_EXTERNAL_STORAGE",
+  "android.permission.POST_NOTIFICATIONS",
+  "android.permission.READ_CALENDAR",
+  "android.permission.READ_CONTACTS",
   "android.permission.READ_EXTERNAL_STORAGE",
   "android.permission.READ_MEDIA_IMAGES",
   "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+  "android.permission.WRITE_CALENDAR",
+  "android.permission.WRITE_CONTACTS",
   "moe.shizuku.manager.permission.API_V23",
 ].sort();
 if (JSON.stringify(actualPermissions) !== JSON.stringify(expectedPermissions)) {

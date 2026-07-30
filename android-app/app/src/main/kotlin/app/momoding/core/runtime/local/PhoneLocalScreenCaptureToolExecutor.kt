@@ -114,7 +114,7 @@ class PhoneLocalScreenCaptureToolExecutor(
     }
 
     override fun stopTask(taskId: String, reason: String) {
-        if (reason == NORMAL_RUN_CLEANUP_REASON) return
+        if (reason == ANDROID_TOOL_TERMINAL_TURN_CLEANUP_REASON) return
         val budget = sessions.remove(taskId) ?: return
         val shouldStop = synchronized(budget) {
             if (budget.stopIssued) {
@@ -149,7 +149,6 @@ class PhoneLocalScreenCaptureToolExecutor(
 
     companion object {
         const val TOOL_NAME = "device_screen_capture"
-        const val NORMAL_RUN_CLEANUP_REASON = "tool_abort"
         private const val SESSION_TTL_MILLIS = 10 * 60_000L
         private const val MAX_CAPTURES_PER_SESSION = 10
     }

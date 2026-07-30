@@ -11,6 +11,52 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 const val DEVICE_CAPABILITY_REQUEST_TOOL = "device_capability_request"
 
+enum class CalendarCapabilityAccess(val wireValue: String) {
+    READ("read"),
+    WRITE("write"),
+    ;
+
+    companion object {
+        fun fromWireValue(value: String): CalendarCapabilityAccess? =
+            entries.firstOrNull { it.wireValue == value }
+    }
+}
+
+enum class ContactsCapabilityAccess(val wireValue: String) {
+    READ("read"),
+    WRITE("write"),
+    ;
+
+    companion object {
+        fun fromWireValue(value: String): ContactsCapabilityAccess? =
+            entries.firstOrNull { it.wireValue == value }
+    }
+}
+
+enum class LocationCapabilityAccess(val wireValue: String) {
+    APPROXIMATE("approximate"),
+    PRECISE("precise"),
+    ;
+
+    companion object {
+        fun fromWireValue(value: String): LocationCapabilityAccess? =
+            entries.firstOrNull { it.wireValue == value }
+    }
+}
+
+sealed interface AndroidCapabilityRequirement {
+    data object Default : AndroidCapabilityRequirement
+    data class Calendar(
+        val access: CalendarCapabilityAccess,
+    ) : AndroidCapabilityRequirement
+    data class Contacts(
+        val access: ContactsCapabilityAccess,
+    ) : AndroidCapabilityRequirement
+    data class Location(
+        val access: LocationCapabilityAccess,
+    ) : AndroidCapabilityRequirement
+}
+
 enum class AndroidCapabilityRequestResult {
     READY,
     DENIED,
@@ -27,6 +73,7 @@ data class AndroidCapabilityRequest(
     val requestId: String,
     val taskId: String,
     val capability: AndroidCapabilityId,
+    val requirement: AndroidCapabilityRequirement,
     val purpose: String,
 )
 
@@ -34,6 +81,7 @@ fun interface AndroidCapabilityRequester {
     suspend fun request(
         taskId: String,
         capability: AndroidCapabilityId,
+        requirement: AndroidCapabilityRequirement,
         purpose: String,
     ): AndroidCapabilityRequestOutcome
 }
@@ -56,15 +104,31 @@ class AndroidCapabilityRequestCoordinator(
     override suspend fun request(
         taskId: String,
         capability: AndroidCapabilityId,
+        requirement: AndroidCapabilityRequirement,
         purpose: String,
     ): AndroidCapabilityRequestOutcome {
         require(taskId.isNotBlank()) { "Capability request task is blank" }
         require(purpose.isNotBlank()) { "Capability request purpose is blank" }
+        require(
+            (capability == AndroidCapabilityId.CALENDAR &&
+                requirement is AndroidCapabilityRequirement.Calendar) ||
+                (capability == AndroidCapabilityId.CONTACTS &&
+                    requirement is AndroidCapabilityRequirement.Contacts) ||
+                (capability == AndroidCapabilityId.LOCATION &&
+                    requirement is AndroidCapabilityRequirement.Location) ||
+                (capability !in setOf(
+                    AndroidCapabilityId.CALENDAR,
+                    AndroidCapabilityId.CONTACTS,
+                    AndroidCapabilityId.LOCATION,
+                ) &&
+                    requirement == AndroidCapabilityRequirement.Default),
+        ) { "Capability requirement does not match capability" }
         return requestMutex.withLock {
             val request = AndroidCapabilityRequest(
                 requestId = requestIdFactory(),
                 taskId = taskId,
                 capability = capability,
+                requirement = requirement,
                 purpose = purpose,
             )
             val result = CompletableDeferred<AndroidCapabilityRequestOutcome>()

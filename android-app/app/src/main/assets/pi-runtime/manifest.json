@@ -3,9 +3,9 @@
   "runtime": "earendil-works/pi AgentHarness",
   "piVersion": "0.80.6",
   "bundleFile": "pi-mobile.js",
-  "bundleSha256": "18b51596b8236bc4e27699d400c1820e3919ee88b2b3533510ea1df06c5cb103",
-  "sourceSha256": "da049e7e079cb4ff6bbab72c2f984e281977eeb6e18e0510443c7af45cc7ab1a",
-  "buildRevision": "2226d7ef230edd7dbb9dd51b6a5df24a51261a36",
+  "bundleSha256": "ec4236c1087eff339e8bb4fc644d4905b6a6eeb498cf85a522b86c0563c314a0",
+  "sourceSha256": "1180654da271861b9b25f2566cadbb5df3e9aed1a33bac6d1a0be555ece622ca",
+  "buildRevision": "a55d2ba28f0da6fe9345e3f84376b1af4e272a55",
   "buildTarget": "es2020",
   "compatibilityTransforms": [
     "pi-agent-core-compat-import:narrow-browser-shim",

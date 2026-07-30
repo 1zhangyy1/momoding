@@ -1,6 +1,7 @@
 package app.momoding.ui.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -43,8 +44,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
@@ -61,12 +65,14 @@ fun ProductTopBar(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     presence: MomodingPresence = MomodingPresence.READY,
+    navigation: (@Composable () -> Unit)? = null,
     onBack: (() -> Unit)? = null,
     backModifier: Modifier = Modifier,
     titleModifier: Modifier = Modifier,
     showDivider: Boolean = true,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
+    val largeFont = LocalDensity.current.fontScale >= 1.5f
     Column(modifier = modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
         Row(
             modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(horizontal = 10.dp, vertical = 6.dp),
@@ -78,25 +84,27 @@ fun ProductTopBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                if (onBack != null) {
-                    IconButton(
-                        onClick = onBack,
-                        modifier = backModifier.size(48.dp),
-                    ) {
-                        Icon(
-                            imageVector = MomodingIcons.Back,
-                            contentDescription = "Back",
-                            modifier = Modifier.size(22.dp),
-                        )
+                when {
+                    navigation != null -> navigation()
+                    onBack != null -> {
+                        IconButton(
+                            onClick = onBack,
+                            modifier = backModifier.size(48.dp),
+                        ) {
+                            Icon(
+                                imageVector = MomodingIcons.Back,
+                                contentDescription = "Back",
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
                     }
-                } else {
-                    MomodingMark(size = 34.dp, presence = presence)
+                    else -> MomodingMark(size = 34.dp, presence = presence)
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = title,
                         style = MaterialTheme.typography.titleLarge,
-                        maxLines = 1,
+                        maxLines = if (largeFont) 2 else 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = titleModifier.semantics { heading() },
                     )
@@ -105,7 +113,7 @@ fun ProductTopBar(
                             text = it,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
+                            maxLines = if (largeFont) 2 else 1,
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
@@ -114,6 +122,38 @@ fun ProductTopBar(
             Row(verticalAlignment = Alignment.CenterVertically, content = actions)
         }
         if (showDivider) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    }
+}
+
+@Composable
+fun NavigationDrawerButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val color = MaterialTheme.colorScheme.onSurface
+    IconButton(
+        onClick = onClick,
+        modifier = modifier
+            .size(48.dp)
+            .semantics { contentDescription = "Open task navigation" },
+    ) {
+        Canvas(Modifier.size(22.dp)) {
+            val stroke = 2.dp.toPx()
+            drawLine(
+                color = color,
+                start = androidx.compose.ui.geometry.Offset(size.width * 0.18f, size.height * 0.32f),
+                end = androidx.compose.ui.geometry.Offset(size.width * 0.82f, size.height * 0.32f),
+                strokeWidth = stroke,
+                cap = StrokeCap.Round,
+            )
+            drawLine(
+                color = color,
+                start = androidx.compose.ui.geometry.Offset(size.width * 0.18f, size.height * 0.68f),
+                end = androidx.compose.ui.geometry.Offset(size.width * 0.64f, size.height * 0.68f),
+                strokeWidth = stroke,
+                cap = StrokeCap.Round,
+            )
+        }
     }
 }
 

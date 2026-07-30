@@ -35,6 +35,7 @@ enum class PhotoLibraryScope(val wireValue: String) {
 }
 
 data class DevicePhotoMetadata(
+    val mediaId: Long,
     val mimeType: String,
     val byteCount: Long?,
     val width: Int?,
@@ -64,6 +65,7 @@ interface DeviceMediaListHandler {
 class DeviceMediaListExecutor(
     private val scopeProvider: PhotoLibraryScopeProvider,
     private val query: DevicePhotoMetadataQuery,
+    private val handles: MediaHandleRegistry = MediaHandleRegistry(),
     private val permissionRequester: PhotoLibraryPermissionRequester =
         PhotoLibraryPermissionRequester { false },
 ) : DeviceMediaListHandler {
@@ -117,6 +119,7 @@ class DeviceMediaListExecutor(
                         items.forEachIndexed { index, item ->
                             add(buildJsonObject {
                                 put("index", index + 1)
+                                put("mediaHandle", handles.bind(frame.taskId, item.mediaId))
                                 put("mimeType", item.mimeType)
                                 item.byteCount?.takeIf { it >= 0L }?.let { put("byteCount", it) }
                                 item.width?.takeIf { it > 0 }?.let { put("width", it) }
@@ -174,6 +177,7 @@ class DeviceMediaListExecutor(
         fun create(
             context: Context,
             permissionCoordinator: AndroidPermissionRequestCoordinator? = null,
+            handles: MediaHandleRegistry = MediaHandleRegistry(),
         ): DeviceMediaListExecutor {
             val appContext = context.applicationContext
             return DeviceMediaListExecutor(
@@ -188,6 +192,7 @@ class DeviceMediaListExecutor(
                     }
                 },
                 query = AndroidMediaStorePhotoQuery(appContext.contentResolver),
+                handles = handles,
                 permissionRequester = PhotoLibraryPermissionRequester {
                     permissionCoordinator?.request(
                         photoLibraryPermissionRequest(android.os.Build.VERSION.SDK_INT),
@@ -203,6 +208,7 @@ private class AndroidMediaStorePhotoQuery(
 ) : DevicePhotoMetadataQuery {
     override suspend fun newestImages(limit: Int): List<DevicePhotoMetadata> = withContext(Dispatchers.IO) {
         val projection = arrayOf(
+            MediaStore.Images.Media._ID,
             MediaStore.Images.Media.MIME_TYPE,
             MediaStore.Images.Media.SIZE,
             MediaStore.Images.Media.WIDTH,
@@ -217,6 +223,7 @@ private class AndroidMediaStorePhotoQuery(
         }
         resolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, queryArgs, null)
             ?.use { cursor ->
+                val id = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
                 val mime = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.MIME_TYPE)
                 val byteCount = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.SIZE)
                 val width = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.WIDTH)
@@ -227,6 +234,7 @@ private class AndroidMediaStorePhotoQuery(
                     while (cursor.moveToNext() && this.size < limit) {
                         add(
                             DevicePhotoMetadata(
+                                mediaId = cursor.getLong(id),
                                 mimeType = cursor.getString(mime)?.takeIf(MEDIA_MIME::matches) ?: "image/*",
                                 byteCount = cursor.longOrNull(byteCount),
                                 width = cursor.intOrNull(width),

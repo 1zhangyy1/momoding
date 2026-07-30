@@ -20,9 +20,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Terminal
@@ -58,6 +62,10 @@ fun DeviceCapabilitiesScreen(
     onRefresh: () -> Unit,
     onOpenFolders: (() -> Unit)?,
     onManagePhotoAccess: (() -> Unit)? = null,
+    onManageCalendarAccess: (() -> Unit)? = null,
+    onManageContactsAccess: (() -> Unit)? = null,
+    onManageLocationAccess: (() -> Unit)? = null,
+    onManageNotificationAccess: (() -> Unit)? = null,
     onManageAccessibility: (() -> Unit)? = null,
     onManageScreenCapture: (() -> Unit)? = null,
     onManageAllFiles: (() -> Unit)? = null,
@@ -116,6 +124,10 @@ fun DeviceCapabilitiesScreen(
                     val action = when (presentation.id) {
                         AndroidCapabilityId.SAF_FOLDERS -> onOpenFolders
                         AndroidCapabilityId.PHOTO_LIBRARY -> onManagePhotoAccess
+                        AndroidCapabilityId.CALENDAR -> onManageCalendarAccess
+                        AndroidCapabilityId.CONTACTS -> onManageContactsAccess
+                        AndroidCapabilityId.LOCATION -> onManageLocationAccess
+                        AndroidCapabilityId.NOTIFICATIONS -> onManageNotificationAccess
                         AndroidCapabilityId.ACCESSIBILITY_CONTROL -> onManageAccessibility
                         AndroidCapabilityId.SCREEN_CAPTURE -> onManageScreenCapture
                         AndroidCapabilityId.ALL_FILES -> onManageAllFiles
@@ -345,6 +357,34 @@ private enum class CapabilityPresentation(
         "List bounded metadata for photos Android allows. Composer Photo Picker needs no permission.",
         Icons.Outlined.Image,
         "Manage photo access",
+    ),
+    CALENDAR(
+        AndroidCapabilityId.CALENDAR,
+        "Calendar",
+        "Read bounded event details only when the current task needs them.",
+        Icons.Outlined.Event,
+        "Manage calendar access",
+    ),
+    CONTACTS(
+        AndroidCapabilityId.CONTACTS,
+        "Contacts",
+        "Find bounded phone, email, and organization fields only when the task needs them.",
+        Icons.Outlined.Person,
+        "Manage contacts access",
+    ),
+    LOCATION(
+        AndroidCapabilityId.LOCATION,
+        "Location",
+        "Read one foreground location at the minimum precision the current task needs.",
+        Icons.Outlined.LocationOn,
+        "Manage location access",
+    ),
+    NOTIFICATIONS(
+        AndroidCapabilityId.NOTIFICATIONS,
+        "Notifications",
+        "Post and manage only Momoding-owned notifications for the current task.",
+        Icons.Outlined.Notifications,
+        "Manage notifications",
     ),
     ACCESSIBILITY(
         AndroidCapabilityId.ACCESSIBILITY_CONTROL,

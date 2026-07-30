@@ -37,15 +37,48 @@ export function validateToolArguments(
   const args = structuredClone(toolCall.arguments);
   const error = validateValue(tool.parameters as JsonSchema, args, "$");
   if (error !== null) {
-    throw new Error(
-      `Validation failed for tool "${toolCall.name}":\n  - ${error}\n\n` +
-        `Received arguments:\n${JSON.stringify(toolCall.arguments, null, 2)}`,
-    );
+    throw invalidArgumentsError(tool.parameters as JsonSchema, toolCall.arguments);
   }
   return args;
 }
 
 type JsonSchema = Record<string, unknown>;
+
+function invalidArgumentsError(
+  schema: JsonSchema,
+  argumentsValue: unknown,
+): Error {
+  const action = supportedAction(schema, argumentsValue);
+  return new Error(JSON.stringify({
+    ok: false,
+    action,
+    error: {
+      code: "INVALID_ARGUMENTS",
+      message: "Tool arguments do not match the schema.",
+      retryable: true,
+    },
+  }));
+}
+
+function supportedAction(
+  schema: JsonSchema,
+  argumentsValue: unknown,
+): string | null {
+  if (!isRecord(argumentsValue) || typeof argumentsValue.action !== "string") return null;
+  const candidate = argumentsValue.action;
+  return schemaContainsAction(schema, candidate) ? candidate : null;
+}
+
+function schemaContainsAction(schema: JsonSchema, candidate: string): boolean {
+  const properties = isRecord(schema.properties) ? schema.properties : null;
+  const action = properties && isRecord(properties.action) ? properties.action : null;
+  if (action?.const === candidate) return true;
+  if (Array.isArray(action?.enum) && action.enum.includes(candidate)) return true;
+  return ["oneOf", "anyOf"].some((key) =>
+    Array.isArray(schema[key]) &&
+    (schema[key] as unknown[]).some((child) =>
+      isRecord(child) && schemaContainsAction(child, candidate)));
+}
 
 const COMMON_SCHEMA_KEYS = new Set([
   "$id",

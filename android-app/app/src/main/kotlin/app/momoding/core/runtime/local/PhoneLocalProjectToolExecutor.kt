@@ -79,13 +79,14 @@ class PhoneLocalProjectToolExecutor internal constructor(
                 if (activeRun.stopRequested.get()) {
                     return stoppedBeforeCommand(request.toolName, runId)
                 }
-                if (!projects.hasImportedTask(taskId)) projects.importApprovedTask(taskId)
+                val workspaceMode = projects.prepareTaskWorkspace(taskId)
                 if (activeRun.stopRequested.get()) {
                     return discardInterruptedResult(
                         taskId = taskId,
                         toolName = request.toolName,
                         command = stoppedCommandResult(runId),
                         stopRequested = true,
+                        workspaceMode = workspaceMode,
                     )
                 }
                 val commandResult = executeCommand(
@@ -107,6 +108,23 @@ class PhoneLocalProjectToolExecutor internal constructor(
                         toolName = request.toolName,
                         command = commandResult,
                         stopRequested = activeRun.stopRequested.get(),
+                        workspaceMode = workspaceMode,
+                    )
+                }
+                if (workspaceMode == PhoneLocalWorkspaceMode.PRIVATE_SCRATCH) {
+                    if (activeRun.stopRequested.get()) {
+                        return discardInterruptedResult(
+                            taskId = taskId,
+                            toolName = request.toolName,
+                            command = commandResult,
+                            stopRequested = true,
+                            workspaceMode = workspaceMode,
+                        )
+                    }
+                    return buildCommandResult(
+                        toolName = request.toolName,
+                        command = commandResult,
+                        changes = privateScratchChanges(),
                     )
                 }
                 val detected = projects.detectChanges(taskId)
@@ -116,6 +134,7 @@ class PhoneLocalProjectToolExecutor internal constructor(
                         toolName = request.toolName,
                         command = commandResult,
                         stopRequested = true,
+                        workspaceMode = workspaceMode,
                     )
                 }
                 if (detected.unsupported.isNotEmpty()) {
@@ -155,31 +174,15 @@ class PhoneLocalProjectToolExecutor internal constructor(
                         toolName = request.toolName,
                         command = commandResult,
                         stopRequested = true,
+                        workspaceMode = workspaceMode,
                     )
                 }
                 val preparationFailed = preparedChanges["state"]?.jsonPrimitive?.content == "failed"
-                val commandOk = commandResult.exitCode == 0 &&
-                    !commandResult.timedOut &&
-                    !commandResult.stopped
-                buildResult(
+                buildCommandResult(
                     toolName = request.toolName,
                     command = commandResult,
-                    ok = commandOk && !preparationFailed,
-                    errorCode = when {
-                        commandResult.stopped -> "PROJECT_COMMAND_STOPPED"
-                        commandResult.timedOut -> "PROJECT_COMMAND_TIMED_OUT"
-                        commandResult.exitCode != 0 -> "PROJECT_COMMAND_FAILED"
-                        preparationFailed -> "PROJECT_CHANGE_PREPARE_FAILED"
-                        else -> null
-                    },
-                    errorMessage = when {
-                        commandResult.stopped -> "Project command was stopped"
-                        commandResult.timedOut -> "Project command timed out"
-                        commandResult.exitCode != 0 -> "Project command exited with a failure"
-                        preparationFailed -> "Project changes could not be prepared for review"
-                        else -> null
-                    },
                     changes = preparedChanges,
+                    preparationFailed = preparationFailed,
                 )
             } finally {
                 synchronized(runGate) {
@@ -216,8 +219,8 @@ class PhoneLocalProjectToolExecutor internal constructor(
                 taskId,
                 "PROJECT_COMMAND_STOPPED",
             )
-            projects.discardImportedTask(taskId)
-            processStopRequested || activeRun != null || cancelled > 0
+            val discardedProject = projects.discardImportedTaskIfPresent(taskId)
+            processStopRequested || activeRun != null || cancelled > 0 || discardedProject
         } finally {
             synchronized(runGate) {
                 val remaining = stoppingTasks.getValue(taskId) - 1
@@ -263,9 +266,12 @@ class PhoneLocalProjectToolExecutor internal constructor(
         toolName: String,
         command: PhoneLocalCommandResult,
         stopRequested: Boolean,
+        workspaceMode: PhoneLocalWorkspaceMode,
     ): JsonObject {
         fileChanges.cancelUnboundPreparedForTask(taskId, "PROJECT_COMMAND_STOPPED")
-        projects.discardImportedTask(taskId)
+        if (workspaceMode == PhoneLocalWorkspaceMode.AUTHORIZED_PROJECT) {
+            projects.discardImportedTaskIfPresent(taskId)
+        }
         val effectiveCommand = if (stopRequested && !command.stopped) {
             command.copy(stopped = true)
         } else {
@@ -285,12 +291,53 @@ class PhoneLocalProjectToolExecutor internal constructor(
             } else {
                 "Project command timed out"
             },
-            changes = buildJsonObject {
-                put("state", "discarded")
-                put("reason", if (effectiveCommand.stopped) "stopped" else "timed_out")
+            changes = if (workspaceMode == PhoneLocalWorkspaceMode.PRIVATE_SCRATCH) {
+                privateScratchChanges(possiblyModified = true)
+            } else {
+                buildJsonObject {
+                    put("state", "discarded")
+                    put("reason", if (effectiveCommand.stopped) "stopped" else "timed_out")
+                }
             },
         )
     }
+
+    private fun buildCommandResult(
+        toolName: String,
+        command: PhoneLocalCommandResult,
+        changes: JsonObject,
+        preparationFailed: Boolean = false,
+    ): JsonObject {
+        val commandOk = command.exitCode == 0 && !command.timedOut && !command.stopped
+        return buildResult(
+            toolName = toolName,
+            command = command,
+            ok = commandOk && !preparationFailed,
+            errorCode = when {
+                command.stopped -> "PROJECT_COMMAND_STOPPED"
+                command.timedOut -> "PROJECT_COMMAND_TIMED_OUT"
+                command.exitCode != 0 -> "PROJECT_COMMAND_FAILED"
+                preparationFailed -> "PROJECT_CHANGE_PREPARE_FAILED"
+                else -> null
+            },
+            errorMessage = when {
+                command.stopped -> "Project command was stopped"
+                command.timedOut -> "Project command timed out"
+                command.exitCode != 0 -> "Project command exited with a failure"
+                preparationFailed -> "Project changes could not be prepared for review"
+                else -> null
+            },
+            changes = changes,
+        )
+    }
+
+    private fun privateScratchChanges(possiblyModified: Boolean = false): JsonObject =
+        buildJsonObject {
+            put("state", "private")
+            put("workspace", "/workspace")
+            put("persisted", true)
+            if (possiblyModified) put("possiblyModified", true)
+        }
 
     private suspend fun prepareChanges(
         taskId: String,

@@ -346,6 +346,18 @@ class AttentionRepository(
                     append(" recent photos; no image bytes, names, paths, location, or EXIF data.")
                 },
             )
+            "device_calendar" -> AttentionPrompt.Confirmation(
+                summary = value.getValue("summary").jsonPrimitive.content,
+                details = value.getValue("details").jsonPrimitive.content,
+            )
+            "device_contacts" -> AttentionPrompt.Confirmation(
+                summary = value.getValue("summary").jsonPrimitive.content,
+                details = value.getValue("details").jsonPrimitive.content,
+            )
+            "device_clipboard" -> AttentionPrompt.Confirmation(
+                summary = value.getValue("summary").jsonPrimitive.content,
+                details = value.getValue("details").jsonPrimitive.content,
+            )
             "device_files_read" -> AttentionPrompt.ContentRead(
                 grantId = value.getValue("grantId").jsonPrimitive.content,
                 purpose = value.getValue("purpose").jsonPrimitive.content,

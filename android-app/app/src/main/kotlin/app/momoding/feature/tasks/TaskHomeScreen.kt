@@ -79,6 +79,7 @@ fun TaskHomeScreen(
     contentPadding: PaddingValues,
     onAction: (TaskHomeAction) -> Unit,
     interactionPolicy: TaskHomeInteractionPolicy = TaskHomeInteractionPolicy.All,
+    onBack: (() -> Unit)? = null,
 ) {
     val brand = LocalMomodingBrandColors.current
     state.managementDialog?.let { dialog ->
@@ -86,7 +87,8 @@ fun TaskHomeScreen(
     }
     Column(modifier = Modifier.fillMaxSize()) {
         ProductTopBar(
-            title = "Tasks",
+            title = "All tasks",
+            onBack = onBack,
             actions = {
                 if (interactionPolicy.allows(TaskHomeInteraction.SEARCH)) {
                     IconButton(

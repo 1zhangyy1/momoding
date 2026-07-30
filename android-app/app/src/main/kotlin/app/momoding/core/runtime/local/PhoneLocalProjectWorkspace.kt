@@ -15,6 +15,7 @@ import java.nio.file.FileVisitResult
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.SimpleFileVisitor
+import java.nio.file.StandardCopyOption
 import java.nio.file.attribute.BasicFileAttributes
 import java.security.MessageDigest
 import java.util.UUID
@@ -59,19 +60,25 @@ data class PhoneLocalProjectChangeSet(
     val unsupported: List<PhoneLocalProjectUnsupportedChange>,
 )
 
+enum class PhoneLocalWorkspaceMode {
+    PRIVATE_SCRATCH,
+    AUTHORIZED_PROJECT,
+}
+
 /**
- * Imports one explicitly selected task folder into the App-private Linux workspace and converts
- * later text-file changes back into the existing Android-authoritative file mutation model.
+ * Prepares one task-scoped App-private Linux workspace.
  *
- * No SAF URI enters the workspace or manifest. This class does not commit to the real directory;
- * callers must pass [PhoneLocalProjectChangeSet.operations] through DeviceFileChangeExecutor so
- * that Diff, user confirmation and live Provider preconditions remain mandatory.
+ * Without a selected SAF grant, the workspace is persistent private Scratch storage. With a grant,
+ * the selected folder is imported as a private snapshot and later text-file changes are converted
+ * into the existing Android-authoritative mutation model. No SAF URI enters the workspace or
+ * manifest, and this class never commits to the real directory.
  */
 class PhoneLocalProjectWorkspace internal constructor(
     private val database: MomodingDatabase,
     private val folders: AuthorizedFoldersRepository,
     private val workspaceRoot: (String) -> File,
     private val manifestRoot: File,
+    private val beforeManifestWrite: () -> Unit = {},
 ) {
     constructor(
         context: Context,
@@ -88,96 +95,38 @@ class PhoneLocalProjectWorkspace internal constructor(
         ),
     )
 
+    suspend fun prepareTaskWorkspace(taskId: String): PhoneLocalWorkspaceMode =
+        withContext(Dispatchers.IO) {
+            requireUuid(taskId, "taskId")
+            PhoneLocalWorkspaceLocks.withLock(taskId) {
+                val selectedGrant = database.momodingDao().draftForTask(taskId)?.selectedGrantId
+                if (selectedGrant == null) {
+                    prepareScratchLocked(taskId)
+                    return@withLock PhoneLocalWorkspaceMode.PRIVATE_SCRATCH
+                }
+                if (!hasImportedTaskLocked(taskId, selectedGrant)) {
+                    clearWorkspaceStateLocked(taskId)
+                    importApprovedTaskLocked(taskId, selectedGrant)
+                }
+                PhoneLocalWorkspaceMode.AUTHORIZED_PROJECT
+            }
+        }
+
     suspend fun hasImportedTask(taskId: String): Boolean = withContext(Dispatchers.IO) {
         requireUuid(taskId, "taskId")
         val selectedGrant = database.momodingDao().draftForTask(taskId)?.selectedGrantId ?: return@withContext false
-        val currentGrant = folders.folders().singleOrNull { it.grantId == selectedGrant }
-            ?: return@withContext false
-        if (!currentGrant.canRead) return@withContext false
         PhoneLocalWorkspaceLocks.withLock(taskId) {
-            if (!manifestFile(taskId).isFile) return@withLock false
-            val manifest = readManifest(taskId)
-            check(manifest.grantId == selectedGrant) {
-                "PHONE_LOCAL_PROJECT_MANIFEST_GRANT_MISMATCH"
-            }
-            val workspace = workspaceRoot(taskId)
-            check(!Files.isSymbolicLink(workspace.toPath()) && workspace.isDirectory) {
-                "PHONE_LOCAL_PROJECT_WORKSPACE_MISSING"
-            }
-            true
+            hasImportedTaskLocked(taskId, selectedGrant)
         }
     }
 
     suspend fun importApprovedTask(taskId: String): PhoneLocalProjectImportResult =
         withContext(Dispatchers.IO) {
             requireUuid(taskId, "taskId")
-            val grantId = database.momodingDao().draftForTask(taskId)?.selectedGrantId
-                ?: throw SecurityException("Task has no user-selected project folder")
-            val currentGrant = folders.folders().singleOrNull { it.grantId == grantId }
-                ?: throw SecurityException("Task project folder is unavailable")
-            check(currentGrant.canRead) { "Task project folder is not readable" }
-            val snapshot = folders.projectSnapshot(grantId)
-            check(snapshot.grantId == grantId) { "Project snapshot grant changed" }
-
             PhoneLocalWorkspaceLocks.withLock(taskId) {
-                check(database.momodingDao().draftForTask(taskId)?.selectedGrantId == grantId) {
-                    "Task project folder changed during import"
-                }
-                val workspace = workspaceRoot(taskId)
-                resetWorkspaceNoFollow(workspace)
-                snapshot.entries.asSequence()
-                    .filter(AuthorizedProjectSnapshotEntry::isDirectory)
-                    .sortedBy(AuthorizedProjectSnapshotEntry::relativePath)
-                    .forEach { entry ->
-                        if (entry.relativePath.isNotEmpty()) {
-                            val directory = safeChild(workspace, entry.relativePath)
-                            check(directory.mkdirs() || directory.isDirectory) {
-                                "PHONE_LOCAL_PROJECT_DIRECTORY_CREATE_FAILED"
-                            }
-                        }
-                    }
-                snapshot.entries.asSequence()
-                    .filterNot(AuthorizedProjectSnapshotEntry::isDirectory)
-                    .sortedBy(AuthorizedProjectSnapshotEntry::relativePath)
-                    .forEach { entry ->
-                        val content = requireNotNull(entry.content)
-                        val target = safeChild(workspace, entry.relativePath)
-                        check(
-                            target.parentFile?.mkdirs() != false ||
-                                target.parentFile?.isDirectory == true,
-                        ) {
-                            "PHONE_LOCAL_PROJECT_PARENT_CREATE_FAILED"
-                        }
-                        target.writeBytes(content)
-                    }
-                val manifest = StoredManifest(
-                    taskId = taskId,
-                    grantId = grantId,
-                    snapshotSha256 = snapshot.manifestSha256,
-                    entries = snapshot.entries.map { entry ->
-                        StoredEntry(
-                            alias = entry.alias,
-                            parentAlias = entry.parentAlias,
-                            relativePath = entry.relativePath,
-                            displayName = entry.displayName,
-                            mimeType = entry.mimeType,
-                            byteCount = entry.byteCount,
-                            lastModifiedMillis = entry.lastModifiedMillis,
-                            sha256 = entry.sha256,
-                            directory = entry.isDirectory,
-                        )
-                    },
-                )
-                writeManifest(manifest)
-                PhoneLocalProjectImportResult(
-                    taskId = taskId,
-                    grantId = grantId,
-                    workspaceId = taskId,
-                    manifestSha256 = snapshot.manifestSha256,
-                    importedFileCount = snapshot.fileCount,
-                    importedBytes = snapshot.totalBytes,
-                    exclusions = snapshot.exclusions,
-                )
+                val grantId = database.momodingDao().draftForTask(taskId)?.selectedGrantId
+                    ?: throw SecurityException("Task has no user-selected project folder")
+                importApprovedTaskLocked(taskId, grantId)
             }
         }
 
@@ -186,11 +135,149 @@ class PhoneLocalProjectWorkspace internal constructor(
         requireUuid(taskId, "taskId")
         PhoneLocalWorkspaceLocks.withLock(taskId) {
             resetWorkspaceNoFollow(workspaceRoot(taskId))
-            val manifest = manifestFile(taskId)
-            check(!manifest.exists() || manifest.delete()) {
-                "PHONE_LOCAL_PROJECT_MANIFEST_DELETE_FAILED"
+            deleteManifest(taskId)
+            deleteWorkspaceState(taskId)
+        }
+    }
+
+    /**
+     * Discards an imported project snapshot if one exists, while preserving private Scratch.
+     */
+    suspend fun discardImportedTaskIfPresent(taskId: String): Boolean =
+        withContext(Dispatchers.IO) {
+            requireUuid(taskId, "taskId")
+            PhoneLocalWorkspaceLocks.withLock(taskId) {
+                val stateFileExists = workspaceStateFile(taskId).exists()
+                val state = readWorkspaceState(taskId)
+                val hasProjectState = manifestFile(taskId).exists() ||
+                    state == StoredWorkspaceState.IMPORTING ||
+                    state == StoredWorkspaceState.PROJECT ||
+                    (stateFileExists && state == StoredWorkspaceState.UNKNOWN)
+                if (!hasProjectState) return@withLock false
+                resetWorkspaceNoFollow(workspaceRoot(taskId))
+                deleteManifest(taskId)
+                deleteWorkspaceState(taskId)
+                true
             }
         }
+
+    private suspend fun hasImportedTaskLocked(
+        taskId: String,
+        selectedGrant: String,
+    ): Boolean {
+        val currentGrant = folders.folders().singleOrNull { it.grantId == selectedGrant }
+            ?: return false
+        if (!currentGrant.canRead) return false
+        if (readWorkspaceState(taskId) != StoredWorkspaceState.PROJECT) return false
+        if (!manifestFile(taskId).isFile) return false
+        val manifest = try {
+            readManifest(taskId)
+        } catch (_: IllegalArgumentException) {
+            return false
+        } catch (_: IllegalStateException) {
+            return false
+        }
+        if (manifest.grantId != selectedGrant) return false
+        val workspace = workspaceRoot(taskId)
+        return !Files.isSymbolicLink(workspace.toPath()) && workspace.isDirectory
+    }
+
+    private suspend fun importApprovedTaskLocked(
+        taskId: String,
+        grantId: String,
+    ): PhoneLocalProjectImportResult {
+        val currentGrant = folders.folders().singleOrNull { it.grantId == grantId }
+            ?: throw SecurityException("Task project folder is unavailable")
+        check(currentGrant.canRead) { "Task project folder is not readable" }
+        val snapshot = folders.projectSnapshot(grantId)
+        check(snapshot.grantId == grantId) { "Project snapshot grant changed" }
+        check(database.momodingDao().draftForTask(taskId)?.selectedGrantId == grantId) {
+            "Task project folder changed during import"
+        }
+
+        writeWorkspaceState(taskId, StoredWorkspaceState.IMPORTING)
+        val workspace = workspaceRoot(taskId)
+        resetWorkspaceNoFollow(workspace)
+        snapshot.entries.asSequence()
+            .filter(AuthorizedProjectSnapshotEntry::isDirectory)
+            .sortedBy(AuthorizedProjectSnapshotEntry::relativePath)
+            .forEach { entry ->
+                if (entry.relativePath.isNotEmpty()) {
+                    val directory = safeChild(workspace, entry.relativePath)
+                    check(directory.mkdirs() || directory.isDirectory) {
+                        "PHONE_LOCAL_PROJECT_DIRECTORY_CREATE_FAILED"
+                    }
+                }
+            }
+        snapshot.entries.asSequence()
+            .filterNot(AuthorizedProjectSnapshotEntry::isDirectory)
+            .sortedBy(AuthorizedProjectSnapshotEntry::relativePath)
+            .forEach { entry ->
+                val content = requireNotNull(entry.content)
+                val target = safeChild(workspace, entry.relativePath)
+                check(
+                    target.parentFile?.mkdirs() != false ||
+                        target.parentFile?.isDirectory == true,
+                ) {
+                    "PHONE_LOCAL_PROJECT_PARENT_CREATE_FAILED"
+                }
+                target.writeBytes(content)
+            }
+        check(database.momodingDao().draftForTask(taskId)?.selectedGrantId == grantId) {
+            "Task project folder changed during import"
+        }
+        val manifest = StoredManifest(
+            taskId = taskId,
+            grantId = grantId,
+            snapshotSha256 = snapshot.manifestSha256,
+            entries = snapshot.entries.map { entry ->
+                StoredEntry(
+                    alias = entry.alias,
+                    parentAlias = entry.parentAlias,
+                    relativePath = entry.relativePath,
+                    displayName = entry.displayName,
+                    mimeType = entry.mimeType,
+                    byteCount = entry.byteCount,
+                    lastModifiedMillis = entry.lastModifiedMillis,
+                    sha256 = entry.sha256,
+                    directory = entry.isDirectory,
+                )
+            },
+        )
+        beforeManifestWrite()
+        writeManifest(manifest)
+        writeWorkspaceState(taskId, StoredWorkspaceState.PROJECT)
+        return PhoneLocalProjectImportResult(
+            taskId = taskId,
+            grantId = grantId,
+            workspaceId = taskId,
+            manifestSha256 = snapshot.manifestSha256,
+            importedFileCount = snapshot.fileCount,
+            importedBytes = snapshot.totalBytes,
+            exclusions = snapshot.exclusions,
+        )
+    }
+
+    private fun prepareScratchLocked(taskId: String) {
+        val workspace = workspaceRoot(taskId)
+        val canPreserve = readWorkspaceState(taskId) == StoredWorkspaceState.SCRATCH &&
+            !manifestFile(taskId).exists() &&
+            !Files.isSymbolicLink(workspace.toPath()) &&
+            workspace.isDirectory
+        if (!canPreserve) {
+            resetWorkspaceNoFollow(workspace)
+            deleteManifest(taskId)
+            writeWorkspaceState(taskId, StoredWorkspaceState.SCRATCH)
+        }
+        check(!Files.isSymbolicLink(workspace.toPath()) && workspace.isDirectory) {
+            "PHONE_LOCAL_SCRATCH_WORKSPACE_UNAVAILABLE"
+        }
+    }
+
+    private fun clearWorkspaceStateLocked(taskId: String) {
+        resetWorkspaceNoFollow(workspaceRoot(taskId))
+        deleteManifest(taskId)
+        deleteWorkspaceState(taskId)
     }
 
     suspend fun detectChanges(taskId: String): PhoneLocalProjectChangeSet =
@@ -402,20 +489,11 @@ class PhoneLocalProjectWorkspace internal constructor(
     }
 
     private fun writeManifest(manifest: StoredManifest) {
-        check(manifestRoot.mkdirs() || manifestRoot.isDirectory) {
-            "PHONE_LOCAL_PROJECT_MANIFEST_DIRECTORY_FAILED"
-        }
-        val destination = manifestFile(manifest.taskId)
-        val temporary = File(manifestRoot, ".${manifest.taskId}.${UUID.randomUUID()}.tmp")
-        temporary.writeText(manifest.toJson().toString())
-        if (destination.exists()) check(destination.delete()) {
-            temporary.delete()
-            "PHONE_LOCAL_PROJECT_MANIFEST_REPLACE_FAILED"
-        }
-        check(temporary.renameTo(destination)) {
-            temporary.delete()
-            "PHONE_LOCAL_PROJECT_MANIFEST_WRITE_FAILED"
-        }
+        writeAtomicPrivateFile(
+            destination = manifestFile(manifest.taskId),
+            content = manifest.toJson().toString(),
+            errorCode = "PHONE_LOCAL_PROJECT_MANIFEST_WRITE_FAILED",
+        )
     }
 
     private fun readManifest(taskId: String): StoredManifest {
@@ -432,6 +510,76 @@ class PhoneLocalProjectWorkspace internal constructor(
     }
 
     private fun manifestFile(taskId: String): File = File(manifestRoot, "$taskId.json")
+
+    private fun workspaceStateFile(taskId: String): File =
+        File(manifestRoot, "$taskId.workspace-state")
+
+    private fun readWorkspaceState(taskId: String): StoredWorkspaceState {
+        val source = workspaceStateFile(taskId)
+        if (!source.isFile || Files.isSymbolicLink(source.toPath())) {
+            return StoredWorkspaceState.UNKNOWN
+        }
+        return when (runCatching { source.readText() }.getOrNull()) {
+            "${StoredWorkspaceState.SCRATCH.name}\n" -> StoredWorkspaceState.SCRATCH
+            "${StoredWorkspaceState.IMPORTING.name}\n" -> StoredWorkspaceState.IMPORTING
+            "${StoredWorkspaceState.PROJECT.name}\n" -> StoredWorkspaceState.PROJECT
+            else -> StoredWorkspaceState.UNKNOWN
+        }
+    }
+
+    private fun writeWorkspaceState(taskId: String, state: StoredWorkspaceState) {
+        check(state != StoredWorkspaceState.UNKNOWN)
+        writeAtomicPrivateFile(
+            destination = workspaceStateFile(taskId),
+            content = "${state.name}\n",
+            errorCode = "PHONE_LOCAL_WORKSPACE_STATE_WRITE_FAILED",
+        )
+    }
+
+    private fun writeAtomicPrivateFile(
+        destination: File,
+        content: String,
+        errorCode: String,
+    ) {
+        check(manifestRoot.mkdirs() || manifestRoot.isDirectory) {
+            "PHONE_LOCAL_PROJECT_MANIFEST_DIRECTORY_FAILED"
+        }
+        val temporary = File(manifestRoot, ".${destination.name}.${UUID.randomUUID()}.tmp")
+        try {
+            temporary.writeText(content)
+            Files.move(
+                temporary.toPath(),
+                destination.toPath(),
+                StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING,
+            )
+        } catch (failure: Exception) {
+            throw IllegalStateException(errorCode, failure)
+        } finally {
+            runCatching { Files.deleteIfExists(temporary.toPath()) }
+        }
+    }
+
+    private fun deleteManifest(taskId: String) {
+        val manifest = manifestFile(taskId)
+        check(!manifest.exists() || manifest.delete()) {
+            "PHONE_LOCAL_PROJECT_MANIFEST_DELETE_FAILED"
+        }
+    }
+
+    private fun deleteWorkspaceState(taskId: String) {
+        val state = workspaceStateFile(taskId)
+        check(!state.exists() || state.delete()) {
+            "PHONE_LOCAL_WORKSPACE_STATE_DELETE_FAILED"
+        }
+    }
+
+    private enum class StoredWorkspaceState {
+        SCRATCH,
+        IMPORTING,
+        PROJECT,
+        UNKNOWN,
+    }
 
     private data class WorkspaceScan(
         val files: Map<String, CurrentFile>,
