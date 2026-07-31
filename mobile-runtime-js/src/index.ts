@@ -34,13 +34,9 @@ import {
   acknowledgeNativeOpenRouterChildEvents,
   abortNativeOpenRouterScenario,
   cancelNativeOpenRouterChildAgent,
-  beginSkillDocumentParse,
-  clearSkillDocumentParse,
   closeNativeOpenRouterScenario,
-  closeSkillDocumentParse,
   completeNativeProviderRequest,
   continueNativeOpenRouterTaskPrompt,
-  currentSkillDocumentParse,
   drainNativeProviderCancellations,
   drainNativeOpenRouterChildEvents,
   drainNativeProviderRequests,
@@ -67,10 +63,16 @@ import {
   continueNativeOpenRouterTaskGoal,
   type NativeOpenRouterScenarioKind,
   type PiChildEventAck,
-  requirePiMobileSkillResources,
   requireRuntimeImageInputs,
   requireRuntimeTextAttachmentInputs,
 } from "./native-openrouter-scenario.js";
+import {
+  beginSkillDocumentParse,
+  clearSkillDocumentParse,
+  closeSkillDocumentParse,
+  currentSkillDocumentParse,
+  requirePiMobileSkillResources,
+} from "./skills/mobile-skill-runtime.js";
 
 declare const __PI_VERSION__: string;
 declare const __BUNDLE_SCHEMA_VERSION__: string;

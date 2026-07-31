@@ -13,6 +13,7 @@ import type {
   Model,
   Models,
 } from "@earendil-works/pi-ai";
+import { CHILD_ANALYSIS_SYSTEM_PROMPT } from "./system-prompts.js";
 
 export const DELEGATE_TOOL_NAME = "delegate";
 export const MAX_CHILDREN_PER_PARENT_TURN = 3;
@@ -203,11 +204,7 @@ export class PiChildAgentManager {
       model: this.options.model,
       tools: [],
       activeToolNames: [],
-      systemPrompt: [
-        "You are a read-only child analysis agent inside Momoding.",
-        "Return a concise factual result to the parent agent.",
-        "You have no tools and must not claim to modify files, run commands, ask the user, or delegate again.",
-      ].join(" "),
+      systemPrompt: CHILD_ANALYSIS_SYSTEM_PROMPT,
     });
     const record: PiChildAgentRecord = {
       ...binding,

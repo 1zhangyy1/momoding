@@ -83,7 +83,7 @@ test("real AgentHarness exposes a user prompt through the same native Provider m
   pushChunk(context, requests[0].id, {
     id: "gen-prompt",
     choices: [{
-      delta: { content: "A local Android coding agent." },
+      delta: { content: "Momoding is an Android action agent." },
       finish_reason: "stop",
     }],
   });
@@ -93,7 +93,7 @@ test("real AgentHarness exposes a user prompt through the same native Provider m
     if (status.terminal) {
       assert.equal(status.kind, "prompt");
       assert.equal(status.expectationMet, true, JSON.stringify(status));
-      assert.equal(status.finalText, "A local Android coding agent.");
+      assert.equal(status.finalText, "Momoding is an Android action agent.");
       assert.deepEqual(JSON.parse(call(context, "closeJson")), { ok: true, closed: true });
       return;
     }
@@ -212,20 +212,22 @@ test("phone-local task exposes real project terminal and test tools through the 
   assert.deepEqual(commandTool.function.parameters.required, ["command"]);
   assert.equal(commandTool.function.parameters.properties.timeoutMillis.maximum, 900_000);
   assert.equal(testsTool.function.parameters.properties.outputLimitBytes.maximum, 1_048_576);
-  assert.equal(
-    first.messages.some((message) =>
-      message.role === "system" &&
-      message.content.includes("App-private Scratch") &&
-      message.content.includes("fileChanges.state=private") &&
-      message.content.includes("apk add --no-cache python3 py3-pip") &&
-      message.content.includes("Alpine py3-*") &&
-      message.content.includes("without shell operators") &&
-      message.content.includes("never create a virtual environment") &&
-      message.content.includes("device_files_commit_changes") &&
-      message.content.includes("Never claim")
-    ),
-    true,
+  const systemPrompt = first.messages.find((message) => message.role === "system")?.content;
+  assert.equal(typeof systemPrompt, "string");
+  assert.match(systemPrompt, /^You are Momoding, an action agent/);
+  assert.match(systemPrompt, /persistent, multi-turn tasks/);
+  assert.match(systemPrompt, /Coding is one capability, not your identity/);
+  assert.match(systemPrompt, /Respond in the user's language/);
+  assert.match(systemPrompt, /Never claim an action succeeded/);
+  assert.doesNotMatch(systemPrompt, /coding agent|apk add/);
+  assert.ok(systemPrompt.length <= 1_200, `base prompt too large: ${systemPrompt.length}`);
+  assert.match(commandTool.function.description, /persistent \/workspace/);
+  assert.match(commandTool.function.description, /device_files_commit_changes/);
+  const commitTool = first.tools.find(
+    (tool) => tool.function.name === "device_files_commit_changes",
   );
+  assert.ok(commitTool);
+  assert.match(commitTool.function.description, /No real Android file changed until this tool succeeds/);
 
   finishToolCall(
     context,
@@ -530,10 +532,14 @@ test("text attachments stay as Pi Session metadata and read through the Android 
     JSON.stringify(JSON.stringify([attachment])),
   ));
   const first = await nextProviderRequest(firstProcess);
-  assert.equal(first.tools.some((tool) => tool.function.name === "attachment_read"), true);
-  assert.equal(first.messages[0].content.includes("attachment_read"), true);
+  const attachmentTool = first.tools.find(
+    (tool) => tool.function.name === "attachment_read",
+  );
+  assert.ok(attachmentTool);
+  assert.match(attachmentTool.function.description, /nextOffset until eof/);
   const decorated = userTexts(first).at(-1);
   assert.equal(decorated.includes("Summarize the attached context."), true);
+  assert.equal(decorated.includes("attachment_read"), true);
   assert.equal(decorated.includes(attachment.attachmentId), true);
   assert.equal(decorated.includes("context.md"), true);
 
@@ -1137,6 +1143,7 @@ test("delegate runs two isolated Pi child harnesses with overlapping Provider in
       request.messages.some((message) =>
         message.role === "system" &&
         message.content.includes("read-only child analysis agent") &&
+        message.content.includes("working for Momoding") &&
         message.content.includes("must not claim to modify files")
       ),
       true,
