@@ -1,8 +1,8 @@
 # Releasing Momoding
 
-Momoding is currently a developer preview. This repository can publish source snapshots; its
-locally built debug and unsigned release APKs are verification artifacts, not approved production
-or Play Store releases.
+Momoding is currently a developer preview. GitHub prereleases may include a signed Core APK for
+direct installation. Debug and unsigned release APKs remain local verification artifacts; this is
+not a Play Store release.
 
 ## Initial public repository
 
@@ -30,14 +30,34 @@ or Play Store releases.
 
 ## Binary distribution
 
-Debug and unsigned release APKs are development artifacts, not production releases. A future
-signed release additionally requires:
+The release signing key must stay outside this repository and CI. Its password must stay in a
+credential manager rather than a shell script, Gradle property, or GitHub Actions log. Losing the
+key prevents compatible upgrades, so the keystore and credential require separate encrypted
+backups.
 
-- protected signing keys outside the repository and CI logs;
-- reproducible, reviewed signing and provenance procedures;
-- Android store policy, privacy disclosure, data-safety, account, and update-path review;
+The expected Momoding release certificate SHA-256 digest is tracked in
+[`android-app/release-signing-certificate.sha256`](android-app/release-signing-certificate.sha256).
+For each signed GitHub prerelease:
+
+1. Wait for required CI to pass on the exact public commit.
+2. Build `app-release-unsigned.apk` in a fresh clone of that commit.
+3. Run `zipalign`, then sign with `apksigner` using the protected offline key. Never print or pass
+   the password on a command line recorded by CI.
+4. Generate `<apk>.sha256` with the APK filename included.
+5. Run `node scripts/verify-signed-release-apk.mjs <apk> <apk>.sha256`. This verifies the reviewed
+   package/version/capability boundary, APK Signature Scheme v3, the pinned certificate, and the
+   checksum.
+6. Fresh-install the exact APK on a supported physical device, launch it, and verify the package,
+   version, signer, and core setup/task flow.
+7. Create the annotated tag and GitHub prerelease only after the signed-artifact review passes.
+
+A signed Core APK still requires:
+
 - final ABI/device coverage and upgrade/migration tests;
-- release checksums and a documented rollback process.
+- a documented rollback decision if the physical-device smoke test fails.
+
+Store distribution would additionally require its own policy, privacy disclosure, data-safety,
+account, signing, and update-path review; those are outside this GitHub developer preview.
 
 Do not publish a PRoot/Alpine-enabled binary until the license inventory, complete corresponding
 source, notices, update, ABI, and security gates in [`OPEN_SOURCE_SCOPE.md`](OPEN_SOURCE_SCOPE.md)

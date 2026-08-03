@@ -5,6 +5,8 @@ All notable public changes will be documented here. The project follows
 
 ## Unreleased
 
+## 0.1.0-alpha.1 - 2026-08-03
+
 ### Added
 
 - Clean Momoding open-source source snapshot with new public Git history.

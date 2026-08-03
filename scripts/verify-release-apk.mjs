@@ -10,7 +10,7 @@ const androidHome = process.env.ANDROID_HOME;
 if (!androidHome) fail("ANDROID_HOME must point to the Android SDK");
 
 const aapt = join(androidHome, "build-tools", "37.0.0", process.platform === "win32" ? "aapt.exe" : "aapt");
-const apk = join(
+const defaultApk = join(
   repositoryDir,
   "android-app",
   "app",
@@ -20,6 +20,7 @@ const apk = join(
   "release",
   "app-release-unsigned.apk",
 );
+const apk = resolve(process.argv[2] ?? defaultApk);
 if (!existsSync(aapt)) fail(`aapt is missing: ${aapt}`);
 if (!existsSync(apk)) fail(`release APK is missing: ${apk}`);
 
@@ -28,6 +29,8 @@ const run = (command, args) =>
 
 const badging = run(aapt, ["dump", "badging", apk]);
 requireMatch(badging, /^package: name='app\.momoding' /m, "application ID");
+requireMatch(badging, / versionCode='1' /m, "version code");
+requireMatch(badging, / versionName='0\.1\.0-alpha\.1' /m, "version name");
 requireMatch(badging, /^sdkVersion:'30'$/m, "minimum SDK");
 requireMatch(badging, /^targetSdkVersion:'37'$/m, "target SDK");
 requireMatch(badging, /^application-label:'Momoding'$/m, "application label");
@@ -101,7 +104,7 @@ const forbiddenEntry = entries.find((entry) =>
 if (forbiddenEntry) fail(`forbidden release APK entry found: ${forbiddenEntry}`);
 
 console.log(
-  `Verified release APK: ${actualPermissions.length} permissions, ` +
+  `Verified release APK ${apk}: ${actualPermissions.length} permissions, ` +
     `${exported.length} reviewed exported components, no debug Linux-runtime artifacts.`,
 );
 

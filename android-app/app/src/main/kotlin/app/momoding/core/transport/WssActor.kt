@@ -1,5 +1,6 @@
 package app.momoding.core.transport
 
+import app.momoding.BuildConfig
 import app.momoding.wire.AckReady
 import app.momoding.wire.CommandResponseFrame
 import app.momoding.wire.DeviceClientFrameEncoder
@@ -225,7 +226,7 @@ class WssActor(
     private val receiverReceive: (ReliabilityReceiver, ByteArray) -> List<ReceiverAction> =
         ReliabilityReceiver::receive,
     private val nowMillis: () -> Long = System::currentTimeMillis,
-    private val clientVersion: String = "0.1.0-dev",
+    private val clientVersion: String = BuildConfig.VERSION_NAME,
 ) : SecureTransportActor {
     private val mailbox = Channel<ActorMessage>(MAILBOX_CAPACITY)
     private val callerLifecycleMutex = Mutex()

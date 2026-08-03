@@ -24,6 +24,7 @@
 # Android production source and reviewable unit tests
 +android-app/PHOSPHOR-NOTICE.md
 +android-app/README.md
++android-app/release-signing-certificate.sha256
 +android-app/build.gradle.kts
 +android-app/gradle.properties
 +android-app/gradle
@@ -56,5 +57,6 @@
 +scripts/lib/p2-fixture-projection.mjs
 +scripts/public-export-paths.txt
 +scripts/verify-release-apk.mjs
++scripts/verify-signed-release-apk.mjs
 +scripts/verify.sh
 +third_party/patches/proot-5.1.107.86-android-ndk.patch

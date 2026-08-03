@@ -17,6 +17,16 @@ user and the device platform in control.
 > is not yet a production or Play Store release, and it has not received an independent security
 > audit.
 
+## Install the Android alpha
+
+Download the signed `momoding-0.1.0-alpha.1.apk` and its SHA-256 checksum from
+[GitHub Releases](https://github.com/1zhangyy1/momoding/releases). Android may ask you to allow your
+browser or file manager to install unknown apps. Momoding never bundles a model credential; enter
+your own OpenRouter API key during setup.
+
+The public alpha is the Core release build. It includes the on-device Pi agent and reviewed Android
+capabilities, but excludes the debug-only PRoot/Alpine project-command environment.
+
 ## Platform status
 
 | Platform | Current status |
@@ -153,7 +163,7 @@ Android application remain included. See [Open-source scope](OPEN_SOURCE_SCOPE.m
 ## Prerequisites
 
 - JDK 17
-- Android SDK Platform 37, Build Tools 37.0.0, and NDK 28.2.13676358
+- Android SDK Platform 37.0 (`platforms;android-37.0`), Build Tools 37.0.0, and NDK 28.2.13676358
 - Node.js 22.22.3 and npm 10.9.8
 - Git, curl, patch, and ripgrep
 

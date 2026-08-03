@@ -22,7 +22,8 @@ durable side-effect records. JavaScript does not receive the provider API key.
 ## Prerequisites
 
 - JDK 17 through `JAVA_HOME`
-- Android SDK Platform 37 and Build Tools 37.0.0 through `ANDROID_HOME`
+- Android SDK Platform 37.0 (`platforms;android-37.0`) and Build Tools 37.0.0 through
+  `ANDROID_HOME`
 - Android NDK 28.2.13676358 for the debug phone-local Linux runtime
 - Node.js 22.22.3 for regenerating the tracked Pi runtime asset
 

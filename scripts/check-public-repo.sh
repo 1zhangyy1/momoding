@@ -32,6 +32,7 @@ for required in \
   licenses/LGPL-3.0-or-later.txt \
   licenses/SQLite-Public-Domain.txt \
   android-app/PHOSPHOR-NOTICE.md \
+  android-app/release-signing-certificate.sha256 \
   android-app/gradle/verification-metadata.xml \
   wire/kotlin-contract/gradle/verification-metadata.xml \
   .github/workflows/ci.yml \
@@ -45,6 +46,7 @@ for required in \
   scripts/export-public-repo.sh \
   scripts/public-export-paths.txt \
   scripts/verify-release-apk.mjs \
+  scripts/verify-signed-release-apk.mjs \
   third_party/patches/proot-5.1.107.86-android-ndk.patch; do
   if [[ ! -f "$required" ]]; then
     fail "required public file is missing: $required"

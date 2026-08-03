@@ -15,6 +15,16 @@ Momoding 是一个本地优先的个人 AI Agent，当前从 Android 开始。�
 > **开发者预览版：** 当前仓库适合源码审阅和本地开发，但还不是正式发行版或 Play 商店版本，
 > 也尚未经过独立安全审计。
 
+## 安装 Android Alpha
+
+请从 [GitHub Releases](https://github.com/1zhangyy1/momoding/releases) 下载已签名的
+`momoding-0.1.0-alpha.1.apk` 和对应的 SHA-256 校验文件。Android 可能要求你允许浏览器或文件
+管理器“安装未知应用”。Momoding 不会内置模型凭据；首次设置时请填写你自己的 OpenRouter
+API Key。
+
+公开 Alpha 是 Core Release 构建：包含运行在手机上的 Pi Agent 和已经审阅的 Android 能力，
+但不包含只用于 Debug 构建的 PRoot/Alpine 项目命令环境。
+
 ## 平台进展
 
 | 平台 | 当前状态 |
@@ -137,7 +147,7 @@ third_party/        复现可选原生组件所需的已审阅补丁
 ## 环境要求
 
 - JDK 17
-- Android SDK Platform 37、Build Tools 37.0.0、NDK 28.2.13676358
+- Android SDK Platform 37.0（`platforms;android-37.0`）、Build Tools 37.0.0、NDK 28.2.13676358
 - Node.js 22.22.3、npm 10.9.8
 - Git、curl、patch、ripgrep
 
