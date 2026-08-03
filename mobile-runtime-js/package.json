@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "0.80.6",
-    "@earendil-works/pi-ai": "0.80.6"
+    "@earendil-works/pi-ai": "0.83.0"
   },
   "devDependencies": {
     "esbuild": "0.27.2",
