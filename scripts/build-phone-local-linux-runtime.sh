@@ -4,7 +4,10 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ANDROID_HOME="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}}"
 NDK_VERSION="28.2.13676358"
-NDK_ROOT="${ANDROID_NDK_HOME:-$ANDROID_HOME/ndk/$NDK_VERSION}"
+NDK_ROOT="$ANDROID_HOME/ndk/$NDK_VERSION"
+if [[ ! -d "$NDK_ROOT" && -n "${ANDROID_NDK_HOME:-}" ]]; then
+  NDK_ROOT="$ANDROID_NDK_HOME"
+fi
 if [[ ! -d "$NDK_ROOT" && -d "/opt/homebrew/share/android-commandlinetools/ndk/$NDK_VERSION" ]]; then
   NDK_ROOT="/opt/homebrew/share/android-commandlinetools/ndk/$NDK_VERSION"
 fi
