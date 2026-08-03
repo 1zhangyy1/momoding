@@ -4,12 +4,12 @@
 
 # Momoding
 
-<p align="center"><strong>A personal AI agent that lives on Android.</strong></p>
+<p align="center"><strong>A personal AI agent that lives on your devices — starting with Android.</strong></p>
 
-Momoding is a local-first personal AI agent for Android. Give it a task and it can keep the context,
-make a plan, ask for the authority it needs, use approved phone capabilities, and report what
-happened. It is designed to grow from conversation into action while keeping the user and Android
-in control.
+Momoding is a local-first personal AI agent that is starting on Android. Give it a task and it can
+keep the context, make a plan, ask for the authority it needs, use approved device capabilities,
+and report what happened. It is designed to grow from conversation into action while keeping the
+user and the device platform in control.
 
 [简体中文](README.zh-CN.md)
 
@@ -17,11 +17,24 @@ in control.
 > is not yet a production or Play Store release, and it has not received an independent security
 > audit.
 
+## Platform status
+
+| Platform | Current status |
+| --- | --- |
+| Android | Current primary implementation; open-source developer preview |
+| iOS | Planning and feasibility exploration; no committed release date |
+| Other platforms | Long-term direction; no committed form or release date |
+
+Momoding's product vision is not Android-only, but this repository and the currently runnable
+preview support Android only. Platform permissions and system capabilities differ, so future
+versions are not expected to copy every Android capability one-for-one.
+
 ## Positioning
 
-Momoding's direction is a general-purpose personal agent for Android, not a coding-first product.
-Coding, project files, and terminal tools are one capability family alongside photos, camera,
-screen context, bounded UI actions, app information, attachments, and shared storage.
+Momoding's long-term direction is a general-purpose personal agent across devices, starting with
+Android; it is not a coding-first product. Coding, project files, and terminal tools are one
+capability family alongside photos, camera, screen context, bounded UI actions, app information,
+attachments, and shared storage.
 
 It is also more than a voice-assistant entry point or a chatbot wrapper. Momoding is organized
 around durable tasks: it can plan, use tools, wait for approval, recover state, and continue work
@@ -56,8 +69,8 @@ flowchart LR
 
 ## Who it is for
 
-The long-term direction is for people who want one AI agent to help across their Android device
-instead of living inside a single chat box or app silo.
+The long-term direction is for people who want one AI agent to help across chat boxes, app silos,
+and devices. The current developer preview first tests that experience on Android phones.
 
 The current open-source developer preview is best suited to Android power users, developers, and
 researchers who value bring-your-own-key model access, inspectable source, explicit permission
