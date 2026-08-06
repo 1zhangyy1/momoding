@@ -50,7 +50,10 @@ For each signed GitHub prerelease:
    checksum.
 6. Fresh-install the exact APK on a supported physical device, launch it, and verify the package,
    version, signer, and core setup/task flow.
-7. Create the annotated tag and GitHub prerelease only after the signed-artifact review passes.
+7. For updater-enabled releases, install the candidate over the previous signed release and verify
+   that Android preserves the application identity and data. The first updater-enabled release
+   still requires manual installation because its predecessor cannot discover it in-app.
+8. Create the annotated tag and GitHub prerelease only after the signed-artifact review passes.
 
 A signed Core APK still requires:
 

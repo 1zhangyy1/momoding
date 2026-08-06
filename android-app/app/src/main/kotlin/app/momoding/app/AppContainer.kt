@@ -66,6 +66,7 @@ import app.momoding.core.data.RoomCommandDraftJournal
 import app.momoding.core.data.TaskRepository
 import app.momoding.core.data.TaskDetailRepository
 import app.momoding.core.transport.AndroidSecureTransportRuntime
+import app.momoding.core.update.AppUpdateManager
 import app.momoding.feature.newtask.TaskCreationCoordinator
 import app.momoding.feature.share.ShareImportCoordinator
 import app.momoding.feature.taskdetail.TaskCommandCoordinator
@@ -157,6 +158,7 @@ class AppContainer(application: Application) {
     )
     val appearanceStore = AppearanceStore.create(application, applicationScope)
     val diagnosticsExporter = DiagnosticsExporter(application)
+    val appUpdateManager = AppUpdateManager.create(application, applicationScope)
     val providerCredentialVault = ProviderCredentialVault.create(application)
     val providerSelectionStore = ProviderSelectionStore.create(application)
     val activeChatProviderStore = ActiveChatProviderStore.create(application)

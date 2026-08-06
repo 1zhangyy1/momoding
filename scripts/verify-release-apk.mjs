@@ -54,6 +54,7 @@ const expectedPermissions = [
   "android.permission.INTERNET",
   "android.permission.MANAGE_EXTERNAL_STORAGE",
   "android.permission.POST_NOTIFICATIONS",
+  "android.permission.REQUEST_INSTALL_PACKAGES",
   "android.permission.READ_CALENDAR",
   "android.permission.READ_CONTACTS",
   "android.permission.READ_EXTERNAL_STORAGE",

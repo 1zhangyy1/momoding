@@ -71,7 +71,9 @@ import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDe
 import androidx.core.view.WindowCompat
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.core.content.edit
+import androidx.core.net.toUri
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
@@ -96,6 +98,7 @@ import app.momoding.feature.attention.AttentionUiState
 import app.momoding.feature.attention.AttentionVisibleState
 import app.momoding.feature.attention.AttentionViewModel
 import app.momoding.core.data.TaskAttentionKind
+import app.momoding.core.update.AppUpdateUiState
 import app.momoding.feature.newtask.NewTaskAction
 import app.momoding.feature.newtask.NewTaskInteraction
 import app.momoding.feature.newtask.NewTaskInteractionPolicy
@@ -200,6 +203,7 @@ class MainActivity : ComponentActivity() {
     }
     private lateinit var toolPermissionLauncher: ActivityResultLauncher<Array<String>>
     private lateinit var toolPermissionSettingsLauncher: ActivityResultLauncher<Intent>
+    private lateinit var updateSourceSettingsLauncher: ActivityResultLauncher<Intent>
     private var activeToolPermissionRequestId: String? = null
     private var activeToolPermissions: List<String> = emptyList()
 
@@ -207,7 +211,9 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         registerToolPermissionLaunchers()
+        registerUpdateLauncher()
         acceptShareNavigation(intent)
+        container.appUpdateManager.checkIfDue()
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 settingsViewModel.oneShots.collect { oneShot ->
@@ -231,6 +237,7 @@ class MainActivity : ComponentActivity() {
             val sharedRoute by externalNewTaskRoute.collectAsStateWithLifecycle()
             val capabilityRequest by container.androidCapabilityRequestCoordinator.pending
                 .collectAsStateWithLifecycle()
+            val appUpdateState by container.appUpdateManager.state.collectAsStateWithLifecycle()
             val phoneLocalModelId = providerState.activeModelId
             val phoneLocalProviderName = providerState.activeProviderName
             val taskHomeViewModel: TaskHomeViewModel = viewModel(
@@ -259,7 +266,7 @@ class MainActivity : ComponentActivity() {
                 val attentionOwnerFactory: AttentionRouteViewModelFactory = remember(container) {
                     { identity -> container.attentionViewModelFactory(identity) }
                 }
-                CodexApp(
+                MomodingApp(
                     state = state,
                     onAction = settingsViewModel::dispatch,
                     providerSetupState = providerState,
@@ -353,6 +360,9 @@ class MainActivity : ComponentActivity() {
                     externalNewTaskRoute = sharedRoute,
                     onExternalNewTaskConsumed = { externalNewTaskRoute.value = null },
                     capabilityRequest = capabilityRequest,
+                    appUpdateState = appUpdateState,
+                    onCheckForUpdates = container.appUpdateManager::checkNow,
+                    onInstallUpdate = ::installAvailableUpdate,
                     initialBackStack = listOf(ProviderSetupRoute(onboarding = true)),
                 )
             }
@@ -368,6 +378,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         container.androidCapabilityRegistry.refresh()
+        container.appUpdateManager.checkIfDue()
     }
 
     private fun acceptShareNavigation(intent: Intent?) {
@@ -399,6 +410,69 @@ class MainActivity : ComponentActivity() {
             startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
         } catch (_: ActivityNotFoundException) {
             settingsViewModel.dispatch(SettingsAction.OperationFailed("accessibility", "System accessibility settings are unavailable."))
+        }
+    }
+
+    private fun registerUpdateLauncher() {
+        updateSourceSettingsLauncher = registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult(),
+        ) {
+            if (packageManager.canRequestPackageInstalls()) {
+                installAvailableUpdate()
+            } else {
+                Toast.makeText(
+                    this,
+                    "Allow Momoding to install updates to continue.",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
+    }
+
+    private fun installAvailableUpdate() {
+        if (!packageManager.canRequestPackageInstalls()) {
+            val intent = Intent(
+                Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                "package:$packageName".toUri(),
+            )
+            try {
+                updateSourceSettingsLauncher.launch(intent)
+            } catch (_: ActivityNotFoundException) {
+                Toast.makeText(
+                    this,
+                    "Install-source settings are unavailable.",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+            return
+        }
+        lifecycleScope.launch {
+            val apk = container.appUpdateManager.prepareUpdate().getOrElse { error ->
+                Toast.makeText(
+                    this@MainActivity,
+                    error.message ?: "Couldn’t prepare the update.",
+                    Toast.LENGTH_LONG,
+                ).show()
+                return@launch
+            }
+            val uri = FileProvider.getUriForFile(
+                this@MainActivity,
+                "$packageName.updates",
+                apk,
+            )
+            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, APK_MIME_TYPE)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            try {
+                startActivity(installIntent)
+            } catch (_: ActivityNotFoundException) {
+                Toast.makeText(
+                    this@MainActivity,
+                    "Android’s package installer is unavailable.",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
         }
     }
 
@@ -502,6 +576,7 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         const val TOOL_PERMISSION_PREFS = "tool_permission_requests"
+        const val APK_MIME_TYPE = "application/vnd.android.package-archive"
     }
 }
 
@@ -576,7 +651,7 @@ data class AttentionNavigationReturn(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun CodexApp(
+internal fun MomodingApp(
     state: SettingsUiState,
     onAction: (SettingsAction) -> Unit,
     providerSetupState: ProviderSetupUiState? = null,
@@ -612,6 +687,9 @@ internal fun CodexApp(
     capabilityRequest: AndroidCapabilityRequest? = null,
     initialBackStack: List<NavKey> = listOf(HostGateRoute),
     onAccessibilityAnnouncement: ((String) -> Unit)? = null,
+    appUpdateState: AppUpdateUiState = AppUpdateUiState.Idle,
+    onCheckForUpdates: () -> Unit = {},
+    onInstallUpdate: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val accessibilityView = LocalView.current
@@ -1107,6 +1185,8 @@ internal fun CodexApp(
                         PaddingValues(),
                         ::handleTaskHomeAction,
                         onBack = ::popRoute,
+                        updateState = appUpdateState,
+                        onInstallUpdate = onInstallUpdate,
                     )
                 } else {
                     taskHomeEntry(
@@ -1157,6 +1237,9 @@ internal fun CodexApp(
                         null
                     },
                     onBack = ::popRoute,
+                    updateState = appUpdateState,
+                    onCheckForUpdates = onCheckForUpdates,
+                    onInstallUpdate = onInstallUpdate,
                 )
             }
             entry<AuthorizedFoldersRoute> { key ->

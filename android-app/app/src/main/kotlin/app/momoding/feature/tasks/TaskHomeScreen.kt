@@ -30,6 +30,7 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.TableRows
 import androidx.compose.material.icons.outlined.Unarchive
+import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -72,6 +73,8 @@ import app.momoding.ui.components.StatusLineTone
 import app.momoding.ui.icons.MomodingIcons
 import app.momoding.ui.theme.LocalMomodingStatusColors
 import app.momoding.ui.theme.LocalMomodingBrandColors
+import app.momoding.core.update.AppRelease
+import app.momoding.core.update.AppUpdateUiState
 
 @Composable
 fun TaskHomeScreen(
@@ -80,6 +83,8 @@ fun TaskHomeScreen(
     onAction: (TaskHomeAction) -> Unit,
     interactionPolicy: TaskHomeInteractionPolicy = TaskHomeInteractionPolicy.All,
     onBack: (() -> Unit)? = null,
+    updateState: AppUpdateUiState = AppUpdateUiState.Idle,
+    onInstallUpdate: () -> Unit = {},
 ) {
     val brand = LocalMomodingBrandColors.current
     state.managementDialog?.let { dialog ->
@@ -143,6 +148,36 @@ fun TaskHomeScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            when (updateState) {
+                is AppUpdateUiState.Available -> item("app-update") {
+                    AppUpdateTip(
+                        release = updateState.release,
+                        action = "Update",
+                        onClick = onInstallUpdate,
+                    )
+                }
+                is AppUpdateUiState.Downloading -> item("app-update") {
+                    AppUpdateTip(
+                        release = updateState.release,
+                        action = updateState.progressPercent?.let { "$it%" } ?: "Downloading",
+                        onClick = null,
+                    )
+                }
+                is AppUpdateUiState.Failed -> updateState.release?.let { release ->
+                    item("app-update") {
+                        AppUpdateTip(
+                            release = release,
+                            action = "Retry",
+                            onClick = onInstallUpdate,
+                        )
+                    }
+                }
+                AppUpdateUiState.Checking,
+                AppUpdateUiState.Idle,
+                is AppUpdateUiState.UpToDate,
+                -> Unit
+            }
+
             when (state.connection) {
                 TaskHomeConnectionState.CONNECTED -> Unit
                 TaskHomeConnectionState.OFFLINE,
@@ -233,6 +268,67 @@ fun TaskHomeScreen(
             }
         }
     }
+}
+
+@Composable
+private fun AppUpdateTip(
+    release: AppRelease,
+    action: String,
+    onClick: (() -> Unit)?,
+) {
+    val brand = LocalMomodingBrandColors.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(
+                        role = androidx.compose.ui.semantics.Role.Button,
+                        onClick = onClick,
+                    )
+                } else {
+                    Modifier
+                },
+            )
+            .padding(horizontal = 14.dp, vertical = 11.dp)
+            .testTag("app-update-tip"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(
+            Icons.Outlined.SystemUpdate,
+            contentDescription = null,
+            tint = brand.primary,
+            modifier = Modifier.size(22.dp),
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                "Momoding ${release.versionName} is available",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                formatUpdateSize(release.apk.sizeBytes),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Text(
+            action,
+            style = MaterialTheme.typography.labelLarge,
+            color = brand.primary,
+        )
+    }
+}
+
+private fun formatUpdateSize(bytes: Long): String = when {
+    bytes >= 1024L * 1024L -> "%.1f MB".format(bytes.toDouble() / (1024.0 * 1024.0))
+    bytes >= 1024L -> "%.1f KB".format(bytes.toDouble() / 1024.0)
+    else -> "$bytes B"
 }
 
 @Composable
