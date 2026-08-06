@@ -23,7 +23,8 @@ export type NativeToolRequestKind =
   | "android_package_tool"
   | "android_capability_tool"
   | "android_project_tool"
-  | "android_attachment_tool";
+  | "android_attachment_tool"
+  | "android_image_generation_tool";
 
 export interface NativeToolRequest {
   id: string;
@@ -63,6 +64,7 @@ export const UI_ACTION_TOOL_NAME = "device_ui_action";
 export const PACKAGES_LIST_TOOL_NAME = "device_packages_list";
 export const PACKAGE_INSPECT_TOOL_NAME = "device_package_inspect";
 export const ATTACHMENT_READ_TOOL_NAME = "attachment_read";
+export const IMAGE_GENERATE_TOOL_NAME = "image_generate";
 export const RUN_COMMAND_TOOL_NAME = "run_command";
 export const RUN_TESTS_TOOL_NAME = "run_tests";
 
@@ -81,9 +83,23 @@ export function createAndroidFixtureTool(
 
 export function createAndroidProductTools(
   executeNativeTool: NativeToolExecutor,
+  options: { imageGenerationEnabled?: boolean } = {},
 ): AgentTool[] {
   const schemas = createAndroidToolSchemas();
   return [
+    ...(options.imageGenerationEnabled
+      ? [
+          nativeTool(
+            IMAGE_GENERATE_TOOL_NAME,
+            "Generate image",
+            "Generate one durable image for this task with the user's configured image model. Use only when the user asks to create or transform an image. prompt is required; request aspect_ratio or quality only when it materially matters.",
+            schemas.imageGeneration,
+            "android_image_generation_tool",
+            executeNativeTool,
+            true,
+          ),
+        ]
+      : []),
     projectCommandTool(
       RUN_COMMAND_TOOL_NAME,
       "Run project command",

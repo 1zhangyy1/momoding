@@ -3,8 +3,19 @@ package app.momoding.feature.providersetup
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import app.momoding.core.provider.ActiveChatProviderSelection
+import app.momoding.core.provider.ActiveChatProviderStore
+import app.momoding.core.provider.ChatProviderKind
+import app.momoding.core.provider.CodexDeviceAuthorization
+import app.momoding.core.provider.CodexDeviceAuthorizationCoordinator
+import app.momoding.core.provider.CodexOAuthCredential
+import app.momoding.core.provider.CodexOAuthCredentialManager
+import app.momoding.core.provider.CodexOAuthGateway
+import app.momoding.core.provider.CodexOAuthProtocolException
 import app.momoding.core.provider.OpenRouterChatRequest
 import app.momoding.core.provider.OpenRouterNativeClient
+import app.momoding.core.provider.OpenRouterImageGateway
+import app.momoding.core.provider.OpenRouterImageModelSummary
 import app.momoding.core.provider.OpenRouterModelSummary
 import app.momoding.core.provider.OpenRouterRequestException
 import app.momoding.core.provider.ProviderCredential
@@ -12,11 +23,14 @@ import app.momoding.core.provider.ProviderCredentialVault
 import app.momoding.core.provider.ProviderKind
 import app.momoding.core.provider.ProviderProfile
 import app.momoding.core.provider.ProviderProfilePolicy
+import app.momoding.core.provider.ProviderSelection
+import app.momoding.core.provider.ProviderSelectionStore
 import java.io.IOException
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,12 +46,33 @@ class ProviderSetupViewModel internal constructor(
     private val deleteCredential: suspend () -> Unit,
     private val testCredential: suspend (ProviderCredential) -> Unit,
     private val loadModels: suspend (String?) -> List<OpenRouterModelSummary> = { emptyList() },
+    private val loadImageModels: suspend (String) -> List<OpenRouterImageModelSummary> = { emptyList() },
+    private val loadSelection: suspend (ProviderProfile) -> ProviderSelection =
+        { ProviderSelection.defaults(it) },
+    private val storeSelection: suspend (ProviderSelection) -> Unit = {},
+    private val deleteSelection: suspend () -> Unit = {},
+    private val loadActiveChatProvider: suspend (String) -> ActiveChatProviderSelection = {
+        ActiveChatProviderSelection(ChatProviderKind.OPENROUTER, it)
+    },
+    private val storeActiveChatProvider: suspend (ActiveChatProviderSelection) -> Unit = {},
+    private val hasCodexCredential: suspend () -> Boolean = { false },
+    private val startCodexAuthorization: suspend () -> CodexDeviceAuthorization = {
+        error("CODEX_OAUTH_NOT_AVAILABLE")
+    },
+    private val awaitCodexCredential: suspend (
+        CodexDeviceAuthorization,
+        (Long) -> Unit,
+    ) -> CodexOAuthCredential = { _, _ -> error("CODEX_OAUTH_NOT_AVAILABLE") },
+    private val storeCodexCredential: suspend (CodexOAuthCredential) -> Unit = {},
+    private val logoutCodex: suspend () -> Unit = {},
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(ProviderSetupUiState())
     val state: StateFlow<ProviderSetupUiState> = mutableState.asStateFlow()
     private var savedCredential: ProviderCredential? = null
     private var lastTestedCredential: ProviderCredential? = null
     private var draftProfileId: String = UUID.randomUUID().toString()
+    private var savedSelection: ProviderSelection? = null
+    private var codexSignInJob: Job? = null
 
     init {
         load()
@@ -45,6 +80,8 @@ class ProviderSetupViewModel internal constructor(
 
     fun dispatch(action: ProviderSetupAction) {
         when (action) {
+            ProviderSetupAction.SelectOpenRouter -> selectChatProvider(ChatProviderKind.OPENROUTER)
+            ProviderSetupAction.SelectCodex -> selectChatProvider(ChatProviderKind.CODEX)
             is ProviderSetupAction.EditModel -> {
                 lastTestedCredential = null
                 mutableState.value = mutableState.value.copy(
@@ -89,7 +126,225 @@ class ProviderSetupViewModel internal constructor(
                 mutableState.value.copy(modelSearch = action.value)
             is ProviderSetupAction.SelectModel -> selectModel(action.modelId)
             ProviderSetupAction.RefreshModels -> loadModelCatalog()
+            ProviderSetupAction.ToggleWebSearch -> if (!mutableState.value.busy) {
+                mutableState.value = mutableState.value.copy(
+                    webSearchEnabled = !mutableState.value.webSearchEnabled,
+                    capabilityChangesNeedSave = true,
+                    notice = null,
+                )
+            }
+            ProviderSetupAction.ToggleImageGeneration -> toggleImageGeneration()
+            ProviderSetupAction.ToggleImageModelCatalog -> {
+                val opening = !mutableState.value.imageModelCatalogVisible
+                mutableState.value = mutableState.value.copy(imageModelCatalogVisible = opening)
+                if (opening && mutableState.value.imageModelCatalogState == ProviderModelCatalogState.IDLE) {
+                    loadImageModelCatalog()
+                }
+            }
+            is ProviderSetupAction.EditImageModelSearch -> mutableState.value =
+                mutableState.value.copy(imageModelSearch = action.value)
+            is ProviderSetupAction.SelectImageModel -> selectImageModel(action.modelId)
+            ProviderSetupAction.RefreshImageModels -> loadImageModelCatalog()
+            ProviderSetupAction.StartCodexSignIn -> startCodexSignIn()
+            ProviderSetupAction.CancelCodexSignIn -> cancelCodexSignIn()
+            ProviderSetupAction.DisconnectCodex -> disconnectCodex()
         }
+    }
+
+    private fun selectChatProvider(kind: ChatProviderKind) {
+        val current = mutableState.value
+        if (current.busy || current.activeChatProvider == kind) return
+        val selection = ActiveChatProviderSelection(
+            kind = kind,
+            modelId = when (kind) {
+                ChatProviderKind.OPENROUTER -> current.savedProfile?.modelId ?: current.modelId
+                ChatProviderKind.CODEX -> current.codexModelId
+            },
+        )
+        mutableState.value = current.copy(operation = ProviderSetupOperation.SAVING)
+        viewModelScope.launch {
+            try {
+                storeActiveChatProvider(selection)
+                val configured = when (kind) {
+                    ChatProviderKind.OPENROUTER -> savedCredential != null
+                    ChatProviderKind.CODEX -> mutableState.value.codexConnected
+                }
+                mutableState.value = mutableState.value.copy(
+                    activeChatProvider = kind,
+                    loadState = if (configured) {
+                        ProviderSetupLoadState.CONFIGURED
+                    } else {
+                        ProviderSetupLoadState.MISSING
+                    },
+                    operation = ProviderSetupOperation.IDLE,
+                    health = when (kind) {
+                        ChatProviderKind.OPENROUTER -> if (savedCredential == null) {
+                            ProviderHealth.MISSING
+                        } else {
+                            ProviderHealth.SAVED
+                        }
+                        ChatProviderKind.CODEX -> if (mutableState.value.codexConnected) {
+                            ProviderHealth.READY
+                        } else {
+                            ProviderHealth.MISSING
+                        }
+                    },
+                    notice = null,
+                    codexNotice = null,
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Throwable) {
+                mutableState.value = mutableState.value.copy(
+                    operation = ProviderSetupOperation.IDLE,
+                    notice = "The active Provider could not be changed safely.",
+                )
+            }
+        }
+    }
+
+    private fun startCodexSignIn() {
+        val current = mutableState.value
+        if (
+            current.activeChatProvider != ChatProviderKind.CODEX ||
+            current.codexConnected ||
+            codexSignInJob?.isActive == true ||
+            current.busy
+        ) return
+        mutableState.value = current.copy(
+            codexSignInState = CodexSignInState.STARTING,
+            codexVerificationUri = null,
+            codexUserCode = null,
+            codexPollSeconds = null,
+            codexNotice = null,
+        )
+        codexSignInJob = viewModelScope.launch {
+            try {
+                val authorization = startCodexAuthorization()
+                mutableState.value = mutableState.value.copy(
+                    codexSignInState = CodexSignInState.WAITING_FOR_USER,
+                    codexVerificationUri = authorization.verificationUri,
+                    codexUserCode = authorization.userCode,
+                    codexPollSeconds = authorization.intervalSeconds,
+                    codexNotice = "Open ChatGPT, enter the code, then return here.",
+                )
+                val credential = awaitCodexCredential(authorization) { sleepMillis ->
+                    mutableState.value = mutableState.value.copy(
+                        codexPollSeconds = (sleepMillis / 1_000L).coerceAtLeast(1L),
+                    )
+                }
+                storeCodexCredential(credential)
+                val selection = ActiveChatProviderSelection(
+                    ChatProviderKind.CODEX,
+                    mutableState.value.codexModelId,
+                )
+                storeActiveChatProvider(selection)
+                mutableState.value = mutableState.value.copy(
+                    loadState = ProviderSetupLoadState.CONFIGURED,
+                    health = ProviderHealth.READY,
+                    codexConnected = true,
+                    codexSignInState = CodexSignInState.CONNECTED,
+                    codexVerificationUri = null,
+                    codexUserCode = null,
+                    codexPollSeconds = null,
+                    codexNotice = "Codex is connected. New tasks can use your ChatGPT account.",
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                mutableState.value = mutableState.value.copy(
+                    codexSignInState = CodexSignInState.ERROR,
+                    codexVerificationUri = null,
+                    codexUserCode = null,
+                    codexPollSeconds = null,
+                    codexNotice = codexSignInErrorMessage(error),
+                )
+            } finally {
+                codexSignInJob = null
+            }
+        }
+    }
+
+    private fun cancelCodexSignIn() {
+        codexSignInJob?.cancel()
+        codexSignInJob = null
+        mutableState.value = mutableState.value.copy(
+            codexSignInState = if (mutableState.value.codexConnected) {
+                CodexSignInState.CONNECTED
+            } else {
+                CodexSignInState.DISCONNECTED
+            },
+            codexVerificationUri = null,
+            codexUserCode = null,
+            codexPollSeconds = null,
+            codexNotice = "Codex sign-in was cancelled.",
+        )
+    }
+
+    private fun disconnectCodex() {
+        val current = mutableState.value
+        if (!current.codexConnected || current.busy) return
+        mutableState.value = current.copy(operation = ProviderSetupOperation.DELETING)
+        viewModelScope.launch {
+            try {
+                logoutCodex()
+                mutableState.value = mutableState.value.copy(
+                    loadState = if (mutableState.value.activeChatProvider == ChatProviderKind.CODEX) {
+                        ProviderSetupLoadState.MISSING
+                    } else {
+                        mutableState.value.loadState
+                    },
+                    operation = ProviderSetupOperation.IDLE,
+                    health = if (mutableState.value.activeChatProvider == ChatProviderKind.CODEX) {
+                        ProviderHealth.MISSING
+                    } else {
+                        mutableState.value.health
+                    },
+                    codexConnected = false,
+                    codexSignInState = CodexSignInState.DISCONNECTED,
+                    codexNotice = "Codex was disconnected from this phone.",
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Throwable) {
+                mutableState.value = mutableState.value.copy(
+                    operation = ProviderSetupOperation.IDLE,
+                    codexNotice = "Codex could not be disconnected safely.",
+                )
+            }
+        }
+    }
+
+    private fun toggleImageGeneration() {
+        val current = mutableState.value
+        if (current.busy) return
+        if (!current.imageGenerationEnabled && current.imageModelId == null) {
+            mutableState.value = current.copy(
+                imageModelCatalogVisible = true,
+                notice = "Choose an image model before enabling image generation.",
+            )
+            if (current.imageModelCatalogState == ProviderModelCatalogState.IDLE) {
+                loadImageModelCatalog()
+            }
+            return
+        }
+        mutableState.value = current.copy(
+            imageGenerationEnabled = !current.imageGenerationEnabled,
+            capabilityChangesNeedSave = true,
+            notice = null,
+        )
+    }
+
+    private fun selectImageModel(modelId: String) {
+        if (mutableState.value.imageModelCatalog.none { it.id == modelId }) return
+        mutableState.value = mutableState.value.copy(
+            imageModelId = modelId,
+            imageGenerationEnabled = true,
+            imageModelCatalogVisible = false,
+            imageModelSearch = "",
+            capabilityChangesNeedSave = true,
+            notice = null,
+        )
     }
 
     private fun selectModel(modelId: String) {
@@ -132,6 +387,39 @@ class ProviderSetupViewModel internal constructor(
         }
     }
 
+    private fun loadImageModelCatalog() {
+        if (mutableState.value.imageModelCatalogState == ProviderModelCatalogState.LOADING) return
+        val key = mutableState.value.apiKeyInput.ifBlank { savedCredential?.apiKey.orEmpty() }
+        if (key.isBlank()) {
+            mutableState.value = mutableState.value.copy(
+                imageModelCatalogState = ProviderModelCatalogState.ERROR,
+                imageModelCatalogError = "Enter or save an OpenRouter API key first.",
+            )
+            return
+        }
+        mutableState.value = mutableState.value.copy(
+            imageModelCatalogState = ProviderModelCatalogState.LOADING,
+            imageModelCatalogError = null,
+        )
+        viewModelScope.launch {
+            try {
+                val models = loadImageModels(key)
+                mutableState.value = mutableState.value.copy(
+                    imageModelCatalogState = ProviderModelCatalogState.READY,
+                    imageModelCatalog = models,
+                    imageModelCatalogError = null,
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Throwable) {
+                mutableState.value = mutableState.value.copy(
+                    imageModelCatalogState = ProviderModelCatalogState.ERROR,
+                    imageModelCatalogError = "Couldn’t load the OpenRouter image model list.",
+                )
+            }
+        }
+    }
+
     private fun load() {
         if (mutableState.value.busy) return
         mutableState.value = mutableState.value.copy(
@@ -142,20 +430,54 @@ class ProviderSetupViewModel internal constructor(
             try {
                 val credential = loadCredential()
                 savedCredential = credential
-                mutableState.value = if (credential == null) {
-                    ProviderSetupUiState(
-                        loadState = ProviderSetupLoadState.MISSING,
-                        health = ProviderHealth.MISSING,
-                    )
-                } else {
-                    ProviderSetupUiState(
-                        loadState = ProviderSetupLoadState.CONFIGURED,
-                        health = ProviderHealth.SAVED,
-                        savedProfile = credential.profile,
-                        modelId = credential.profile.modelId,
-                        hasSavedApiKey = true,
-                    )
+                val selection = credential?.let { loadSelection(it.profile) }
+                if (selection != null) {
+                    savedSelection = selection
                 }
+                val openRouterModelId = credential?.profile?.modelId ?: DEFAULT_OPENROUTER_MODEL
+                val active = loadActiveChatProvider(openRouterModelId)
+                val codexConnected = hasCodexCredential()
+                val configured = when (active.kind) {
+                    ChatProviderKind.OPENROUTER -> credential != null
+                    ChatProviderKind.CODEX -> codexConnected
+                }
+                mutableState.value = ProviderSetupUiState(
+                    loadState = if (configured) {
+                        ProviderSetupLoadState.CONFIGURED
+                    } else {
+                        ProviderSetupLoadState.MISSING
+                    },
+                    health = when (active.kind) {
+                        ChatProviderKind.OPENROUTER -> if (credential == null) {
+                            ProviderHealth.MISSING
+                        } else {
+                            ProviderHealth.SAVED
+                        }
+                        ChatProviderKind.CODEX -> if (codexConnected) {
+                            ProviderHealth.READY
+                        } else {
+                            ProviderHealth.MISSING
+                        }
+                    },
+                    savedProfile = credential?.profile,
+                    modelId = openRouterModelId,
+                    hasSavedApiKey = credential != null,
+                    webSearchEnabled = selection?.webSearchEnabled ?: true,
+                    imageGenerationEnabled = selection?.imageGenerationEnabled ?: false,
+                    imageModelId = selection?.imageModelId,
+                    activeChatProvider = active.kind,
+                    codexModelId = if (active.kind == ChatProviderKind.CODEX) {
+                        active.modelId
+                    } else {
+                        DEFAULT_CODEX_MODEL
+                    },
+                    codexConnected = codexConnected,
+                    codexSignInState = if (codexConnected) {
+                        CodexSignInState.CONNECTED
+                    } else {
+                        CodexSignInState.DISCONNECTED
+                    },
+                )
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Throwable) {
@@ -216,6 +538,21 @@ class ProviderSetupViewModel internal constructor(
         viewModelScope.launch {
             try {
                 storeCredential(candidate)
+                val selection = ProviderSelection.defaults(candidate.profile).copy(
+                    imageModelId = mutableState.value.imageModelId,
+                    webSearchEnabled = mutableState.value.webSearchEnabled,
+                    imageGenerationEnabled = mutableState.value.imageGenerationEnabled,
+                )
+                storeSelection(selection)
+                if (mutableState.value.activeChatProvider == ChatProviderKind.OPENROUTER) {
+                    storeActiveChatProvider(
+                        ActiveChatProviderSelection(
+                            ChatProviderKind.OPENROUTER,
+                            candidate.profile.modelId,
+                        ),
+                    )
+                }
+                savedSelection = selection
                 savedCredential = candidate
                 val remainsVerified = candidate == lastTestedCredential
                 mutableState.value = mutableState.value.copy(
@@ -232,6 +569,7 @@ class ProviderSetupViewModel internal constructor(
                         "OpenRouter saved securely on this phone. Test the connection when you are ready."
                     },
                     testedChangesNeedSave = false,
+                    capabilityChangesNeedSave = false,
                 )
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -287,13 +625,20 @@ class ProviderSetupViewModel internal constructor(
         viewModelScope.launch {
             try {
                 deleteCredential()
+                deleteSelection()
                 savedCredential = null
+                savedSelection = null
                 lastTestedCredential = null
                 draftProfileId = UUID.randomUUID().toString()
                 mutableState.value = ProviderSetupUiState(
                     loadState = ProviderSetupLoadState.MISSING,
                     health = ProviderHealth.MISSING,
                     notice = "OpenRouter was removed from this phone.",
+                    activeChatProvider = mutableState.value.activeChatProvider,
+                    codexModelId = mutableState.value.codexModelId,
+                    codexConnected = mutableState.value.codexConnected,
+                    codexSignInState = mutableState.value.codexSignInState,
+                    codexNotice = mutableState.value.codexNotice,
                 )
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -314,9 +659,15 @@ class ProviderSetupViewModel internal constructor(
 
     class Factory(
         vault: ProviderCredentialVault,
+        selectionStore: ProviderSelectionStore,
+        private val activeChatProviderStore: ActiveChatProviderStore,
+        private val codexGateway: CodexOAuthGateway,
+        private val codexCredentialManager: CodexOAuthCredentialManager,
         private val client: OpenRouterNativeClient,
-        ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+        private val imageGateway: OpenRouterImageGateway,
+        private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     ) : ViewModelProvider.Factory {
+        private val codexCoordinator = CodexDeviceAuthorizationCoordinator(codexGateway)
         private val loadCredential: suspend () -> ProviderCredential? = {
             withContext(ioDispatcher) { vault.load() }
         }
@@ -328,6 +679,15 @@ class ProviderSetupViewModel internal constructor(
                 vault.deleteFile()
                 vault.deleteKey()
             }
+        }
+        private val loadSelection: suspend (ProviderProfile) -> ProviderSelection = { profile ->
+            withContext(ioDispatcher) { selectionStore.load(profile) }
+        }
+        private val storeSelection: suspend (ProviderSelection) -> Unit = { selection ->
+            withContext(ioDispatcher) { selectionStore.store(selection) }
+        }
+        private val deleteSelection: suspend () -> Unit = {
+            withContext(ioDispatcher) { selectionStore.delete() }
         }
         private val testCredential: suspend (ProviderCredential) -> Unit = { credential ->
             client.stream(
@@ -358,9 +718,41 @@ class ProviderSetupViewModel internal constructor(
                 deleteCredential = deleteCredential,
                 testCredential = testCredential,
                 loadModels = client::listModels,
+                loadImageModels = imageGateway::listModels,
+                loadSelection = loadSelection,
+                storeSelection = storeSelection,
+                deleteSelection = deleteSelection,
+                loadActiveChatProvider = { defaultModelId ->
+                    withContext(ioDispatcher) {
+                        activeChatProviderStore.load(defaultModelId)
+                    }
+                },
+                storeActiveChatProvider = { selection ->
+                    withContext(ioDispatcher) { activeChatProviderStore.store(selection) }
+                },
+                hasCodexCredential = {
+                    withContext(ioDispatcher) { codexCredentialManager.current() != null }
+                },
+                startCodexAuthorization = codexGateway::startDeviceAuthorization,
+                awaitCodexCredential = codexCoordinator::awaitCredential,
+                storeCodexCredential = { credential ->
+                    withContext(ioDispatcher) { codexCredentialManager.store(credential) }
+                },
+                logoutCodex = {
+                    withContext(ioDispatcher) { codexCredentialManager.logout() }
+                },
             ) as T
         }
     }
+}
+
+private fun codexSignInErrorMessage(error: Throwable): String = when (error) {
+    is CodexOAuthProtocolException -> when (error.errorType) {
+        "expired" -> "The Codex sign-in code expired. Start again to get a new code."
+        "network", "timeout" -> "Could not reach ChatGPT. Check this phone’s network and try again."
+        else -> error.message ?: "Codex sign-in failed."
+    }
+    else -> "Codex sign-in could not be completed safely."
 }
 
 private fun providerErrorMessage(error: Throwable): String = when (error) {

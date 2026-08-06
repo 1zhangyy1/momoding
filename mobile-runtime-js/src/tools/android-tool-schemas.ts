@@ -5,6 +5,7 @@ type ToolParameters = AgentTool["parameters"];
 export interface AndroidToolSchemas {
   projectCommand: (defaultTimeoutMillis: number) => ToolParameters;
   attachmentRead: ToolParameters;
+  imageGeneration: ToolParameters;
   capabilities: ToolParameters;
   capabilityRequest: ToolParameters;
   filesList: ToolParameters;
@@ -72,6 +73,22 @@ export function createAndroidToolSchemas(): AndroidToolSchemas {
         limit: { type: "integer", minimum: 256, maximum: 65_536, default: 16_384 },
       },
       required: ["attachmentId", "offset", "limit"],
+      additionalProperties: false,
+    } as ToolParameters,
+    imageGeneration: {
+      type: "object",
+      properties: {
+        prompt: { type: "string", minLength: 1, maxLength: 4096 },
+        aspect_ratio: {
+          type: "string",
+          enum: ["1:1", "16:9", "9:16", "4:3", "3:4"],
+        },
+        quality: {
+          type: "string",
+          enum: ["auto", "low", "medium", "high"],
+        },
+      },
+      required: ["prompt"],
       additionalProperties: false,
     } as ToolParameters,
     capabilities: {

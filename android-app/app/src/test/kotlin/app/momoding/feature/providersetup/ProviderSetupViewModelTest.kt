@@ -1,12 +1,19 @@
 package app.momoding.feature.providersetup
 
 import app.momoding.core.provider.OpenRouterFailurePhase
+import app.momoding.core.provider.OpenRouterImageModelSummary
 import app.momoding.core.provider.OpenRouterModelSummary
 import app.momoding.core.provider.OpenRouterRequestException
 import app.momoding.core.provider.ProviderCredential
 import app.momoding.core.provider.ProviderKind
 import app.momoding.core.provider.ProviderProfile
 import app.momoding.core.provider.ProviderProfilePolicy
+import app.momoding.core.provider.ProviderSelection
+import app.momoding.core.provider.ActiveChatProviderSelection
+import app.momoding.core.provider.ChatProviderKind
+import app.momoding.core.provider.CodexDeviceAuthorization
+import app.momoding.core.provider.CodexOAuthCredential
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -102,6 +109,82 @@ class ProviderSetupViewModelTest {
             assertTrue(deleted)
             assertEquals(ProviderSetupLoadState.MISSING, viewModel.state.value.loadState)
             assertFalse(viewModel.state.value.configured)
+        }
+
+    @Test
+    fun `web search setting loads and saves independently from the credential`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val original = credential(MODEL_ID)
+        val storedSelections = mutableListOf<ProviderSelection>()
+        val viewModel = ProviderSetupViewModel(
+            loadCredential = { original },
+            storeCredential = {},
+            deleteCredential = {},
+            testCredential = {},
+            loadSelection = { profile ->
+                ProviderSelection.defaults(profile).copy(webSearchEnabled = false)
+            },
+            storeSelection = { storedSelections += it },
+        )
+        advanceUntilIdle()
+
+        assertFalse(viewModel.state.value.webSearchEnabled)
+        viewModel.dispatch(ProviderSetupAction.ToggleWebSearch)
+        assertTrue(viewModel.state.value.webSearchEnabled)
+        assertTrue(viewModel.state.value.capabilityChangesNeedSave)
+
+        viewModel.dispatch(ProviderSetupAction.Save)
+        advanceUntilIdle()
+        assertTrue(storedSelections.single().webSearchEnabled)
+        assertFalse(viewModel.state.value.capabilityChangesNeedSave)
+    }
+
+    @Test
+    fun `image generation requires an explicit discovered model then saves the capability`() =
+        runTest {
+            Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+            val original = credential(MODEL_ID)
+            val storedSelections = mutableListOf<ProviderSelection>()
+            val loadedKeys = mutableListOf<String>()
+            val viewModel = ProviderSetupViewModel(
+                loadCredential = { original },
+                storeCredential = {},
+                deleteCredential = {},
+                testCredential = {},
+                loadImageModels = { key ->
+                    loadedKeys += key
+                    listOf(
+                        OpenRouterImageModelSummary(
+                            id = "openai/gpt-image-2",
+                            name = "GPT Image 2",
+                            inputModalities = listOf("text", "image"),
+                            outputModalities = listOf("image"),
+                            supportedParameters = emptyMap(),
+                            supportsStreaming = false,
+                        ),
+                    )
+                },
+                storeSelection = { storedSelections += it },
+            )
+            advanceUntilIdle()
+
+            viewModel.dispatch(ProviderSetupAction.ToggleImageGeneration)
+            advanceUntilIdle()
+            assertEquals(listOf(API_KEY), loadedKeys)
+            assertFalse(viewModel.state.value.imageGenerationEnabled)
+            assertTrue(viewModel.state.value.imageModelCatalogVisible)
+            assertEquals(ProviderModelCatalogState.READY, viewModel.state.value.imageModelCatalogState)
+
+            viewModel.dispatch(ProviderSetupAction.SelectImageModel("openai/gpt-image-2"))
+            assertTrue(viewModel.state.value.imageGenerationEnabled)
+            assertEquals("openai/gpt-image-2", viewModel.state.value.imageModelId)
+            assertTrue(viewModel.state.value.capabilityChangesNeedSave)
+
+            viewModel.dispatch(ProviderSetupAction.Save)
+            advanceUntilIdle()
+            assertEquals("openai/gpt-image-2", storedSelections.single().imageModelId)
+            assertTrue(storedSelections.single().imageGenerationEnabled)
+            assertFalse(viewModel.state.value.capabilityChangesNeedSave)
         }
 
     @Test
@@ -213,6 +296,98 @@ class ProviderSetupViewModelTest {
 
         viewModel.dispatch(ProviderSetupAction.EditModel("custom/manual-model"))
         assertEquals("custom/manual-model", viewModel.state.value.modelId)
+    }
+
+    @Test
+    fun `Codex sign-in stores OAuth outside UI state and activates the chat Provider`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val activeSelections = mutableListOf<ActiveChatProviderSelection>()
+        val storedCredentials = mutableListOf<CodexOAuthCredential>()
+        val credential = CodexOAuthCredential(
+            accessToken = "secret-access-token",
+            refreshToken = "secret-refresh-token",
+            expiresAtMillis = 9_999_999L,
+            accountId = "secret-account-id",
+        )
+        val viewModel = ProviderSetupViewModel(
+            loadCredential = { null },
+            storeCredential = {},
+            deleteCredential = {},
+            testCredential = {},
+            loadActiveChatProvider = {
+                ActiveChatProviderSelection(ChatProviderKind.CODEX, DEFAULT_CODEX_MODEL)
+            },
+            storeActiveChatProvider = { activeSelections += it },
+            hasCodexCredential = { false },
+            startCodexAuthorization = {
+                CodexDeviceAuthorization(
+                    deviceAuthId = "device-auth",
+                    userCode = "ABCD-EFGH",
+                    verificationUri = "https://auth.openai.com/codex/device",
+                    intervalSeconds = 5,
+                    expiresAtMillis = 99_999,
+                )
+            },
+            awaitCodexCredential = { _, onPoll ->
+                onPoll(5_000)
+                credential
+            },
+            storeCodexCredential = { storedCredentials += it },
+        )
+        advanceUntilIdle()
+        assertEquals(ChatProviderKind.CODEX, viewModel.state.value.activeChatProvider)
+        assertFalse(viewModel.state.value.configured)
+
+        viewModel.dispatch(ProviderSetupAction.StartCodexSignIn)
+        advanceUntilIdle()
+
+        assertEquals(listOf(credential), storedCredentials)
+        assertEquals(
+            listOf(ActiveChatProviderSelection(ChatProviderKind.CODEX, DEFAULT_CODEX_MODEL)),
+            activeSelections,
+        )
+        assertTrue(viewModel.state.value.configured)
+        assertEquals(CodexSignInState.CONNECTED, viewModel.state.value.codexSignInState)
+        assertFalse(viewModel.state.value.toString().contains("secret-access-token"))
+        assertFalse(viewModel.state.value.toString().contains("secret-account-id"))
+    }
+
+    @Test
+    fun `Codex device code remains visible while polling and cancel stops the flow`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val credential = CompletableDeferred<CodexOAuthCredential>()
+        val viewModel = ProviderSetupViewModel(
+            loadCredential = { null },
+            storeCredential = {},
+            deleteCredential = {},
+            testCredential = {},
+            loadActiveChatProvider = {
+                ActiveChatProviderSelection(ChatProviderKind.CODEX, DEFAULT_CODEX_MODEL)
+            },
+            hasCodexCredential = { false },
+            startCodexAuthorization = {
+                CodexDeviceAuthorization(
+                    deviceAuthId = "device-auth",
+                    userCode = "ABCD-EFGH",
+                    verificationUri = "https://auth.openai.com/codex/device",
+                    intervalSeconds = 5,
+                    expiresAtMillis = 99_999,
+                )
+            },
+            awaitCodexCredential = { _, _ -> credential.await() },
+        )
+        advanceUntilIdle()
+
+        viewModel.dispatch(ProviderSetupAction.StartCodexSignIn)
+        advanceUntilIdle()
+        assertEquals(CodexSignInState.WAITING_FOR_USER, viewModel.state.value.codexSignInState)
+        assertEquals("ABCD-EFGH", viewModel.state.value.codexUserCode)
+
+        viewModel.dispatch(ProviderSetupAction.CancelCodexSignIn)
+        advanceUntilIdle()
+        assertEquals(CodexSignInState.DISCONNECTED, viewModel.state.value.codexSignInState)
+        assertEquals(null, viewModel.state.value.codexUserCode)
+        assertFalse(viewModel.state.value.configured)
     }
 
     private fun credential(modelId: String): ProviderCredential =

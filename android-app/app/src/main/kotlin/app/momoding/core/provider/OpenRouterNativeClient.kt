@@ -13,6 +13,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
@@ -32,9 +33,36 @@ import okhttp3.Response
 data class OpenRouterChatRequest(
     val modelId: String,
     val messages: JsonArray,
-    val tools: JsonArray? = null,
+    val functionTools: JsonArray? = null,
+    val webSearch: OpenRouterWebSearchConfig? = null,
+    val webFetch: OpenRouterWebFetchConfig? = null,
     val maxTokens: Int? = null,
 )
+
+/** Typed, bounded OpenRouter server-tool configuration. It never accepts arbitrary provider JSON. */
+data class OpenRouterWebSearchConfig(
+    val engine: OpenRouterWebSearchEngine = OpenRouterWebSearchEngine.EXA,
+    val maxUses: Int = 3,
+    val maxResults: Int = 5,
+    val maxTotalResults: Int = 15,
+    val maxCharactersPerResult: Int = 2_000,
+    val maxServerToolCalls: Int = 3,
+)
+
+enum class OpenRouterWebSearchEngine(val wireValue: String) {
+    EXA("exa"),
+}
+
+/** OpenRouter executes this server-side; page bytes never cross the Android tool boundary. */
+data class OpenRouterWebFetchConfig(
+    val engine: OpenRouterWebFetchEngine = OpenRouterWebFetchEngine.OPENROUTER,
+    val maxUses: Int = 3,
+    val maxContentTokens: Int = 20_000,
+)
+
+enum class OpenRouterWebFetchEngine(val wireValue: String) {
+    OPENROUTER("openrouter"),
+}
 
 data class OpenRouterStreamResult(
     val generationId: String?,
@@ -47,6 +75,7 @@ data class OpenRouterModelSummary(
     val contextLength: Int?,
     val inputModalities: List<String>,
     val supportedParameters: List<String> = emptyList(),
+    val outputModalities: List<String> = emptyList(),
 )
 
 enum class OpenRouterFailurePhase {
@@ -63,6 +92,12 @@ class OpenRouterRequestException(
     safeMessage: String,
     cause: Throwable? = null,
 ) : IOException(safeMessage, cause) {
+    fun safeTaskMessage(): String = safeOpenRouterFailureMessage(
+        statusCode = statusCode,
+        errorType = errorType,
+        fallback = message,
+    )
+
     override fun toString(): String =
         "OpenRouterRequestException(statusCode=$statusCode, errorType=$errorType, " +
             "retryAfterSeconds=$retryAfterSeconds, phase=$phase, message=$message)"
@@ -199,6 +234,10 @@ class OpenRouterNativeClient internal constructor(
                     ?.mapNotNull { value -> value.jsonPrimitive.contentOrNull }
                     .orEmpty(),
                 supportedParameters = model["supported_parameters"]
+                    ?.let { runCatching { it.jsonArray }.getOrNull() }
+                    ?.mapNotNull { value -> value.jsonPrimitive.contentOrNull }
+                    .orEmpty(),
+                outputModalities = architecture?.get("output_modalities")
                     ?.let { runCatching { it.jsonArray }.getOrNull() }
                     ?.mapNotNull { value -> value.jsonPrimitive.contentOrNull }
                     .orEmpty(),
@@ -395,7 +434,43 @@ class OpenRouterNativeClient internal constructor(
                     put("include_usage", true)
                 },
             )
-            request.tools?.let { put("tools", it) }
+            val combinedTools = buildJsonArray {
+                request.functionTools?.forEach(::add)
+                request.webSearch?.let { config ->
+                    add(
+                        buildJsonObject {
+                            put("type", "openrouter:web_search")
+                            put(
+                                "parameters",
+                                buildJsonObject {
+                                    put("engine", config.engine.wireValue)
+                                    put("max_uses", config.maxUses)
+                                    put("max_results", config.maxResults)
+                                    put("max_total_results", config.maxTotalResults)
+                                    put("max_characters", config.maxCharactersPerResult)
+                                },
+                            )
+                        },
+                    )
+                }
+                request.webFetch?.let { config ->
+                    add(
+                        buildJsonObject {
+                            put("type", "openrouter:web_fetch")
+                            put(
+                                "parameters",
+                                buildJsonObject {
+                                    put("engine", config.engine.wireValue)
+                                    put("max_uses", config.maxUses)
+                                    put("max_content_tokens", config.maxContentTokens)
+                                },
+                            )
+                        },
+                    )
+                }
+            }
+            if (combinedTools.isNotEmpty()) put("tools", combinedTools)
+            request.serverToolCallBudget()?.let { put("max_tool_calls", it) }
             request.maxTokens?.let { put("max_completion_tokens", it) }
         }
 
@@ -412,10 +487,44 @@ class OpenRouterNativeClient internal constructor(
         require(request.messages.toString().toByteArray().size <= MAX_REQUEST_MESSAGES_BYTES) {
             "OpenRouter messages are too large"
         }
-        request.tools?.let {
-            require(it.size <= MAX_TOOLS) { "OpenRouter tool count is invalid" }
+        request.functionTools?.let {
+            val reservedServerTools = listOf(request.webSearch, request.webFetch).count { it != null }
+            require(it.size + reservedServerTools <= MAX_TOOLS) {
+                "OpenRouter tool count is invalid"
+            }
             require(it.toString().toByteArray().size <= MAX_REQUEST_TOOLS_BYTES) {
                 "OpenRouter tools are too large"
+            }
+        }
+        request.webSearch?.let { config ->
+            require(config.maxUses in 1..MAX_WEB_SEARCH_USES) {
+                "OpenRouter web search use count is invalid"
+            }
+            require(config.maxResults in 1..MAX_WEB_SEARCH_RESULTS) {
+                "OpenRouter web search result count is invalid"
+            }
+            require(config.maxTotalResults in config.maxResults..MAX_WEB_SEARCH_TOTAL_RESULTS) {
+                "OpenRouter web search total result count is invalid"
+            }
+            require(config.maxCharactersPerResult in 1..MAX_WEB_SEARCH_CHARACTERS) {
+                "OpenRouter web search character budget is invalid"
+            }
+            require(config.maxServerToolCalls in 1..MAX_SERVER_TOOL_CALLS) {
+                "OpenRouter server tool call budget is invalid"
+            }
+            require(config.maxServerToolCalls >= config.maxUses) {
+                "OpenRouter server tool budget cannot be lower than web search uses"
+            }
+        }
+        request.webFetch?.let { config ->
+            require(config.maxUses in 1..MAX_WEB_FETCH_USES) {
+                "OpenRouter web fetch use count is invalid"
+            }
+            require(config.maxContentTokens in 1..MAX_WEB_FETCH_CONTENT_TOKENS) {
+                "OpenRouter web fetch content budget is invalid"
+            }
+            require(request.serverToolCallBudget()!! >= config.maxUses) {
+                "OpenRouter server tool budget cannot be lower than web fetch uses"
             }
         }
         request.maxTokens?.let {
@@ -454,6 +563,13 @@ class OpenRouterNativeClient internal constructor(
         const val CALL_TIMEOUT_SECONDS = 180L
         const val MAX_MESSAGES = 512
         const val MAX_TOOLS = 128
+        const val MAX_WEB_SEARCH_USES = 3
+        const val MAX_WEB_SEARCH_RESULTS = 25
+        const val MAX_WEB_SEARCH_TOTAL_RESULTS = 50
+        const val MAX_WEB_SEARCH_CHARACTERS = 10_000
+        const val MAX_WEB_FETCH_USES = 3
+        const val MAX_WEB_FETCH_CONTENT_TOKENS = 50_000
+        const val MAX_SERVER_TOOL_CALLS = 5
         const val MAX_COMPLETION_TOKENS = 1_000_000
         const val MAX_REQUEST_MESSAGES_BYTES = 12 * 1024 * 1024
         const val MAX_REQUEST_TOOLS_BYTES = 512 * 1024
@@ -467,6 +583,11 @@ class OpenRouterNativeClient internal constructor(
         const val MAX_RETRY_AFTER_SECONDS = 24L * 60L * 60L
     }
 }
+
+private fun OpenRouterChatRequest.serverToolCallBudget(): Int? = listOfNotNull(
+    webSearch?.maxServerToolCalls,
+    webFetch?.maxUses,
+).maxOrNull()
 
 private fun statusErrorType(statusCode: Int): String = when (statusCode) {
     400 -> "invalid_request"
@@ -492,3 +613,38 @@ private fun safeStatusMessage(statusCode: Int): String = when (statusCode) {
     502, 503 -> "OpenRouter provider is unavailable"
     else -> "OpenRouter request failed"
 }
+
+private fun safeOpenRouterFailureMessage(
+    statusCode: Int?,
+    errorType: String?,
+    fallback: String?,
+): String {
+    statusCode?.let { return safeStatusMessage(it) }
+    val normalizedType = errorType.orEmpty().lowercase()
+    return when {
+        normalizedType.contains("auth") || normalizedType.contains("api_key") ->
+            "OpenRouter API key is invalid"
+        normalizedType.contains("credit") || normalizedType.contains("payment") ->
+            "OpenRouter account has insufficient credits"
+        normalizedType.contains("permission") || normalizedType.contains("policy") ->
+            "OpenRouter request is not permitted"
+        normalizedType.contains("model") && normalizedType.contains("not_found") ->
+            "OpenRouter model was not found"
+        normalizedType.contains("rate") || normalizedType.contains("quota") ->
+            "OpenRouter rate limit reached"
+        normalizedType.contains("timeout") -> "OpenRouter request timed out"
+        normalizedType.contains("network") -> "OpenRouter network request failed"
+        normalizedType.contains("overload") ||
+            normalizedType.contains("unavailable") ||
+            normalizedType == "server" -> "OpenRouter provider is unavailable"
+        normalizedType == "invalid_response" -> "OpenRouter returned an invalid stream"
+        fallback in SAFE_NETWORK_MESSAGES -> requireNotNull(fallback)
+        else -> "OpenRouter request failed"
+    }
+}
+
+private val SAFE_NETWORK_MESSAGES = setOf(
+    "OpenRouter request timed out",
+    "OpenRouter network request failed",
+    "OpenRouter returned an invalid stream",
+)

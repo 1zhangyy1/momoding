@@ -46,6 +46,32 @@ interface PendingProvider {
   toolCalls: Map<number, ToolCallScratch>;
   hasFinishReason: boolean;
   finished: boolean;
+  webRequests: number | null;
+  webSearchRequests: number | null;
+  webFetchRequests: number | null;
+  webSources: Map<string, ProviderWebSource>;
+  webActivityStarted: boolean;
+  webActivityTerminal: boolean;
+  hooks: OpenRouterNativeBridgeHooks;
+}
+
+export interface ProviderWebSource {
+  url: string;
+  title: string;
+  domain: string;
+  startIndex?: number;
+  endIndex?: number;
+}
+
+export interface ProviderWebActivityEvent {
+  type: "provider_web_activity";
+  state: "running" | "completed" | "failed" | "cancelled";
+  requestId: string;
+  searchRequests?: number;
+  fetchRequests?: number;
+  webRequests?: number;
+  sources: ProviderWebSource[];
+  childName?: string;
 }
 
 export interface OpenRouterNativeBridgeState {
@@ -69,6 +95,7 @@ export interface OpenRouterNativeBridgeState {
 export interface OpenRouterNativeBridgeHooks {
   consumeLiveContext: (messages: unknown[]) => void;
   updateTerminal: () => void;
+  recordWebActivityEvent: (event: ProviderWebActivityEvent) => void;
 }
 
 class NativeAssistantMessageEventStream extends EventStream<
@@ -138,6 +165,13 @@ export function createOpenRouterNativeStream(
     toolCalls: new Map(),
     hasFinishReason: false,
     finished: false,
+    webRequests: null,
+    webSearchRequests: null,
+    webFetchRequests: null,
+    webSources: new Map(),
+    webActivityStarted: false,
+    webActivityTerminal: false,
+    hooks,
   };
   if (options?.signal !== undefined) {
     const abortListener = () => {
@@ -219,6 +253,7 @@ export function completeOpenRouterRequest(
     return;
   }
   finishBlocks(pending);
+  emitWebActivityTerminal(pending, "completed");
   pending.finished = true;
   clearProviderAbort(pending);
   state.pendingProviders.delete(requestId);
@@ -302,17 +337,22 @@ function applyOpenRouterChunk(pending: PendingProvider, value: unknown): void {
   }
   if (isRecord(value.usage)) {
     pending.output.usage = parseUsage(value.usage);
+    captureWebToolUsage(pending, value.usage);
   }
   const choice = Array.isArray(value.choices) && isRecord(value.choices[0])
     ? value.choices[0]
     : undefined;
   if (choice === undefined) return;
+  if (isRecord(choice.message)) {
+    captureWebSearchAnnotations(pending, choice.message.annotations);
+  }
   if (typeof choice.finish_reason === "string" && choice.finish_reason.length > 0) {
     pending.output.stopReason = mapFinishReason(choice.finish_reason);
     pending.hasFinishReason = true;
   }
   if (!isRecord(choice.delta)) return;
   const delta = choice.delta;
+  captureWebSearchAnnotations(pending, delta.annotations);
   if (typeof delta.content === "string" && delta.content.length > 0) {
     const block = ensureTextBlock(pending);
     block.text += delta.content;
@@ -430,6 +470,7 @@ function failPendingProvider(
 ): void {
   if (pending.finished) return;
   pending.finished = true;
+  emitWebActivityTerminal(pending, aborted ? "cancelled" : "failed");
   clearProviderAbort(pending);
   state.pendingProviders.delete(pending.request.id);
   if (pending.request.childId === undefined) {
@@ -453,6 +494,170 @@ function failPendingProvider(
   });
   pending.stream.end();
   updateTerminal();
+}
+
+function captureWebToolUsage(
+  pending: PendingProvider,
+  usage: Record<string, unknown>,
+): void {
+  const current = usage.server_tool_use_details;
+  const legacy = usage.server_tool_use;
+  if (current === undefined && legacy === undefined) return;
+  if (current !== undefined && !isRecord(current)) {
+    throw new Error("OpenRouter server tool usage details are invalid");
+  }
+  if (legacy !== undefined && !isRecord(legacy)) {
+    throw new Error("OpenRouter server tool usage is invalid");
+  }
+  pending.webSearchRequests = captureWebRequestCount(
+    current,
+    legacy,
+    "web_search_requests",
+    MAX_WEB_SEARCH_REQUESTS,
+  ) ?? pending.webSearchRequests;
+  pending.webFetchRequests = captureWebRequestCount(
+    current,
+    legacy,
+    "web_fetch_requests",
+    MAX_WEB_FETCH_REQUESTS,
+  ) ?? pending.webFetchRequests;
+  pending.webRequests = captureWebRequestCount(
+    current,
+    legacy,
+    "tool_calls_executed",
+    MAX_WEB_REQUESTS,
+  ) ?? pending.webRequests;
+  if (
+    (pending.webRequests ?? 0) > 0 ||
+    (pending.webSearchRequests ?? 0) > 0 ||
+    (pending.webFetchRequests ?? 0) > 0
+  ) {
+    emitWebActivityRunning(pending);
+  }
+}
+
+function captureWebRequestCount(
+  current: unknown,
+  legacy: unknown,
+  field: "web_search_requests" | "web_fetch_requests" | "tool_calls_executed",
+  maximum: number,
+): number | null {
+  const currentValue = isRecord(current) ? current[field] : undefined;
+  const legacyValue = isRecord(legacy) ? legacy[field] : undefined;
+  if (
+    currentValue !== undefined && legacyValue !== undefined &&
+    nonNegativeInteger(currentValue) !== nonNegativeInteger(legacyValue)
+  ) {
+    throw new Error(`OpenRouter ${field} usage fields disagree`);
+  }
+  const value = currentValue ?? legacyValue;
+  if (value === undefined) return null;
+  const requests = nonNegativeInteger(value);
+  if (requests > maximum) throw new Error(`OpenRouter ${field} usage exceeds request budget`);
+  return requests;
+}
+
+function captureWebSearchAnnotations(
+  pending: PendingProvider,
+  annotations: unknown,
+): void {
+  if (annotations === undefined) return;
+  if (!Array.isArray(annotations)) {
+    throw new Error("OpenRouter annotations are invalid");
+  }
+  for (const annotation of annotations) {
+    if (!isRecord(annotation) || typeof annotation.type !== "string") {
+      throw new Error("OpenRouter annotation is invalid");
+    }
+    if (annotation.type !== "url_citation") continue;
+    if (!isRecord(annotation.url_citation)) {
+      throw new Error("OpenRouter URL citation is invalid");
+    }
+    const citation = annotation.url_citation;
+    const url = typeof citation.url === "string" ? citation.url.trim() : "";
+    const domain = sourceDomain(url);
+    if (url.length === 0 || url.length > MAX_SOURCE_URL_CHARS || domain === null) {
+      throw new Error("OpenRouter URL citation URL is invalid");
+    }
+    if (citation.title !== undefined && typeof citation.title !== "string") {
+      throw new Error("OpenRouter URL citation title is invalid");
+    }
+    if (citation.content !== undefined && typeof citation.content !== "string") {
+      throw new Error("OpenRouter URL citation content is invalid");
+    }
+    const startIndex = optionalNonNegativeInteger(citation.start_index);
+    const endIndex = optionalNonNegativeInteger(citation.end_index);
+    if (startIndex !== undefined && endIndex !== undefined && endIndex < startIndex) {
+      throw new Error("OpenRouter URL citation range is invalid");
+    }
+    if (!pending.webSources.has(url) && pending.webSources.size < MAX_WEB_SOURCES) {
+      const rawTitle = typeof citation.title === "string" ? citation.title.trim() : "";
+      pending.webSources.set(url, {
+        url,
+        title: (rawTitle || domain).slice(0, MAX_SOURCE_TITLE_CHARS),
+        domain,
+        ...(startIndex === undefined ? {} : { startIndex }),
+        ...(endIndex === undefined ? {} : { endIndex }),
+      });
+    }
+  }
+  if (pending.webSources.size > 0) emitWebActivityRunning(pending);
+}
+
+function emitWebActivityRunning(pending: PendingProvider): void {
+  if (pending.webActivityStarted) return;
+  pending.webActivityStarted = true;
+  pending.hooks.recordWebActivityEvent(webActivityEvent(pending, "running"));
+}
+
+function emitWebActivityTerminal(
+  pending: PendingProvider,
+  state: "completed" | "failed" | "cancelled",
+): void {
+  if (pending.webActivityTerminal) return;
+  if (
+    !pending.webActivityStarted &&
+    ((pending.webRequests ?? 0) > 0 ||
+      (pending.webSearchRequests ?? 0) > 0 ||
+      (pending.webFetchRequests ?? 0) > 0 ||
+      pending.webSources.size > 0)
+  ) {
+    emitWebActivityRunning(pending);
+  }
+  if (!pending.webActivityStarted) return;
+  pending.webActivityTerminal = true;
+  pending.hooks.recordWebActivityEvent(webActivityEvent(pending, state));
+}
+
+function webActivityEvent(
+  pending: PendingProvider,
+  state: ProviderWebActivityEvent["state"],
+): ProviderWebActivityEvent {
+  return {
+    type: "provider_web_activity",
+    state,
+    requestId: pending.request.id,
+    ...(pending.webRequests === null
+      ? {}
+      : { webRequests: pending.webRequests }),
+    ...(pending.webSearchRequests === null
+      ? {}
+      : { searchRequests: pending.webSearchRequests }),
+    ...(pending.webFetchRequests === null
+      ? {}
+      : { fetchRequests: pending.webFetchRequests }),
+    sources: [...pending.webSources.values()],
+    ...(pending.request.childName === undefined ? {} : { childName: pending.request.childName }),
+  };
+}
+
+function sourceDomain(url: string): string | null {
+  const match = /^https?:\/\/([^/?#\s]+)(?:[/?#]|$)/i.exec(url);
+  return match === null ? null : match[1].toLowerCase();
+}
+
+function optionalNonNegativeInteger(value: unknown): number | undefined {
+  return value === undefined ? undefined : nonNegativeInteger(value);
 }
 
 function toOpenRouterMessages(context: Context): unknown[] {
@@ -661,3 +866,10 @@ const OPENROUTER_IMAGE_MIME_TYPES = new Set([
   "image/webp",
   "image/gif",
 ]);
+
+const MAX_WEB_SEARCH_REQUESTS = 3;
+const MAX_WEB_FETCH_REQUESTS = 3;
+const MAX_WEB_REQUESTS = 5;
+const MAX_WEB_SOURCES = 15;
+const MAX_SOURCE_URL_CHARS = 2_048;
+const MAX_SOURCE_TITLE_CHARS = 240;

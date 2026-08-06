@@ -1,5 +1,6 @@
 package app.momoding.ui.components
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.Image
@@ -46,10 +47,43 @@ fun MomodingMark(
     presence: MomodingPresence = MomodingPresence.READY,
     contentDescription: String? = null,
 ) {
+    MomodingArtwork(
+        artwork = R.drawable.momoding_portrait,
+        size = size,
+        modifier = modifier,
+        presence = presence,
+        contentDescription = contentDescription,
+    )
+}
+
+@Composable
+fun MomodingConversationAvatar(
+    size: Dp,
+    modifier: Modifier = Modifier,
+    presence: MomodingPresence = MomodingPresence.READY,
+    contentDescription: String? = null,
+) {
+    MomodingArtwork(
+        artwork = R.drawable.momoding_conversation_avatar,
+        size = size,
+        modifier = modifier,
+        presence = presence,
+        contentDescription = contentDescription,
+    )
+}
+
+@Composable
+private fun MomodingArtwork(
+    @DrawableRes artwork: Int,
+    size: Dp,
+    modifier: Modifier,
+    presence: MomodingPresence,
+    contentDescription: String?,
+) {
     val status = LocalMomodingStatusColors.current
     Box(modifier = modifier.size(size)) {
         Image(
-            painter = painterResource(R.drawable.momoding_head),
+            painter = painterResource(artwork),
             contentDescription = contentDescription,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Fit,
@@ -72,19 +106,6 @@ fun MomodingMark(
             )
         }
     }
-}
-
-@Composable
-fun MomodingHeadMark(
-    size: Dp,
-    modifier: Modifier = Modifier,
-    contentDescription: String? = null,
-) {
-    MomodingMark(
-        size = size,
-        modifier = modifier,
-        contentDescription = contentDescription,
-    )
 }
 
 @Composable

@@ -536,7 +536,7 @@ fun MessageGroup(
     } else {
         Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                MomodingMark(size = 20.dp, presence = presence)
+                MomodingConversationAvatar(size = 20.dp, presence = presence)
                 Text("Momoding", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Column(verticalArrangement = Arrangement.spacedBy(10.dp), content = content)

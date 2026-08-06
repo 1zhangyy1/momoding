@@ -4,8 +4,10 @@ import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readReleaseVersion } from "./lib/release-version.mjs";
 
 const repositoryDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const { versionCode, versionName } = readReleaseVersion(repositoryDir);
 const androidHome = process.env.ANDROID_HOME;
 if (!androidHome) fail("ANDROID_HOME must point to the Android SDK");
 
@@ -29,8 +31,12 @@ const run = (command, args) =>
 
 const badging = run(aapt, ["dump", "badging", apk]);
 requireMatch(badging, /^package: name='app\.momoding' /m, "application ID");
-requireMatch(badging, / versionCode='1' /m, "version code");
-requireMatch(badging, / versionName='0\.1\.0-alpha\.1' /m, "version name");
+requireMatch(badging, new RegExp(` versionCode='${versionCode}' `, "m"), "version code");
+requireMatch(
+  badging,
+  new RegExp(` versionName='${escapeRegex(versionName)}' `, "m"),
+  "version name",
+);
 requireMatch(badging, /^sdkVersion:'30'$/m, "minimum SDK");
 requireMatch(badging, /^targetSdkVersion:'37'$/m, "target SDK");
 requireMatch(badging, /^application-label:'Momoding'$/m, "application label");
@@ -148,6 +154,10 @@ function formatComponents(components) {
 
 function requireMatch(value, pattern, label) {
   if (!pattern.test(value)) fail(`release APK ${label} changed`);
+}
+
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 
 function fail(message) {

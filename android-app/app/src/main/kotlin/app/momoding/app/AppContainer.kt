@@ -30,11 +30,19 @@ import app.momoding.core.media.PhoneLocalMediaToolExecutor
 import app.momoding.core.media.PhotoLibraryScopeProvider
 import app.momoding.core.policy.TaskApprovalMode
 import app.momoding.core.provider.OpenRouterNativeClient
+import app.momoding.core.provider.ActiveChatProviderStore
+import app.momoding.core.provider.CodexNativeClient
+import app.momoding.core.provider.CodexOAuthCredentialManager
+import app.momoding.core.provider.CodexOAuthProtocol
+import app.momoding.core.provider.CodexOAuthVault
+import app.momoding.core.provider.OpenRouterImageGenerationGateway
 import app.momoding.core.provider.ProviderCredentialVault
+import app.momoding.core.provider.ProviderSelectionStore
 import app.momoding.core.runtime.local.PhoneLocalPiEventProjector
 import app.momoding.core.runtime.local.PhoneLocalPiOpenRouterRuntime
 import app.momoding.core.runtime.local.PhoneLocalAttentionBridge
 import app.momoding.core.runtime.local.PhoneLocalAttachmentToolExecutor
+import app.momoding.core.runtime.local.PhoneLocalImageGenerationToolExecutor
 import app.momoding.core.runtime.local.PhoneLocalCapabilityRequestToolExecutor
 import app.momoding.core.runtime.local.PhoneLocalLinuxRuntime
 import app.momoding.core.runtime.local.PhoneLocalProjectToolExecutor
@@ -150,7 +158,16 @@ class AppContainer(application: Application) {
     val appearanceStore = AppearanceStore.create(application, applicationScope)
     val diagnosticsExporter = DiagnosticsExporter(application)
     val providerCredentialVault = ProviderCredentialVault.create(application)
+    val providerSelectionStore = ProviderSelectionStore.create(application)
+    val activeChatProviderStore = ActiveChatProviderStore.create(application)
     val openRouterClient = OpenRouterNativeClient()
+    val openRouterImageGateway = OpenRouterImageGenerationGateway()
+    val codexOAuthGateway = CodexOAuthProtocol()
+    val codexCredentialManager = CodexOAuthCredentialManager(
+        vault = CodexOAuthVault.create(application),
+        gateway = codexOAuthGateway,
+    )
+    val codexNativeClient = CodexNativeClient(codexCredentialManager)
     val phoneLocalFileChangeExecutor = DeviceFileChangeExecutor(
         database = database,
         folders = authorizedFoldersRepository,
@@ -169,6 +186,12 @@ class AppContainer(application: Application) {
         phoneLocalFileChangeExecutor,
     )
     val phoneLocalAttachmentToolExecutor = PhoneLocalAttachmentToolExecutor(attachmentRepository)
+    val phoneLocalImageGenerationToolExecutor = PhoneLocalImageGenerationToolExecutor(
+        providerCredentialVault,
+        providerSelectionStore,
+        openRouterImageGateway,
+        attachmentRepository,
+    )
     private val phoneLocalScreenCaptureToolExecutor = PhoneLocalScreenCaptureToolExecutor(
         ScreenCaptureCoordinator(application),
     )
@@ -230,6 +253,7 @@ class AppContainer(application: Application) {
         fileChangeHandler = phoneLocalFileChangeExecutor,
         projectTools = phoneLocalProjectToolExecutor,
         attachmentTools = phoneLocalAttachmentToolExecutor,
+        imageGenerationTools = phoneLocalImageGenerationToolExecutor,
         mediaTools = mediaListToolExecutor,
         mediaMutationTools = mediaMutationToolExecutor,
         calendarTools = PhoneLocalCalendarToolExecutor.create(
@@ -259,6 +283,9 @@ class AppContainer(application: Application) {
     val phoneLocalPiRuntime = PhoneLocalPiOpenRouterRuntime(
         application,
         phoneLocalAttentionBridge,
+        selectionStore = providerSelectionStore,
+        activeChatProviderStore = activeChatProviderStore,
+        codexClient = codexNativeClient,
     ) { events, snapshots ->
         phoneLocalChildAgentRepository.persistRuntimeUpdate(events, snapshots)
     }

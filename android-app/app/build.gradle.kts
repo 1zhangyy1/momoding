@@ -1,6 +1,22 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 val repositoryRoot = rootProject.projectDir.parentFile
+val releaseVersionFile = repositoryRoot.resolve("version.properties")
+require(releaseVersionFile.isFile) { "Missing release version file: $releaseVersionFile" }
+val releaseVersionProperties = Properties().apply {
+    releaseVersionFile.inputStream().use { input -> load(input) }
+}
+val releaseVersionCode = requireNotNull(releaseVersionProperties.getProperty("VERSION_CODE")) {
+    "VERSION_CODE is required in version.properties"
+}.trim().toInt().also { require(it > 0) { "VERSION_CODE must be positive" } }
+val releaseVersionName = requireNotNull(releaseVersionProperties.getProperty("VERSION_NAME")) {
+    "VERSION_NAME is required in version.properties"
+}.trim().also {
+    require(Regex("^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$").matches(it)) {
+        "VERSION_NAME must be a semantic version"
+    }
+}
 val gitMetadataPresent = repositoryRoot.resolve(".git").exists()
 val gitRevision = providers.exec {
     workingDir(repositoryRoot)
@@ -46,8 +62,8 @@ android {
         applicationId = "app.momoding"
         minSdk = 30
         targetSdk = 37
-        versionCode = 1
-        versionName = "0.1.0-alpha.1"
+        versionCode = releaseVersionCode
+        versionName = releaseVersionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         val resolvedSourceRevision = sourceRevision.get()

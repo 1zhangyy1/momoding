@@ -111,9 +111,11 @@ data class PiNativeProviderRequest(
     val id: String,
     val kind: String,
     val modelId: String,
-    val messages: JsonArray,
+    val messages: JsonArray? = null,
     val tools: JsonArray? = null,
     val maxTokens: Int? = null,
+    val sessionId: String? = null,
+    val body: JsonObject? = null,
     val parentTaskId: String? = null,
     val parentToolCallId: String? = null,
     val childId: String? = null,
@@ -534,6 +536,7 @@ class PhoneLocalPiEngine(
         skillResources: List<PhoneLocalSkillResource> = emptyList(),
         images: List<PiRuntimeImageInput> = emptyList(),
         textAttachments: List<PiRuntimeTextAttachmentInput> = emptyList(),
+        imageGenerationEnabled: Boolean = false,
     ): PiNativeOpenRouterScenarioStatus {
         checkReady()
         return decodeNativeOpenRouterStatus(
@@ -543,13 +546,36 @@ class PhoneLocalPiEngine(
                     "${jsString(sessionId)},$planMode," +
                     "${jsString(json.encodeToString(skillResources))}," +
                     "${jsString(json.encodeToString(images))}," +
-                    "${jsString(json.encodeToString(textAttachments))})",
+                    "${jsString(json.encodeToString(textAttachments))}," +
+                    "$imageGenerationEnabled)",
                 "pi-mobile-native-task-start.js",
             ),
         )
     }
 
-    suspend fun startNativeOpenRouterTaskSkillSession(
+    suspend fun startNativeCodexTaskSession(
+        taskId: String,
+        sessionId: String,
+        prompt: String,
+        modelId: String,
+        planMode: Boolean = false,
+        skillResources: List<PhoneLocalSkillResource> = emptyList(),
+        textAttachments: List<PiRuntimeTextAttachmentInput> = emptyList(),
+    ): PiNativeOpenRouterScenarioStatus {
+        checkReady()
+        return decodeNativeOpenRouterStatus(
+            evaluateString(
+                "PiMobileRuntimeBundle.startNativeCodexTaskSessionJson(" +
+                    "${jsString(taskId)},${jsString(prompt)},${jsString(modelId)}," +
+                    "${jsString(sessionId)},$planMode," +
+                    "${jsString(json.encodeToString(skillResources))}," +
+                    "${jsString(json.encodeToString(textAttachments))})",
+                "pi-mobile-native-codex-task-start.js",
+            ),
+        )
+    }
+
+    suspend fun startNativeCodexTaskSkillSession(
         taskId: String,
         sessionId: String,
         skillName: String,
@@ -561,10 +587,33 @@ class PhoneLocalPiEngine(
         val instructions = additionalInstructions?.let(::jsString) ?: "undefined"
         return decodeNativeOpenRouterStatus(
             evaluateString(
-                "PiMobileRuntimeBundle.startNativeOpenRouterTaskSkillSessionJson(" +
+                "PiMobileRuntimeBundle.startNativeCodexTaskSkillSessionJson(" +
                     "${jsString(taskId)},${jsString(skillName)},$instructions," +
                     "${jsString(modelId)},${jsString(sessionId)}," +
                     "${jsString(json.encodeToString(skillResources))})",
+                "pi-mobile-native-codex-task-skill-start.js",
+            ),
+        )
+    }
+
+    suspend fun startNativeOpenRouterTaskSkillSession(
+        taskId: String,
+        sessionId: String,
+        skillName: String,
+        additionalInstructions: String?,
+        modelId: String,
+        skillResources: List<PhoneLocalSkillResource>,
+        imageGenerationEnabled: Boolean = false,
+    ): PiNativeOpenRouterScenarioStatus {
+        checkReady()
+        val instructions = additionalInstructions?.let(::jsString) ?: "undefined"
+        return decodeNativeOpenRouterStatus(
+            evaluateString(
+                "PiMobileRuntimeBundle.startNativeOpenRouterTaskSkillSessionJson(" +
+                    "${jsString(taskId)},${jsString(skillName)},$instructions," +
+                    "${jsString(modelId)},${jsString(sessionId)}," +
+                    "${jsString(json.encodeToString(skillResources))}," +
+                    "$imageGenerationEnabled)",
                 "pi-mobile-native-task-skill-start.js",
             ),
         )
@@ -694,6 +743,7 @@ class PhoneLocalPiEngine(
         modelId: String,
         skillResources: List<PhoneLocalSkillResource> = emptyList(),
         images: List<PiRuntimeImageInput> = emptyList(),
+        imageGenerationEnabled: Boolean = false,
     ): PiNativeOpenRouterScenarioStatus {
         checkReady()
         return decodeNativeOpenRouterStatus(
@@ -702,8 +752,29 @@ class PhoneLocalPiEngine(
                     "${jsString(taskId)},${jsString(sessionId)},$turnCount," +
                     "${jsString(entries.toString())},${jsString(modelId)}," +
                     "${jsString(json.encodeToString(skillResources))}," +
-                    "${jsString(json.encodeToString(images))})",
+                    "${jsString(json.encodeToString(images))}," +
+                    "$imageGenerationEnabled)",
                 "pi-mobile-native-task-restore.js",
+            ),
+        )
+    }
+
+    suspend fun restoreNativeCodexTaskSession(
+        taskId: String,
+        sessionId: String,
+        turnCount: Int,
+        entries: JsonArray,
+        modelId: String,
+        skillResources: List<PhoneLocalSkillResource> = emptyList(),
+    ): PiNativeOpenRouterScenarioStatus {
+        checkReady()
+        return decodeNativeOpenRouterStatus(
+            evaluateString(
+                "PiMobileRuntimeBundle.restoreNativeCodexTaskSessionJson(" +
+                    "${jsString(taskId)},${jsString(sessionId)},$turnCount," +
+                    "${jsString(entries.toString())},${jsString(modelId)}," +
+                    "${jsString(json.encodeToString(skillResources))})",
+                "pi-mobile-native-codex-task-restore.js",
             ),
         )
     }

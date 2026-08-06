@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="64dp"
+    android:height="64dp"
+    android:viewportWidth="64"
+    android:viewportHeight="64">
+
+    <!-- Separate ribbon surfaces keep the face transparent in themed icons. -->
+    <path android:fillColor="#FF000000" android:pathData="M21,16l9,5 -9,6z" />
+    <path android:fillColor="#FF000000" android:pathData="M21,5c2,0 3,1 4,2l9,12 6,-6c2,-2 4,-3 6,-2l-1,9c-1,3 -3,5 -6,6c-3,0 -6,-1 -9,-3l-9,-6z" />
+    <path android:fillColor="#FF000000" android:pathData="M42,12c2,-2 5,-1 8,1c4,2 6,5 6,11l2,19c1,6 -1,11 -5,15l-6,3 -4,-6 6,-4c3,-2 4,-5 3,-9l-2,-18c0,-3 -1,-5 -3,-6z" />
+    <path android:fillColor="#FF000000" android:pathData="M21,5c-3,-1 -6,2 -7,6l-4,30c-1,8 2,13 9,16l5,2 3,-6 -5,-4c-4,-1 -5,-4 -4,-8l3,-23z" />
+    <path android:fillColor="#FF000000" android:pathData="M10,41c-1,8 2,13 9,16l24,6c6,1 11,-2 14,-7l-4,-4c-3,3 -6,4 -10,3l-21,-6c-4,-1 -5,-4 -4,-8z" />
+    <path android:fillColor="#FF000000" android:pathData="M30,30.3c1.1,0 2,1.66 2,3.7s-0.9,3.7 -2,3.7s-2,-1.66 -2,-3.7s0.9,-3.7 2,-3.7z" />
+    <path android:fillColor="#FF000000" android:pathData="M41,31.3c1.1,0 2,1.66 2,3.7s-0.9,3.7 -2,3.7s-2,-1.66 -2,-3.7s0.9,-3.7 2,-3.7z" />
+</vector>

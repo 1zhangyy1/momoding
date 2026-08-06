@@ -19,7 +19,7 @@ user and the device platform in control.
 
 ## Install the Android alpha
 
-Download the signed `momoding-0.1.0-alpha.1.apk` and its SHA-256 checksum from
+Download the signed `momoding-0.1.0-alpha.2.apk` and its SHA-256 checksum from
 [GitHub Releases](https://github.com/1zhangyy1/momoding/releases). Android may ask you to allow your
 browser or file manager to install unknown apps. Momoding never bundles a model credential; enter
 your own OpenRouter API key during setup.

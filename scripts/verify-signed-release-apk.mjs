@@ -5,8 +5,10 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readReleaseVersion } from "./lib/release-version.mjs";
 
 const repositoryDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const { apkName } = readReleaseVersion(repositoryDir);
 const androidHome = process.env.ANDROID_HOME;
 if (!androidHome) fail("ANDROID_HOME must point to the Android SDK");
 
@@ -15,7 +17,7 @@ const apksigner = join(
   buildToolsDir,
   process.platform === "win32" ? "apksigner.bat" : "apksigner",
 );
-const apk = resolve(process.argv[2] ?? join(repositoryDir, "dist", "momoding-0.1.0-alpha.1.apk"));
+const apk = resolve(process.argv[2] ?? join(repositoryDir, "dist", apkName));
 const checksumFile = resolve(process.argv[3] ?? `${apk}.sha256`);
 const certificateFile = join(repositoryDir, "android-app", "release-signing-certificate.sha256");
 

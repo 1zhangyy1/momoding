@@ -23,6 +23,7 @@ for required in \
   CHANGELOG.md \
   RELEASING.md \
   THIRD_PARTY_NOTICES.md \
+  version.properties \
   OPEN_SOURCE_SCOPE.md \
   docs/ARCHITECTURE.md \
   docs/SECURITY_MODEL.md \
@@ -43,6 +44,7 @@ for required in \
   .github/ISSUE_TEMPLATE/feature_request.yml \
   scripts/check-markdown-links.mjs \
   scripts/check-public-sync.sh \
+  scripts/lib/release-version.mjs \
   scripts/export-public-repo.sh \
   scripts/public-export-paths.txt \
   scripts/verify-release-apk.mjs \

@@ -117,6 +117,242 @@ var PiMobileRuntimeBundle = (() => {
   var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
   var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
 
+  // node_modules/partial-json/dist/options.js
+  var require_options = __commonJS({
+    "node_modules/partial-json/dist/options.js"(exports) {
+      "use strict";
+      Object.defineProperty(exports, "__esModule", { value: true });
+      exports.Allow = exports.ALL = exports.COLLECTION = exports.ATOM = exports.SPECIAL = exports.INF = exports._INFINITY = exports.INFINITY = exports.NAN = exports.BOOL = exports.NULL = exports.OBJ = exports.ARR = exports.NUM = exports.STR = void 0;
+      exports.STR = 1;
+      exports.NUM = 2;
+      exports.ARR = 4;
+      exports.OBJ = 8;
+      exports.NULL = 16;
+      exports.BOOL = 32;
+      exports.NAN = 64;
+      exports.INFINITY = 128;
+      exports._INFINITY = 256;
+      exports.INF = exports.INFINITY | exports._INFINITY;
+      exports.SPECIAL = exports.NULL | exports.BOOL | exports.INF | exports.NAN;
+      exports.ATOM = exports.STR | exports.NUM | exports.SPECIAL;
+      exports.COLLECTION = exports.ARR | exports.OBJ;
+      exports.ALL = exports.ATOM | exports.COLLECTION;
+      exports.Allow = { STR: exports.STR, NUM: exports.NUM, ARR: exports.ARR, OBJ: exports.OBJ, NULL: exports.NULL, BOOL: exports.BOOL, NAN: exports.NAN, INFINITY: exports.INFINITY, _INFINITY: exports._INFINITY, INF: exports.INF, SPECIAL: exports.SPECIAL, ATOM: exports.ATOM, COLLECTION: exports.COLLECTION, ALL: exports.ALL };
+      exports.default = exports.Allow;
+    }
+  });
+
+  // node_modules/partial-json/dist/index.js
+  var require_dist = __commonJS({
+    "node_modules/partial-json/dist/index.js"(exports) {
+      "use strict";
+      var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
+        if (k2 === void 0) k2 = k;
+        var desc = Object.getOwnPropertyDescriptor(m, k);
+        if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+          desc = { enumerable: true, get: function() {
+            return m[k];
+          } };
+        }
+        Object.defineProperty(o, k2, desc);
+      }) : (function(o, m, k, k2) {
+        if (k2 === void 0) k2 = k;
+        o[k2] = m[k];
+      }));
+      var __exportStar = exports && exports.__exportStar || function(m, exports2) {
+        for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports2, p)) __createBinding(exports2, m, p);
+      };
+      Object.defineProperty(exports, "__esModule", { value: true });
+      exports.Allow = exports.MalformedJSON = exports.PartialJSON = exports.parseJSON = exports.parse = void 0;
+      var options_1 = require_options();
+      Object.defineProperty(exports, "Allow", { enumerable: true, get: function() {
+        return options_1.Allow;
+      } });
+      __exportStar(require_options(), exports);
+      var PartialJSON = class extends Error {
+      };
+      exports.PartialJSON = PartialJSON;
+      var MalformedJSON = class extends Error {
+      };
+      exports.MalformedJSON = MalformedJSON;
+      function parseJSON(jsonString, allowPartial = options_1.Allow.ALL) {
+        if (typeof jsonString !== "string") {
+          throw new TypeError(`expecting str, got ${typeof jsonString}`);
+        }
+        if (!jsonString.trim()) {
+          throw new Error(`${jsonString} is empty`);
+        }
+        return _parseJSON(jsonString.trim(), allowPartial);
+      }
+      exports.parseJSON = parseJSON;
+      var _parseJSON = (jsonString, allow) => {
+        const length = jsonString.length;
+        let index = 0;
+        const markPartialJSON = (msg) => {
+          throw new PartialJSON(`${msg} at position ${index}`);
+        };
+        const throwMalformedError = (msg) => {
+          throw new MalformedJSON(`${msg} at position ${index}`);
+        };
+        const parseAny = () => {
+          skipBlank();
+          if (index >= length)
+            markPartialJSON("Unexpected end of input");
+          if (jsonString[index] === '"')
+            return parseStr();
+          if (jsonString[index] === "{")
+            return parseObj();
+          if (jsonString[index] === "[")
+            return parseArr();
+          if (jsonString.substring(index, index + 4) === "null" || options_1.Allow.NULL & allow && length - index < 4 && "null".startsWith(jsonString.substring(index))) {
+            index += 4;
+            return null;
+          }
+          if (jsonString.substring(index, index + 4) === "true" || options_1.Allow.BOOL & allow && length - index < 4 && "true".startsWith(jsonString.substring(index))) {
+            index += 4;
+            return true;
+          }
+          if (jsonString.substring(index, index + 5) === "false" || options_1.Allow.BOOL & allow && length - index < 5 && "false".startsWith(jsonString.substring(index))) {
+            index += 5;
+            return false;
+          }
+          if (jsonString.substring(index, index + 8) === "Infinity" || options_1.Allow.INFINITY & allow && length - index < 8 && "Infinity".startsWith(jsonString.substring(index))) {
+            index += 8;
+            return Infinity;
+          }
+          if (jsonString.substring(index, index + 9) === "-Infinity" || options_1.Allow._INFINITY & allow && 1 < length - index && length - index < 9 && "-Infinity".startsWith(jsonString.substring(index))) {
+            index += 9;
+            return -Infinity;
+          }
+          if (jsonString.substring(index, index + 3) === "NaN" || options_1.Allow.NAN & allow && length - index < 3 && "NaN".startsWith(jsonString.substring(index))) {
+            index += 3;
+            return NaN;
+          }
+          return parseNum();
+        };
+        const parseStr = () => {
+          const start = index;
+          let escape2 = false;
+          index++;
+          while (index < length && (jsonString[index] !== '"' || escape2 && jsonString[index - 1] === "\\")) {
+            escape2 = jsonString[index] === "\\" ? !escape2 : false;
+            index++;
+          }
+          if (jsonString.charAt(index) == '"') {
+            try {
+              return JSON.parse(jsonString.substring(start, ++index - Number(escape2)));
+            } catch (e) {
+              throwMalformedError(String(e));
+            }
+          } else if (options_1.Allow.STR & allow) {
+            try {
+              return JSON.parse(jsonString.substring(start, index - Number(escape2)) + '"');
+            } catch (e) {
+              return JSON.parse(jsonString.substring(start, jsonString.lastIndexOf("\\")) + '"');
+            }
+          }
+          markPartialJSON("Unterminated string literal");
+        };
+        const parseObj = () => {
+          index++;
+          skipBlank();
+          const obj = {};
+          try {
+            while (jsonString[index] !== "}") {
+              skipBlank();
+              if (index >= length && options_1.Allow.OBJ & allow)
+                return obj;
+              const key = parseStr();
+              skipBlank();
+              index++;
+              try {
+                const value = parseAny();
+                obj[key] = value;
+              } catch (e) {
+                if (options_1.Allow.OBJ & allow)
+                  return obj;
+                else
+                  throw e;
+              }
+              skipBlank();
+              if (jsonString[index] === ",")
+                index++;
+            }
+          } catch (e) {
+            if (options_1.Allow.OBJ & allow)
+              return obj;
+            else
+              markPartialJSON("Expected '}' at end of object");
+          }
+          index++;
+          return obj;
+        };
+        const parseArr = () => {
+          index++;
+          const arr = [];
+          try {
+            while (jsonString[index] !== "]") {
+              arr.push(parseAny());
+              skipBlank();
+              if (jsonString[index] === ",") {
+                index++;
+              }
+            }
+          } catch (e) {
+            if (options_1.Allow.ARR & allow) {
+              return arr;
+            }
+            markPartialJSON("Expected ']' at end of array");
+          }
+          index++;
+          return arr;
+        };
+        const parseNum = () => {
+          if (index === 0) {
+            if (jsonString === "-")
+              throwMalformedError("Not sure what '-' is");
+            try {
+              return JSON.parse(jsonString);
+            } catch (e) {
+              if (options_1.Allow.NUM & allow)
+                try {
+                  return JSON.parse(jsonString.substring(0, jsonString.lastIndexOf("e")));
+                } catch (e2) {
+                }
+              throwMalformedError(String(e));
+            }
+          }
+          const start = index;
+          if (jsonString[index] === "-")
+            index++;
+          while (jsonString[index] && ",]}".indexOf(jsonString[index]) === -1)
+            index++;
+          if (index == length && !(options_1.Allow.NUM & allow))
+            markPartialJSON("Unterminated number literal");
+          try {
+            return JSON.parse(jsonString.substring(start, index));
+          } catch (e) {
+            if (jsonString.substring(start, index) === "-")
+              markPartialJSON("Not sure what '-' is");
+            try {
+              return JSON.parse(jsonString.substring(start, jsonString.lastIndexOf("e")));
+            } catch (e2) {
+              throwMalformedError(String(e2));
+            }
+          }
+        };
+        const skipBlank = () => {
+          while (index < length && " \n\r	".includes(jsonString[index])) {
+            index++;
+          }
+        };
+        return parseAny();
+      };
+      var parse2 = parseJSON;
+      exports.parse = parse2;
+    }
+  });
+
   // node_modules/ignore/index.js
   var require_ignore = __commonJS({
     "node_modules/ignore/index.js"(exports, module) {
@@ -605,12 +841,16 @@ var PiMobileRuntimeBundle = (() => {
     rejectNativeRequestJson: () => rejectNativeRequestJson,
     resolveNativeProviderToolRequestJson: () => resolveNativeProviderToolRequestJson,
     resolveNativeRequestJson: () => resolveNativeRequestJson,
+    restoreNativeCodexTaskSessionJson: () => restoreNativeCodexTaskSessionJson,
     restoreNativeOpenRouterTaskSessionJson: () => restoreNativeOpenRouterTaskSessionJson,
     scenarioStatusJson: () => scenarioStatusJson,
     setNativeOpenRouterTaskGoalStateJson: () => setNativeOpenRouterTaskGoalStateJson,
     setNativeOpenRouterTaskPlanModeJson: () => setNativeOpenRouterTaskPlanModeJson,
     setNativeOpenRouterTaskResourcesJson: () => setNativeOpenRouterTaskResourcesJson,
     skillDocumentParseStatusJson: () => skillDocumentParseStatusJson,
+    startNativeCodexScenarioJson: () => startNativeCodexScenarioJson,
+    startNativeCodexTaskSessionJson: () => startNativeCodexTaskSessionJson,
+    startNativeCodexTaskSkillSessionJson: () => startNativeCodexTaskSkillSessionJson,
     startNativeOpenRouterPromptJson: () => startNativeOpenRouterPromptJson,
     startNativeOpenRouterScenarioJson: () => startNativeOpenRouterScenarioJson,
     startNativeOpenRouterTaskGoalJson: () => startNativeOpenRouterTaskGoalJson,
@@ -783,6 +1023,25 @@ var PiMobileRuntimeBundle = (() => {
       stream: (model, context, options) => dispatch(model, (streams) => streams.stream(model, context, options)),
       streamSimple: (model, context, options) => dispatch(model, (streams) => streams.streamSimple(model, context, options))
     };
+  }
+  function calculateCost(model, usage) {
+    const inputTokens = usage.input + usage.cacheRead + usage.cacheWrite;
+    let rates = model.cost;
+    let matchedThreshold = -1;
+    for (const tier of model.cost.tiers ?? []) {
+      if (inputTokens > tier.inputTokensAbove && tier.inputTokensAbove > matchedThreshold) {
+        rates = tier;
+        matchedThreshold = tier.inputTokensAbove;
+      }
+    }
+    const longWrite = usage.cacheWrite1h ?? 0;
+    const shortWrite = usage.cacheWrite - longWrite;
+    usage.cost.input = rates.input / 1e6 * usage.input;
+    usage.cost.output = rates.output / 1e6 * usage.output;
+    usage.cost.cacheRead = rates.cacheRead / 1e6 * usage.cacheRead;
+    usage.cost.cacheWrite = (rates.cacheWrite * shortWrite + rates.input * 2 * longWrite) / 1e6;
+    usage.cost.total = usage.cost.input + usage.cost.output + usage.cost.cacheRead + usage.cost.cacheWrite;
+    return usage.cost;
   }
 
   // node_modules/@earendil-works/pi-ai/dist/providers/faux.js
@@ -1156,6 +1415,104 @@ var PiMobileRuntimeBundle = (() => {
       appendResponses: core.appendResponses,
       getPendingResponseCount: core.getPendingResponseCount
     };
+  }
+
+  // node_modules/@earendil-works/pi-ai/dist/utils/json-parse.js
+  var import_partial_json = __toESM(require_dist(), 1);
+  var VALID_JSON_ESCAPES = /* @__PURE__ */ new Set(['"', "\\", "/", "b", "f", "n", "r", "t", "u"]);
+  function isControlCharacter(char) {
+    const codePoint = char.codePointAt(0);
+    return codePoint !== void 0 && codePoint >= 0 && codePoint <= 31;
+  }
+  function escapeControlCharacter(char) {
+    switch (char) {
+      case "\b":
+        return "\\b";
+      case "\f":
+        return "\\f";
+      case "\n":
+        return "\\n";
+      case "\r":
+        return "\\r";
+      case "	":
+        return "\\t";
+      default:
+        return `\\u${char.codePointAt(0)?.toString(16).padStart(4, "0") ?? "0000"}`;
+    }
+  }
+  function repairJson(json) {
+    let repaired = "";
+    let inString = false;
+    for (let index = 0; index < json.length; index++) {
+      const char = json[index];
+      if (!inString) {
+        repaired += char;
+        if (char === '"') {
+          inString = true;
+        }
+        continue;
+      }
+      if (char === '"') {
+        repaired += char;
+        inString = false;
+        continue;
+      }
+      if (char === "\\") {
+        const nextChar = json[index + 1];
+        if (nextChar === void 0) {
+          repaired += "\\\\";
+          continue;
+        }
+        if (nextChar === "u") {
+          const unicodeDigits = json.slice(index + 2, index + 6);
+          if (/^[0-9a-fA-F]{4}$/.test(unicodeDigits)) {
+            repaired += `\\u${unicodeDigits}`;
+            index += 5;
+            continue;
+          }
+        }
+        if (VALID_JSON_ESCAPES.has(nextChar)) {
+          repaired += `\\${nextChar}`;
+          index += 1;
+          continue;
+        }
+        repaired += "\\\\";
+        continue;
+      }
+      repaired += isControlCharacter(char) ? escapeControlCharacter(char) : char;
+    }
+    return repaired;
+  }
+  function parseJsonWithRepair(json) {
+    try {
+      return JSON.parse(json);
+    } catch (error) {
+      const repairedJson = repairJson(json);
+      if (repairedJson !== json) {
+        return JSON.parse(repairedJson);
+      }
+      throw error;
+    }
+  }
+  function parseStreamingJson(partialJson) {
+    if (!partialJson || partialJson.trim() === "") {
+      return {};
+    }
+    try {
+      return parseJsonWithRepair(partialJson);
+    } catch {
+      try {
+        const result = (0, import_partial_json.parse)(partialJson);
+        return result ?? {};
+      } catch {
+        try {
+          const result = (0, import_partial_json.parse)(repairJson(partialJson));
+          return result ?? {};
+        } catch {
+          return {};
+        }
+      }
+    }
   }
 
   // src/pi-ai-compat.ts
@@ -11067,6 +11424,877 @@ ${additionalInstructions}` : skillBlock;
     return typeof value === "object" && value !== null && !Array.isArray(value);
   }
 
+  // node_modules/@earendil-works/pi-ai/dist/utils/hash.js
+  function shortHash(str) {
+    let h1 = 3735928559;
+    let h2 = 1103547991;
+    for (let i = 0; i < str.length; i++) {
+      const ch = str.charCodeAt(i);
+      h1 = Math.imul(h1 ^ ch, 2654435761);
+      h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ h1 >>> 16, 2246822507) ^ Math.imul(h2 ^ h2 >>> 13, 3266489909);
+    h2 = Math.imul(h2 ^ h2 >>> 16, 2246822507) ^ Math.imul(h1 ^ h1 >>> 13, 3266489909);
+    return (h2 >>> 0).toString(36) + (h1 >>> 0).toString(36);
+  }
+
+  // node_modules/@earendil-works/pi-ai/dist/utils/sanitize-unicode.js
+  function sanitizeSurrogates(text) {
+    return text.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "");
+  }
+
+  // node_modules/@earendil-works/pi-ai/dist/api/transform-messages.js
+  var NON_VISION_USER_IMAGE_PLACEHOLDER = "(image omitted: model does not support images)";
+  var NON_VISION_TOOL_IMAGE_PLACEHOLDER = "(tool image omitted: model does not support images)";
+  function replaceImagesWithPlaceholder(content, placeholder) {
+    const result = [];
+    let previousWasPlaceholder = false;
+    for (const block of content) {
+      if (block.type === "image") {
+        if (!previousWasPlaceholder) {
+          result.push({ type: "text", text: placeholder });
+        }
+        previousWasPlaceholder = true;
+        continue;
+      }
+      result.push(block);
+      previousWasPlaceholder = block.text === placeholder;
+    }
+    return result;
+  }
+  function downgradeUnsupportedImages(messages, model) {
+    if (model.input.includes("image")) {
+      return messages;
+    }
+    return messages.map((msg) => {
+      if (msg.role === "user" && Array.isArray(msg.content)) {
+        return {
+          ...msg,
+          content: replaceImagesWithPlaceholder(msg.content, NON_VISION_USER_IMAGE_PLACEHOLDER)
+        };
+      }
+      if (msg.role === "toolResult") {
+        return {
+          ...msg,
+          content: replaceImagesWithPlaceholder(msg.content, NON_VISION_TOOL_IMAGE_PLACEHOLDER)
+        };
+      }
+      return msg;
+    });
+  }
+  function transformMessages(messages, model, normalizeToolCallId) {
+    const toolCallIdMap = /* @__PURE__ */ new Map();
+    const normalizedMessages = messages.map((msg) => msg.content == null ? { ...msg, content: [] } : msg);
+    const imageAwareMessages = downgradeUnsupportedImages(normalizedMessages, model);
+    const transformed = imageAwareMessages.map((msg) => {
+      if (msg.role === "user") {
+        return msg;
+      }
+      if (msg.role === "toolResult") {
+        const normalizedId = toolCallIdMap.get(msg.toolCallId);
+        if (normalizedId && normalizedId !== msg.toolCallId) {
+          return { ...msg, toolCallId: normalizedId };
+        }
+        return msg;
+      }
+      if (msg.role === "assistant") {
+        const assistantMsg = msg;
+        const isSameModel = assistantMsg.provider === model.provider && assistantMsg.api === model.api && assistantMsg.model === model.id;
+        const transformedContent = assistantMsg.content.flatMap((block) => {
+          if (block.type === "thinking") {
+            if (block.redacted) {
+              return isSameModel ? block : [];
+            }
+            if (isSameModel && block.thinkingSignature)
+              return block;
+            if (!block.thinking || block.thinking.trim() === "")
+              return [];
+            if (isSameModel)
+              return block;
+            return {
+              type: "text",
+              text: block.thinking
+            };
+          }
+          if (block.type === "text") {
+            if (isSameModel)
+              return block;
+            return {
+              type: "text",
+              text: block.text
+            };
+          }
+          if (block.type === "toolCall") {
+            const toolCall = block;
+            let normalizedToolCall = toolCall;
+            if (!isSameModel && toolCall.thoughtSignature) {
+              normalizedToolCall = { ...toolCall };
+              delete normalizedToolCall.thoughtSignature;
+            }
+            if (!isSameModel && normalizeToolCallId) {
+              const normalizedId = normalizeToolCallId(toolCall.id, model, assistantMsg);
+              if (normalizedId !== toolCall.id) {
+                toolCallIdMap.set(toolCall.id, normalizedId);
+                normalizedToolCall = { ...normalizedToolCall, id: normalizedId };
+              }
+            }
+            return normalizedToolCall;
+          }
+          return block;
+        });
+        return {
+          ...assistantMsg,
+          content: transformedContent
+        };
+      }
+      return msg;
+    });
+    const result = [];
+    let pendingToolCalls = [];
+    let existingToolResultIds = /* @__PURE__ */ new Set();
+    const insertSyntheticToolResults = () => {
+      if (pendingToolCalls.length > 0) {
+        for (const tc of pendingToolCalls) {
+          if (!existingToolResultIds.has(tc.id)) {
+            result.push({
+              role: "toolResult",
+              toolCallId: tc.id,
+              toolName: tc.name,
+              content: [{ type: "text", text: "No result provided" }],
+              isError: true,
+              timestamp: Date.now()
+            });
+          }
+        }
+        pendingToolCalls = [];
+        existingToolResultIds = /* @__PURE__ */ new Set();
+      }
+    };
+    for (let i = 0; i < transformed.length; i++) {
+      const msg = transformed[i];
+      if (msg.role === "assistant") {
+        insertSyntheticToolResults();
+        const assistantMsg = msg;
+        if (assistantMsg.stopReason === "error" || assistantMsg.stopReason === "aborted") {
+          continue;
+        }
+        const toolCalls = assistantMsg.content.filter((b) => b.type === "toolCall");
+        if (toolCalls.length > 0) {
+          pendingToolCalls = toolCalls;
+          existingToolResultIds = /* @__PURE__ */ new Set();
+        }
+        result.push(msg);
+      } else if (msg.role === "toolResult") {
+        existingToolResultIds.add(msg.toolCallId);
+        result.push(msg);
+      } else if (msg.role === "user") {
+        insertSyntheticToolResults();
+        result.push(msg);
+      } else {
+        result.push(msg);
+      }
+    }
+    insertSyntheticToolResults();
+    return result;
+  }
+
+  // node_modules/@earendil-works/pi-ai/dist/api/openai-responses-shared.js
+  function encodeTextSignatureV1(id, phase) {
+    const payload = { v: 1, id };
+    if (phase)
+      payload.phase = phase;
+    return JSON.stringify(payload);
+  }
+  function parseTextSignature(signature) {
+    if (!signature)
+      return void 0;
+    if (signature.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(signature);
+        if (parsed.v === 1 && typeof parsed.id === "string") {
+          if (parsed.phase === "commentary" || parsed.phase === "final_answer") {
+            return { id: parsed.id, phase: parsed.phase };
+          }
+          return { id: parsed.id };
+        }
+      } catch {
+      }
+    }
+    return { id: signature };
+  }
+  function convertResponsesMessages(model, context, allowedToolCallProviders, options) {
+    const messages = [];
+    const normalizeIdPart = (part) => {
+      const sanitized = part.replace(/[^a-zA-Z0-9_-]/g, "_");
+      const normalized = sanitized.length > 64 ? sanitized.slice(0, 64) : sanitized;
+      return normalized.replace(/_+$/, "");
+    };
+    const buildForeignResponsesItemId = (itemId) => {
+      const normalized = `fc_${shortHash(itemId)}`;
+      return normalized.length > 64 ? normalized.slice(0, 64) : normalized;
+    };
+    const normalizeToolCallId = (id, _targetModel, source) => {
+      if (!allowedToolCallProviders.has(model.provider))
+        return normalizeIdPart(id);
+      if (!id.includes("|"))
+        return normalizeIdPart(id);
+      const [callId, itemId] = id.split("|");
+      const normalizedCallId = normalizeIdPart(callId);
+      const isForeignToolCall = source.provider !== model.provider || source.api !== model.api;
+      let normalizedItemId = isForeignToolCall ? buildForeignResponsesItemId(itemId) : normalizeIdPart(itemId);
+      if (!normalizedItemId.startsWith("fc_")) {
+        normalizedItemId = normalizeIdPart(`fc_${normalizedItemId}`);
+      }
+      return `${normalizedCallId}|${normalizedItemId}`;
+    };
+    const transformedMessages = transformMessages(context.messages, model, normalizeToolCallId);
+    const includeSystemPrompt = options?.includeSystemPrompt ?? true;
+    if (includeSystemPrompt && context.systemPrompt) {
+      const compat = model.compat;
+      const role = model.reasoning && compat?.supportsDeveloperRole !== false ? "developer" : "system";
+      messages.push({
+        role,
+        content: sanitizeSurrogates(context.systemPrompt)
+      });
+    }
+    let msgIndex = 0;
+    for (const msg of transformedMessages) {
+      if (msg.role === "user") {
+        if (typeof msg.content === "string") {
+          messages.push({
+            role: "user",
+            content: [{ type: "input_text", text: sanitizeSurrogates(msg.content) }]
+          });
+        } else {
+          const content = msg.content.map((item) => {
+            if (item.type === "text") {
+              return {
+                type: "input_text",
+                text: sanitizeSurrogates(item.text)
+              };
+            }
+            return {
+              type: "input_image",
+              detail: "auto",
+              image_url: `data:${item.mimeType};base64,${item.data}`
+            };
+          });
+          if (content.length === 0)
+            continue;
+          messages.push({
+            role: "user",
+            content
+          });
+        }
+      } else if (msg.role === "assistant") {
+        const output = [];
+        const assistantMsg = msg;
+        const isDifferentModel = assistantMsg.model !== model.id && assistantMsg.provider === model.provider && assistantMsg.api === model.api;
+        let textBlockIndex = 0;
+        for (const block of msg.content) {
+          if (block.type === "thinking") {
+            if (block.thinkingSignature) {
+              const reasoningItem = JSON.parse(block.thinkingSignature);
+              output.push(reasoningItem);
+            }
+          } else if (block.type === "text") {
+            const textBlock = block;
+            const parsedSignature = parseTextSignature(textBlock.textSignature);
+            const fallbackMessageId = textBlockIndex === 0 ? `msg_pi_${msgIndex}` : `msg_pi_${msgIndex}_${textBlockIndex}`;
+            textBlockIndex++;
+            let msgId = parsedSignature?.id;
+            if (!msgId) {
+              msgId = fallbackMessageId;
+            } else if (msgId.length > 64) {
+              msgId = `msg_${shortHash(msgId)}`;
+            }
+            output.push({
+              type: "message",
+              role: "assistant",
+              content: [{ type: "output_text", text: sanitizeSurrogates(textBlock.text), annotations: [] }],
+              status: "completed",
+              id: msgId,
+              phase: parsedSignature?.phase
+            });
+          } else if (block.type === "toolCall") {
+            const toolCall = block;
+            const [callId, itemIdRaw] = toolCall.id.split("|");
+            let itemId = itemIdRaw;
+            if (isDifferentModel && itemId?.startsWith("fc_")) {
+              itemId = void 0;
+            }
+            output.push({
+              type: "function_call",
+              id: itemId,
+              call_id: callId,
+              name: toolCall.name,
+              arguments: JSON.stringify(toolCall.arguments)
+            });
+          }
+        }
+        if (output.length === 0)
+          continue;
+        messages.push(...output);
+      } else if (msg.role === "toolResult") {
+        const textResult = msg.content.filter((c) => c.type === "text").map((c) => c.text).join("\n");
+        const hasImages = msg.content.some((c) => c.type === "image");
+        const hasText = textResult.length > 0;
+        const [callId] = msg.toolCallId.split("|");
+        let output;
+        if (hasImages && model.input.includes("image")) {
+          const contentParts = [];
+          if (hasText) {
+            contentParts.push({
+              type: "input_text",
+              text: sanitizeSurrogates(textResult)
+            });
+          }
+          for (const block of msg.content) {
+            if (block.type === "image") {
+              contentParts.push({
+                type: "input_image",
+                detail: "auto",
+                image_url: `data:${block.mimeType};base64,${block.data}`
+              });
+            }
+          }
+          output = contentParts;
+        } else {
+          output = sanitizeSurrogates(hasText ? textResult : hasImages ? "(see attached image)" : "(no tool output)");
+        }
+        messages.push({
+          type: "function_call_output",
+          call_id: callId,
+          output
+        });
+      }
+      msgIndex++;
+    }
+    return messages;
+  }
+  function convertResponsesTools(tools, options) {
+    const strict = options?.strict === void 0 ? false : options.strict;
+    return tools.map((tool) => ({
+      type: "function",
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.parameters,
+      // TypeBox already generates JSON Schema
+      strict
+    }));
+  }
+  async function processResponsesStream(openaiStream, output, stream, model, options) {
+    let sawTerminalResponseEvent = false;
+    const outputSlots = /* @__PURE__ */ new Map();
+    const getSlot = (outputIndex, type) => {
+      const slot = outputSlots.get(outputIndex);
+      return slot?.type === type ? slot : void 0;
+    };
+    const createSlot = (outputIndex, item) => {
+      if (item.type === "reasoning") {
+        const block = { type: "thinking", thinking: "" };
+        output.content.push(block);
+        const slot = {
+          type: "thinking",
+          block,
+          contentIndex: output.content.length - 1
+        };
+        outputSlots.set(outputIndex, slot);
+        stream.push({ type: "thinking_start", contentIndex: slot.contentIndex, partial: output });
+        return slot;
+      }
+      if (item.type === "message") {
+        const block = { type: "text", text: "" };
+        output.content.push(block);
+        const slot = { type: "text", block, contentIndex: output.content.length - 1 };
+        outputSlots.set(outputIndex, slot);
+        stream.push({ type: "text_start", contentIndex: slot.contentIndex, partial: output });
+        return slot;
+      }
+      if (item.type === "function_call") {
+        const block = {
+          type: "toolCall",
+          id: `${item.call_id}|${item.id}`,
+          name: item.name,
+          arguments: {},
+          partialJson: item.arguments || ""
+        };
+        output.content.push(block);
+        const slot = {
+          type: "toolCall",
+          block,
+          contentIndex: output.content.length - 1
+        };
+        outputSlots.set(outputIndex, slot);
+        stream.push({ type: "toolcall_start", contentIndex: slot.contentIndex, partial: output });
+        return slot;
+      }
+      return void 0;
+    };
+    const getOrCreateSlot = (outputIndex, item) => {
+      return outputSlots.get(outputIndex) ?? createSlot(outputIndex, item);
+    };
+    const finalizeResponse = (response) => {
+      sawTerminalResponseEvent = true;
+      if (response?.id) {
+        output.responseId = response.id;
+      }
+      if (response?.usage) {
+        const inputDetails = response.usage.input_tokens_details;
+        const cachedTokens = inputDetails?.cached_tokens || 0;
+        const cacheWriteTokens = inputDetails?.cache_write_tokens || 0;
+        output.usage = {
+          // OpenAI includes cached and cache-write tokens in input_tokens, so subtract both.
+          input: Math.max(0, (response.usage.input_tokens || 0) - cachedTokens - cacheWriteTokens),
+          output: response.usage.output_tokens || 0,
+          cacheRead: cachedTokens,
+          cacheWrite: cacheWriteTokens,
+          reasoning: response.usage.output_tokens_details?.reasoning_tokens || 0,
+          totalTokens: response.usage.total_tokens || 0,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }
+        };
+      }
+      calculateCost(model, output.usage);
+      if (options?.applyServiceTierPricing) {
+        const serviceTier = options.resolveServiceTier ? options.resolveServiceTier(response?.service_tier, options.serviceTier) : response?.service_tier ?? options.serviceTier;
+        options.applyServiceTierPricing(output.usage, serviceTier);
+      }
+      output.stopReason = mapStopReason(response?.status);
+      if (output.content.some((b) => b.type === "toolCall") && output.stopReason === "stop") {
+        output.stopReason = "toolUse";
+      }
+    };
+    for await (const event of openaiStream) {
+      if (event.type === "response.created") {
+        output.responseId = event.response.id;
+      } else if (event.type === "response.output_item.added") {
+        createSlot(event.output_index, event.item);
+      } else if (event.type === "response.reasoning_summary_text.delta") {
+        const slot = getSlot(event.output_index, "thinking");
+        if (!slot)
+          continue;
+        slot.block.thinking += event.delta;
+        stream.push({
+          type: "thinking_delta",
+          contentIndex: slot.contentIndex,
+          delta: event.delta,
+          partial: output
+        });
+      } else if (event.type === "response.reasoning_summary_part.done") {
+        const slot = getSlot(event.output_index, "thinking");
+        if (!slot)
+          continue;
+        slot.block.thinking += "\n\n";
+        stream.push({
+          type: "thinking_delta",
+          contentIndex: slot.contentIndex,
+          delta: "\n\n",
+          partial: output
+        });
+      } else if (event.type === "response.reasoning_text.delta") {
+        const slot = getSlot(event.output_index, "thinking");
+        if (!slot)
+          continue;
+        slot.block.thinking += event.delta;
+        stream.push({
+          type: "thinking_delta",
+          contentIndex: slot.contentIndex,
+          delta: event.delta,
+          partial: output
+        });
+      } else if (event.type === "response.output_text.delta") {
+        const slot = getSlot(event.output_index, "text");
+        if (!slot)
+          continue;
+        slot.block.text += event.delta;
+        stream.push({
+          type: "text_delta",
+          contentIndex: slot.contentIndex,
+          delta: event.delta,
+          partial: output
+        });
+      } else if (event.type === "response.refusal.delta") {
+        const slot = getSlot(event.output_index, "text");
+        if (!slot)
+          continue;
+        slot.block.text += event.delta;
+        stream.push({
+          type: "text_delta",
+          contentIndex: slot.contentIndex,
+          delta: event.delta,
+          partial: output
+        });
+      } else if (event.type === "response.function_call_arguments.delta") {
+        const slot = getSlot(event.output_index, "toolCall");
+        if (!slot)
+          continue;
+        slot.block.partialJson += event.delta;
+        slot.block.arguments = parseStreamingJson(slot.block.partialJson);
+        stream.push({
+          type: "toolcall_delta",
+          contentIndex: slot.contentIndex,
+          delta: event.delta,
+          partial: output
+        });
+      } else if (event.type === "response.function_call_arguments.done") {
+        const slot = getSlot(event.output_index, "toolCall");
+        if (!slot)
+          continue;
+        const previousPartialJson = slot.block.partialJson;
+        slot.block.partialJson = event.arguments;
+        slot.block.arguments = parseStreamingJson(slot.block.partialJson);
+        if (event.arguments.startsWith(previousPartialJson)) {
+          const delta = event.arguments.slice(previousPartialJson.length);
+          if (delta.length > 0) {
+            stream.push({
+              type: "toolcall_delta",
+              contentIndex: slot.contentIndex,
+              delta,
+              partial: output
+            });
+          }
+        }
+      } else if (event.type === "response.output_item.done") {
+        const item = event.item;
+        const slot = getOrCreateSlot(event.output_index, item);
+        if (item.type === "reasoning" && slot?.type === "thinking") {
+          const summaryText = item.summary?.map((s) => s.text).join("\n\n") || "";
+          const contentText = item.content?.map((c) => c.text).join("\n\n") || "";
+          slot.block.thinking = summaryText || contentText || slot.block.thinking;
+          slot.block.thinkingSignature = JSON.stringify(item);
+          stream.push({
+            type: "thinking_end",
+            contentIndex: slot.contentIndex,
+            content: slot.block.thinking,
+            partial: output
+          });
+          outputSlots.delete(event.output_index);
+        } else if (item.type === "message" && slot?.type === "text") {
+          slot.block.text = item.content?.map((c) => c.type === "output_text" ? c.text : c.refusal).join("") || "";
+          slot.block.textSignature = encodeTextSignatureV1(item.id, item.phase ?? void 0);
+          stream.push({
+            type: "text_end",
+            contentIndex: slot.contentIndex,
+            content: slot.block.text,
+            partial: output
+          });
+          outputSlots.delete(event.output_index);
+        } else if (item.type === "function_call" && slot?.type === "toolCall") {
+          slot.block.arguments = parseStreamingJson(item.arguments || slot.block.partialJson || "{}");
+          delete slot.block.partialJson;
+          stream.push({
+            type: "toolcall_end",
+            contentIndex: slot.contentIndex,
+            toolCall: slot.block,
+            partial: output
+          });
+          outputSlots.delete(event.output_index);
+        }
+      } else if (event.type === "response.completed" || event.type === "response.incomplete") {
+        finalizeResponse(event.response);
+      } else if (event.type === "error") {
+        throw new Error(`Error Code ${event.code}: ${event.message}` || "Unknown error");
+      } else if (event.type === "response.failed") {
+        sawTerminalResponseEvent = true;
+        const error = event.response?.error;
+        const details = event.response?.incomplete_details;
+        const msg = error ? `${error.code || "unknown"}: ${error.message || "no message"}` : details?.reason ? `incomplete: ${details.reason}` : "Unknown error (no error details in response)";
+        throw new Error(msg);
+      }
+    }
+    if (!sawTerminalResponseEvent) {
+      throw new Error("OpenAI Responses stream ended before a terminal response event");
+    }
+  }
+  function mapStopReason(status) {
+    if (!status)
+      return "stop";
+    switch (status) {
+      case "completed":
+        return "stop";
+      case "incomplete":
+        return "length";
+      case "failed":
+      case "cancelled":
+        return "error";
+      // These two are wonky ...
+      case "in_progress":
+      case "queued":
+        return "stop";
+      default: {
+        const _exhaustive = status;
+        throw new Error(`Unhandled stop reason: ${_exhaustive}`);
+      }
+    }
+  }
+
+  // src/provider/codex-native-bridge.ts
+  var CODEX_TOOL_CALL_PROVIDERS = /* @__PURE__ */ new Set(["openai", "openai-codex", "opencode"]);
+  var NativeAsyncEventQueue = class {
+    constructor() {
+      this.values = [];
+      this.waiters = [];
+      this.ended = false;
+      this.failure = null;
+    }
+    push(value) {
+      if (this.ended) throw new Error("PI_MOBILE_CODEX_EVENT_AFTER_TERMINAL");
+      const waiter = this.waiters.shift();
+      if (waiter === void 0) this.values.push(value);
+      else waiter.resolve({ value, done: false });
+    }
+    end() {
+      if (this.ended) return;
+      this.ended = true;
+      this.waiters.splice(0).forEach(({ resolve }) => resolve({ value: void 0, done: true }));
+    }
+    fail(error) {
+      if (this.ended) return;
+      this.failure = error;
+      this.ended = true;
+      this.waiters.splice(0).forEach(({ reject }) => reject(error));
+    }
+    async *[Symbol.asyncIterator]() {
+      while (true) {
+        if (this.values.length > 0) {
+          yield this.values.shift();
+        } else if (this.failure !== null) {
+          throw this.failure;
+        } else if (this.ended) {
+          return;
+        } else {
+          const result = await new Promise((resolve, reject) => this.waiters.push({ resolve, reject }));
+          if (result.done) return;
+          yield result.value;
+        }
+      }
+    }
+  };
+  function createCodexNativeStream(state, model, context, options, hooks, childBinding) {
+    const stream = createAssistantMessageEventStream();
+    const output = initialAssistantMessage(model);
+    stream.push({ type: "start", partial: output });
+    if (state.stopRequested || options?.signal?.aborted) {
+      output.stopReason = "aborted";
+      output.errorMessage = "Codex request was cancelled";
+      stream.push({ type: "error", reason: "aborted", error: output });
+      stream.end();
+      state.lateProviderRequestsAfterStop += 1;
+      return stream;
+    }
+    const body = buildRequestBody(model, context, options);
+    hooks.consumeLiveContext(body.input);
+    const request = {
+      id: `provider-${state.nextProviderRequestId++}`,
+      kind: "codex_responses_stream",
+      modelId: model.id,
+      ...options?.sessionId ? { sessionId: options.sessionId } : {},
+      body,
+      ...childBinding ?? {}
+    };
+    const pending = {
+      request,
+      model,
+      stream,
+      output,
+      events: new NativeAsyncEventQueue(),
+      signal: options?.signal,
+      finished: false,
+      hooks
+    };
+    if (options?.signal !== void 0) {
+      const abortListener = () => {
+        if (!state.pendingCodexProviders.has(request.id)) return;
+        state.codexProviderCancellationOutbox.push({
+          id: request.id,
+          kind: "cancel_codex_responses_stream"
+        });
+        if (request.childId === void 0) state.providerCancellationsIssued += 1;
+        else state.childProviderCancellationsIssued += 1;
+        pending.events.fail(new Error("Codex request was cancelled"));
+      };
+      pending.abortListener = abortListener;
+      options.signal.addEventListener("abort", abortListener);
+    }
+    state.pendingCodexProviders.set(request.id, pending);
+    state.codexProviderOutbox.push(request);
+    if (request.childId === void 0) state.providerRequestsIssued += 1;
+    else state.childProviderRequestsIssued += 1;
+    queueMicrotask(() => void processCodexEvents(state, pending));
+    return stream;
+  }
+  function drainCodexRequests(state) {
+    return state.codexProviderOutbox.splice(0);
+  }
+  function drainCodexCancellations(state) {
+    return state.codexProviderCancellationOutbox.splice(0);
+  }
+  function pushCodexEvent(state, requestId, value) {
+    const pending = requirePending(state, requestId);
+    try {
+      pending.events.push(normalizeCodexEvent(value));
+    } catch {
+      pending.events.fail(new Error("Codex returned an invalid stream"));
+    }
+  }
+  function completeCodexRequest(state, requestId) {
+    requirePending(state, requestId).events.end();
+  }
+  function failCodexRequest(state, requestId, safeMessage) {
+    requirePending(state, requestId).events.fail(new Error(safeMessage));
+  }
+  function closeCodexNativeBridge(state) {
+    for (const pending of state.pendingCodexProviders.values()) {
+      clearAbort(pending);
+      pending.events.fail(new Error("Phone-local Codex runtime closed"));
+    }
+    state.pendingCodexProviders.clear();
+    state.codexProviderOutbox.length = 0;
+    state.codexProviderCancellationOutbox.length = 0;
+  }
+  function buildRequestBody(model, context, options) {
+    const body = {
+      model: model.id,
+      store: false,
+      stream: true,
+      instructions: context.systemPrompt || "You are a helpful assistant.",
+      input: convertResponsesMessages(model, context, CODEX_TOOL_CALL_PROVIDERS, {
+        includeSystemPrompt: false
+      }),
+      text: { verbosity: "low" },
+      include: ["reasoning.encrypted_content"],
+      tool_choice: "auto",
+      parallel_tool_calls: true
+    };
+    if (options?.sessionId) body.prompt_cache_key = options.sessionId.slice(0, 64);
+    if (context.tools && context.tools.length > 0) {
+      body.tools = convertResponsesTools(context.tools, { strict: null });
+    }
+    return body;
+  }
+  async function processCodexEvents(state, pending) {
+    try {
+      await processResponsesStream(
+        pending.events,
+        pending.output,
+        pending.stream,
+        pending.model
+      );
+      if (pending.signal?.aborted) throw new Error("Codex request was cancelled");
+      if (pending.output.stopReason === "error" || pending.output.stopReason === "aborted") {
+        throw new Error("Codex returned an error event");
+      }
+      pending.finished = true;
+      settleCounters(state, pending, "completed");
+      pending.stream.push({
+        type: "done",
+        reason: pending.output.stopReason,
+        message: pending.output
+      });
+      pending.stream.end();
+    } catch (error) {
+      const aborted = pending.signal?.aborted === true;
+      pending.output.stopReason = aborted ? "aborted" : "error";
+      pending.output.errorMessage = aborted ? "Codex request was cancelled" : safeCodexError(error);
+      if (!aborted) state.providerError = pending.output.errorMessage;
+      settleCounters(state, pending, aborted ? "aborted" : "failed");
+      pending.stream.push({
+        type: "error",
+        reason: pending.output.stopReason,
+        error: pending.output
+      });
+      pending.stream.end();
+    } finally {
+      clearAbort(pending);
+      state.pendingCodexProviders.delete(pending.request.id);
+      pending.hooks.updateTerminal();
+    }
+  }
+  function initialAssistantMessage(model) {
+    return {
+      role: "assistant",
+      content: [],
+      api: "openai-codex-responses",
+      provider: model.provider,
+      model: model.id,
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }
+      },
+      stopReason: "stop",
+      timestamp: Date.now()
+    };
+  }
+  function normalizeCodexEvent(value) {
+    if (!isRecord3(value) || typeof value.type !== "string") {
+      throw new Error("PI_MOBILE_CODEX_EVENT_INVALID");
+    }
+    if (value.type === "error" || value.type === "response.failed") {
+      throw new Error("Codex returned an error event");
+    }
+    if (value.type === "response.done" || value.type === "response.completed" || value.type === "response.incomplete") {
+      const response = isRecord3(value.response) ? value.response : void 0;
+      return {
+        ...value,
+        type: "response.completed",
+        ...response === void 0 ? {} : {
+          response: {
+            ...response,
+            status: normalizeResponseStatus(response.status)
+          }
+        }
+      };
+    }
+    return value;
+  }
+  function normalizeResponseStatus(value) {
+    return typeof value === "string" && [
+      "completed",
+      "incomplete",
+      "failed",
+      "cancelled",
+      "queued",
+      "in_progress"
+    ].includes(value) ? value : void 0;
+  }
+  function settleCounters(state, pending, result) {
+    if (result === "aborted") return;
+    if (pending.request.childId === void 0) {
+      if (result === "completed") state.providerRequestsCompleted += 1;
+      else state.providerRequestsFailed += 1;
+    } else if (result === "completed") {
+      state.childProviderRequestsCompleted += 1;
+    } else {
+      state.childProviderRequestsFailed += 1;
+    }
+  }
+  function clearAbort(pending) {
+    if (pending.signal !== void 0 && pending.abortListener !== void 0) {
+      pending.signal.removeEventListener("abort", pending.abortListener);
+    }
+    pending.abortListener = void 0;
+  }
+  function requirePending(state, requestId) {
+    const pending = state.pendingCodexProviders.get(requestId);
+    if (pending === void 0 || pending.finished) {
+      throw new Error(`PI_MOBILE_CODEX_PROVIDER_REQUEST_NOT_FOUND ${requestId}`);
+    }
+    return pending;
+  }
+  function safeCodexError(error) {
+    if (error instanceof Error && error.message.startsWith("Codex ")) {
+      return error.message.slice(0, 256);
+    }
+    return "Codex returned an invalid stream";
+  }
+  function isRecord3(value) {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+  }
+
   // src/system-prompts.ts
   var MOMODING_TASK_SYSTEM_PROMPT = [
     "You are Momoding, an action agent that lives on the user's phone.",
@@ -11701,7 +12929,7 @@ ${additionalInstructions}` : skillBlock;
         continue;
       }
       if (entry.type !== "custom") continue;
-      if (entry.customType === PLAN_MODE_ENTRY_TYPE && isRecord3(entry.data)) {
+      if (entry.customType === PLAN_MODE_ENTRY_TYPE && isRecord4(entry.data)) {
         if (entry.data.enabled === true) {
           const prior = stringArray(entry.data.prePlanActiveToolNames);
           if (prior !== null) {
@@ -11722,7 +12950,7 @@ ${additionalInstructions}` : skillBlock;
     return harness.getActiveTools().map((tool) => tool.name);
   }
   function requireTaskPlan(value) {
-    if (!isRecord3(value)) throw new Error("PI_MOBILE_PLAN_INVALID");
+    if (!isRecord4(value)) throw new Error("PI_MOBILE_PLAN_INVALID");
     const explanation = typeof value.explanation === "string" ? value.explanation.trim() : "";
     if (explanation.length < 1 || explanation.length > 4096) {
       throw new Error("PI_MOBILE_PLAN_EXPLANATION_INVALID");
@@ -11732,7 +12960,7 @@ ${additionalInstructions}` : skillBlock;
     }
     const ids = /* @__PURE__ */ new Set();
     const steps = value.steps.map((candidate) => {
-      if (!isRecord3(candidate)) throw new Error("PI_MOBILE_PLAN_STEP_INVALID");
+      if (!isRecord4(candidate)) throw new Error("PI_MOBILE_PLAN_STEP_INVALID");
       const id = typeof candidate.id === "string" ? candidate.id : "";
       const text = typeof candidate.text === "string" ? candidate.text.trim() : "";
       const status = candidate.status;
@@ -11752,7 +12980,7 @@ ${additionalInstructions}` : skillBlock;
     return { explanation, steps, planDigest: sha256(canonical) };
   }
   function parseTaskPlanSnapshot(value) {
-    if (!isRecord3(value) || typeof value.planDigest !== "string") return null;
+    if (!isRecord4(value) || typeof value.planDigest !== "string") return null;
     try {
       const plan = requireTaskPlan(value);
       return plan.planDigest === value.planDigest ? plan : null;
@@ -11771,7 +12999,7 @@ ${additionalInstructions}` : skillBlock;
     const names = value;
     return names.length === new Set(names).size ? [...names] : null;
   }
-  function isRecord3(value) {
+  function isRecord4(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);
   }
 
@@ -11967,7 +13195,7 @@ ${additionalInstructions}` : skillBlock;
     return goal;
   }
   function requireTaskGoalProgress(value) {
-    if (!isRecord4(value)) throw new Error("PI_MOBILE_GOAL_PROGRESS_INVALID");
+    if (!isRecord5(value)) throw new Error("PI_MOBILE_GOAL_PROGRESS_INVALID");
     const summary = typeof value.summary === "string" ? value.summary.trim() : "";
     const marker = typeof value.progressMarker === "string" ? value.progressMarker.trim() : "";
     if (summary.length < 1 || summary.length > 4096) {
@@ -11979,7 +13207,7 @@ ${additionalInstructions}` : skillBlock;
     return { progressSummary: summary, progressMarker: marker };
   }
   function requireTaskGoalCompletion(value) {
-    if (!isRecord4(value)) throw new Error("PI_MOBILE_GOAL_COMPLETION_INVALID");
+    if (!isRecord5(value)) throw new Error("PI_MOBILE_GOAL_COMPLETION_INVALID");
     const summary = typeof value.summary === "string" ? value.summary.trim() : "";
     const terminalReason = value.terminalReason;
     if (summary.length < 1 || summary.length > 4096) {
@@ -11998,7 +13226,7 @@ ${additionalInstructions}` : skillBlock;
     };
   }
   function parseTaskGoalSnapshot(value) {
-    if (!isRecord4(value)) return null;
+    if (!isRecord5(value)) return null;
     const goalId = typeof value.goalId === "string" ? value.goalId : "";
     const instruction = typeof value.instruction === "string" ? value.instruction.trim() : "";
     const state = value.state;
@@ -12049,7 +13277,7 @@ ${additionalInstructions}` : skillBlock;
     const names = value;
     return names.length === new Set(names).size ? [...names] : null;
   }
-  function isRecord4(value) {
+  function isRecord5(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);
   }
 
@@ -12286,7 +13514,7 @@ ${additionalInstructions}` : skillBlock;
     return target.length > 0 && !target.startsWith("/") && !target.startsWith("#") && !target.startsWith("//") && !/^[a-z][a-z0-9+.-]*:/i.test(target);
   }
   function requirePiMobileSkillResource(value) {
-    if (!isRecord5(value)) throw new Error("PI_MOBILE_SKILL_RESOURCE_INVALID");
+    if (!isRecord6(value)) throw new Error("PI_MOBILE_SKILL_RESOURCE_INVALID");
     const name = value.name;
     const description = value.description;
     const content = value.content;
@@ -12309,7 +13537,7 @@ ${additionalInstructions}` : skillBlock;
     }
     return { name, description, content, contentSha256, disableModelInvocation };
   }
-  function isRecord5(value) {
+  function isRecord6(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);
   }
 
@@ -12328,7 +13556,7 @@ ${additionalInstructions}` : skillBlock;
   };
   function createOpenRouterNativeStream(state, model, context, options, hooks, childBinding) {
     const stream = new NativeAssistantMessageEventStream();
-    const output = initialAssistantMessage(model);
+    const output = initialAssistantMessage2(model);
     stream.push({ type: "start", partial: output });
     if (state.stopRequested || options?.signal?.aborted) {
       output.stopReason = "aborted";
@@ -12366,7 +13594,14 @@ ${additionalInstructions}` : skillBlock;
       textBlock: null,
       toolCalls: /* @__PURE__ */ new Map(),
       hasFinishReason: false,
-      finished: false
+      finished: false,
+      webRequests: null,
+      webSearchRequests: null,
+      webFetchRequests: null,
+      webSources: /* @__PURE__ */ new Map(),
+      webActivityStarted: false,
+      webActivityTerminal: false,
+      hooks
     };
     if (options?.signal !== void 0) {
       const abortListener = () => {
@@ -12431,6 +13666,7 @@ ${additionalInstructions}` : skillBlock;
       return;
     }
     finishBlocks(pending);
+    emitWebActivityTerminal(pending, "completed");
     pending.finished = true;
     clearProviderAbort(pending);
     state.pendingProviders.delete(requestId);
@@ -12484,24 +13720,29 @@ ${additionalInstructions}` : skillBlock;
   }
   function applyOpenRouterChunk(pending, value) {
     var _a, _b;
-    if (!isRecord6(value)) throw new Error("chunk must be an object");
+    if (!isRecord7(value)) throw new Error("chunk must be an object");
     if (typeof value.id === "string" && value.id.length > 0) {
       (_a = pending.output).responseId || (_a.responseId = value.id);
     }
     if (typeof value.model === "string" && value.model.length > 0 && value.model !== pending.output.model) {
       (_b = pending.output).responseModel || (_b.responseModel = value.model);
     }
-    if (isRecord6(value.usage)) {
+    if (isRecord7(value.usage)) {
       pending.output.usage = parseUsage(value.usage);
+      captureWebToolUsage(pending, value.usage);
     }
-    const choice = Array.isArray(value.choices) && isRecord6(value.choices[0]) ? value.choices[0] : void 0;
+    const choice = Array.isArray(value.choices) && isRecord7(value.choices[0]) ? value.choices[0] : void 0;
     if (choice === void 0) return;
+    if (isRecord7(choice.message)) {
+      captureWebSearchAnnotations(pending, choice.message.annotations);
+    }
     if (typeof choice.finish_reason === "string" && choice.finish_reason.length > 0) {
       pending.output.stopReason = mapFinishReason(choice.finish_reason);
       pending.hasFinishReason = true;
     }
-    if (!isRecord6(choice.delta)) return;
+    if (!isRecord7(choice.delta)) return;
     const delta = choice.delta;
+    captureWebSearchAnnotations(pending, delta.annotations);
     if (typeof delta.content === "string" && delta.content.length > 0) {
       const block = ensureTextBlock(pending);
       block.text += delta.content;
@@ -12514,7 +13755,7 @@ ${additionalInstructions}` : skillBlock;
     }
     if (Array.isArray(delta.tool_calls)) {
       for (const candidate of delta.tool_calls) {
-        if (!isRecord6(candidate) || !Number.isInteger(candidate.index)) {
+        if (!isRecord7(candidate) || !Number.isInteger(candidate.index)) {
           throw new Error("tool call index is invalid");
         }
         const streamIndex = candidate.index;
@@ -12522,7 +13763,7 @@ ${additionalInstructions}` : skillBlock;
         if (typeof candidate.id === "string" && candidate.id.length > 0) {
           block.id || (block.id = candidate.id);
         }
-        const functionDelta = isRecord6(candidate.function) ? candidate.function : void 0;
+        const functionDelta = isRecord7(candidate.function) ? candidate.function : void 0;
         if (typeof functionDelta?.name === "string" && functionDelta.name.length > 0) {
           block.name || (block.name = functionDelta.name);
         }
@@ -12553,7 +13794,7 @@ ${additionalInstructions}` : skillBlock;
   function ensureToolCallBlock(pending, streamIndex, candidate) {
     const existing = pending.toolCalls.get(streamIndex);
     if (existing !== void 0) return existing;
-    const functionDelta = isRecord6(candidate.function) ? candidate.function : void 0;
+    const functionDelta = isRecord7(candidate.function) ? candidate.function : void 0;
     const block = {
       type: "toolCall",
       id: typeof candidate.id === "string" ? candidate.id : "",
@@ -12601,6 +13842,7 @@ ${additionalInstructions}` : skillBlock;
   function failPendingProvider(state, pending, safeMessage, aborted, updateTerminal3) {
     if (pending.finished) return;
     pending.finished = true;
+    emitWebActivityTerminal(pending, aborted ? "cancelled" : "failed");
     clearProviderAbort(pending);
     state.pendingProviders.delete(pending.request.id);
     if (pending.request.childId === void 0) {
@@ -12624,6 +13866,126 @@ ${additionalInstructions}` : skillBlock;
     });
     pending.stream.end();
     updateTerminal3();
+  }
+  function captureWebToolUsage(pending, usage) {
+    const current = usage.server_tool_use_details;
+    const legacy = usage.server_tool_use;
+    if (current === void 0 && legacy === void 0) return;
+    if (current !== void 0 && !isRecord7(current)) {
+      throw new Error("OpenRouter server tool usage details are invalid");
+    }
+    if (legacy !== void 0 && !isRecord7(legacy)) {
+      throw new Error("OpenRouter server tool usage is invalid");
+    }
+    pending.webSearchRequests = captureWebRequestCount(
+      current,
+      legacy,
+      "web_search_requests",
+      MAX_WEB_SEARCH_REQUESTS
+    ) ?? pending.webSearchRequests;
+    pending.webFetchRequests = captureWebRequestCount(
+      current,
+      legacy,
+      "web_fetch_requests",
+      MAX_WEB_FETCH_REQUESTS
+    ) ?? pending.webFetchRequests;
+    pending.webRequests = captureWebRequestCount(
+      current,
+      legacy,
+      "tool_calls_executed",
+      MAX_WEB_REQUESTS
+    ) ?? pending.webRequests;
+    if ((pending.webRequests ?? 0) > 0 || (pending.webSearchRequests ?? 0) > 0 || (pending.webFetchRequests ?? 0) > 0) {
+      emitWebActivityRunning(pending);
+    }
+  }
+  function captureWebRequestCount(current, legacy, field, maximum) {
+    const currentValue = isRecord7(current) ? current[field] : void 0;
+    const legacyValue = isRecord7(legacy) ? legacy[field] : void 0;
+    if (currentValue !== void 0 && legacyValue !== void 0 && nonNegativeInteger(currentValue) !== nonNegativeInteger(legacyValue)) {
+      throw new Error(`OpenRouter ${field} usage fields disagree`);
+    }
+    const value = currentValue ?? legacyValue;
+    if (value === void 0) return null;
+    const requests = nonNegativeInteger(value);
+    if (requests > maximum) throw new Error(`OpenRouter ${field} usage exceeds request budget`);
+    return requests;
+  }
+  function captureWebSearchAnnotations(pending, annotations) {
+    if (annotations === void 0) return;
+    if (!Array.isArray(annotations)) {
+      throw new Error("OpenRouter annotations are invalid");
+    }
+    for (const annotation of annotations) {
+      if (!isRecord7(annotation) || typeof annotation.type !== "string") {
+        throw new Error("OpenRouter annotation is invalid");
+      }
+      if (annotation.type !== "url_citation") continue;
+      if (!isRecord7(annotation.url_citation)) {
+        throw new Error("OpenRouter URL citation is invalid");
+      }
+      const citation = annotation.url_citation;
+      const url = typeof citation.url === "string" ? citation.url.trim() : "";
+      const domain = sourceDomain(url);
+      if (url.length === 0 || url.length > MAX_SOURCE_URL_CHARS || domain === null) {
+        throw new Error("OpenRouter URL citation URL is invalid");
+      }
+      if (citation.title !== void 0 && typeof citation.title !== "string") {
+        throw new Error("OpenRouter URL citation title is invalid");
+      }
+      if (citation.content !== void 0 && typeof citation.content !== "string") {
+        throw new Error("OpenRouter URL citation content is invalid");
+      }
+      const startIndex = optionalNonNegativeInteger(citation.start_index);
+      const endIndex = optionalNonNegativeInteger(citation.end_index);
+      if (startIndex !== void 0 && endIndex !== void 0 && endIndex < startIndex) {
+        throw new Error("OpenRouter URL citation range is invalid");
+      }
+      if (!pending.webSources.has(url) && pending.webSources.size < MAX_WEB_SOURCES) {
+        const rawTitle = typeof citation.title === "string" ? citation.title.trim() : "";
+        pending.webSources.set(url, {
+          url,
+          title: (rawTitle || domain).slice(0, MAX_SOURCE_TITLE_CHARS),
+          domain,
+          ...startIndex === void 0 ? {} : { startIndex },
+          ...endIndex === void 0 ? {} : { endIndex }
+        });
+      }
+    }
+    if (pending.webSources.size > 0) emitWebActivityRunning(pending);
+  }
+  function emitWebActivityRunning(pending) {
+    if (pending.webActivityStarted) return;
+    pending.webActivityStarted = true;
+    pending.hooks.recordWebActivityEvent(webActivityEvent(pending, "running"));
+  }
+  function emitWebActivityTerminal(pending, state) {
+    if (pending.webActivityTerminal) return;
+    if (!pending.webActivityStarted && ((pending.webRequests ?? 0) > 0 || (pending.webSearchRequests ?? 0) > 0 || (pending.webFetchRequests ?? 0) > 0 || pending.webSources.size > 0)) {
+      emitWebActivityRunning(pending);
+    }
+    if (!pending.webActivityStarted) return;
+    pending.webActivityTerminal = true;
+    pending.hooks.recordWebActivityEvent(webActivityEvent(pending, state));
+  }
+  function webActivityEvent(pending, state) {
+    return {
+      type: "provider_web_activity",
+      state,
+      requestId: pending.request.id,
+      ...pending.webRequests === null ? {} : { webRequests: pending.webRequests },
+      ...pending.webSearchRequests === null ? {} : { searchRequests: pending.webSearchRequests },
+      ...pending.webFetchRequests === null ? {} : { fetchRequests: pending.webFetchRequests },
+      sources: [...pending.webSources.values()],
+      ...pending.request.childName === void 0 ? {} : { childName: pending.request.childName }
+    };
+  }
+  function sourceDomain(url) {
+    const match = /^https?:\/\/([^/?#\s]+)(?:[/?#]|$)/i.exec(url);
+    return match === null ? null : match[1].toLowerCase();
+  }
+  function optionalNonNegativeInteger(value) {
+    return value === void 0 ? void 0 : nonNegativeInteger(value);
   }
   function toOpenRouterMessages(context) {
     const messages = [];
@@ -12708,7 +14070,7 @@ ${additionalInstructions}` : skillBlock;
     }
     return parts;
   }
-  function initialAssistantMessage(model) {
+  function initialAssistantMessage2(model) {
     return {
       role: "assistant",
       content: [],
@@ -12771,7 +14133,7 @@ ${additionalInstructions}` : skillBlock;
   function parsePartialArguments(value) {
     try {
       const parsed = JSON.parse(value);
-      return isRecord6(parsed) ? parsed : {};
+      return isRecord7(parsed) ? parsed : {};
     } catch {
       return {};
     }
@@ -12782,7 +14144,7 @@ ${additionalInstructions}` : skillBlock;
     }
     return value;
   }
-  function isRecord6(value) {
+  function isRecord7(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);
   }
   var OPENROUTER_IMAGE_MIME_TYPES = /* @__PURE__ */ new Set([
@@ -12791,6 +14153,12 @@ ${additionalInstructions}` : skillBlock;
     "image/webp",
     "image/gif"
   ]);
+  var MAX_WEB_SEARCH_REQUESTS = 3;
+  var MAX_WEB_FETCH_REQUESTS = 3;
+  var MAX_WEB_REQUESTS = 5;
+  var MAX_WEB_SOURCES = 15;
+  var MAX_SOURCE_URL_CHARS = 2048;
+  var MAX_SOURCE_TITLE_CHARS = 240;
 
   // src/tools/android-tool-schemas.ts
   function createAndroidFixtureSchema() {
@@ -12836,6 +14204,22 @@ ${additionalInstructions}` : skillBlock;
           limit: { type: "integer", minimum: 256, maximum: 65536, default: 16384 }
         },
         required: ["attachmentId", "offset", "limit"],
+        additionalProperties: false
+      },
+      imageGeneration: {
+        type: "object",
+        properties: {
+          prompt: { type: "string", minLength: 1, maxLength: 4096 },
+          aspect_ratio: {
+            type: "string",
+            enum: ["1:1", "16:9", "9:16", "4:3", "3:4"]
+          },
+          quality: {
+            type: "string",
+            enum: ["auto", "low", "medium", "high"]
+          }
+        },
+        required: ["prompt"],
         additionalProperties: false
       },
       capabilities: {
@@ -13513,6 +14897,7 @@ ${additionalInstructions}` : skillBlock;
   var PACKAGES_LIST_TOOL_NAME = "device_packages_list";
   var PACKAGE_INSPECT_TOOL_NAME = "device_package_inspect";
   var ATTACHMENT_READ_TOOL_NAME = "attachment_read";
+  var IMAGE_GENERATE_TOOL_NAME = "image_generate";
   var RUN_COMMAND_TOOL_NAME = "run_command";
   var RUN_TESTS_TOOL_NAME = "run_tests";
   function createAndroidFixtureTool(executeNativeTool) {
@@ -13525,9 +14910,20 @@ ${additionalInstructions}` : skillBlock;
       executeNativeTool
     );
   }
-  function createAndroidProductTools(executeNativeTool) {
+  function createAndroidProductTools(executeNativeTool, options = {}) {
     const schemas2 = createAndroidToolSchemas();
     return [
+      ...options.imageGenerationEnabled ? [
+        nativeTool(
+          IMAGE_GENERATE_TOOL_NAME,
+          "Generate image",
+          "Generate one durable image for this task with the user's configured image model. Use only when the user asks to create or transform an image. prompt is required; request aspect_ratio or quality only when it materially matters.",
+          schemas2.imageGeneration,
+          "android_image_generation_tool",
+          executeNativeTool,
+          true
+        )
+      ] : [],
       projectCommandTool(
         RUN_COMMAND_TOOL_NAME,
         "Run project command",
@@ -13739,14 +15135,14 @@ ${additionalInstructions}` : skillBlock;
           params,
           signal
         );
-        if (throwOnToolFailure && isRecord7(result.details) && result.details.ok === false) {
+        if (throwOnToolFailure && isRecord8(result.details) && result.details.ok === false) {
           throw new Error(JSON.stringify(result.details));
         }
         return result;
       }
     };
   }
-  function isRecord7(value) {
+  function isRecord8(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);
   }
 
@@ -13793,7 +15189,7 @@ ${additionalInstructions}` : skillBlock;
     let totalChars = 0;
     const attachmentIds = /* @__PURE__ */ new Set();
     return value.map((candidate) => {
-      if (!isRecord8(candidate)) throw new Error("PI_MOBILE_IMAGE_INPUT_INVALID");
+      if (!isRecord9(candidate)) throw new Error("PI_MOBILE_IMAGE_INPUT_INVALID");
       const attachmentId = candidate.attachmentId;
       const mimeType = candidate.mimeType;
       const data = candidate.data;
@@ -13820,7 +15216,7 @@ ${additionalInstructions}` : skillBlock;
     }
     const attachmentIds = /* @__PURE__ */ new Set();
     return value.map((candidate) => {
-      if (!isRecord8(candidate) || Object.keys(candidate).length !== 4) {
+      if (!isRecord9(candidate) || Object.keys(candidate).length !== 4) {
         throw new Error("PI_MOBILE_TEXT_ATTACHMENT_INVALID");
       }
       const { attachmentId, displayName, mimeType, byteSize } = candidate;
@@ -13846,7 +15242,7 @@ ${additionalInstructions}` : skillBlock;
     }
   }
   function requireTextAttachmentControlData(value) {
-    if (!isRecord8(value) || Object.keys(value).length !== 3 || value.kind !== "text_attachments") {
+    if (!isRecord9(value) || Object.keys(value).length !== 3 || value.kind !== "text_attachments") {
       throw new Error("PI_MOBILE_TEXT_ATTACHMENT_CONTROL_INVALID");
     }
     if (typeof value.originalText !== "string" || value.originalText.length > 65536 || value.originalText.includes("\0")) {
@@ -13896,7 +15292,7 @@ ${additionalInstructions}` : skillBlock;
     }
     let imageCount = 0;
     return value.map((candidate) => {
-      if (!isRecord8(candidate)) {
+      if (!isRecord9(candidate)) {
         throw new Error("PI_MOBILE_NATIVE_TOOL_CONTENT_INVALID");
       }
       if (candidate.type === "text" && typeof candidate.text === "string" && candidate.text.length <= 65536 && !candidate.text.includes("\0")) {
@@ -13962,7 +15358,7 @@ ${additionalInstructions}` : skillBlock;
         candidate.forEach(countRawImageOccurrences);
         return;
       }
-      if (!isRecord8(candidate)) return;
+      if (!isRecord9(candidate)) return;
       if (candidate.type === "image") {
         const data = candidate.data;
         if (typeof data === "string" && ATTACHMENT_IMAGE_REFERENCE.exec(data) === null) {
@@ -13979,7 +15375,7 @@ ${additionalInstructions}` : skillBlock;
     const occurrenceByData = /* @__PURE__ */ new Map();
     const visit3 = (candidate) => {
       if (Array.isArray(candidate)) return candidate.map(visit3);
-      if (!isRecord8(candidate)) return candidate;
+      if (!isRecord9(candidate)) return candidate;
       if (candidate.type === "image") {
         const data = candidate.data;
         const mimeType = candidate.mimeType;
@@ -14016,7 +15412,7 @@ ${additionalInstructions}` : skillBlock;
     );
     const visit3 = (candidate) => {
       if (Array.isArray(candidate)) return candidate.map(visit3);
-      if (!isRecord8(candidate)) return candidate;
+      if (!isRecord9(candidate)) return candidate;
       if (candidate.type === "image") {
         const data = candidate.data;
         const mimeType = candidate.mimeType;
@@ -14052,11 +15448,22 @@ ${additionalInstructions}` : skillBlock;
     references.set(image.data, attachmentIds);
   }
   function registerLiveToolImages(state, request, content, details, isError) {
+    if (request.kind === "android_image_generation_tool" && request.toolName === "image_generate") {
+      if (isError) return;
+      const attachmentId = isRecord9(details) ? details.attachmentId : void 0;
+      const mimeType2 = isRecord9(details) ? details.mimeType : void 0;
+      if (content.length !== 1 || content[0].type !== "text" || !isRecord9(details) || details.kind !== "generated_image_artifact" || details.persistent !== true || typeof attachmentId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+        attachmentId
+      ) || mimeType2 !== "image/png" && mimeType2 !== "image/jpeg" && mimeType2 !== "image/webp") {
+        throw new Error("PI_MOBILE_GENERATED_IMAGE_DETAILS_INVALID");
+      }
+      return;
+    }
     const images = content.filter(
       (block) => block.type === "image"
     );
     if (images.length === 0) return;
-    if (!isRecord8(details)) {
+    if (!isRecord9(details)) {
       throw new Error("PI_MOBILE_LIVE_IMAGE_DETAILS_INVALID");
     }
     const contentSha256 = details.contentSha256;
@@ -14077,7 +15484,7 @@ ${additionalInstructions}` : skillBlock;
     const hasLocationIdentity = request.kind === "android_location_tool" || request.toolName === LOCATION_TOOL_NAME;
     const hasClipboardIdentity = request.kind === "android_clipboard_tool" || request.toolName === CLIPBOARD_TOOL_NAME;
     if (!hasLocationIdentity && !hasClipboardIdentity) {
-      if (isRecord8(details) && (details.dataClass === "location" || details.dataClass === "clipboard")) {
+      if (isRecord9(details) && (details.dataClass === "location" || details.dataClass === "clipboard")) {
         throw new Error("PI_MOBILE_LIVE_TEXT_DETAILS_INVALID");
       }
       return;
@@ -14092,18 +15499,18 @@ ${additionalInstructions}` : skillBlock;
     if (hasClipboardIdentity) {
       const action = request.arguments.action;
       if (action !== "get") {
-        if (isRecord8(details) && details.dataClass === "clipboard") {
+        if (isRecord9(details) && details.dataClass === "clipboard") {
           throw new Error("PI_MOBILE_LIVE_TEXT_DETAILS_INVALID");
         }
         return;
       }
-      if (!isRecord8(details) || details.dataClass !== "clipboard") {
+      if (!isRecord9(details) || details.dataClass !== "clipboard") {
         throw new Error("PI_MOBILE_LIVE_TEXT_DETAILS_INVALID");
       }
       const text2 = content.length === 1 && content[0].type === "text" ? content[0].text : null;
       const payload2 = typeof text2 === "string" ? parseJsonRecord(text2) : null;
-      const data2 = isRecord8(payload2?.data) ? payload2.data : null;
-      const verification2 = isRecord8(payload2?.verification) ? payload2.verification : null;
+      const data2 = isRecord9(payload2?.data) ? payload2.data : null;
+      const verification2 = isRecord9(payload2?.verification) ? payload2.verification : null;
       if (details.liveOnly !== true || typeof text2 !== "string" || typeof details.contentSha256 !== "string" || !/^[0-9a-f]{64}$/.test(details.contentSha256) || sha256(text2) !== details.contentSha256 || payload2?.ok !== true || payload2.action !== "get" || data2?.state !== "text" || typeof data2.text !== "string" || data2.text.length < 1 || data2.text.length > 8192 || !Number.isSafeInteger(data2.characterCount) || data2.characterCount !== data2.text.length || verification2?.status !== "observed" || typeof verification2.observedAt !== "string" || verification2.observedAt.length < 20 || verification2.observedAt.length > 40) {
         throw new Error("PI_MOBILE_LIVE_TEXT_DETAILS_INVALID");
       }
@@ -14113,13 +15520,13 @@ ${additionalInstructions}` : skillBlock;
       });
       return;
     }
-    if (!isRecord8(details) || details.dataClass !== "location") {
+    if (!isRecord9(details) || details.dataClass !== "location") {
       throw new Error("PI_MOBILE_LIVE_TEXT_DETAILS_INVALID");
     }
     const text = content.length === 1 && content[0].type === "text" ? content[0].text : null;
     const payload = typeof text === "string" ? parseJsonRecord(text) : null;
-    const data = isRecord8(payload?.data) ? payload.data : null;
-    const verification = isRecord8(payload?.verification) ? payload.verification : null;
+    const data = isRecord9(payload?.data) ? payload.data : null;
+    const verification = isRecord9(payload?.verification) ? payload.verification : null;
     const precision = details.precision;
     const latitude = data?.latitude;
     const longitude = data?.longitude;
@@ -14139,7 +15546,7 @@ ${additionalInstructions}` : skillBlock;
   function expireLiveToolTexts(value, texts) {
     const visit3 = (candidate) => {
       if (Array.isArray(candidate)) return candidate.map(visit3);
-      if (!isRecord8(candidate)) return candidate;
+      if (!isRecord9(candidate)) return candidate;
       if (candidate.type === "text" && typeof candidate.text === "string" && texts.has(candidate.text)) {
         return {
           ...candidate,
@@ -14158,7 +15565,7 @@ ${additionalInstructions}` : skillBlock;
     );
     const visit3 = (candidate) => {
       if (Array.isArray(candidate)) return candidate.map(visit3);
-      if (!isRecord8(candidate)) return candidate;
+      if (!isRecord9(candidate)) return candidate;
       if (candidate.type === "text" && typeof candidate.text === "string") {
         const text = textByPlaceholder.get(candidate.text);
         if (text !== void 0) return { ...candidate, text };
@@ -14193,7 +15600,7 @@ ${additionalInstructions}` : skillBlock;
   function expireLiveToolImages(value, images) {
     const visit3 = (candidate) => {
       if (Array.isArray(candidate)) return candidate.map(visit3);
-      if (!isRecord8(candidate)) return candidate;
+      if (!isRecord9(candidate)) return candidate;
       if (candidate.type === "image" && typeof candidate.data === "string" && images.has(candidate.data)) {
         const descriptor = images.get(candidate.data);
         return {
@@ -14216,7 +15623,7 @@ ${additionalInstructions}` : skillBlock;
     );
     const visit3 = (candidate) => {
       if (Array.isArray(candidate)) return candidate.map(visit3);
-      if (!isRecord8(candidate)) return candidate;
+      if (!isRecord9(candidate)) return candidate;
       if (candidate.type === "text" && typeof candidate.text === "string") {
         const image = imageByPlaceholder.get(candidate.text);
         if (image !== void 0) return { ...image };
@@ -14242,13 +15649,13 @@ ${additionalInstructions}` : skillBlock;
       "]"
     ].join(" ");
   }
-  function isRecord8(value) {
+  function isRecord9(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);
   }
   function parseJsonRecord(value) {
     try {
       const parsed = JSON.parse(value);
-      return isRecord8(parsed) ? parsed : null;
+      return isRecord9(parsed) ? parsed : null;
     } catch {
       return null;
     }
@@ -14258,6 +15665,9 @@ ${additionalInstructions}` : skillBlock;
   var NATIVE_TOOL_RESULT_MARKER = /* @__PURE__ */ Symbol("pi-mobile-native-tool-result");
   var PROVIDER_ID = "openrouter";
   var PROVIDER_BASE_URL = "https://openrouter.ai/api/v1";
+  var CODEX_PROVIDER_ID = "openai-codex";
+  var CODEX_PROVIDER_BASE_URL = "https://chatgpt.com/backend-api";
+  var PROVIDER_BINDING_ENTRY_TYPE = "pi_mobile_provider_binding";
   var RECORDED_EVENT_TYPES2 = /* @__PURE__ */ new Set([
     "agent_start",
     "agent_end",
@@ -14284,11 +15694,30 @@ ${additionalInstructions}` : skillBlock;
       kind === "tool"
     );
   }
+  function startNativeCodexScenario(kind, modelId, env) {
+    return startNativeOpenRouterRun(
+      kind,
+      `Run native Codex scenario ${kind}`,
+      modelId,
+      env,
+      kind === "tool",
+      null,
+      `phone-local-native-codex-${kind}`,
+      [],
+      0,
+      false,
+      [],
+      [],
+      [],
+      false,
+      "codex"
+    );
+  }
   function startNativeOpenRouterPrompt(prompt, modelId, env) {
     requirePrompt(prompt);
     return startNativeOpenRouterRun("prompt", prompt, modelId, env, false);
   }
-  function startNativeOpenRouterTaskSession(taskId, prompt, modelId, env, sessionId = `phone-local-task-${taskId}`, planMode = false, skillResources = [], imageInputs = [], textAttachmentInputs = []) {
+  function startNativeOpenRouterTaskSession(taskId, prompt, modelId, env, sessionId = `phone-local-task-${taskId}`, planMode = false, skillResources = [], imageInputs = [], textAttachmentInputs = [], imageGenerationEnabled = false) {
     requireTaskId(taskId);
     const images = requireRuntimeImageInputs(imageInputs);
     const textAttachments = requireRuntimeTextAttachmentInputs(textAttachmentInputs);
@@ -14307,10 +15736,34 @@ ${additionalInstructions}` : skillBlock;
       planMode,
       requirePiMobileSkillResources(skillResources),
       images,
-      textAttachments
+      textAttachments,
+      imageGenerationEnabled
     );
   }
-  function startNativeOpenRouterTaskSkillSession(taskId, skillName, additionalInstructions, modelId, env, sessionId = `phone-local-task-${taskId}`, skillResources = []) {
+  function startNativeCodexTaskSession(taskId, prompt, modelId, env, sessionId = `phone-local-task-${taskId}`, planMode = false, skillResources = [], textAttachmentInputs = []) {
+    requireTaskId(taskId);
+    const textAttachments = requireRuntimeTextAttachmentInputs(textAttachmentInputs);
+    requireTaskInput(prompt, [], textAttachments);
+    requireSessionId(sessionId);
+    return startNativeOpenRouterRun(
+      "prompt",
+      prompt,
+      modelId,
+      env,
+      false,
+      taskId,
+      sessionId,
+      [],
+      0,
+      planMode,
+      requirePiMobileSkillResources(skillResources),
+      [],
+      textAttachments,
+      false,
+      "codex"
+    );
+  }
+  function startNativeCodexTaskSkillSession(taskId, skillName, additionalInstructions, modelId, env, sessionId = `phone-local-task-${taskId}`, skillResources = []) {
     requireTaskId(taskId);
     requireSessionId(sessionId);
     const resources = requirePiMobileSkillResources(skillResources);
@@ -14325,11 +15778,37 @@ ${additionalInstructions}` : skillBlock;
       [],
       0,
       false,
-      resources
+      resources,
+      [],
+      [],
+      false,
+      "codex"
     );
     return invokeNativeOpenRouterTaskSkill(skillName, additionalInstructions);
   }
-  function restoreNativeOpenRouterTaskSession(taskId, sessionId, turnCount, entries, modelId, env, skillResources = [], imageInputs = []) {
+  function startNativeOpenRouterTaskSkillSession(taskId, skillName, additionalInstructions, modelId, env, sessionId = `phone-local-task-${taskId}`, skillResources = [], imageGenerationEnabled = false) {
+    requireTaskId(taskId);
+    requireSessionId(sessionId);
+    const resources = requirePiMobileSkillResources(skillResources);
+    startNativeOpenRouterRun(
+      "prompt",
+      null,
+      modelId,
+      env,
+      false,
+      taskId,
+      sessionId,
+      [],
+      0,
+      false,
+      resources,
+      [],
+      [],
+      imageGenerationEnabled
+    );
+    return invokeNativeOpenRouterTaskSkill(skillName, additionalInstructions);
+  }
+  function restoreNativeOpenRouterTaskSession(taskId, sessionId, turnCount, entries, modelId, env, skillResources = [], imageInputs = [], imageGenerationEnabled = false) {
     requireTaskId(taskId);
     requireSessionId(sessionId);
     const images = requireRuntimeImageInputs(imageInputs);
@@ -14349,7 +15828,34 @@ ${additionalInstructions}` : skillBlock;
       turnCount,
       false,
       requirePiMobileSkillResources(skillResources),
-      images
+      images,
+      [],
+      imageGenerationEnabled
+    );
+  }
+  function restoreNativeCodexTaskSession(taskId, sessionId, turnCount, entries, modelId, env, skillResources = []) {
+    requireTaskId(taskId);
+    requireSessionId(sessionId);
+    const restoredEntries = requireSessionEntries(entries);
+    if (!Number.isSafeInteger(turnCount) || turnCount < 0) {
+      throw new Error("PI_MOBILE_TASK_SESSION_TURN_COUNT_INVALID");
+    }
+    return startNativeOpenRouterRun(
+      "prompt",
+      null,
+      modelId,
+      env,
+      false,
+      taskId,
+      sessionId,
+      restoredEntries,
+      turnCount,
+      false,
+      requirePiMobileSkillResources(skillResources),
+      [],
+      [],
+      false,
+      "codex"
     );
   }
   function continueNativeOpenRouterTaskPrompt(prompt, imageInputs = [], textAttachmentInputs = []) {
@@ -14527,14 +16033,32 @@ ${additionalInstructions}` : skillBlock;
     });
     return nativeOpenRouterScenarioStatus();
   }
-  function startNativeOpenRouterRun(kind, prompt, modelId, env, enableFixtureTool, taskId = null, sessionId = `phone-local-native-provider-${kind}`, restoredEntries = [], restoredTurnCount = 0, initialPlanMode = false, initialSkillResources = [], initialRuntimeImages = [], initialTextAttachments = []) {
+  function startNativeOpenRouterRun(kind, prompt, modelId, env, enableFixtureTool, taskId = null, sessionId = `phone-local-native-provider-${kind}`, restoredEntries = [], restoredTurnCount = 0, initialPlanMode = false, initialSkillResources = [], initialRuntimeImages = [], initialTextAttachments = [], imageGenerationEnabled = false, providerKind = "openrouter") {
     if (nativeScenarioState !== null && !nativeScenarioState.terminal) {
       throw new Error("PI_MOBILE_NATIVE_PROVIDER_SCENARIO_ALREADY_RUNNING");
     }
     closeNativeOpenRouterScenario();
-    requireModelId(modelId);
+    requireModelId(modelId, providerKind);
+    const restoredProviderBinding = providerBindingFromEntries(restoredEntries);
+    if (restoredProviderBinding !== null && (restoredProviderBinding.kind !== providerKind || restoredProviderBinding.modelId !== modelId)) {
+      throw new Error("PI_MOBILE_SESSION_PROVIDER_BINDING_MISMATCH");
+    }
+    if (taskId !== null && restoredEntries.length > 0 && providerKind === "codex" && restoredProviderBinding === null) {
+      throw new Error("PI_MOBILE_SESSION_PROVIDER_BINDING_MISSING");
+    }
     let state;
-    const model = {
+    const model = providerKind === "codex" ? {
+      id: modelId,
+      name: modelId,
+      api: "openai-codex-responses",
+      provider: CODEX_PROVIDER_ID,
+      baseUrl: CODEX_PROVIDER_BASE_URL,
+      reasoning: true,
+      input: ["text", "image"],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 128e3,
+      maxTokens: 4096
+    } : {
       id: modelId,
       name: modelId,
       api: "openai-completions",
@@ -14547,12 +16071,12 @@ ${additionalInstructions}` : skillBlock;
       maxTokens: 4096
     };
     const provider = {
-      id: PROVIDER_ID,
-      name: "OpenRouter",
-      baseUrl: PROVIDER_BASE_URL,
+      id: providerKind === "codex" ? CODEX_PROVIDER_ID : PROVIDER_ID,
+      name: providerKind === "codex" ? "Codex" : "OpenRouter",
+      baseUrl: providerKind === "codex" ? CODEX_PROVIDER_BASE_URL : PROVIDER_BASE_URL,
       auth: {
         apiKey: {
-          name: "Android Keystore managed OpenRouter credential",
+          name: `Android Keystore managed ${providerKind === "codex" ? "Codex" : "OpenRouter"} credential`,
           resolve: async () => ({ auth: {}, source: "Android Keystore" })
         }
       },
@@ -14595,7 +16119,7 @@ ${additionalInstructions}` : skillBlock;
     const fixtureTool = createAndroidFixtureTool(executeNativeTool);
     const productTools = kind === "prompt" && taskId !== null ? [
       childAgents.delegateTool(),
-      ...createAndroidProductTools(executeNativeTool),
+      ...createAndroidProductTools(executeNativeTool, { imageGenerationEnabled }),
       createPlanUpdateTool(() => state),
       ...createGoalTools(() => state)
     ] : [];
@@ -14636,6 +16160,9 @@ ${additionalInstructions}` : skillBlock;
     }));
     state = {
       kind,
+      providerKind,
+      modelId,
+      providerBindingRecorded: restoredProviderBinding !== null,
       harness,
       session,
       taskId,
@@ -14659,6 +16186,9 @@ ${additionalInstructions}` : skillBlock;
       providerOutbox: [],
       providerCancellationOutbox: [],
       pendingProviders: /* @__PURE__ */ new Map(),
+      codexProviderOutbox: [],
+      codexProviderCancellationOutbox: [],
+      pendingCodexProviders: /* @__PURE__ */ new Map(),
       nextProviderRequestId: 1,
       providerRequestsIssued: 0,
       providerRequestsCompleted: 0,
@@ -14744,6 +16274,37 @@ ${additionalInstructions}` : skillBlock;
       }
     }
     return value;
+  }
+  function providerBindingFromEntries(entries) {
+    let binding = null;
+    for (const entry of entries) {
+      if (entry.type !== "custom" || entry.customType !== PROVIDER_BINDING_ENTRY_TYPE) continue;
+      if (entry.data === null || typeof entry.data !== "object" || Array.isArray(entry.data)) {
+        throw new Error("PI_MOBILE_SESSION_PROVIDER_BINDING_INVALID");
+      }
+      const data = entry.data;
+      if (Object.keys(data).sort().join(",") !== "kind,modelId" || data.kind !== "openrouter" && data.kind !== "codex" || typeof data.modelId !== "string") {
+        throw new Error("PI_MOBILE_SESSION_PROVIDER_BINDING_INVALID");
+      }
+      requireModelId(data.modelId, data.kind);
+      const candidate = {
+        kind: data.kind,
+        modelId: data.modelId
+      };
+      if (binding !== null && (binding.kind !== candidate.kind || binding.modelId !== candidate.modelId)) {
+        throw new Error("PI_MOBILE_SESSION_PROVIDER_BINDING_CONFLICT");
+      }
+      binding = candidate;
+    }
+    return binding;
+  }
+  async function ensureProviderBinding(state) {
+    if (state.taskId === null || state.providerBindingRecorded) return;
+    await state.session.appendCustomEntry(PROVIDER_BINDING_ENTRY_TYPE, {
+      kind: state.providerKind,
+      modelId: state.modelId
+    });
+    state.providerBindingRecorded = true;
   }
   function requireSessionId(value) {
     if (typeof value !== "string" || value.trim().length === 0) {
@@ -14865,7 +16426,7 @@ ${additionalInstructions}` : skillBlock;
     if (!state.terminal || !state.promptSettled || state.planTransitionPending || state.goalTransitionPending || state.resourceTransitionPending) {
       throw new Error("PI_MOBILE_TASK_SESSION_BUSY");
     }
-    if (state.pendingProviders.size > 0 || state.pendingTools.size > 0 || state.providerOutbox.length > 0 || state.providerCancellationOutbox.length > 0 || state.toolOutbox.length > 0) {
+    if (pendingProviderCount(state) > 0 || state.pendingTools.size > 0 || queuedProviderRequestCount(state) > 0 || queuedProviderCancellationCount(state) > 0 || state.toolOutbox.length > 0) {
       throw new Error("PI_MOBILE_TASK_SESSION_PENDING_OUTPUT");
     }
     if (!state.resourceSetTrusted) {
@@ -14885,6 +16446,7 @@ ${additionalInstructions}` : skillBlock;
   }
   async function runHarnessPrompt(state, prompt, images = [], textAttachments = []) {
     try {
+      await ensureProviderBinding(state);
       const effectivePrompt = await promptWithTextAttachments(
         state.session,
         prompt,
@@ -14910,6 +16472,7 @@ ${additionalInstructions}` : skillBlock;
   }
   async function runHarnessSkill(state, skillName, additionalInstructions) {
     try {
+      await ensureProviderBinding(state);
       await state.session.appendCustomEntry(SKILL_INVOCATION_CONTROL_ENTRY_TYPE, {
         kind: "skill_invocation",
         name: skillName,
@@ -14944,7 +16507,7 @@ ${additionalInstructions}` : skillBlock;
         throw new Error("PI_MOBILE_SKILL_RESOURCE_EVENT_MISSING");
       }
       const resourceEvent = state.events[state.events.length - 1];
-      if (!isRecord9(resourceEvent) || resourceEvent.type !== "resources_update" || resourceEvent.resourceSetDigest !== nextDigest) {
+      if (!isRecord10(resourceEvent) || resourceEvent.type !== "resources_update" || resourceEvent.resourceSetDigest !== nextDigest) {
         throw new Error("PI_MOBILE_SKILL_RESOURCE_EVENT_MISMATCH");
       }
       state.resourceSetDigest = nextDigest;
@@ -15000,7 +16563,7 @@ ${additionalInstructions}` : skillBlock;
     return nativeOpenRouterScenarioStatus();
   }
   function resetTaskRun(state) {
-    if (state.pendingProviders.size > 0 || state.pendingTools.size > 0 || state.pendingAttachedTaskMessages > 0 || state.providerOutbox.length > 0 || state.providerCancellationOutbox.length > 0 || state.toolOutbox.length > 0) {
+    if (pendingProviderCount(state) > 0 || state.pendingTools.size > 0 || state.pendingAttachedTaskMessages > 0 || queuedProviderRequestCount(state) > 0 || queuedProviderCancellationCount(state) > 0 || state.toolOutbox.length > 0) {
       throw new Error("PI_MOBILE_TASK_SESSION_PENDING_OUTPUT");
     }
     state.childAgents?.beginParentTurn();
@@ -15031,10 +16594,12 @@ ${additionalInstructions}` : skillBlock;
     state.lateToolStartsAfterStop = 0;
   }
   function drainNativeProviderRequests() {
-    return drainOpenRouterRequests(requireNativeScenario());
+    const state = requireNativeScenario();
+    return state.providerKind === "codex" ? drainCodexRequests(state) : drainOpenRouterRequests(state);
   }
   function drainNativeProviderCancellations() {
-    return drainOpenRouterCancellations(requireNativeScenario());
+    const state = requireNativeScenario();
+    return state.providerKind === "codex" ? drainCodexCancellations(state) : drainOpenRouterCancellations(state);
   }
   function drainNativeOpenRouterChildEvents() {
     const state = requireNativeTaskSession();
@@ -15093,27 +16658,28 @@ ${additionalInstructions}` : skillBlock;
   }
   function pushNativeProviderChunk(requestId, chunk) {
     const state = requireNativeScenario();
-    pushOpenRouterChunk(state, requestId, chunk, () => updateTerminal2(state));
+    if (state.providerKind === "codex") pushCodexEvent(state, requestId, chunk);
+    else pushOpenRouterChunk(state, requestId, chunk, () => updateTerminal2(state));
     return nativeOpenRouterScenarioStatus();
   }
   function completeNativeProviderRequest(requestId, generationId) {
     const state = requireNativeScenario();
-    completeOpenRouterRequest(
-      state,
-      requestId,
-      generationId,
-      () => updateTerminal2(state)
-    );
+    if (state.providerKind === "codex") completeCodexRequest(state, requestId);
+    else {
+      completeOpenRouterRequest(
+        state,
+        requestId,
+        generationId,
+        () => updateTerminal2(state)
+      );
+    }
     return nativeOpenRouterScenarioStatus();
   }
   function failNativeProviderRequest(requestId, safeMessage) {
     const state = requireNativeScenario();
-    failOpenRouterRequest(
-      state,
-      requestId,
-      requireSafeProviderError(safeMessage),
-      () => updateTerminal2(state)
-    );
+    const message = requireSafeProviderError(safeMessage);
+    if (state.providerKind === "codex") failCodexRequest(state, requestId, message);
+    else failOpenRouterRequest(state, requestId, message, () => updateTerminal2(state));
     return nativeOpenRouterScenarioStatus();
   }
   function drainNativeProviderToolRequests() {
@@ -15187,9 +16753,9 @@ ${additionalInstructions}` : skillBlock;
       eventTypes,
       runEvents,
       runEventTypes,
-      pendingProviderCount: state.pendingProviders.size,
-      queuedProviderRequestCount: state.providerOutbox.length,
-      queuedProviderCancellationCount: state.providerCancellationOutbox.length,
+      pendingProviderCount: pendingProviderCount(state),
+      queuedProviderRequestCount: queuedProviderRequestCount(state),
+      queuedProviderCancellationCount: queuedProviderCancellationCount(state),
       providerRequestsIssued: state.providerRequestsIssued,
       providerRequestsCompleted: state.providerRequestsCompleted,
       providerRequestsFailed: state.providerRequestsFailed,
@@ -15231,6 +16797,7 @@ ${additionalInstructions}` : skillBlock;
     state.childAgents?.close("runtime_rebuilt");
     state.unsubscribe();
     closeOpenRouterNativeBridge(state);
+    closeCodexNativeBridge(state);
     for (const pending of state.pendingTools.values()) {
       clearToolAbort(pending);
       pending.reject(new Error("PI_MOBILE_RUNTIME_CLOSED"));
@@ -15241,6 +16808,19 @@ ${additionalInstructions}` : skillBlock;
     nativeScenarioState = null;
   }
   function createNativeProviderStream(state, model, context, options, childBinding) {
+    if (state.providerKind === "codex") {
+      return createCodexNativeStream(
+        state,
+        model,
+        context,
+        options,
+        {
+          consumeLiveContext: (messages) => consumeLiveToolContext(messages, state),
+          updateTerminal: () => updateTerminal2(state)
+        },
+        childBinding
+      );
+    }
     return createOpenRouterNativeStream(
       state,
       model,
@@ -15248,7 +16828,11 @@ ${additionalInstructions}` : skillBlock;
       options,
       {
         consumeLiveContext: (messages) => consumeLiveToolContext(messages, state),
-        updateTerminal: () => updateTerminal2(state)
+        updateTerminal: () => updateTerminal2(state),
+        recordWebActivityEvent: (event) => {
+          state.events.push(event);
+          state.eventTypes.push(event.type);
+        }
       },
       childBinding
     );
@@ -15324,7 +16908,16 @@ ${additionalInstructions}` : skillBlock;
     }
   }
   function updateTerminal2(state) {
-    state.terminal = !state.planTransitionPending && !state.goalTransitionPending && !state.resourceTransitionPending && state.promptSettled && (!state.stopRequested || state.stopCompleted || state.stopError !== null) && state.pendingProviders.size === 0 && state.pendingTools.size === 0 && state.pendingAttachedTaskMessages === 0;
+    state.terminal = !state.planTransitionPending && !state.goalTransitionPending && !state.resourceTransitionPending && state.promptSettled && (!state.stopRequested || state.stopCompleted || state.stopError !== null) && pendingProviderCount(state) === 0 && state.pendingTools.size === 0 && state.pendingAttachedTaskMessages === 0;
+  }
+  function pendingProviderCount(state) {
+    return state.pendingProviders.size + state.pendingCodexProviders.size;
+  }
+  function queuedProviderRequestCount(state) {
+    return state.providerOutbox.length + state.codexProviderOutbox.length;
+  }
+  function queuedProviderCancellationCount(state) {
+    return state.providerCancellationOutbox.length + state.codexProviderCancellationOutbox.length;
   }
   function nativeExpectationMet(state) {
     if (!state.terminal) return false;
@@ -15370,10 +16963,9 @@ ${additionalInstructions}` : skillBlock;
       pending.signal.removeEventListener("abort", pending.abortListener);
     }
   }
-  function requireModelId(value) {
-    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}\/[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value)) {
-      throw new Error("PI_MOBILE_OPENROUTER_MODEL_ID_INVALID");
-    }
+  function requireModelId(value, providerKind) {
+    const valid = providerKind === "codex" ? /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value) : /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}\/[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value);
+    if (!valid) throw new Error("PI_MOBILE_PROVIDER_MODEL_ID_INVALID");
   }
   function requireTaskId(value) {
     if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value)) {
@@ -15394,7 +16986,7 @@ ${additionalInstructions}` : skillBlock;
   function safeErrorMessage2(error) {
     return error instanceof Error ? error.message : "Phone-local Provider operation failed";
   }
-  function isRecord9(value) {
+  function isRecord10(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);
   }
 
@@ -15507,7 +17099,7 @@ ${additionalInstructions}` : skillBlock;
       ok: true,
       schemaVersion: "1",
       piVersion: "0.80.6",
-      buildRevision: "a466da2c10ec540fd63b052dee07868ad26010cc",
+      buildRevision: "fd32c6c53e281428d8b132e6035fc4149ea3358d",
       runtime: "AgentHarness",
       modelId: harness.getModel().id,
       thinkingLevel: harness.getThinkingLevel(),
@@ -15553,13 +17145,20 @@ ${additionalInstructions}` : skillBlock;
       startNativeOpenRouterScenario(kind, modelId, createBootstrapEnv())
     );
   }
+  function startNativeCodexScenarioJson(kind, modelId) {
+    if (runtimeState === null) throw new Error("PI_MOBILE_RUNTIME_NOT_BOOTED");
+    if (!isNativeOpenRouterScenarioKind(kind)) {
+      throw new Error(`PI_MOBILE_NATIVE_PROVIDER_SCENARIO_UNKNOWN ${kind}`);
+    }
+    return JSON.stringify(startNativeCodexScenario(kind, modelId, createBootstrapEnv()));
+  }
   function startNativeOpenRouterPromptJson(prompt, modelId) {
     if (runtimeState === null) throw new Error("PI_MOBILE_RUNTIME_NOT_BOOTED");
     return JSON.stringify(
       startNativeOpenRouterPrompt(prompt, modelId, createBootstrapEnv())
     );
   }
-  function startNativeOpenRouterTaskSessionJson(taskId, prompt, modelId, sessionId, planMode = false, skillResourcesJson = "[]", imageInputsJson = "[]", textAttachmentInputsJson = "[]") {
+  function startNativeOpenRouterTaskSessionJson(taskId, prompt, modelId, sessionId, planMode = false, skillResourcesJson = "[]", imageInputsJson = "[]", textAttachmentInputsJson = "[]", imageGenerationEnabled = false) {
     if (runtimeState === null) throw new Error("PI_MOBILE_RUNTIME_NOT_BOOTED");
     return JSON.stringify(
       startNativeOpenRouterTaskSession(
@@ -15571,11 +17170,41 @@ ${additionalInstructions}` : skillBlock;
         planMode,
         requirePiMobileSkillResources(JSON.parse(skillResourcesJson)),
         requireRuntimeImageInputs(JSON.parse(imageInputsJson)),
+        requireRuntimeTextAttachmentInputs(JSON.parse(textAttachmentInputsJson)),
+        imageGenerationEnabled
+      )
+    );
+  }
+  function startNativeCodexTaskSessionJson(taskId, prompt, modelId, sessionId, planMode = false, skillResourcesJson = "[]", textAttachmentInputsJson = "[]") {
+    if (runtimeState === null) throw new Error("PI_MOBILE_RUNTIME_NOT_BOOTED");
+    return JSON.stringify(
+      startNativeCodexTaskSession(
+        taskId,
+        prompt,
+        modelId,
+        createBootstrapEnv(),
+        sessionId,
+        planMode,
+        requirePiMobileSkillResources(JSON.parse(skillResourcesJson)),
         requireRuntimeTextAttachmentInputs(JSON.parse(textAttachmentInputsJson))
       )
     );
   }
-  function startNativeOpenRouterTaskSkillSessionJson(taskId, skillName, additionalInstructions, modelId, sessionId, skillResourcesJson = "[]") {
+  function startNativeCodexTaskSkillSessionJson(taskId, skillName, additionalInstructions, modelId, sessionId, skillResourcesJson = "[]") {
+    if (runtimeState === null) throw new Error("PI_MOBILE_RUNTIME_NOT_BOOTED");
+    return JSON.stringify(
+      startNativeCodexTaskSkillSession(
+        taskId,
+        skillName,
+        additionalInstructions,
+        modelId,
+        createBootstrapEnv(),
+        sessionId,
+        requirePiMobileSkillResources(JSON.parse(skillResourcesJson))
+      )
+    );
+  }
+  function startNativeOpenRouterTaskSkillSessionJson(taskId, skillName, additionalInstructions, modelId, sessionId, skillResourcesJson = "[]", imageGenerationEnabled = false) {
     if (runtimeState === null) throw new Error("PI_MOBILE_RUNTIME_NOT_BOOTED");
     return JSON.stringify(
       startNativeOpenRouterTaskSkillSession(
@@ -15585,7 +17214,8 @@ ${additionalInstructions}` : skillBlock;
         modelId,
         createBootstrapEnv(),
         sessionId,
-        requirePiMobileSkillResources(JSON.parse(skillResourcesJson))
+        requirePiMobileSkillResources(JSON.parse(skillResourcesJson)),
+        imageGenerationEnabled
       )
     );
   }
@@ -15642,7 +17272,7 @@ ${additionalInstructions}` : skillBlock;
       invokeNativeOpenRouterTaskSkill(skillName, additionalInstructions)
     );
   }
-  function restoreNativeOpenRouterTaskSessionJson(taskId, sessionId, turnCount, entriesJson, modelId, skillResourcesJson = "[]", imageInputsJson = "[]") {
+  function restoreNativeOpenRouterTaskSessionJson(taskId, sessionId, turnCount, entriesJson, modelId, skillResourcesJson = "[]", imageInputsJson = "[]", imageGenerationEnabled = false) {
     if (runtimeState === null) throw new Error("PI_MOBILE_RUNTIME_NOT_BOOTED");
     return JSON.stringify(
       restoreNativeOpenRouterTaskSession(
@@ -15653,7 +17283,22 @@ ${additionalInstructions}` : skillBlock;
         modelId,
         createBootstrapEnv(),
         requirePiMobileSkillResources(JSON.parse(skillResourcesJson)),
-        requireRuntimeImageInputs(JSON.parse(imageInputsJson))
+        requireRuntimeImageInputs(JSON.parse(imageInputsJson)),
+        imageGenerationEnabled
+      )
+    );
+  }
+  function restoreNativeCodexTaskSessionJson(taskId, sessionId, turnCount, entriesJson, modelId, skillResourcesJson = "[]") {
+    if (runtimeState === null) throw new Error("PI_MOBILE_RUNTIME_NOT_BOOTED");
+    return JSON.stringify(
+      restoreNativeCodexTaskSession(
+        taskId,
+        sessionId,
+        turnCount,
+        JSON.parse(entriesJson),
+        modelId,
+        createBootstrapEnv(),
+        requirePiMobileSkillResources(JSON.parse(skillResourcesJson))
       )
     );
   }

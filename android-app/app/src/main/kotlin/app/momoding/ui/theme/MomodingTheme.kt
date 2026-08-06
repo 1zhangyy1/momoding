@@ -171,18 +171,18 @@ data class MomodingBrandColors(
 )
 
 private val LightMomodingBrandColors = MomodingBrandColors(
-    primary = Color(0xFF49C947),
+    primary = Color(0xFF5FD21E),
     onPrimary = Color(0xFF17221A),
-    deep = Color(0xFF176B2A),
-    soft = Color(0xFFEAF8E7),
-    fold = Color(0xFFFFC928),
+    deep = Color(0xFF27821C),
+    soft = Color(0xFFECF9E5),
+    fold = Color(0xFFFFC51B),
 )
 
 private val DarkMomodingBrandColors = MomodingBrandColors(
-    primary = Color(0xFF6DDD68),
+    primary = Color(0xFF75E238),
     onPrimary = Color(0xFF111712),
-    deep = Color(0xFFB9F5B4),
-    soft = Color(0xFF263A2A),
+    deep = Color(0xFFC4F4AD),
+    soft = Color(0xFF223B24),
     fold = Color(0xFFFFD65C),
 )
 

@@ -19,6 +19,15 @@ class TaskFailureTest {
     }
 
     @Test
+    fun `legacy stream failure is a retryable Provider failure`() {
+        val failure = classifyTaskFailure("OpenRouter stream failed")
+
+        assertEquals(TaskFailureKind.PROVIDER_OTHER, failure.kind)
+        assertEquals(TaskFailureRecovery.RETRY, failure.recovery)
+        assertEquals("The Provider could not complete this response.", failure.message)
+    }
+
+    @Test
     fun `latest Pi assistant error becomes the durable task failure`() {
         val messages = listOf(
             Json.parseToJsonElement(

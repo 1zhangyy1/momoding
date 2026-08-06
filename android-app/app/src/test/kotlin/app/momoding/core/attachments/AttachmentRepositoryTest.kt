@@ -347,6 +347,62 @@ class AttachmentRepositoryTest {
     }
 
     @Test
+    fun `generated image is durable previewable copyable downloadable and discardable`() = runBlocking {
+        PhoneLocalPiEventProjector(database).createTask(
+            taskId = TASK_ID,
+            title = "Generated image task",
+            piSessionId = "session-generated-image",
+            streamId = "stream-generated-image",
+            initialPrompt = "Draw a robot",
+        )
+        val bytes = createPng("generated.png").readBytes()
+
+        val imported = repository.importGeneratedImage(
+            taskId = TASK_ID,
+            toolCallId = "call-generated-image",
+            displayName = "Momoding image.png",
+            bytes = bytes,
+            declaredMimeType = "image/png",
+        )
+        val repeated = repository.importGeneratedImage(
+            taskId = TASK_ID,
+            toolCallId = "call-generated-image",
+            displayName = "ignored replay.png",
+            bytes = bytes,
+            declaredMimeType = "image/png",
+        )
+
+        assertEquals(imported.attachmentId, repeated.attachmentId)
+        assertEquals(AttachmentSource.GENERATED_IMAGE, imported.source)
+        assertEquals(AttachmentState.SENT, imported.state)
+        assertEquals("call-generated-image", imported.messageLocalId)
+        assertEquals(imported, repository.observeTaskGeneratedImages(TASK_ID).first().single())
+        val runtime = repository.runtimeImagesForTask(TASK_ID, setOf(imported.attachmentId)).single()
+        assertEquals(imported.attachmentId, runtime.attachmentId)
+        assertEquals("image/jpeg", runtime.mimeType)
+        assertTrue(repository.generatedImageBytes(TASK_ID, imported.attachmentId).contentEquals(bytes))
+        val contentUri = requireNotNull(
+            repository.generatedImageContentUri(TASK_ID, imported.attachmentId),
+        )
+        assertEquals("content", contentUri.scheme)
+        assertEquals(imported.displayName, Uri.decode(contentUri.lastPathSegment))
+        val savedUri = requireNotNull(
+            repository.saveGeneratedImageToPictures(TASK_ID, imported.attachmentId),
+        )
+        val savedBytes = requireNotNull(context.contentResolver.openInputStream(savedUri)).use {
+            it.readBytes()
+        }
+        assertTrue(savedBytes.contentEquals(bytes))
+        context.contentResolver.delete(savedUri, null, null)
+
+        assertTrue(repository.discardGeneratedImage(TASK_ID, imported.attachmentId))
+        assertTrue(repository.observeTaskGeneratedImages(TASK_ID).first().isEmpty())
+        assertEquals(null, repository.generatedImageBytes(TASK_ID, imported.attachmentId))
+        assertEquals(null, repository.generatedImageContentUri(TASK_ID, imported.attachmentId))
+        assertEquals(0, repository.pruneOrphanedPayloads())
+    }
+
+    @Test
     fun `task composer image failure releases exact pending message without deleting payload`() = runBlocking {
         PhoneLocalPiEventProjector(database).createTask(
             taskId = TASK_ID,

@@ -24,6 +24,9 @@ interface AttachmentDao {
     @Query("SELECT * FROM attachments WHERE taskId = :taskId ORDER BY createdAtMillis, ordinal, attachmentId")
     fun taskAttachments(taskId: String): List<AttachmentEntity>
 
+    @Query("SELECT * FROM attachments WHERE taskId = :taskId AND source = :source ORDER BY createdAtMillis, ordinal, attachmentId")
+    fun observeTaskAttachmentsBySource(taskId: String, source: String): Flow<List<AttachmentEntity>>
+
     @Query("SELECT DISTINCT taskId FROM attachments WHERE state = :state AND taskId IS NOT NULL ORDER BY taskId")
     fun taskIdsWithAttachmentState(state: String): List<String>
 
@@ -59,6 +62,9 @@ interface AttachmentDao {
 
     @Query("DELETE FROM attachments WHERE attachmentId = :attachmentId AND taskId = :taskId AND messageLocalId IS NULL")
     fun deleteTaskStagedAttachmentRow(taskId: String, attachmentId: String): Int
+
+    @Query("DELETE FROM attachments WHERE attachmentId = :attachmentId AND taskId = :taskId AND source = :source")
+    fun deleteTaskAttachmentBySource(taskId: String, attachmentId: String, source: String): Int
 
     @Query("UPDATE attachments SET draftId = NULL, taskId = :taskId, messageLocalId = :messageLocalId, state = :state, updatedAtMillis = :updatedAtMillis WHERE draftId = :draftId")
     fun bindDraftAttachments(

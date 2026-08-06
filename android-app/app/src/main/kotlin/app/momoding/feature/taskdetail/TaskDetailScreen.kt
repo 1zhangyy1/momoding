@@ -47,6 +47,7 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.TableRows
@@ -83,6 +84,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalUriHandler
@@ -94,6 +96,8 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -102,7 +106,9 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import com.mikepenz.markdown.m3.Markdown
 import com.mikepenz.markdown.m3.markdownColor
 import com.mikepenz.markdown.m3.markdownTypography
@@ -312,6 +318,9 @@ fun TaskDetailScreen(
     }
     state.goalConfirmation?.let { confirmation ->
         GoalConfirmationDialog(confirmation, onAction)
+    }
+    state.generatedImagePreview?.let { preview ->
+        GeneratedImagePreviewDialog(preview, onAction)
     }
 }
 
@@ -1292,55 +1301,93 @@ private fun ToolActivity(
             )
         }
     }
-    val expandable = item.result != null
-    val icon = when (item.state) {
-        ToolActivityState.RUNNING -> MomodingIcons.Retry
-        ToolActivityState.SUCCESS -> Icons.Outlined.CheckCircle
-        ToolActivityState.FAILURE -> Icons.Outlined.ErrorOutline
-        ToolActivityState.CANCELLED -> MomodingFilledIcons.Stop
-        ToolActivityState.UNSUPPORTED -> MomodingIcons.Warning
+    val expandable = item.result != null || contextualAction != null
+    val icon = when {
+        item.kind == ToolActivityKind.WEB_ACCESS -> Icons.Outlined.Language
+        item.state == ToolActivityState.RUNNING -> MomodingIcons.Retry
+        item.state == ToolActivityState.SUCCESS -> Icons.Outlined.CheckCircle
+        item.state == ToolActivityState.FAILURE -> Icons.Outlined.ErrorOutline
+        item.state == ToolActivityState.CANCELLED -> MomodingFilledIcons.Stop
+        else -> MomodingIcons.Warning
     }
-    val tone = when (item.state) {
-        ToolActivityState.RUNNING -> WorkBlockTone.ACTIVE
-        ToolActivityState.SUCCESS -> WorkBlockTone.SUCCESS
-        ToolActivityState.FAILURE -> WorkBlockTone.DANGER
-        ToolActivityState.CANCELLED, ToolActivityState.UNSUPPORTED -> WorkBlockTone.WARNING
+    val statusColors = LocalMomodingStatusColors.current
+    val brand = LocalMomodingBrandColors.current
+    val accent = when (item.state) {
+        ToolActivityState.RUNNING -> brand.deep
+        ToolActivityState.SUCCESS -> statusColors.success
+        ToolActivityState.FAILURE -> statusColors.danger
+        ToolActivityState.CANCELLED, ToolActivityState.UNSUPPORTED -> statusColors.warning
     }
-    val status = when (item.state) {
-        ToolActivityState.RUNNING -> "Working"
-        ToolActivityState.SUCCESS -> "Done"
-        ToolActivityState.FAILURE -> "Failed"
-        ToolActivityState.CANCELLED -> "Stopped"
-        ToolActivityState.UNSUPPORTED -> "Unsupported"
+    val canOpen = expandable && policy.allows(TaskDetailInteraction.OPEN_TOOL)
+    val summary = buildAnnotatedString {
+        withStyle(SpanStyle(fontWeight = FontWeight.Medium)) {
+            append(item.title)
+        }
+        item.detail
+            .takeIf(String::isNotBlank)
+            ?.takeUnless { it.equals("Completed", ignoreCase = true) }
+            ?.let { detail ->
+                withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant)) {
+                    append(" · ")
+                    append(detail)
+                }
+            }
     }
-    WorkBlock(
-        title = item.title,
-        detail = item.detail.takeIf { contextualAction == null },
-        icon = icon,
-        tone = tone,
-        statusLabel = status.takeIf { contextualAction == null },
-        onClick = if (expandable && policy.allows(TaskDetailInteraction.OPEN_TOOL)) {
-            { onAction(TaskDetailAction.ToggleTool(item.stableKey)) }
-        } else null,
-        trailing = if (expandable) {
-            {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .then(
+                    if (canOpen) {
+                        Modifier
+                            .clickable { onAction(TaskDetailAction.ToggleTool(item.stableKey)) }
+                            .testTag("action-OpenTool")
+                            .taskDetailContractAction(policy, TaskDetailInteraction.OPEN_TOOL)
+                    } else {
+                        Modifier.testTag("tool-activity-${item.toolCallId}")
+                    },
+                )
+                .padding(horizontal = 4.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (item.state == ToolActivityState.RUNNING) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(15.dp),
+                    strokeWidth = 1.8.dp,
+                    color = accent,
+                )
+            } else {
+                Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(16.dp))
+            }
+            Text(
+                text = summary,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (expandable) {
                 Icon(
-                    Icons.Outlined.ChevronRight,
-                    contentDescription = if (item.expanded) "Collapse tool activity" else "Expand tool activity",
-                    modifier = Modifier.size(19.dp),
+                    if (item.expanded) Icons.Outlined.KeyboardArrowDown else Icons.Outlined.ChevronRight,
+                    contentDescription = if (item.expanded) {
+                        "Collapse tool activity"
+                    } else {
+                        "Expand tool activity"
+                    },
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(17.dp),
                 )
             }
-        } else null,
-        modifier = if (expandable) {
-            Modifier
-                .testTag("action-OpenTool")
-                .taskDetailContractAction(policy, TaskDetailInteraction.OPEN_TOOL)
-        } else {
-            Modifier.testTag("tool-activity-${item.toolCallId}")
-        },
-        content = if ((item.expanded && item.result != null) || contextualAction != null) {
-            {
-                if (item.expanded && item.result != null) ToolResult(item)
+        }
+        if (item.expanded && (item.result != null || contextualAction != null)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 24.dp, end = 4.dp, bottom = 8.dp),
+            ) {
+                if (item.expanded && item.result != null) ToolResult(item, onAction)
                 contextualAction?.let { (label, action, interaction) ->
                     TextButton(
                         onClick = { onAction(action) },
@@ -1355,8 +1402,8 @@ private fun ToolActivity(
                     }
                 }
             }
-        } else null,
-    )
+        }
+    }
 }
 
 @Composable
@@ -1528,8 +1575,12 @@ private fun childUsageLabel(child: TaskChildAgentUiModel): String? {
 }
 
 @Composable
-private fun ToolResult(item: TimelineItem.ToolActivity) {
+private fun ToolResult(
+    item: TimelineItem.ToolActivity,
+    onAction: (TaskDetailAction) -> Unit,
+) {
     val result = requireNotNull(item.result)
+    val uriHandler = LocalUriHandler.current
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1538,6 +1589,30 @@ private fun ToolResult(item: TimelineItem.ToolActivity) {
             .testTag("tool-result-${item.toolCallId}"),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        result.images.forEach { generated ->
+            val bitmap = remember(generated.attachmentId, generated.thumbnailPng) {
+                generated.thumbnailPng?.let { bytes ->
+                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+                }
+            }
+            if (bitmap != null) {
+                Image(
+                    bitmap = bitmap,
+                    contentDescription = "Open ${generated.displayName}",
+                    modifier = Modifier
+                        .size(220.dp)
+                        .background(
+                            MaterialTheme.colorScheme.surfaceContainerHighest,
+                            RoundedCornerShape(12.dp),
+                        )
+                        .clickable {
+                            onAction(TaskDetailAction.OpenGeneratedImage(generated.attachmentId))
+                        }
+                        .testTag("generated-image-${generated.attachmentId}"),
+                    contentScale = ContentScale.Fit,
+                )
+            }
+        }
         if (result.text.isNotBlank()) {
             SelectionContainer {
                 Text(
@@ -1550,13 +1625,86 @@ private fun ToolResult(item: TimelineItem.ToolActivity) {
             }
         }
         if (result.sources.isNotEmpty()) {
-            Text("Sources", style = MaterialTheme.typography.labelMedium)
-            result.sources.forEach { source ->
-                Text(
-                    text = source,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            Text(
+                "Sources",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Column {
+                result.sources.forEachIndexed { index, source ->
+                    val host = remember(source.url) {
+                        source.url?.let { runCatching { it.toUri().host }.getOrNull() }
+                    }
+                    if (index > 0) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(start = 33.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
+                        )
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 44.dp)
+                            .then(
+                                if (source.url == null) {
+                                    Modifier
+                                } else {
+                                    Modifier
+                                        .clickable {
+                                            runCatching { uriHandler.openUri(source.url) }
+                                        }
+                                        .semantics {
+                                            contentDescription = "Open source: ${source.label}"
+                                        }
+                                },
+                            )
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(9.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .background(
+                                    MaterialTheme.colorScheme.surfaceContainerHighest,
+                                    CircleShape,
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                source.label.firstOrNull()?.uppercase() ?: "·",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                source.label,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            host?.let {
+                                Text(
+                                    it.removePrefix("www."),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                        if (source.url != null) {
+                            Icon(
+                                Icons.AutoMirrored.Outlined.ArrowForward,
+                                contentDescription = "Open source",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                    }
+                }
             }
         }
         if (result.truncated) {

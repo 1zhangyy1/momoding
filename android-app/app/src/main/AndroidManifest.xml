@@ -145,6 +145,16 @@
         </provider>
 
         <provider
+            android:name=".core.attachments.AttachmentShareFileProvider"
+            android:authorities="${applicationId}.attachments"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/attachment_share_paths" />
+        </provider>
+
+        <provider
             android:name="rikka.shizuku.ShizukuProvider"
             android:authorities="${applicationId}.shizuku"
             android:enabled="true"

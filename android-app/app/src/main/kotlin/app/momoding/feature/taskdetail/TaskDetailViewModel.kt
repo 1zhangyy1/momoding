@@ -77,6 +77,7 @@ class TaskDetailViewModel internal constructor(
     private var openResolution = TaskOpenResolution.PENDING
     private var acknowledgedCompletion: String? = null
     private var phoneLocalPlan = PhoneLocalTaskPlanState()
+    private var generatedImagesById: Map<String, ToolImageUiModel> = emptyMap()
     private val consumedAttentionReturnEffects = mutableSetOf<String>()
 
     constructor(
@@ -162,6 +163,20 @@ class TaskDetailViewModel internal constructor(
                         )
                     }
                     mutableState.value = mutableState.value.copy(attachments = ui)
+                    rebuild()
+                }
+            }
+            viewModelScope.launch {
+                gateway.observeTaskGeneratedImages(taskId).collect { records ->
+                    generatedImagesById = records.associate { record ->
+                        record.attachmentId to ToolImageUiModel(
+                            attachmentId = record.attachmentId,
+                            displayName = record.displayName,
+                            mimeType = record.mimeType,
+                            byteSize = record.byteSize,
+                            thumbnailPng = gateway.thumbnailPng(record.attachmentId),
+                        )
+                    }
                     rebuild()
                 }
             }
@@ -353,6 +368,63 @@ class TaskDetailViewModel internal constructor(
             is TaskDetailAction.ImportPhotos -> importPhotos(action.uris)
             is TaskDetailAction.ImportTextFile -> importTextFile(action.uri)
             is TaskDetailAction.RemoveAttachment -> removeAttachment(action.attachmentId)
+            is TaskDetailAction.OpenGeneratedImage -> openGeneratedImage(action.attachmentId)
+            TaskDetailAction.DismissGeneratedImage -> mutableState.value =
+                mutableState.value.copy(generatedImagePreview = null)
+            is TaskDetailAction.CopyGeneratedImage -> copyGeneratedImage(action.attachmentId)
+            is TaskDetailAction.DownloadGeneratedImage -> downloadGeneratedImage(action.attachmentId)
+        }
+    }
+
+    private fun openGeneratedImage(attachmentId: String) {
+        val gateway = taskAttachments ?: return
+        val image = generatedImagesById[attachmentId] ?: return
+        viewModelScope.launch {
+            val bytes = gateway.generatedImageBytes(taskId, attachmentId)
+            if (bytes == null) {
+                mutableOneShots.emit(
+                    TaskDetailOneShot.GeneratedImageActionFailed("The full image is unavailable."),
+                )
+                return@launch
+            }
+            if (generatedImagesById[attachmentId] != image) return@launch
+            mutableState.value = mutableState.value.copy(
+                generatedImagePreview = GeneratedImagePreviewUiModel(
+                    attachmentId = attachmentId,
+                    displayName = image.displayName,
+                    mimeType = image.mimeType,
+                    imageBytes = bytes,
+                ),
+            )
+        }
+    }
+
+    private fun copyGeneratedImage(attachmentId: String) {
+        val gateway = taskAttachments ?: return
+        val image = generatedImagesById[attachmentId] ?: return
+        viewModelScope.launch {
+            val uri = gateway.generatedImageContentUri(taskId, attachmentId)
+            if (uri == null) {
+                mutableOneShots.emit(
+                    TaskDetailOneShot.GeneratedImageActionFailed("The image could not be copied."),
+                )
+                return@launch
+            }
+            mutableOneShots.emit(TaskDetailOneShot.CopyGeneratedImage(uri, image.displayName))
+        }
+    }
+
+    private fun downloadGeneratedImage(attachmentId: String) {
+        val gateway = taskAttachments ?: return
+        if (generatedImagesById[attachmentId] == null) return
+        viewModelScope.launch {
+            if (gateway.saveGeneratedImageToPictures(taskId, attachmentId) == null) {
+                mutableOneShots.emit(
+                    TaskDetailOneShot.GeneratedImageActionFailed("The image could not be downloaded."),
+                )
+            } else {
+                mutableOneShots.emit(TaskDetailOneShot.GeneratedImageSaved)
+            }
         }
     }
 
@@ -536,10 +608,11 @@ class TaskDetailViewModel internal constructor(
     }
 
     private fun rebuild() {
+        val enrichedProjection = projection?.withGeneratedImages(generatedImagesById)
         mutableState.value = projectTaskDetailUiState(
             current = mutableState.value,
             snapshot = snapshot,
-            projection = projection,
+            projection = enrichedProjection,
             transport = transport,
             replay = replay,
             commandProgress = commandProgress,
@@ -723,7 +796,11 @@ internal fun projectTaskDetailUiState(
             projection?.recovery
         },
         activeStopFence = snapshot?.activeStopFence == true,
-        failure = snapshot?.failure,
+        failure = if (runState == TaskDetailRunState.FAILED) {
+            projection?.failure ?: snapshot?.failure
+        } else {
+            snapshot?.failure
+        },
         composerBlockedReason = blockedReason,
         planMode = current.phoneLocal && phoneLocalPlan.enabled,
         latestPlanDigest = phoneLocalPlan.latestPlan?.planDigest,
@@ -773,6 +850,28 @@ internal fun projectTaskDetailUiState(
                 }?.expanded == true,
             )
         },
+    )
+}
+
+private fun PiUiProjection.withGeneratedImages(
+    generatedImagesById: Map<String, ToolImageUiModel>,
+): PiUiProjection {
+    if (generatedImagesById.isEmpty()) return this
+    fun enrich(item: TimelineItem): TimelineItem {
+        if (item !is TimelineItem.ToolActivity || item.result?.images.isNullOrEmpty()) return item
+        return item.copy(
+            result = item.result?.copy(
+                images = item.result.images.map { image ->
+                    generatedImagesById[image.attachmentId] ?: image
+                },
+            ),
+        )
+    }
+    return copy(
+        timeline = timeline.copy(
+            settledItems = timeline.settledItems.map(::enrich),
+            activeItem = timeline.activeItem?.let(::enrich),
+        ),
     )
 }
 

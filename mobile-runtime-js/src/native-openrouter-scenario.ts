@@ -1,4 +1,16 @@
 import {
+  closeCodexNativeBridge,
+  completeCodexRequest,
+  createCodexNativeStream,
+  drainCodexCancellations,
+  drainCodexRequests,
+  failCodexRequest,
+  pushCodexEvent,
+  type CodexNativeBridgeState,
+  type NativeCodexCancellation,
+  type NativeCodexRequest,
+} from "./provider/codex-native-bridge.js";
+import {
   AgentHarness,
   Session,
   type AgentHarnessEvent,
@@ -9,6 +21,7 @@ import {
 } from "@earendil-works/pi-agent-core";
 import {
   type AssistantMessage,
+  type Api,
   type Context,
   type ImageContent,
   type Model,
@@ -70,8 +83,8 @@ import {
   failOpenRouterRequest,
   modelsForProvider,
   pushOpenRouterChunk,
-  type NativeProviderCancellation,
-  type NativeProviderRequest,
+  type NativeProviderCancellation as OpenRouterNativeProviderCancellation,
+  type NativeProviderRequest as OpenRouterNativeProviderRequest,
   type OpenRouterNativeBridgeState,
 } from "./provider/openrouter-native-bridge.js";
 import {
@@ -144,8 +157,11 @@ interface NativeToolResultEnvelope {
 }
 
 interface NativeScenarioState
-  extends OpenRouterNativeBridgeState, LiveTaskContextState {
+  extends OpenRouterNativeBridgeState, CodexNativeBridgeState, LiveTaskContextState {
   kind: NativeOpenRouterRunKind;
+  providerKind: NativeProviderKind;
+  modelId: string;
+  providerBindingRecorded: boolean;
   harness: AgentHarness;
   session: Session;
   taskId: string | null;
@@ -190,6 +206,14 @@ interface NativeScenarioState
 
 const PROVIDER_ID = "openrouter";
 const PROVIDER_BASE_URL = "https://openrouter.ai/api/v1";
+const CODEX_PROVIDER_ID = "openai-codex";
+const CODEX_PROVIDER_BASE_URL = "https://chatgpt.com/backend-api";
+const PROVIDER_BINDING_ENTRY_TYPE = "pi_mobile_provider_binding";
+type NativeProviderKind = "openrouter" | "codex";
+type NativeProviderRequest = OpenRouterNativeProviderRequest | NativeCodexRequest;
+type NativeProviderCancellation =
+  | OpenRouterNativeProviderCancellation
+  | NativeCodexCancellation;
 const RECORDED_EVENT_TYPES = new Set([
   "agent_start",
   "agent_end",
@@ -223,6 +247,30 @@ export function startNativeOpenRouterScenario(
   );
 }
 
+export function startNativeCodexScenario(
+  kind: NativeOpenRouterScenarioKind,
+  modelId: string,
+  env: ExecutionEnv,
+): Record<string, unknown> {
+  return startNativeOpenRouterRun(
+    kind,
+    `Run native Codex scenario ${kind}`,
+    modelId,
+    env,
+    kind === "tool",
+    null,
+    `phone-local-native-codex-${kind}`,
+    [],
+    0,
+    false,
+    [],
+    [],
+    [],
+    false,
+    "codex",
+  );
+}
+
 export function startNativeOpenRouterPrompt(
   prompt: string,
   modelId: string,
@@ -242,6 +290,7 @@ export function startNativeOpenRouterTaskSession(
   skillResources: PiMobileSkillResource[] = [],
   imageInputs: PiRuntimeImageInput[] = [],
   textAttachmentInputs: PiRuntimeTextAttachmentInput[] = [],
+  imageGenerationEnabled = false,
 ): Record<string, unknown> {
   requireTaskId(taskId);
   const images = requireRuntimeImageInputs(imageInputs);
@@ -262,10 +311,44 @@ export function startNativeOpenRouterTaskSession(
     requirePiMobileSkillResources(skillResources),
     images,
     textAttachments,
+    imageGenerationEnabled,
   );
 }
 
-export function startNativeOpenRouterTaskSkillSession(
+export function startNativeCodexTaskSession(
+  taskId: string,
+  prompt: string,
+  modelId: string,
+  env: ExecutionEnv,
+  sessionId = `phone-local-task-${taskId}`,
+  planMode = false,
+  skillResources: PiMobileSkillResource[] = [],
+  textAttachmentInputs: PiRuntimeTextAttachmentInput[] = [],
+): Record<string, unknown> {
+  requireTaskId(taskId);
+  const textAttachments = requireRuntimeTextAttachmentInputs(textAttachmentInputs);
+  requireTaskInput(prompt, [], textAttachments);
+  requireSessionId(sessionId);
+  return startNativeOpenRouterRun(
+    "prompt",
+    prompt,
+    modelId,
+    env,
+    false,
+    taskId,
+    sessionId,
+    [],
+    0,
+    planMode,
+    requirePiMobileSkillResources(skillResources),
+    [],
+    textAttachments,
+    false,
+    "codex",
+  );
+}
+
+export function startNativeCodexTaskSkillSession(
   taskId: string,
   skillName: string,
   additionalInstructions: string | undefined,
@@ -289,6 +372,42 @@ export function startNativeOpenRouterTaskSkillSession(
     0,
     false,
     resources,
+    [],
+    [],
+    false,
+    "codex",
+  );
+  return invokeNativeOpenRouterTaskSkill(skillName, additionalInstructions);
+}
+
+export function startNativeOpenRouterTaskSkillSession(
+  taskId: string,
+  skillName: string,
+  additionalInstructions: string | undefined,
+  modelId: string,
+  env: ExecutionEnv,
+  sessionId = `phone-local-task-${taskId}`,
+  skillResources: PiMobileSkillResource[] = [],
+  imageGenerationEnabled = false,
+): Record<string, unknown> {
+  requireTaskId(taskId);
+  requireSessionId(sessionId);
+  const resources = requirePiMobileSkillResources(skillResources);
+  startNativeOpenRouterRun(
+    "prompt",
+    null,
+    modelId,
+    env,
+    false,
+    taskId,
+    sessionId,
+    [],
+    0,
+    false,
+    resources,
+    [],
+    [],
+    imageGenerationEnabled,
   );
   return invokeNativeOpenRouterTaskSkill(skillName, additionalInstructions);
 }
@@ -302,6 +421,7 @@ export function restoreNativeOpenRouterTaskSession(
   env: ExecutionEnv,
   skillResources: PiMobileSkillResource[] = [],
   imageInputs: PiRuntimeImageInput[] = [],
+  imageGenerationEnabled = false,
 ): Record<string, unknown> {
   requireTaskId(taskId);
   requireSessionId(sessionId);
@@ -323,6 +443,42 @@ export function restoreNativeOpenRouterTaskSession(
     false,
     requirePiMobileSkillResources(skillResources),
     images,
+    [],
+    imageGenerationEnabled,
+  );
+}
+
+export function restoreNativeCodexTaskSession(
+  taskId: string,
+  sessionId: string,
+  turnCount: number,
+  entries: unknown,
+  modelId: string,
+  env: ExecutionEnv,
+  skillResources: PiMobileSkillResource[] = [],
+): Record<string, unknown> {
+  requireTaskId(taskId);
+  requireSessionId(sessionId);
+  const restoredEntries = requireSessionEntries(entries);
+  if (!Number.isSafeInteger(turnCount) || turnCount < 0) {
+    throw new Error("PI_MOBILE_TASK_SESSION_TURN_COUNT_INVALID");
+  }
+  return startNativeOpenRouterRun(
+    "prompt",
+    null,
+    modelId,
+    env,
+    false,
+    taskId,
+    sessionId,
+    restoredEntries,
+    turnCount,
+    false,
+    requirePiMobileSkillResources(skillResources),
+    [],
+    [],
+    false,
+    "codex",
   );
 }
 
@@ -571,15 +727,46 @@ function startNativeOpenRouterRun(
   initialSkillResources: PiMobileSkillResource[] = [],
   initialRuntimeImages: PiRuntimeImageInput[] = [],
   initialTextAttachments: PiRuntimeTextAttachmentInput[] = [],
+  imageGenerationEnabled = false,
+  providerKind: NativeProviderKind = "openrouter",
 ): Record<string, unknown> {
   if (nativeScenarioState !== null && !nativeScenarioState.terminal) {
     throw new Error("PI_MOBILE_NATIVE_PROVIDER_SCENARIO_ALREADY_RUNNING");
   }
   closeNativeOpenRouterScenario();
-  requireModelId(modelId);
+  requireModelId(modelId, providerKind);
+  const restoredProviderBinding = providerBindingFromEntries(restoredEntries);
+  if (
+    restoredProviderBinding !== null &&
+    (
+      restoredProviderBinding.kind !== providerKind ||
+      restoredProviderBinding.modelId !== modelId
+    )
+  ) {
+    throw new Error("PI_MOBILE_SESSION_PROVIDER_BINDING_MISMATCH");
+  }
+  if (
+    taskId !== null &&
+    restoredEntries.length > 0 &&
+    providerKind === "codex" &&
+    restoredProviderBinding === null
+  ) {
+    throw new Error("PI_MOBILE_SESSION_PROVIDER_BINDING_MISSING");
+  }
 
   let state: NativeScenarioState;
-  const model: Model<"openai-completions"> = {
+  const model: Model<Api> = providerKind === "codex" ? {
+    id: modelId,
+    name: modelId,
+    api: "openai-codex-responses",
+    provider: CODEX_PROVIDER_ID,
+    baseUrl: CODEX_PROVIDER_BASE_URL,
+    reasoning: true,
+    input: ["text", "image"],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 128_000,
+    maxTokens: 4_096,
+  } : {
     id: modelId,
     name: modelId,
     api: "openai-completions",
@@ -591,13 +778,13 @@ function startNativeOpenRouterRun(
     contextWindow: 128_000,
     maxTokens: 4_096,
   };
-  const provider: Provider<"openai-completions"> = {
-    id: PROVIDER_ID,
-    name: "OpenRouter",
-    baseUrl: PROVIDER_BASE_URL,
+  const provider: Provider = {
+    id: providerKind === "codex" ? CODEX_PROVIDER_ID : PROVIDER_ID,
+    name: providerKind === "codex" ? "Codex" : "OpenRouter",
+    baseUrl: providerKind === "codex" ? CODEX_PROVIDER_BASE_URL : PROVIDER_BASE_URL,
     auth: {
       apiKey: {
-        name: "Android Keystore managed OpenRouter credential",
+        name: `Android Keystore managed ${providerKind === "codex" ? "Codex" : "OpenRouter"} credential`,
         resolve: async () => ({ auth: {}, source: "Android Keystore" }),
       },
     },
@@ -651,7 +838,7 @@ function startNativeOpenRouterRun(
   const productTools: AgentTool[] = kind === "prompt" && taskId !== null
     ? [
         childAgents!.delegateTool(),
-        ...createAndroidProductTools(executeNativeTool),
+        ...createAndroidProductTools(executeNativeTool, { imageGenerationEnabled }),
         createPlanUpdateTool(() => state),
         ...createGoalTools(() => state),
       ]
@@ -711,6 +898,9 @@ function startNativeOpenRouterRun(
   }));
   state = {
     kind,
+    providerKind,
+    modelId,
+    providerBindingRecorded: restoredProviderBinding !== null,
     harness,
     session,
     taskId,
@@ -734,6 +924,9 @@ function startNativeOpenRouterRun(
     providerOutbox: [],
     providerCancellationOutbox: [],
     pendingProviders: new Map(),
+    codexProviderOutbox: [],
+    codexProviderCancellationOutbox: [],
+    pendingCodexProviders: new Map(),
     nextProviderRequestId: 1,
     providerRequestsIssued: 0,
     providerRequestsCompleted: 0,
@@ -839,6 +1032,48 @@ function requireSessionEntries(value: unknown): SessionTreeEntry[] {
     }
   }
   return value as SessionTreeEntry[];
+}
+
+function providerBindingFromEntries(
+  entries: SessionTreeEntry[],
+): { kind: NativeProviderKind; modelId: string } | null {
+  let binding: { kind: NativeProviderKind; modelId: string } | null = null;
+  for (const entry of entries) {
+    if (entry.type !== "custom" || entry.customType !== PROVIDER_BINDING_ENTRY_TYPE) continue;
+    if (entry.data === null || typeof entry.data !== "object" || Array.isArray(entry.data)) {
+      throw new Error("PI_MOBILE_SESSION_PROVIDER_BINDING_INVALID");
+    }
+    const data = entry.data as Record<string, unknown>;
+    if (
+      Object.keys(data).sort().join(",") !== "kind,modelId" ||
+      (data.kind !== "openrouter" && data.kind !== "codex") ||
+      typeof data.modelId !== "string"
+    ) {
+      throw new Error("PI_MOBILE_SESSION_PROVIDER_BINDING_INVALID");
+    }
+    requireModelId(data.modelId, data.kind);
+    const candidate: { kind: NativeProviderKind; modelId: string } = {
+      kind: data.kind as NativeProviderKind,
+      modelId: data.modelId,
+    };
+    if (
+      binding !== null &&
+      (binding.kind !== candidate.kind || binding.modelId !== candidate.modelId)
+    ) {
+      throw new Error("PI_MOBILE_SESSION_PROVIDER_BINDING_CONFLICT");
+    }
+    binding = candidate;
+  }
+  return binding;
+}
+
+async function ensureProviderBinding(state: NativeScenarioState): Promise<void> {
+  if (state.taskId === null || state.providerBindingRecorded) return;
+  await state.session.appendCustomEntry(PROVIDER_BINDING_ENTRY_TYPE, {
+    kind: state.providerKind,
+    modelId: state.modelId,
+  });
+  state.providerBindingRecorded = true;
 }
 
 function requireSessionId(value: string): void {
@@ -1009,10 +1244,10 @@ function requireSettledNativeTaskSession(): NativeScenarioState {
     throw new Error("PI_MOBILE_TASK_SESSION_BUSY");
   }
   if (
-    state.pendingProviders.size > 0 ||
+    pendingProviderCount(state) > 0 ||
     state.pendingTools.size > 0 ||
-    state.providerOutbox.length > 0 ||
-    state.providerCancellationOutbox.length > 0 ||
+    queuedProviderRequestCount(state) > 0 ||
+    queuedProviderCancellationCount(state) > 0 ||
     state.toolOutbox.length > 0
   ) {
     throw new Error("PI_MOBILE_TASK_SESSION_PENDING_OUTPUT");
@@ -1051,6 +1286,7 @@ async function runHarnessPrompt(
   textAttachments: PiRuntimeTextAttachmentInput[] = [],
 ): Promise<void> {
   try {
+    await ensureProviderBinding(state);
     const effectivePrompt = await promptWithTextAttachments(
       state.session,
       prompt,
@@ -1081,6 +1317,7 @@ async function runHarnessSkill(
   additionalInstructions?: string,
 ): Promise<void> {
   try {
+    await ensureProviderBinding(state);
     await state.session.appendCustomEntry(SKILL_INVOCATION_CONTROL_ENTRY_TYPE, {
       kind: "skill_invocation",
       name: skillName,
@@ -1190,11 +1427,11 @@ function queueNativeOpenRouterTaskMessage(
 
 function resetTaskRun(state: NativeScenarioState): void {
   if (
-    state.pendingProviders.size > 0 ||
+    pendingProviderCount(state) > 0 ||
     state.pendingTools.size > 0 ||
     state.pendingAttachedTaskMessages > 0 ||
-    state.providerOutbox.length > 0 ||
-    state.providerCancellationOutbox.length > 0 ||
+    queuedProviderRequestCount(state) > 0 ||
+    queuedProviderCancellationCount(state) > 0 ||
     state.toolOutbox.length > 0
   ) {
     throw new Error("PI_MOBILE_TASK_SESSION_PENDING_OUTPUT");
@@ -1228,11 +1465,17 @@ function resetTaskRun(state: NativeScenarioState): void {
 }
 
 export function drainNativeProviderRequests(): NativeProviderRequest[] {
-  return drainOpenRouterRequests(requireNativeScenario());
+  const state = requireNativeScenario();
+  return state.providerKind === "codex"
+    ? drainCodexRequests(state)
+    : drainOpenRouterRequests(state);
 }
 
 export function drainNativeProviderCancellations(): NativeProviderCancellation[] {
-  return drainOpenRouterCancellations(requireNativeScenario());
+  const state = requireNativeScenario();
+  return state.providerKind === "codex"
+    ? drainCodexCancellations(state)
+    : drainOpenRouterCancellations(state);
 }
 
 export function drainNativeOpenRouterChildEvents(): PiChildEventEnvelope[] {
@@ -1328,7 +1571,8 @@ export function pushNativeProviderChunk(
   chunk: unknown,
 ): Record<string, unknown> {
   const state = requireNativeScenario();
-  pushOpenRouterChunk(state, requestId, chunk, () => updateTerminal(state));
+  if (state.providerKind === "codex") pushCodexEvent(state, requestId, chunk);
+  else pushOpenRouterChunk(state, requestId, chunk, () => updateTerminal(state));
   return nativeOpenRouterScenarioStatus();
 }
 
@@ -1337,12 +1581,15 @@ export function completeNativeProviderRequest(
   generationId?: string,
 ): Record<string, unknown> {
   const state = requireNativeScenario();
-  completeOpenRouterRequest(
-    state,
-    requestId,
-    generationId,
-    () => updateTerminal(state),
-  );
+  if (state.providerKind === "codex") completeCodexRequest(state, requestId);
+  else {
+    completeOpenRouterRequest(
+      state,
+      requestId,
+      generationId,
+      () => updateTerminal(state),
+    );
+  }
   return nativeOpenRouterScenarioStatus();
 }
 
@@ -1351,12 +1598,9 @@ export function failNativeProviderRequest(
   safeMessage: string,
 ): Record<string, unknown> {
   const state = requireNativeScenario();
-  failOpenRouterRequest(
-    state,
-    requestId,
-    requireSafeProviderError(safeMessage),
-    () => updateTerminal(state),
-  );
+  const message = requireSafeProviderError(safeMessage);
+  if (state.providerKind === "codex") failCodexRequest(state, requestId, message);
+  else failOpenRouterRequest(state, requestId, message, () => updateTerminal(state));
   return nativeOpenRouterScenarioStatus();
 }
 
@@ -1445,9 +1689,9 @@ export function nativeOpenRouterScenarioStatus(): Record<string, unknown> {
     eventTypes,
     runEvents,
     runEventTypes,
-    pendingProviderCount: state.pendingProviders.size,
-    queuedProviderRequestCount: state.providerOutbox.length,
-    queuedProviderCancellationCount: state.providerCancellationOutbox.length,
+    pendingProviderCount: pendingProviderCount(state),
+    queuedProviderRequestCount: queuedProviderRequestCount(state),
+    queuedProviderCancellationCount: queuedProviderCancellationCount(state),
     providerRequestsIssued: state.providerRequestsIssued,
     providerRequestsCompleted: state.providerRequestsCompleted,
     providerRequestsFailed: state.providerRequestsFailed,
@@ -1490,6 +1734,7 @@ export function closeNativeOpenRouterScenario(): void {
   state.childAgents?.close("runtime_rebuilt");
   state.unsubscribe();
   closeOpenRouterNativeBridge(state);
+  closeCodexNativeBridge(state);
   for (const pending of state.pendingTools.values()) {
     clearToolAbort(pending);
     pending.reject(new Error("PI_MOBILE_RUNTIME_CLOSED"));
@@ -1502,20 +1747,37 @@ export function closeNativeOpenRouterScenario(): void {
 
 function createNativeProviderStream(
   state: NativeScenarioState,
-  model: Model<"openai-completions">,
+  model: Model<Api>,
   context: Context,
   options?: SimpleStreamOptions,
   childBinding?: PiChildBinding,
-): ReturnType<typeof createOpenRouterNativeStream> {
+) {
+  if (state.providerKind === "codex") {
+    return createCodexNativeStream(
+      state,
+      model as Model<"openai-codex-responses">,
+      context,
+      options,
+      {
+        consumeLiveContext: (messages) => consumeLiveToolContext(messages, state),
+        updateTerminal: () => updateTerminal(state),
+      },
+      childBinding,
+    );
+  }
   return createOpenRouterNativeStream(
     state,
-    model,
+    model as Model<"openai-completions">,
     context,
     options,
     {
       consumeLiveContext: (messages) =>
         consumeLiveToolContext(messages, state),
       updateTerminal: () => updateTerminal(state),
+      recordWebActivityEvent: (event) => {
+        state.events.push(event);
+        state.eventTypes.push(event.type);
+      },
     },
     childBinding,
   );
@@ -1558,10 +1820,10 @@ function requestNativeTool(
 
 function childModelsForProvider(
   state: NativeScenarioState,
-  provider: Provider<"openai-completions">,
+  provider: Provider,
   binding: PiChildBinding,
 ): Models {
-  const childProvider: Provider<"openai-completions"> = {
+  const childProvider: Provider = {
     ...provider,
     stream: (model, context, options) =>
       createNativeProviderStream(state, model, context, options, binding),
@@ -1611,9 +1873,22 @@ function updateTerminal(state: NativeScenarioState): void {
   state.terminal = !state.planTransitionPending && !state.goalTransitionPending &&
     !state.resourceTransitionPending && state.promptSettled &&
     (!state.stopRequested || state.stopCompleted || state.stopError !== null) &&
-    state.pendingProviders.size === 0 &&
+    pendingProviderCount(state) === 0 &&
     state.pendingTools.size === 0 &&
     state.pendingAttachedTaskMessages === 0;
+}
+
+function pendingProviderCount(state: NativeScenarioState): number {
+  return state.pendingProviders.size + state.pendingCodexProviders.size;
+}
+
+function queuedProviderRequestCount(state: NativeScenarioState): number {
+  return state.providerOutbox.length + state.codexProviderOutbox.length;
+}
+
+function queuedProviderCancellationCount(state: NativeScenarioState): number {
+  return state.providerCancellationOutbox.length +
+    state.codexProviderCancellationOutbox.length;
 }
 
 function nativeExpectationMet(state: NativeScenarioState): boolean {
@@ -1704,10 +1979,11 @@ function clearToolAbort(pending: PendingTool): void {
   }
 }
 
-function requireModelId(value: string): void {
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}\/[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value)) {
-    throw new Error("PI_MOBILE_OPENROUTER_MODEL_ID_INVALID");
-  }
+function requireModelId(value: string, providerKind: NativeProviderKind): void {
+  const valid = providerKind === "codex"
+    ? /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value)
+    : /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}\/[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value);
+  if (!valid) throw new Error("PI_MOBILE_PROVIDER_MODEL_ID_INVALID");
 }
 
 function requireTaskId(value: string): void {
