@@ -3,6 +3,7 @@ package app.momoding.feature.taskdetail
 import app.momoding.core.data.TaskDetailEventRecord
 import app.momoding.core.data.TaskDetailSnapshot
 import app.momoding.core.data.AttentionResponseState
+import app.momoding.core.data.TaskFailure
 import app.momoding.core.data.TaskAttentionKind
 import app.momoding.core.data.classifyTaskFailure
 import java.security.MessageDigest
@@ -25,6 +26,7 @@ data class PiUiProjection(
     val queue: List<QueueItemUiModel>,
     val attention: TaskAttentionUiModel?,
     val recovery: TaskRecoveryUiModel?,
+    val failure: TaskFailure? = null,
 )
 
 /** Stateful presentation reducer over durable native Pi data. It never emits another runtime protocol. */
@@ -113,6 +115,21 @@ class PiUiReducer {
             } else {
                 null
             },
+            failure = if (run == TaskDetailRunState.FAILED) {
+                snapshot.messages.asReversed().firstNotNullOfOrNull { row ->
+                    val message = parseObject(row.rawPayload) ?: return@firstNotNullOfOrNull null
+                    if (
+                        message.string("role") == "assistant" &&
+                        message.string("stopReason") == "error"
+                    ) {
+                        classifyTaskFailure(message.string("errorMessage"))
+                    } else {
+                        null
+                    }
+                }
+            } else {
+                null
+            },
         )
     }
 
@@ -150,6 +167,7 @@ class PiUiReducer {
             "tool_execution_start" -> applyToolStart(record, event)
             "tool_execution_update" -> applyToolUpdate(record, event)
             "tool_execution_end" -> applyToolEnd(record, event)
+            "provider_web_search", "provider_web_activity" -> applyProviderWebActivity(record, event)
             "queue_update" -> eventQueue = parseQueueEvent(event)
             "compaction_start" -> {
                 activeItem = TimelineItem.RunStatus("event:${record.streamId}:${record.sequence}", "Compacting task history")
@@ -303,6 +321,104 @@ class PiUiReducer {
             replaceOrAppendTool(update)
         }
         transientRunState = TaskDetailRunState.RUNNING
+    }
+
+    private fun applyProviderWebActivity(
+        record: TaskDetailEventRecord,
+        event: JsonObject,
+    ) {
+        val requestId = event.nonBlankString("requestId")
+            ?.takeIf { PROVIDER_REQUEST_ID.matches(it) }
+        val state = when (event.string("state")) {
+            "running" -> ToolActivityState.RUNNING
+            "completed" -> ToolActivityState.SUCCESS
+            "failed" -> ToolActivityState.FAILURE
+            "cancelled" -> ToolActivityState.CANCELLED
+            else -> null
+        }
+        val sources = providerSearchSources(event["sources"])
+        val webRequests = event.primitive("webRequests")?.intOrNull
+        val requests = event.primitive("searchRequests")?.intOrNull
+        val fetches = event.primitive("fetchRequests")?.intOrNull
+        if (
+            requestId == null || state == null ||
+            webRequests?.let { it !in 0..MAX_PROVIDER_WEB_REQUESTS } == true ||
+            requests?.let { it !in 0..MAX_PROVIDER_SEARCH_REQUESTS } == true ||
+            fetches?.let { it !in 0..MAX_PROVIDER_FETCH_REQUESTS } == true ||
+            event["sources"] !is JsonArray
+        ) {
+            settledItems = settledItems + TimelineItem.UnsupportedActivity(
+                "event:${record.streamId}:${record.sequence}:unsupported-provider-search",
+            )
+            return
+        }
+        val detail = buildList {
+            requests?.takeIf { it > 0 }?.let {
+                add("$it search${if (it == 1) "" else "es"}")
+            }
+            fetches?.takeIf { it > 0 }?.let {
+                add("$it page${if (it == 1) "" else "s"} read")
+            }
+            if ((requests ?: 0) == 0 && (fetches ?: 0) == 0) {
+                webRequests?.takeIf { it > 0 }?.let {
+                    add("$it web action${if (it == 1) "" else "s"}")
+                }
+            }
+            sources.size.takeIf { it > 0 }?.let {
+                add("$it source${if (it == 1) "" else "s"}")
+            }
+        }.joinToString(" · ").ifBlank {
+            if (state == ToolActivityState.RUNNING) "Using web" else "No sources returned"
+        }
+        val activity = when {
+            (requests ?: 0) > 0 && (fetches ?: 0) > 0 -> WebActivity.SEARCH_AND_FETCH
+            (fetches ?: 0) > 0 -> WebActivity.FETCH
+            (webRequests ?: 0) > 0 -> WebActivity.GENERIC
+            else -> WebActivity.SEARCH
+        }
+        val item = TimelineItem.ToolActivity(
+            stableKey = "provider-web:$requestId",
+            toolCallId = "provider-web:$requestId",
+            title = when (state) {
+                ToolActivityState.RUNNING -> activity.runningTitle
+                ToolActivityState.SUCCESS -> activity.completedTitle
+                ToolActivityState.FAILURE -> "Web access failed"
+                ToolActivityState.CANCELLED -> "Web access stopped"
+                ToolActivityState.UNSUPPORTED -> "Web access unavailable"
+            },
+            detail = detail,
+            state = state,
+            kind = ToolActivityKind.WEB_ACCESS,
+            result = sources.takeIf { it.isNotEmpty() }?.let {
+                ToolResultUiModel(text = "", sources = it)
+            },
+            expanded = false,
+        )
+        if (activeItem is TimelineItem.ToolActivity && activeItem?.stableKey == item.stableKey) {
+            activeItem = item
+        } else {
+            settleActive()
+            replaceOrAppendTool(item)
+            if (state == ToolActivityState.RUNNING) {
+                val existing = settledItems.indexOfLast { it.stableKey == item.stableKey }
+                if (existing >= 0) {
+                    settledItems = settledItems.toMutableList().also { it.removeAt(existing) }
+                }
+                activeItem = item
+            }
+        }
+        if (state != ToolActivityState.RUNNING) settleActive()
+        transientRunState = TaskDetailRunState.RUNNING
+    }
+
+    private enum class WebActivity(
+        val runningTitle: String,
+        val completedTitle: String,
+    ) {
+        SEARCH("Searching web", "Searched web"),
+        FETCH("Reading web page", "Read web page"),
+        SEARCH_AND_FETCH("Researching web", "Researched web"),
+        GENERIC("Using web", "Used web"),
     }
 
     private fun settleActive() {
@@ -541,6 +657,10 @@ class PiUiReducer {
                 clipboardToolTitle(state, resultContainer)
             toolName == "device_notification" ->
                 notificationToolTitle(state, resultContainer)
+            toolName == "image_generate" && state == ToolActivityState.RUNNING -> "Generating image"
+            toolName == "image_generate" && state == ToolActivityState.SUCCESS -> "Generated image"
+            toolName == "image_generate" && state == ToolActivityState.FAILURE -> "Image generation failed"
+            toolName == "image_generate" && state == ToolActivityState.CANCELLED -> "Image generation stopped"
             kind == ToolActivityKind.TEST && state == ToolActivityState.RUNNING -> "Running tests"
             kind == ToolActivityKind.TEST && state == ToolActivityState.SUCCESS -> "Tests passed"
             kind == ToolActivityKind.TEST && state == ToolActivityState.FAILURE -> "Tests failed"
@@ -548,22 +668,22 @@ class PiUiReducer {
             kind == ToolActivityKind.TERMINAL && state == ToolActivityState.SUCCESS -> "Command completed"
             kind == ToolActivityKind.TERMINAL && state == ToolActivityState.FAILURE -> "Command failed"
             else -> when (toolName) {
-            "request_user_question" -> "Asked a question"
-            "request_user_confirmation" -> "Requested confirmation"
-            "device_capabilities_get" -> "Checked mobile capabilities"
-            "device_files_list" -> "Listed authorized files"
-            "device_files_read" -> "Requested file content"
-            "device_media_list" -> "Listed recent photo metadata"
-            "device_contacts" -> "Used Android Contacts"
-            "device_location" -> "Checked current location"
-            "device_clipboard" -> "Used Android Clipboard"
-            "device_notification" -> "Managed Momoding notifications"
-            "device_ui_inspect" -> "Inspected the current interface"
-            "device_ui_action" -> "Performed an interface action"
-            "attachment_read" -> "Read text attachment"
-            "device_files_prepare_changes" -> "Prepared file changes"
-            "device_files_commit_changes" -> "Applied file changes"
-            else -> toolName.replace('_', ' ').replaceFirstChar(Char::uppercase)
+                "request_user_question" -> "Asked a question"
+                "request_user_confirmation" -> "Requested confirmation"
+                "device_capabilities_get" -> "Checked mobile capabilities"
+                "device_files_list" -> "Listed authorized files"
+                "device_files_read" -> "Requested file content"
+                "device_media_list" -> "Listed recent photo metadata"
+                "device_contacts" -> "Used Android Contacts"
+                "device_location" -> "Checked current location"
+                "device_clipboard" -> "Used Android Clipboard"
+                "device_notification" -> "Managed Momoding notifications"
+                "device_ui_inspect" -> "Inspected the current interface"
+                "device_ui_action" -> "Performed an interface action"
+                "attachment_read" -> "Read text attachment"
+                "device_files_prepare_changes" -> "Prepared file changes"
+                "device_files_commit_changes" -> "Applied file changes"
+                else -> toolName.replace('_', ' ').replaceFirstChar(Char::uppercase)
             }
         }
         val result = resultContainer?.let { toolResult(toolName, state, it) }
@@ -585,6 +705,7 @@ class PiUiReducer {
             kind = kind,
             result = result,
             action = action,
+            expanded = result?.images?.isNotEmpty() == true,
         )
     }
 
@@ -686,18 +807,41 @@ class PiUiReducer {
         val text = extractContentText(container["content"], setOf("text"))
         val details = container["details"] as? JsonObject
         val sources = details?.get("sources")
-            ?.let(::sourceLabels)
+            ?.let(::sourceItems)
             .orEmpty()
             .distinct()
             .take(MAX_TOOL_SOURCES)
+        val generatedImageAttachmentId = generatedImageAttachmentId(toolName, state, details)
+        val imageAttachmentIds = (
+            extractAttachmentReferences(container["content"]) + listOfNotNull(generatedImageAttachmentId)
+        )
+            .distinct()
+            .take(MAX_TOOL_IMAGES)
         val presented = attentionResultText(toolName, state, text) ?: prettyStructuredText(text)
         val sanitized = sanitizeText(presented)
-        if (sanitized.isBlank() && sources.isEmpty()) return null
+        if (sanitized.isBlank() && sources.isEmpty() && imageAttachmentIds.isEmpty()) return null
         return ToolResultUiModel(
             text = sanitized,
             sources = sources,
+            images = imageAttachmentIds.map(::ToolImageUiModel),
             truncated = presented.length > sanitized.length,
         )
+    }
+
+    private fun generatedImageAttachmentId(
+        toolName: String,
+        state: ToolActivityState,
+        details: JsonObject?,
+    ): String? {
+        if (
+            toolName != "image_generate" || state != ToolActivityState.SUCCESS ||
+            details?.string("kind") != "generated_image_artifact" ||
+            details.strictBoolean("persistent") != true
+        ) return null
+        val attachmentId = details.nonBlankString("attachmentId") ?: return null
+        return attachmentId.takeIf {
+            ATTACHMENT_REFERENCE.matches("attachment:$attachmentId")
+        }
     }
 
     private fun attentionResultText(
@@ -734,7 +878,22 @@ class PiUiReducer {
         "device_location" -> locationResultText(state, text)
         "device_clipboard" -> clipboardResultText(state, text)
         "device_notification" -> notificationResultText(state, text)
+        "image_generate" -> imageGenerationResultText(state, text)
         else -> null
+    }
+
+    private fun imageGenerationResultText(
+        state: ToolActivityState,
+        text: String,
+    ): String {
+        val result = parseObject(text.trim())
+        return if (state == ToolActivityState.SUCCESS && result?.strictBoolean("ok") == true) {
+            ""
+        } else {
+            result?.nonBlankString("errorMessage")
+                ?.let(::sanitizeText)
+                ?: "Image generation failed"
+        }
     }
 
     private fun notificationToolTitle(
@@ -1135,15 +1294,28 @@ class PiUiReducer {
         }.getOrDefault(text)
     }
 
-    private fun sourceLabels(element: JsonElement): List<String> =
+    private fun sourceItems(element: JsonElement): List<ToolSourceUiModel> =
         (element as? JsonArray).orEmpty().mapNotNull { value ->
             val raw = when (value) {
                 is JsonPrimitive -> value.takeIf(JsonPrimitive::isString)?.contentOrNull
                 is JsonObject -> value.string("title") ?: value.string("name") ?: value.string("url")
                 else -> null
             }
-            raw?.takeIf(String::isNotBlank)?.let(::sanitizeText)
+            raw?.takeIf(String::isNotBlank)?.let { ToolSourceUiModel(sanitizeText(it)) }
         }
+
+    private fun providerSearchSources(element: JsonElement?): List<ToolSourceUiModel> =
+        (element as? JsonArray).orEmpty().mapNotNull { value ->
+            val source = value as? JsonObject ?: return@mapNotNull null
+            val url = source.nonBlankString("url")
+                ?.takeIf { it.length <= MAX_PROVIDER_SOURCE_URL_CHARS && WEB_URL.matches(it) }
+                ?: return@mapNotNull null
+            val title = source.nonBlankString("title")
+                ?.takeIf { it.length <= MAX_PROVIDER_SOURCE_TITLE_CHARS }
+                ?: source.nonBlankString("domain")
+                ?: url
+            ToolSourceUiModel(label = sanitizeText(title), url = url)
+        }.distinctBy(ToolSourceUiModel::url).take(MAX_PROVIDER_SEARCH_SOURCES)
 
     private fun parseQueue(raw: String): List<QueueItemUiModel> {
         val array = runCatching { strictJson.parseToJsonElement(raw) as? JsonArray }.getOrNull() ?: return emptyList()
@@ -1263,6 +1435,15 @@ class PiUiReducer {
             "^attachment:([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$",
         )
         const val MAX_TOOL_SOURCES = 12
+        const val MAX_TOOL_IMAGES = 1
+        const val MAX_PROVIDER_SEARCH_SOURCES = 15
+        const val MAX_PROVIDER_SEARCH_REQUESTS = 3
+        const val MAX_PROVIDER_FETCH_REQUESTS = 3
+        const val MAX_PROVIDER_WEB_REQUESTS = 5
+        const val MAX_PROVIDER_SOURCE_URL_CHARS = 2_048
+        const val MAX_PROVIDER_SOURCE_TITLE_CHARS = 240
+        val PROVIDER_REQUEST_ID = Regex("^provider-[1-9][0-9]{0,8}$")
+        val WEB_URL = Regex("^https?://[^\\s]+$", RegexOption.IGNORE_CASE)
         const val MAX_CALENDAR_PRESENTATION_ITEMS = 5
         const val MAX_PRESENTATION_CHARS = 32_768
 

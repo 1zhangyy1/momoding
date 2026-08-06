@@ -5,6 +5,28 @@ All notable public changes will be documented here. The project follows
 
 ## Unreleased
 
+## 0.1.0-alpha.2 - 2026-08-06
+
+### Added
+
+- Capability-aware Provider setup with OpenRouter web search, bounded web fetch, and separate image
+  generation.
+- Optional Codex device authorization and task-scoped Provider selection.
+- Full-screen generated-image preview with copy and download actions.
+
+### Changed
+
+- Tool activity now stays as a compact, expandable one-line timeline entry.
+- Refined the Momoding visual system while preserving the original character artwork and classic
+  conversation avatar.
+- Release version metadata now has one source shared by Android packaging and APK verification.
+
+### Security
+
+- Provider credentials and OAuth tokens remain in the Android native vault and are not exposed to
+  the bundled JavaScript runtime.
+- Search and fetched page content remain bounded before entering the task context.
+
 ## 0.1.0-alpha.1 - 2026-08-03
 
 ### Added

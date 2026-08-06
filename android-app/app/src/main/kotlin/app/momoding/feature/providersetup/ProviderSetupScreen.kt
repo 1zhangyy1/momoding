@@ -20,6 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
@@ -28,13 +29,16 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
@@ -42,7 +46,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
-import app.momoding.core.provider.ProviderProfilePolicy
+import app.momoding.core.provider.ChatProviderKind
+import app.momoding.core.provider.supportsFunctionTools
+import app.momoding.core.provider.supportsImageInput
 import app.momoding.ui.components.DangerAction
 import app.momoding.ui.components.ListGroup
 import app.momoding.ui.components.ListRow
@@ -132,17 +138,10 @@ private fun ProviderForm(
             )
         }
 
-        ListGroup {
-            ListRow(
-                icon = MomodingIcons.Permission,
-                iconTone = ProductIconTone.BRAND,
-                title = "OpenRouter",
-                detail = ProviderProfilePolicy.OPENROUTER_BASE_URL,
-                showDivider = false,
-            )
-        }
+        ProviderPicker(state, onAction)
 
-        ProviderHealthCard(state)
+        if (state.activeChatProvider == ChatProviderKind.OPENROUTER) {
+            ProviderHealthCard(state)
 
         OutlinedTextField(
             value = state.modelId,
@@ -166,6 +165,63 @@ private fun ProviderForm(
 
         if (state.modelCatalogVisible) {
             ModelCatalog(state, onAction)
+        }
+
+        ListGroup {
+            ListRow(
+                icon = MomodingIcons.Search,
+                iconTone = ProductIconTone.BRAND,
+                title = "Web access",
+                detail = "Let the model search current information and read web pages or PDFs when needed.",
+                meta = if (state.webSearchEnabled) "Enabled" else "Off",
+                showDivider = false,
+                trailing = {
+                    Switch(
+                        checked = state.webSearchEnabled,
+                        onCheckedChange = { onAction(ProviderSetupAction.ToggleWebSearch) },
+                        enabled = !state.busy,
+                        modifier = Modifier.testTag("provider-web-search"),
+                    )
+                },
+            )
+        }
+
+        ListGroup {
+            ListRow(
+                icon = Icons.Outlined.AutoAwesome,
+                iconTone = ProductIconTone.BRAND,
+                title = "Image generation",
+                detail = state.imageModelId?.let { "Generate task images with $it." }
+                    ?: "Choose a separate OpenRouter image model.",
+                meta = if (state.imageGenerationEnabled) "Enabled" else "Off",
+                showDivider = false,
+                trailing = {
+                    Switch(
+                        checked = state.imageGenerationEnabled,
+                        onCheckedChange = { onAction(ProviderSetupAction.ToggleImageGeneration) },
+                        enabled = !state.busy,
+                        modifier = Modifier.testTag("provider-image-generation"),
+                    )
+                },
+            )
+        }
+
+        SecondaryAction(
+            label = if (state.imageModelCatalogVisible) {
+                "Hide image models"
+            } else if (state.imageModelId == null) {
+                "Choose image model"
+            } else {
+                "Change image model"
+            },
+            onClick = { onAction(ProviderSetupAction.ToggleImageModelCatalog) },
+            enabled = !state.busy,
+            icon = Icons.Outlined.AutoAwesome,
+            modifier = Modifier.testTag("browse-image-models"),
+        )
+
+        if (state.imageModelCatalogVisible) {
+            ImageModelCatalog(state, onAction)
         }
 
         OutlinedTextField(
@@ -266,6 +322,7 @@ private fun ProviderForm(
             val label = when {
                 state.canReturnToTask -> "Return to task"
                 state.testedChangesNeedSave -> "Save verified changes to return"
+                state.capabilityChangesNeedSave -> "Save capability changes to return"
                 else -> "Test connection to return"
             }
             if (returnIsPrimary) {
@@ -298,7 +355,264 @@ private fun ProviderForm(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        } else {
+            CodexProviderForm(state, onAction, onReturnToTask)
+        }
         Spacer(Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun ProviderPicker(
+    state: ProviderSetupUiState,
+    onAction: (ProviderSetupAction) -> Unit,
+) {
+    ListGroup {
+        ListRow(
+            icon = MomodingIcons.Permission,
+            iconTone = ProductIconTone.BRAND,
+            title = "OpenRouter",
+            detail = "Use your own API key · search and image generation",
+            meta = if (state.savedProfile != null) "Saved" else null,
+            onClick = { onAction(ProviderSetupAction.SelectOpenRouter) },
+            trailing = {
+                RadioButton(
+                    selected = state.activeChatProvider == ChatProviderKind.OPENROUTER,
+                    onClick = { onAction(ProviderSetupAction.SelectOpenRouter) },
+                    enabled = !state.busy,
+                    modifier = Modifier.testTag("provider-choice-openrouter"),
+                )
+            },
+        )
+        ListRow(
+            icon = MomodingIcons.Permission,
+            iconTone = ProductIconTone.BRAND,
+            title = "Codex",
+            detail = "Sign in with ChatGPT · Codex chat and Android tools",
+            meta = if (state.codexConnected) "Connected" else null,
+            onClick = { onAction(ProviderSetupAction.SelectCodex) },
+            showDivider = false,
+            trailing = {
+                RadioButton(
+                    selected = state.activeChatProvider == ChatProviderKind.CODEX,
+                    onClick = { onAction(ProviderSetupAction.SelectCodex) },
+                    enabled = !state.busy,
+                    modifier = Modifier.testTag("provider-choice-codex"),
+                )
+            },
+        )
+    }
+}
+
+@Composable
+private fun CodexProviderForm(
+    state: ProviderSetupUiState,
+    onAction: (ProviderSetupAction) -> Unit,
+    onReturnToTask: (() -> Unit)?,
+) {
+    val uriHandler = LocalUriHandler.current
+    val (title, detail, tone) = when (state.codexSignInState) {
+        CodexSignInState.DISCONNECTED -> Triple(
+            "Codex not connected",
+            "Sign in with ChatGPT to use Codex directly from this phone.",
+            StatusLineTone.INFO,
+        )
+        CodexSignInState.STARTING -> Triple(
+            "Starting sign-in",
+            "Requesting a one-time code from ChatGPT.",
+            StatusLineTone.INFO,
+        )
+        CodexSignInState.WAITING_FOR_USER -> Triple(
+            "Waiting for ChatGPT",
+            "Complete authorization in your browser, then return to Momoding.",
+            StatusLineTone.INFO,
+        )
+        CodexSignInState.CONNECTED -> Triple(
+            "Codex connected",
+            "New tasks use your ChatGPT account through the on-device Pi Agent.",
+            StatusLineTone.SUCCESS,
+        )
+        CodexSignInState.ERROR -> Triple(
+            "Sign-in needs attention",
+            state.codexNotice ?: "Codex sign-in failed.",
+            StatusLineTone.INFO,
+        )
+    }
+    StatusLine(
+        title = title,
+        detail = detail,
+        icon = if (state.codexConnected) MomodingIcons.Permission else MomodingIcons.Retry,
+        tone = tone,
+    )
+
+    ListGroup {
+        ListRow(
+            icon = MomodingIcons.Permission,
+            iconTone = ProductIconTone.BRAND,
+            title = "Codex model",
+            detail = state.codexModelId,
+            meta = "Chat",
+            showDivider = false,
+        )
+    }
+
+    if (state.codexSignInState == CodexSignInState.WAITING_FOR_USER) {
+        ListGroup {
+            ListRow(
+                title = "One-time code",
+                detail = requireNotNull(state.codexUserCode),
+                meta = state.codexPollSeconds?.let { "Checking in ${it}s" },
+                showDivider = false,
+                modifier = Modifier.testTag("codex-user-code"),
+            )
+        }
+        PrimaryAction(
+            label = "Open ChatGPT",
+            onClick = {
+                state.codexVerificationUri?.let(uriHandler::openUri)
+            },
+            enabled = state.codexVerificationUri != null,
+            modifier = Modifier.testTag("codex-open-browser"),
+        )
+        SecondaryAction(
+            label = "Cancel sign-in",
+            onClick = { onAction(ProviderSetupAction.CancelCodexSignIn) },
+            modifier = Modifier.testTag("codex-cancel-sign-in"),
+        )
+    } else if (!state.codexConnected) {
+        PrimaryAction(
+            label = if (state.codexSignInState == CodexSignInState.STARTING) {
+                "Starting…"
+            } else {
+                "Connect Codex"
+            },
+            onClick = { onAction(ProviderSetupAction.StartCodexSignIn) },
+            enabled = !state.busy,
+            leading = if (state.codexSignInState == CodexSignInState.STARTING) {
+                { CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) }
+            } else null,
+            modifier = Modifier.testTag("codex-connect"),
+        )
+    } else {
+        onReturnToTask?.let { returnToTask ->
+            PrimaryAction(
+                label = "Return to task",
+                onClick = returnToTask,
+                enabled = state.canReturnToTask,
+                modifier = Modifier.testTag("provider-return-to-task"),
+            )
+        }
+        DangerAction(
+            label = "Disconnect Codex",
+            onClick = { onAction(ProviderSetupAction.DisconnectCodex) },
+            enabled = !state.busy,
+            modifier = Modifier.testTag("codex-disconnect"),
+        )
+    }
+
+    state.codexNotice?.takeIf { state.codexSignInState != CodexSignInState.ERROR }?.let {
+        Text(
+            it,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    Text(
+        "Codex currently enables chat and Android tools. Web search, image input, and image generation remain off until separately verified.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+@Composable
+private fun ImageModelCatalog(
+    state: ProviderSetupUiState,
+    onAction: (ProviderSetupAction) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceContainerLow, RoundedCornerShape(14.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Image models", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "OpenRouter models verified to return images.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            IconButton(
+                onClick = { onAction(ProviderSetupAction.RefreshImageModels) },
+                enabled = state.imageModelCatalogState != ProviderModelCatalogState.LOADING,
+            ) { Icon(MomodingIcons.Retry, contentDescription = "Refresh image models") }
+        }
+        OutlinedTextField(
+            value = state.imageModelSearch,
+            onValueChange = { onAction(ProviderSetupAction.EditImageModelSearch(it)) },
+            label = { Text("Search image models") },
+            leadingIcon = { Icon(MomodingIcons.Search, contentDescription = null) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth().testTag("image-model-search"),
+        )
+        when (state.imageModelCatalogState) {
+            ProviderModelCatalogState.IDLE,
+            ProviderModelCatalogState.LOADING,
+            -> Row(
+                horizontalArrangement = Arrangement.spacedBy(9.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                Text("Loading image models…", style = MaterialTheme.typography.bodySmall)
+            }
+            ProviderModelCatalogState.ERROR -> Column {
+                Text(
+                    state.imageModelCatalogError ?: "Image models are unavailable.",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                TextButton(onClick = { onAction(ProviderSetupAction.RefreshImageModels) }) {
+                    Text("Try again")
+                }
+            }
+            ProviderModelCatalogState.READY -> if (state.visibleImageModels.isEmpty()) {
+                Text(
+                    "No matching image models.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                state.visibleImageModels.forEach { model ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onAction(ProviderSetupAction.SelectImageModel(model.id)) }
+                            .testTag("image-model-${model.id}")
+                            .padding(horizontal = 4.dp, vertical = 7.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(model.name, style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            buildString {
+                                append(model.id)
+                                if ("image" in model.inputModalities) append(" · Image input")
+                                if (model.supportsStreaming) append(" · Streaming")
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -382,7 +696,8 @@ private fun ModelCatalog(
                             buildString {
                                 append(model.id)
                                 model.contextLength?.let { append(" · ").append(it).append(" context") }
-                                if ("image" in model.inputModalities) append(" · Images")
+                                if (model.supportsFunctionTools) append(" · Tools")
+                                if (model.supportsImageInput) append(" · Image input")
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,

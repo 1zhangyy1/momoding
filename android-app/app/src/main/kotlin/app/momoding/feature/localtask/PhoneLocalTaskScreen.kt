@@ -40,7 +40,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.momoding.ui.components.MomodingTopBar
-import app.momoding.ui.components.MomodingHeadMark
+import app.momoding.ui.components.MomodingMark
 
 @Composable
 fun PhoneLocalTaskScreen(
@@ -81,7 +81,7 @@ private fun Composer(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 22.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    MomodingHeadMark(size = 54.dp)
+                    MomodingMark(size = 56.dp)
                     Text(
                         "What should Momoding do?",
                         style = MaterialTheme.typography.headlineMedium,

@@ -80,6 +80,7 @@ class PhoneLocalAttentionBridge(
     private val fileChangeHandler: DeviceFileChangeExecutor? = null,
     private val projectTools: PhoneLocalProjectToolHandler? = null,
     private val attachmentTools: PhoneLocalAttachmentToolHandler? = null,
+    private val imageGenerationTools: PhoneLocalImageGenerationToolHandler? = null,
     private val mediaTools: DeviceMediaListHandler? = null,
     private val mediaMutationTools: PhoneLocalMediaToolHandler? = null,
     private val calendarTools: PhoneLocalCalendarToolHandler? = null,
@@ -179,6 +180,13 @@ class PhoneLocalAttentionBridge(
             require(handler.handles(request.toolName)) { "PI_MOBILE_NATIVE_TOOL_NOT_ALLOWED" }
             PiNativeAndroidToolResult(handler.execute(taskId, request))
         }
+        IMAGE_GENERATION_NATIVE_KIND -> withContext(ioDispatcher) {
+            val handler = requireNotNull(imageGenerationTools) {
+                "PI_MOBILE_IMAGE_GENERATION_TOOL_EXECUTOR_MISSING"
+            }
+            require(handler.handles(request.toolName)) { "PI_MOBILE_NATIVE_TOOL_NOT_ALLOWED" }
+            handler.execute(taskId, request)
+        }
         MEDIA_NATIVE_KIND -> handleMediaRequest(taskId, request)
         CALENDAR_NATIVE_KIND -> handleCalendarRequest(taskId, request)
         CONTACTS_NATIVE_KIND -> handleContactsRequest(taskId, request)
@@ -208,6 +216,13 @@ class PhoneLocalAttentionBridge(
             handler.execute(taskId, request)
         }
         else -> throw IllegalArgumentException("PI_MOBILE_NATIVE_TOOL_KIND_UNSUPPORTED")
+    }
+
+    internal suspend fun discardUndeliveredImageResult(
+        taskId: String,
+        result: PiNativeAndroidToolResult,
+    ) = withContext(ioDispatcher) {
+        imageGenerationTools?.discardUndelivered(taskId, result)
     }
 
     private suspend fun handleFileContentRequest(
@@ -3380,6 +3395,7 @@ class PhoneLocalAttentionBridge(
         const val FILES_COMMIT_TOOL = "device_files_commit_changes"
         const val PROJECT_NATIVE_KIND = "android_project_tool"
         const val ATTACHMENT_NATIVE_KIND = "android_attachment_tool"
+        const val IMAGE_GENERATION_NATIVE_KIND = "android_image_generation_tool"
         const val MEDIA_NATIVE_KIND = "android_media_tool"
         const val CALENDAR_NATIVE_KIND = "android_calendar_tool"
         const val CALENDAR_TOOL = "device_calendar"

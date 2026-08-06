@@ -107,6 +107,8 @@ fun SettingsScreen(
     onOpenDeviceCapabilities: (() -> Unit)? = null,
     onOpenExtensions: (() -> Unit)? = null,
     providerProfile: ProviderProfile? = null,
+    localProviderName: String? = providerProfile?.displayName,
+    localProviderModelId: String? = providerProfile?.modelId,
     onOpenProviderSetup: (() -> Unit)? = null,
     onOpenRemoteHost: (() -> Unit)? = null,
     onBack: (() -> Unit)? = null,
@@ -167,7 +169,8 @@ fun SettingsScreen(
                 state = state,
                 contentPadding = contentPadding,
                 interactionPolicy = interactionPolicy,
-                providerProfile = providerProfile,
+                localProviderName = localProviderName,
+                localProviderModelId = localProviderModelId,
                 onOpenProviderSetup = onOpenProviderSetup,
                 onOpenAppearance = { appearanceOpen = true },
                 onOpenPhoneAccess = when {
@@ -226,7 +229,8 @@ fun SettingsScreen(
                 state = state,
                 contentPadding = contentPadding,
                 interactionPolicy = interactionPolicy,
-                providerProfile = providerProfile,
+                localProviderName = localProviderName,
+                localProviderModelId = localProviderModelId,
                 onAction = onAction,
                 onOpenRemoteHost = onOpenRemoteHost,
                 hostRowFocus = hostRowFocus,
@@ -365,7 +369,8 @@ private fun SettingsRootPage(
     state: SettingsUiState,
     contentPadding: PaddingValues,
     interactionPolicy: SettingsInteractionPolicy,
-    providerProfile: ProviderProfile?,
+    localProviderName: String?,
+    localProviderModelId: String?,
     onOpenProviderSetup: (() -> Unit)?,
     onOpenAppearance: () -> Unit,
     onOpenPhoneAccess: SettingsNavigationAction?,
@@ -380,7 +385,7 @@ private fun SettingsRootPage(
 ) {
     SettingsList(contentPadding) {
         if (
-            providerProfile == null &&
+            localProviderName == null &&
             state.transport.phase == SecureTransportUiPhase.VERSION_MISMATCH
         ) {
             item("version-warning") {
@@ -401,10 +406,11 @@ private fun SettingsRootPage(
         item("model-provider") {
             ModelProviderCard(
                 state = state,
-                providerProfile = providerProfile,
+                localProviderName = localProviderName,
+                localProviderModelId = localProviderModelId,
                 onClick = when {
-                    providerProfile != null && onOpenProviderSetup != null -> onOpenProviderSetup
-                    providerProfile == null -> onOpenAdvanced
+                    localProviderName != null && onOpenProviderSetup != null -> onOpenProviderSetup
+                    localProviderName == null -> onOpenAdvanced
                     else -> null
                 },
             )
@@ -497,7 +503,7 @@ private fun SettingsRootPage(
             SettingsRow(
                 icon = Icons.Outlined.Computer,
                 title = "Advanced",
-                detail = if (providerProfile == null) {
+                detail = if (localProviderName == null) {
                     "Remote Host and runtime details"
                 } else {
                     "Runtime and developer options"
@@ -516,13 +522,14 @@ private fun SettingsRootPage(
 @Composable
 private fun ModelProviderCard(
     state: SettingsUiState,
-    providerProfile: ProviderProfile?,
+    localProviderName: String?,
+    localProviderModelId: String?,
     onClick: (() -> Unit)?,
 ) {
     val brand = LocalMomodingBrandColors.current
     val detail = when {
-        providerProfile != null -> {
-            "${providerProfile.displayName} · ${providerProfile.modelId.substringAfterLast('/')}"
+        localProviderName != null && localProviderModelId != null -> {
+            "$localProviderName · ${localProviderModelId.substringAfterLast('/')}"
         }
         state.agentProfile is AgentProfileState.Ready -> {
             val profile = state.agentProfile.profile
@@ -531,7 +538,7 @@ private fun ModelProviderCard(
         state.agentProfile is AgentProfileState.Error -> "Remote model unavailable"
         else -> "Loading remote model…"
     }
-    val context = if (providerProfile != null) {
+    val context = if (localProviderName != null) {
         "Tasks run on this phone"
     } else {
         "Managed by ${state.transport.hostAlias ?: "Remote Host"}"
@@ -779,7 +786,8 @@ private fun SettingsAdvancedPage(
     state: SettingsUiState,
     contentPadding: PaddingValues,
     interactionPolicy: SettingsInteractionPolicy,
-    providerProfile: ProviderProfile?,
+    localProviderName: String?,
+    localProviderModelId: String?,
     onAction: (SettingsAction) -> Unit,
     onOpenRemoteHost: (() -> Unit)?,
     hostRowFocus: FocusRequester,
@@ -789,7 +797,7 @@ private fun SettingsAdvancedPage(
     onRequestUnpair: () -> Unit,
 ) {
     SettingsList(contentPadding) {
-        if (providerProfile == null) {
+        if (localProviderName == null || localProviderModelId == null) {
             item("remote-runtime") {
                 SettingsSection("Remote runtime") {
                     SettingsRow(
@@ -898,7 +906,7 @@ private fun SettingsAdvancedPage(
                     SettingsRow(
                         Icons.Outlined.Bolt,
                         "Runs on this phone",
-                        "${providerProfile.displayName} · ${providerProfile.modelId}",
+                        "$localProviderName · $localProviderModelId",
                     )
                 }
             }

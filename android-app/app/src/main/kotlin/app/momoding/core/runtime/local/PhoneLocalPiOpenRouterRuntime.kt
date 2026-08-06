@@ -1,11 +1,25 @@
 package app.momoding.core.runtime.local
 
 import android.content.Context
+import app.momoding.core.provider.ActiveChatProviderSelection
+import app.momoding.core.provider.ActiveChatProviderStore
+import app.momoding.core.provider.ActiveChatProviderPolicy
+import app.momoding.core.provider.ChatProviderKind
+import app.momoding.core.provider.CodexNativeClient
+import app.momoding.core.provider.CodexResponsesRequest
+import app.momoding.core.provider.CodexTransportException
 import app.momoding.core.provider.OpenRouterChatRequest
+import app.momoding.core.provider.OpenRouterCapabilityProbe
 import app.momoding.core.provider.OpenRouterNativeClient
 import app.momoding.core.provider.OpenRouterRequestException
+import app.momoding.core.provider.OpenRouterWebFetchConfig
+import app.momoding.core.provider.OpenRouterWebSearchConfig
+import app.momoding.core.provider.ProviderCapabilityAvailability
 import app.momoding.core.provider.ProviderCredential
 import app.momoding.core.provider.ProviderCredentialVault
+import app.momoding.core.provider.ProviderRuntimeConfiguration
+import app.momoding.core.provider.ProviderSelection
+import app.momoding.core.provider.ProviderSelectionStore
 import app.momoding.core.skills.PhoneLocalSkillParser
 import app.momoding.core.skills.EnabledSkillResourceSet
 import app.momoding.core.skills.SkillAvailability
@@ -30,6 +44,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
@@ -52,10 +69,17 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
         List<PiChildAgentSnapshot>,
     ) -> Unit = ::missingChildPersistenceSink,
     private val skillParsePollMillis: Long = SKILL_PARSE_POLL_MILLIS,
+    private val selectionStore: ProviderSelectionStore? = null,
+    private val capabilityProbe: OpenRouterCapabilityProbe = OpenRouterCapabilityProbe(client),
+    private val activeChatProviderStore: ActiveChatProviderStore? = null,
+    private val codexClient: CodexNativeClient? = null,
 ) : AutoCloseable, PhoneLocalSkillParser {
     constructor(
         context: Context,
         attentionBridge: PhoneLocalAttentionBridge? = null,
+        selectionStore: ProviderSelectionStore = ProviderSelectionStore.create(context),
+        activeChatProviderStore: ActiveChatProviderStore = ActiveChatProviderStore.create(context),
+        codexClient: CodexNativeClient? = null,
         childUpdateSink: (
             List<PiChildAgentEventEnvelope>,
             List<PiChildAgentSnapshot>,
@@ -70,12 +94,15 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
         networkScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
         attentionBridge = attentionBridge,
         childUpdateSink = childUpdateSink,
+        selectionStore = selectionStore,
+        activeChatProviderStore = activeChatProviderStore,
+        codexClient = codexClient,
     )
 
     private val appContext = context.applicationContext
     private var engine: PhoneLocalPiEngine? = null
-    private var requestPump: OpenRouterRequestPump? = null
-    private var activeTaskCredential: ProviderCredential? = null
+    private var requestPump: NativeProviderRequestPump? = null
+    private var activeTaskProvider: RuntimeChatProvider? = null
     private val taskCommands = ConcurrentLinkedQueue<PendingTaskCommand>()
     private val commandLock = Any()
     @Volatile
@@ -93,61 +120,87 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
     @Volatile
     private var shuttingDown = false
     @Volatile
-    private var multimodalAgentProfileId: String? = null
-    private var multimodalAgentModelId: String? = null
-    private var toolAgentProfileId: String? = null
-    private var toolAgentModelId: String? = null
     private var closed = false
+
+    suspend fun currentProviderConfiguration(): ProviderRuntimeConfiguration =
+        withContext(ownerDispatcher) {
+            checkOpen()
+            val credential = (activeTaskProvider as? RuntimeChatProvider.OpenRouter)?.credential
+                ?: loadCredential()
+            ProviderRuntimeConfiguration(
+                selection = selectionStore?.reconcile(credential.profile)
+                    ?: ProviderSelection.defaults(credential.profile),
+                capabilities = capabilityProbe.resolve(credential),
+            )
+        }
 
     suspend fun requireImageInputCapability(): String = withContext(ownerDispatcher) {
         checkOpen()
-        val credential = if (activeTaskId != null) {
-            requireNotNull(activeTaskCredential) { "PI_MOBILE_TASK_SESSION_CREDENTIAL_MISSING" }
+        val provider = if (activeTaskId != null) {
+            requireNotNull(activeTaskProvider) { "PI_MOBILE_TASK_SESSION_PROVIDER_MISSING" }
         } else {
-            requireNotNull(credentialVault.load()) { "PI_MOBILE_PROVIDER_CREDENTIAL_MISSING" }
+            loadActiveProvider()
         }
-        requireImageInputCapability(credential)
+        requireImageInputCapability(provider)
     }
 
     suspend fun requireToolCapability(): String = withContext(ownerDispatcher) {
         checkOpen()
-        val credential = if (activeTaskId != null) {
-            requireNotNull(activeTaskCredential) { "PI_MOBILE_TASK_SESSION_CREDENTIAL_MISSING" }
+        val provider = if (activeTaskId != null) {
+            requireNotNull(activeTaskProvider) { "PI_MOBILE_TASK_SESSION_PROVIDER_MISSING" }
         } else {
-            requireNotNull(credentialVault.load()) { "PI_MOBILE_PROVIDER_CREDENTIAL_MISSING" }
+            loadActiveProvider()
         }
-        requireToolCapability(credential)
+        requireToolCapability(provider)
     }
+
+    private suspend fun requireToolCapability(provider: RuntimeChatProvider): String =
+        when (provider) {
+            is RuntimeChatProvider.OpenRouter -> requireToolCapability(provider.credential)
+            is RuntimeChatProvider.Codex -> provider.modelId
+        }
+
+    private suspend fun requireImageInputCapability(provider: RuntimeChatProvider): String =
+        when (provider) {
+            is RuntimeChatProvider.OpenRouter -> requireImageInputCapability(provider.credential)
+            is RuntimeChatProvider.Codex -> error("PI_MOBILE_CODEX_IMAGE_INPUT_NOT_VERIFIED")
+        }
 
     private suspend fun requireToolCapability(credential: ProviderCredential): String {
         val modelId = credential.profile.modelId
-        if (toolAgentProfileId == credential.profile.id && toolAgentModelId == modelId) return modelId
-        val model = client.listModels(credential.apiKey).singleOrNull { it.id == modelId }
-            ?: error("PI_MOBILE_TOOL_MODEL_CAPABILITY_UNKNOWN")
-        check(model.supportedParameters.any { it.equals("tools", ignoreCase = true) }) {
-            "PI_MOBILE_TOOL_MODEL_UNSUPPORTED"
+        when (capabilityProbe.resolve(credential).functionTools) {
+            ProviderCapabilityAvailability.AVAILABLE -> Unit
+            ProviderCapabilityAvailability.UNSUPPORTED -> {
+                error("PI_MOBILE_TOOL_MODEL_UNSUPPORTED")
+            }
+            ProviderCapabilityAvailability.UNKNOWN,
+            ProviderCapabilityAvailability.NOT_IMPLEMENTED,
+            -> error("PI_MOBILE_TOOL_MODEL_CAPABILITY_UNKNOWN")
         }
-        toolAgentProfileId = credential.profile.id
-        toolAgentModelId = modelId
         return modelId
     }
 
     private suspend fun requireImageInputCapability(credential: ProviderCredential): String {
         val modelId = credential.profile.modelId
-        if (
-            multimodalAgentProfileId == credential.profile.id &&
-            multimodalAgentModelId == modelId
-        ) return modelId
-        val model = client.listModels(credential.apiKey).singleOrNull { it.id == modelId }
-            ?: error("PI_MOBILE_IMAGE_MODEL_CAPABILITY_UNKNOWN")
-        check(model.inputModalities.any { it.equals("image", ignoreCase = true) }) {
-            "PI_MOBILE_IMAGE_MODEL_UNSUPPORTED"
+        val capabilities = capabilityProbe.resolve(credential)
+        when (capabilities.imageInput) {
+            ProviderCapabilityAvailability.AVAILABLE -> Unit
+            ProviderCapabilityAvailability.UNSUPPORTED -> {
+                error("PI_MOBILE_IMAGE_MODEL_UNSUPPORTED")
+            }
+            ProviderCapabilityAvailability.UNKNOWN,
+            ProviderCapabilityAvailability.NOT_IMPLEMENTED,
+            -> error("PI_MOBILE_IMAGE_MODEL_CAPABILITY_UNKNOWN")
         }
-        check(model.supportedParameters.any { it.equals("tools", ignoreCase = true) }) {
-            "PI_MOBILE_IMAGE_MODEL_TOOLS_UNSUPPORTED"
+        when (capabilities.functionTools) {
+            ProviderCapabilityAvailability.AVAILABLE -> Unit
+            ProviderCapabilityAvailability.UNSUPPORTED -> {
+                error("PI_MOBILE_IMAGE_MODEL_TOOLS_UNSUPPORTED")
+            }
+            ProviderCapabilityAvailability.UNKNOWN,
+            ProviderCapabilityAvailability.NOT_IMPLEMENTED,
+            -> error("PI_MOBILE_IMAGE_MODEL_CAPABILITY_UNKNOWN")
         }
-        multimodalAgentProfileId = credential.profile.id
-        multimodalAgentModelId = modelId
         return modelId
     }
 
@@ -196,18 +249,19 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
         check(engine == null && activeTaskId == null) {
             "PI_MOBILE_TASK_SESSION_ALREADY_OPEN"
         }
-        val credential = requireNotNull(credentialVault.load()) {
-            "PI_MOBILE_PROVIDER_CREDENTIAL_MISSING"
-        }
+        val credential = loadCredential()
         val activeEngine = PhoneLocalPiEngine(appContext.assets, ownerDispatcher)
-        val activePump = OpenRouterRequestPump(
+        val activePump = NativeProviderRequestPump(
             engine = activeEngine,
-            credential = credential,
-            client = client,
+            provider = RuntimeChatProvider.OpenRouter(credential),
+            openRouterClient = client,
+            codexClient = null,
             networkScope = networkScope,
             attentionBridge = null,
             taskId = null,
             childUpdateSink = childUpdateSink,
+            webSearch = { webSearchConfiguration(credential) },
+            webFetch = { webFetchConfiguration(credential) },
         )
         engine = activeEngine
         requestPump = activePump
@@ -249,40 +303,62 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
             "PI_MOBILE_TASK_SESSION_ALREADY_OPEN"
         }
         requireValidSkillResourceSet(skillResources)
-        val credential = requireNotNull(credentialVault.load()) {
-            "PI_MOBILE_PROVIDER_CREDENTIAL_MISSING"
-        }
-        if (images.isNotEmpty()) requireImageInputCapability(credential)
-        if (textAttachments.isNotEmpty()) requireToolCapability(credential)
+        val provider = loadActiveProvider()
+        val imageGenerationEnabled = imageGenerationEnabled(provider)
+        if (images.isNotEmpty()) requireImageInputCapability(provider)
+        if (textAttachments.isNotEmpty()) requireToolCapability(provider)
         val activeEngine = PhoneLocalPiEngine(appContext.assets, ownerDispatcher)
-        val activePump = OpenRouterRequestPump(
+        val activePump = NativeProviderRequestPump(
             engine = activeEngine,
-            credential = credential,
-            client = client,
+            provider = provider,
+            openRouterClient = client,
+            codexClient = codexClient,
             networkScope = networkScope,
             attentionBridge = attentionBridge,
             taskId = taskId,
             childUpdateSink = childUpdateSink,
+            webSearch = {
+                (provider as? RuntimeChatProvider.OpenRouter)
+                    ?.credential
+                    ?.let(::webSearchConfiguration)
+            },
+            webFetch = {
+                (provider as? RuntimeChatProvider.OpenRouter)
+                    ?.credential
+                    ?.let(::webFetchConfiguration)
+            },
         )
         engine = activeEngine
         requestPump = activePump
-        activeTaskCredential = credential
+        activeTaskProvider = provider
         activeTaskId = taskId
         running = true
         lastStatus = null
         openCommandMailbox()
         try {
             activeEngine.bootstrap()
-            val initial = activeEngine.startNativeOpenRouterTaskSession(
-                taskId = taskId,
-                sessionId = sessionId,
-                prompt = prompt,
-                modelId = credential.profile.modelId,
-                planMode = planMode,
-                skillResources = skillResources.resources,
-                images = images,
-                textAttachments = textAttachments,
-            )
+            val initial = when (provider) {
+                is RuntimeChatProvider.OpenRouter -> activeEngine.startNativeOpenRouterTaskSession(
+                    taskId = taskId,
+                    sessionId = sessionId,
+                    prompt = prompt,
+                    modelId = provider.modelId,
+                    planMode = planMode,
+                    skillResources = skillResources.resources,
+                    images = images,
+                    textAttachments = textAttachments,
+                    imageGenerationEnabled = imageGenerationEnabled,
+                )
+                is RuntimeChatProvider.Codex -> activeEngine.startNativeCodexTaskSession(
+                    taskId = taskId,
+                    sessionId = sessionId,
+                    prompt = prompt,
+                    modelId = provider.modelId,
+                    planMode = planMode,
+                    skillResources = skillResources.resources,
+                    textAttachments = textAttachments,
+                )
+            }
             pumpUntilTerminal(initial, activePump, onStatus).also { terminal ->
                 requireTrustedSkillResourceSet(terminal, skillResources)
             }
@@ -312,36 +388,57 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
         check(skillResources.resources.any { it.name == skillName }) {
             "PI_MOBILE_SKILL_NOT_ENABLED"
         }
-        val credential = requireNotNull(credentialVault.load()) {
-            "PI_MOBILE_PROVIDER_CREDENTIAL_MISSING"
-        }
+        val provider = loadActiveProvider()
+        val imageGenerationEnabled = imageGenerationEnabled(provider)
         val activeEngine = PhoneLocalPiEngine(appContext.assets, ownerDispatcher)
-        val activePump = OpenRouterRequestPump(
+        val activePump = NativeProviderRequestPump(
             engine = activeEngine,
-            credential = credential,
-            client = client,
+            provider = provider,
+            openRouterClient = client,
+            codexClient = codexClient,
             networkScope = networkScope,
             attentionBridge = attentionBridge,
             taskId = taskId,
             childUpdateSink = childUpdateSink,
+            webSearch = {
+                (provider as? RuntimeChatProvider.OpenRouter)
+                    ?.credential
+                    ?.let(::webSearchConfiguration)
+            },
+            webFetch = {
+                (provider as? RuntimeChatProvider.OpenRouter)
+                    ?.credential
+                    ?.let(::webFetchConfiguration)
+            },
         )
         engine = activeEngine
         requestPump = activePump
-        activeTaskCredential = credential
+        activeTaskProvider = provider
         activeTaskId = taskId
         running = true
         lastStatus = null
         openCommandMailbox()
         try {
             activeEngine.bootstrap()
-            val initial = activeEngine.startNativeOpenRouterTaskSkillSession(
-                taskId = taskId,
-                sessionId = sessionId,
-                skillName = skillName,
-                additionalInstructions = additionalInstructions,
-                modelId = credential.profile.modelId,
-                skillResources = skillResources.resources,
-            )
+            val initial = when (provider) {
+                is RuntimeChatProvider.OpenRouter -> activeEngine.startNativeOpenRouterTaskSkillSession(
+                    taskId = taskId,
+                    sessionId = sessionId,
+                    skillName = skillName,
+                    additionalInstructions = additionalInstructions,
+                    modelId = provider.modelId,
+                    skillResources = skillResources.resources,
+                    imageGenerationEnabled = imageGenerationEnabled,
+                )
+                is RuntimeChatProvider.Codex -> activeEngine.startNativeCodexTaskSkillSession(
+                    taskId = taskId,
+                    sessionId = sessionId,
+                    skillName = skillName,
+                    additionalInstructions = additionalInstructions,
+                    modelId = provider.modelId,
+                    skillResources = skillResources.resources,
+                )
+            }
             pumpUntilTerminal(initial, activePump, onStatus).also { terminal ->
                 requireTrustedSkillResourceSet(terminal, skillResources)
             }
@@ -523,7 +620,7 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
         val activeEngine = requireNotNull(engine) { "PI_MOBILE_TASK_SESSION_ENGINE_MISSING" }
         val activePump = requireNotNull(requestPump) { "PI_MOBILE_TASK_SESSION_PUMP_MISSING" }
         if (textAttachments.isNotEmpty()) {
-            requireToolCapability(requireNotNull(activeTaskCredential))
+            requireToolCapability(requireNotNull(activeTaskProvider))
         }
         running = true
         lastStatus = null
@@ -624,38 +721,60 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
         }
         check(snapshot.taskId == taskId) { "PI_MOBILE_SESSION_SNAPSHOT_TASK_MISMATCH" }
         requireValidSkillResourceSet(skillResources)
-        val credential = requireNotNull(credentialVault.load()) {
-            "PI_MOBILE_PROVIDER_CREDENTIAL_MISSING"
-        }
-        if (images.isNotEmpty()) requireImageInputCapability(credential)
-        if (requiresTools) requireToolCapability(credential)
+        val provider = loadProviderForSnapshot(snapshot.entries)
+        val imageGenerationEnabled = imageGenerationEnabled(provider)
+        if (images.isNotEmpty()) requireImageInputCapability(provider)
+        if (requiresTools) requireToolCapability(provider)
         val activeEngine = PhoneLocalPiEngine(appContext.assets, ownerDispatcher)
-        val activePump = OpenRouterRequestPump(
+        val activePump = NativeProviderRequestPump(
             engine = activeEngine,
-            credential = credential,
-            client = client,
+            provider = provider,
+            openRouterClient = client,
+            codexClient = codexClient,
             networkScope = networkScope,
             attentionBridge = attentionBridge,
             taskId = taskId,
             childUpdateSink = childUpdateSink,
+            webSearch = {
+                (provider as? RuntimeChatProvider.OpenRouter)
+                    ?.credential
+                    ?.let(::webSearchConfiguration)
+            },
+            webFetch = {
+                (provider as? RuntimeChatProvider.OpenRouter)
+                    ?.credential
+                    ?.let(::webFetchConfiguration)
+            },
         )
         engine = activeEngine
         requestPump = activePump
-        activeTaskCredential = credential
+        activeTaskProvider = provider
         activeTaskId = taskId
         lastStatus = null
         closeCommandMailbox("PI_MOBILE_TASK_SESSION_RESTORING")
         try {
             activeEngine.bootstrap()
-            val restored = activeEngine.restoreNativeOpenRouterTaskSession(
-                taskId = taskId,
-                sessionId = sessionId,
-                turnCount = snapshot.turnCount,
-                entries = snapshot.entries,
-                modelId = credential.profile.modelId,
-                skillResources = skillResources.resources,
-                images = images,
-            )
+            val restored = when (provider) {
+                is RuntimeChatProvider.OpenRouter ->
+                    activeEngine.restoreNativeOpenRouterTaskSession(
+                        taskId = taskId,
+                        sessionId = sessionId,
+                        turnCount = snapshot.turnCount,
+                        entries = snapshot.entries,
+                        modelId = provider.modelId,
+                        skillResources = skillResources.resources,
+                        images = images,
+                        imageGenerationEnabled = imageGenerationEnabled,
+                    )
+                is RuntimeChatProvider.Codex -> activeEngine.restoreNativeCodexTaskSession(
+                    taskId = taskId,
+                    sessionId = sessionId,
+                    turnCount = snapshot.turnCount,
+                    entries = snapshot.entries,
+                    modelId = provider.modelId,
+                    skillResources = skillResources.resources,
+                )
+            }
             check(
                 restored.terminal &&
                     restored.providerRequestsIssued == 0 &&
@@ -760,7 +879,7 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
             engine?.shutdown()
             requestPump = null
             engine = null
-            activeTaskCredential = null
+            activeTaskProvider = null
             activeTaskId = null
             running = false
             lastStatus = null
@@ -794,7 +913,7 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
 
     private suspend fun pumpUntilTerminal(
         initial: PiNativeOpenRouterScenarioStatus,
-        activePump: OpenRouterRequestPump,
+        activePump: NativeProviderRequestPump,
         onStatus: (PiNativeOpenRouterScenarioStatus) -> Unit,
     ): PiNativeOpenRouterScenarioStatus {
         var status = initial
@@ -838,6 +957,87 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
             }
             taskCommands += command
         }
+    }
+
+    private fun loadCredential(): ProviderCredential {
+        val credential = requireNotNull(credentialVault.load()) {
+            "PI_MOBILE_PROVIDER_CREDENTIAL_MISSING"
+        }
+        selectionStore?.reconcile(credential.profile)
+        return credential
+    }
+
+    private fun loadActiveProvider(): RuntimeChatProvider {
+        val openRouterCredential = credentialVault.load()
+        val active = activeChatProviderStore?.load(
+            openRouterCredential?.profile?.modelId ?: DEFAULT_OPENROUTER_MODEL_ID,
+        ) ?: ActiveChatProviderSelection(
+            ChatProviderKind.OPENROUTER,
+            requireNotNull(openRouterCredential) {
+                "PI_MOBILE_PROVIDER_CREDENTIAL_MISSING"
+            }.profile.modelId,
+        )
+        val resolved = if (active.kind == ChatProviderKind.OPENROUTER) {
+            active.copy(
+                modelId = requireNotNull(openRouterCredential) {
+                    "PI_MOBILE_PROVIDER_CREDENTIAL_MISSING"
+                }.profile.modelId,
+            )
+        } else {
+            active
+        }
+        return providerFromSelection(resolved, openRouterCredential)
+    }
+
+    private fun loadProviderForSnapshot(entries: JsonArray): RuntimeChatProvider {
+        val binding = persistedProviderBinding(entries) ?: return RuntimeChatProvider.OpenRouter(
+            loadCredential(),
+        )
+        return providerFromSelection(binding, credentialVault.load())
+    }
+
+    private fun providerFromSelection(
+        selection: ActiveChatProviderSelection,
+        openRouterCredential: ProviderCredential?,
+    ): RuntimeChatProvider = when (selection.kind) {
+        ChatProviderKind.OPENROUTER -> {
+            val credential = requireNotNull(openRouterCredential) {
+                "PI_MOBILE_PROVIDER_CREDENTIAL_MISSING"
+            }
+            selectionStore?.reconcile(credential.profile)
+            RuntimeChatProvider.OpenRouter(
+                credential.copy(profile = credential.profile.copy(modelId = selection.modelId)),
+            )
+        }
+        ChatProviderKind.CODEX -> {
+            check(codexClient != null) { "PI_MOBILE_CODEX_PROVIDER_NOT_CONFIGURED" }
+            RuntimeChatProvider.Codex(selection.modelId)
+        }
+    }
+
+    private fun webSearchConfiguration(
+        credential: ProviderCredential,
+    ): OpenRouterWebSearchConfig? {
+        val selection = selectionStore?.load(credential.profile)
+            ?: ProviderSelection.defaults(credential.profile)
+        return OpenRouterWebSearchConfig().takeIf { selection.webSearchEnabled }
+    }
+
+    private fun webFetchConfiguration(
+        credential: ProviderCredential,
+    ): OpenRouterWebFetchConfig? {
+        val selection = selectionStore?.load(credential.profile)
+            ?: ProviderSelection.defaults(credential.profile)
+        return OpenRouterWebFetchConfig().takeIf { selection.webSearchEnabled }
+    }
+
+    private fun imageGenerationEnabled(provider: RuntimeChatProvider): Boolean = when (provider) {
+        is RuntimeChatProvider.OpenRouter -> {
+            val selection = selectionStore?.load(provider.credential.profile)
+                ?: ProviderSelection.defaults(provider.credential.profile)
+            selection.imageGenerationEnabled && selection.imageModelId != null
+        }
+        is RuntimeChatProvider.Codex -> false
     }
 
     private fun checkOpen() {
@@ -924,7 +1124,7 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
         } finally {
             requestPump = null
             engine = null
-            activeTaskCredential = null
+            activeTaskProvider = null
             activeTaskId = null
             lastStatus = null
             closeCommandMailbox("PI_MOBILE_TASK_SESSION_CLOSED")
@@ -1004,6 +1204,7 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
         const val PUMP_INTERVAL_MILLIS = 2L
         const val SKILL_PARSE_POLL_MILLIS = 1L
         const val MAX_SKILL_PARSE_POLLS = 100
+        const val DEFAULT_OPENROUTER_MODEL_ID = "deepseek/deepseek-v4-pro"
     }
 }
 
@@ -1019,10 +1220,50 @@ private fun missingChildPersistenceSink(
     "PI_MOBILE_CHILD_PERSISTENCE_SINK_MISSING events=${events.size} snapshots=${snapshots.size}",
 )
 
-internal class OpenRouterRequestPump(
+internal sealed interface RuntimeChatProvider {
+    val modelId: String
+
+    data class OpenRouter(val credential: ProviderCredential) : RuntimeChatProvider {
+        override val modelId: String = credential.profile.modelId
+    }
+
+    data class Codex(override val modelId: String) : RuntimeChatProvider
+}
+
+private fun persistedProviderBinding(entries: JsonArray): ActiveChatProviderSelection? {
+    val bindings = entries.mapNotNull { element ->
+        val entry = element as? JsonObject ?: return@mapNotNull null
+        if ((entry["type"] as? JsonPrimitive)?.contentOrNull != "custom") {
+            return@mapNotNull null
+        }
+        if ((entry["customType"] as? JsonPrimitive)?.contentOrNull != PROVIDER_BINDING_ENTRY_TYPE) {
+            return@mapNotNull null
+        }
+        val data = entry["data"] as? JsonObject
+            ?: error("PI_MOBILE_SESSION_PROVIDER_BINDING_INVALID")
+        check(data.keys == setOf("kind", "modelId")) {
+            "PI_MOBILE_SESSION_PROVIDER_BINDING_INVALID"
+        }
+        ActiveChatProviderSelection(
+            kind = ChatProviderKind.fromWireValue(
+                (data["kind"] as? JsonPrimitive)?.contentOrNull
+                    ?: error("PI_MOBILE_SESSION_PROVIDER_BINDING_INVALID"),
+            ),
+            modelId = (data["modelId"] as? JsonPrimitive)?.contentOrNull
+                ?: error("PI_MOBILE_SESSION_PROVIDER_BINDING_INVALID"),
+        ).also(ActiveChatProviderPolicy::validate)
+    }
+    check(bindings.distinct().size <= 1) { "PI_MOBILE_SESSION_PROVIDER_BINDING_CONFLICT" }
+    return bindings.lastOrNull()
+}
+
+private const val PROVIDER_BINDING_ENTRY_TYPE = "pi_mobile_provider_binding"
+
+internal class NativeProviderRequestPump(
     private val engine: PhoneLocalPiEngine,
-    private val credential: ProviderCredential,
-    private val client: OpenRouterNativeClient,
+    private val provider: RuntimeChatProvider,
+    private val openRouterClient: OpenRouterNativeClient,
+    private val codexClient: CodexNativeClient?,
     private val networkScope: CoroutineScope,
     private val attentionBridge: PhoneLocalAttentionBridge?,
     private val taskId: String?,
@@ -1030,6 +1271,8 @@ internal class OpenRouterRequestPump(
         List<PiChildAgentEventEnvelope>,
         List<PiChildAgentSnapshot>,
     ) -> Unit,
+    private val webSearch: () -> OpenRouterWebSearchConfig?,
+    private val webFetch: () -> OpenRouterWebFetchConfig?,
 ) {
     private val networkEvents = ConcurrentLinkedQueue<NetworkEvent>()
     private val jobs = mutableMapOf<String, Job>()
@@ -1131,7 +1374,11 @@ internal class OpenRouterRequestPump(
 
     private suspend fun drainCancellations() {
         engine.drainNativeProviderCancellations().forEach { cancellation ->
-            require(cancellation.kind == "cancel_openrouter_stream") {
+            val expectedKind = when (provider) {
+                is RuntimeChatProvider.OpenRouter -> "cancel_openrouter_stream"
+                is RuntimeChatProvider.Codex -> "cancel_codex_responses_stream"
+            }
+            require(cancellation.kind == expectedKind) {
                 "PI_MOBILE_PROVIDER_CANCELLATION_KIND_INVALID"
             }
             cancelledRequestIds += cancellation.id
@@ -1165,34 +1412,61 @@ internal class OpenRouterRequestPump(
 
     private suspend fun startProviderRequests() {
         engine.drainNativeProviderRequests().forEach { request ->
-            require(request.kind == "openrouter_chat_stream") {
-                "PI_MOBILE_PROVIDER_REQUEST_KIND_INVALID"
-            }
             require(request.id !in jobs) { "PI_MOBILE_PROVIDER_REQUEST_DUPLICATED" }
             val job = networkScope.launch {
                 try {
-                    val result = client.stream(
-                        credential = credential,
-                        request = OpenRouterChatRequest(
-                            modelId = request.modelId,
-                            messages = request.messages,
-                            tools = request.tools,
-                            maxTokens = request.maxTokens,
-                        ),
-                        onChunk = { chunk ->
-                            networkEvents += NetworkEvent.Chunk(request.id, chunk)
-                        },
-                    )
+                    val generationId = when (val activeProvider = provider) {
+                        is RuntimeChatProvider.OpenRouter -> {
+                            require(request.kind == "openrouter_chat_stream") {
+                                "PI_MOBILE_PROVIDER_REQUEST_KIND_INVALID"
+                            }
+                            openRouterClient.stream(
+                                credential = activeProvider.credential,
+                                request = OpenRouterChatRequest(
+                                    modelId = request.modelId,
+                                    messages = requireNotNull(request.messages) {
+                                        "PI_MOBILE_OPENROUTER_MESSAGES_MISSING"
+                                    },
+                                    functionTools = request.tools,
+                                    webSearch = webSearch(),
+                                    webFetch = webFetch(),
+                                    maxTokens = request.maxTokens,
+                                ),
+                                onChunk = { chunk ->
+                                    networkEvents += NetworkEvent.Chunk(request.id, chunk)
+                                },
+                            ).generationId
+                        }
+                        is RuntimeChatProvider.Codex -> {
+                            require(request.kind == "codex_responses_stream") {
+                                "PI_MOBILE_PROVIDER_REQUEST_KIND_INVALID"
+                            }
+                            requireNotNull(codexClient) {
+                                "PI_MOBILE_CODEX_PROVIDER_NOT_CONFIGURED"
+                            }.stream(
+                                CodexResponsesRequest(
+                                    modelId = request.modelId,
+                                    body = requireNotNull(request.body) {
+                                        "PI_MOBILE_CODEX_BODY_MISSING"
+                                    },
+                                    sessionId = request.sessionId,
+                                ),
+                            ) { event ->
+                                networkEvents += NetworkEvent.Chunk(request.id, event)
+                            }
+                            null
+                        }
+                    }
                     networkEvents += NetworkEvent.Completed(
                         requestId = request.id,
-                        generationId = result.generationId,
+                        generationId = generationId,
                     )
                 } catch (_: CancellationException) {
                     // Pi Stop is the source of truth. The owner thread already removed this request.
                 } catch (error: Throwable) {
                     networkEvents += NetworkEvent.Failed(
                         requestId = request.id,
-                        safeMessage = safeProviderMessage(error),
+                        safeMessage = safeProviderMessage(provider, error),
                     )
                 }
             }
@@ -1291,23 +1565,37 @@ internal class OpenRouterRequestPump(
                 isError = result.isError,
             )
         } catch (error: Throwable) {
+            val boundTaskId = taskId
+            if (boundTaskId != null) {
+                attentionBridge?.discardUndeliveredImageResult(boundTaskId, result)
+            }
             if (error.message?.contains("PI_MOBILE_NATIVE_PROVIDER_TOOL_NOT_FOUND") != true) {
                 throw error
             }
-            // Pi removed the pending tool when Stop aborted the Agent turn.
+            // Pi removed the pending tool when Stop aborted the Agent turn. Any generated
+            // attachment is removed above so a cancelled paid request cannot leave a ghost item.
         }
     }
 
-    private fun safeProviderMessage(error: Throwable): String =
-        if (error is OpenRouterRequestException) {
-            error.message ?: "OpenRouter request failed"
-        } else {
-            "OpenRouter request failed"
-        }
+    private fun safeProviderMessage(provider: RuntimeChatProvider, error: Throwable): String =
+        when (provider) {
+            is RuntimeChatProvider.OpenRouter -> if (error is OpenRouterRequestException) {
+                error.safeTaskMessage()
+            } else {
+                "OpenRouter request failed"
+            }
+            is RuntimeChatProvider.Codex -> if (error is CodexTransportException) {
+                error.message ?: "Codex request failed"
+            } else {
+                "Codex request failed"
+            }
+        }.take(160)
 
     private suspend fun supportsScreenToolImages(): Boolean {
         screenImageCapabilityReady?.let { return it }
-        val model = runCatching { client.listModels(credential.apiKey) }
+        val credential = (provider as? RuntimeChatProvider.OpenRouter)?.credential
+            ?: return false.also { screenImageCapabilityReady = it }
+        val model = runCatching { openRouterClient.listModels(credential.apiKey) }
             .getOrNull()
             ?.singleOrNull { it.id == credential.profile.modelId }
         return (

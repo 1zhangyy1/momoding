@@ -3,6 +3,6 @@
     xmlns:tools="http://schemas.android.com/tools"
     tools:ignore="ObsoleteSdkInt">
     <background android:drawable="@color/momoding_icon_background" />
-    <foreground android:drawable="@drawable/momoding_head_foreground" />
-    <monochrome android:drawable="@drawable/momoding_head_foreground" />
+    <foreground android:drawable="@drawable/momoding_launcher_foreground" />
+    <monochrome android:drawable="@drawable/momoding_launcher_monochrome" />
 </adaptive-icon>

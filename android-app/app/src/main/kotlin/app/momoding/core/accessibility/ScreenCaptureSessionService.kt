@@ -282,7 +282,7 @@ class ScreenCaptureSessionService : Service() {
     }
 
     private fun notification(): Notification = NotificationCompat.Builder(this, CHANNEL_ID)
-        .setSmallIcon(R.mipmap.ic_momoding)
+        .setSmallIcon(R.drawable.momoding_mark_monochrome)
         .setContentTitle("Momoding screen access")
         .setContentText("A time-limited screen-capture session is active")
         .setOngoing(true)

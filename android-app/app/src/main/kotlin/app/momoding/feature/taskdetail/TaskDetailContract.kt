@@ -37,7 +37,7 @@ enum class RunningComposerMode { STEER, FOLLOW_UP }
 
 enum class ToolActivityState { RUNNING, SUCCESS, FAILURE, CANCELLED, UNSUPPORTED }
 
-enum class ToolActivityKind { GENERIC, MOBILE_FILE, TEST, TERMINAL, USER_INPUT }
+enum class ToolActivityKind { GENERIC, WEB_ACCESS, MOBILE_FILE, TEST, TERMINAL, USER_INPUT }
 
 enum class ToolActivityAction { REVIEW_CHANGES, VIEW_OUTPUTS }
 
@@ -92,11 +92,50 @@ data class TaskPlanStepUiModel(
     val state: TaskPlanStepState,
 )
 
+data class ToolSourceUiModel(
+    val label: String,
+    val url: String? = null,
+)
+
 data class ToolResultUiModel(
     val text: String,
-    val sources: List<String> = emptyList(),
+    val sources: List<ToolSourceUiModel> = emptyList(),
+    val images: List<ToolImageUiModel> = emptyList(),
     val truncated: Boolean = false,
 )
+
+data class ToolImageUiModel(
+    val attachmentId: String,
+    val displayName: String = "Generated image",
+    val mimeType: String = "image/png",
+    val byteSize: Long = 0,
+    val thumbnailPng: ByteArray? = null,
+) {
+    override fun equals(other: Any?): Boolean = other is ToolImageUiModel &&
+        attachmentId == other.attachmentId && displayName == other.displayName &&
+        mimeType == other.mimeType && byteSize == other.byteSize &&
+        thumbnailPng.contentEqualsNullable(other.thumbnailPng)
+
+    override fun hashCode(): Int = 31 * (
+        31 * (31 * (31 * attachmentId.hashCode() + displayName.hashCode()) + mimeType.hashCode()) +
+            byteSize.hashCode()
+    ) + (thumbnailPng?.contentHashCode() ?: 0)
+}
+
+data class GeneratedImagePreviewUiModel(
+    val attachmentId: String,
+    val displayName: String,
+    val mimeType: String,
+    val imageBytes: ByteArray,
+) {
+    override fun equals(other: Any?): Boolean = other is GeneratedImagePreviewUiModel &&
+        attachmentId == other.attachmentId && displayName == other.displayName &&
+        mimeType == other.mimeType && imageBytes.contentEquals(other.imageBytes)
+
+    override fun hashCode(): Int =
+        31 * (31 * (31 * attachmentId.hashCode() + displayName.hashCode()) + mimeType.hashCode()) +
+            imageBytes.contentHashCode()
+}
 
 enum class TaskCommandKind { PROMPT, STEER, FOLLOW_UP, STOP }
 
@@ -288,6 +327,7 @@ data class TaskDetailUiState(
     val attachmentImporting: Boolean = false,
     val attachmentError: String? = null,
     val attachments: List<TaskDetailAttachmentUiModel> = emptyList(),
+    val generatedImagePreview: GeneratedImagePreviewUiModel? = null,
     val failure: TaskFailure? = null,
 ) {
     val latestError: TimelineItem.Error?
@@ -466,6 +506,10 @@ sealed interface TaskDetailAction {
     data class ImportPhotos(val uris: List<Uri>) : TaskDetailAction
     data class ImportTextFile(val uri: Uri) : TaskDetailAction
     data class RemoveAttachment(val attachmentId: String) : TaskDetailAction
+    data class OpenGeneratedImage(val attachmentId: String) : TaskDetailAction
+    data object DismissGeneratedImage : TaskDetailAction
+    data class CopyGeneratedImage(val attachmentId: String) : TaskDetailAction
+    data class DownloadGeneratedImage(val attachmentId: String) : TaskDetailAction
 }
 
 sealed interface TaskDetailOneShot {
@@ -474,6 +518,12 @@ sealed interface TaskDetailOneShot {
     data object OpenDiff : TaskDetailOneShot
     data object OpenProvider : TaskDetailOneShot
     data object OpenFullAccessSetup : TaskDetailOneShot
+    data class CopyGeneratedImage(
+        val uri: Uri,
+        val displayName: String,
+    ) : TaskDetailOneShot
+    data object GeneratedImageSaved : TaskDetailOneShot
+    data class GeneratedImageActionFailed(val message: String) : TaskDetailOneShot
     data class OpenAttention(
         val callId: String,
         val fileChanges: Boolean = false,

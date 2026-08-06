@@ -10,7 +10,7 @@ enum class AttachmentKind { IMAGE, TEXT_FILE, VIDEO }
 
 enum class AttachmentState { STAGED, PENDING, SENT }
 
-enum class AttachmentSource { PHOTO_PICKER, OPEN_DOCUMENT, ANDROID_SHARE, CAMERA }
+enum class AttachmentSource { PHOTO_PICKER, OPEN_DOCUMENT, ANDROID_SHARE, CAMERA, GENERATED_IMAGE }
 
 data class CameraCaptureRequest(
     val captureId: String,
@@ -126,6 +126,16 @@ interface TaskAttachmentGateway {
     suspend fun thumbnailPng(attachmentId: String): ByteArray?
 
     suspend fun removeTaskStagedAttachment(taskId: String, attachmentId: String): Boolean
+
+    /** Durable Agent-created images. Defaults keep older test fakes source-compatible. */
+    fun observeTaskGeneratedImages(taskId: String): Flow<List<TaskAttachmentRecord>> =
+        kotlinx.coroutines.flow.emptyFlow()
+
+    suspend fun generatedImageBytes(taskId: String, attachmentId: String): ByteArray? = null
+
+    suspend fun generatedImageContentUri(taskId: String, attachmentId: String): Uri? = null
+
+    suspend fun saveGeneratedImageToPictures(taskId: String, attachmentId: String): Uri? = null
 }
 
 object AttachmentFeatureGate {

@@ -77,7 +77,7 @@ class AndroidNotificationGateway private constructor(
             identity.tag,
             identity.id,
             NotificationCompat.Builder(context, AGENT_NOTIFICATION_CHANNEL_ID)
-                .setSmallIcon(R.mipmap.ic_momoding)
+                .setSmallIcon(R.drawable.momoding_mark_monochrome)
                 .setContentTitle(title)
                 .setContentText(message)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(message))

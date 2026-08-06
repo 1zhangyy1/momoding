@@ -1,14 +1,20 @@
 package app.momoding.core.attachments
 
 import android.content.ContentResolver
+import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
+import android.os.Environment
 import android.provider.OpenableColumns
+import android.provider.MediaStore
 import android.util.Base64
+import androidx.core.content.FileProvider
 import app.momoding.core.data.AttachmentEntity
 import app.momoding.core.data.MomodingDatabase
+import app.momoding.core.runtime.local.GeneratedImageArtifactStore
 import app.momoding.core.runtime.local.PiRuntimeImageInput
 import app.momoding.core.runtime.local.PiRuntimeTextAttachmentInput
+import java.io.ByteArrayInputStream
 import java.io.FileNotFoundException
 import java.io.InputStream
 import java.nio.charset.StandardCharsets
@@ -32,8 +38,9 @@ class AttachmentRepository(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     cameraCaptureIdFactory: () -> String = { UUID.randomUUID().toString() },
     cameraCaptureUriFactory: ((java.io.File) -> Uri)? = null,
-) : DraftAttachmentGateway, TaskAttachmentGateway {
-    private val resolver: ContentResolver = context.applicationContext.contentResolver
+) : DraftAttachmentGateway, TaskAttachmentGateway, GeneratedImageArtifactStore {
+    private val appContext = context.applicationContext
+    private val resolver: ContentResolver = appContext.contentResolver
     private val dao = database.attachmentDao()
     private val mutationMutex = Mutex()
     private val cameraCaptures = if (cameraCaptureUriFactory == null) {
@@ -42,7 +49,7 @@ class AttachmentRepository(
         CameraCaptureStore(context.applicationContext, cameraCaptureIdFactory, cameraCaptureUriFactory)
     }
     private val store by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
-        AttachmentPayloadStore(context.applicationContext.filesDir.resolve("attachments/v1"))
+        AttachmentPayloadStore(appContext.filesDir.resolve("attachments/v1"))
     }
 
     override fun observeDraftAttachments(draftId: String): Flow<List<AttachmentRecord>> {
@@ -214,6 +221,203 @@ class AttachmentRepository(
             .map { entities -> entities.map(::validatedTaskRecord) }
             .distinctUntilChanged()
             .flowOn(ioDispatcher)
+    }
+
+    override fun observeTaskGeneratedImages(taskId: String): Flow<List<TaskAttachmentRecord>> {
+        requireToken(taskId, "taskId")
+        return dao.observeTaskAttachmentsBySource(taskId, AttachmentSource.GENERATED_IMAGE.name)
+            .map { entities -> entities.map(::validatedTaskRecord) }
+            .distinctUntilChanged()
+            .flowOn(ioDispatcher)
+    }
+
+    override suspend fun importGeneratedImage(
+        taskId: String,
+        toolCallId: String,
+        displayName: String,
+        bytes: ByteArray,
+        declaredMimeType: String,
+    ): TaskAttachmentRecord = withContext(ioDispatcher) {
+        requireToken(taskId, "taskId")
+        requireToken(toolCallId, "toolCallId")
+        require(bytes.isNotEmpty()) { "GENERATED_IMAGE_EMPTY" }
+        val attachmentId = deterministicGeneratedAttachmentId(taskId, toolCallId)
+        mutationMutex.withLock {
+            dao.attachment(attachmentId)?.let { existing ->
+                check(
+                    existing.taskId == taskId &&
+                        existing.messageLocalId == toolCallId &&
+                        existing.source == AttachmentSource.GENERATED_IMAGE.name &&
+                        existing.kind == AttachmentKind.IMAGE.name,
+                ) { "GENERATED_IMAGE_ID_COLLISION" }
+                return@withLock validatedTaskRecord(existing)
+            }
+            val safeName = sanitizeDisplayName(displayName, "Generated image.png")
+            val stored = store.import(
+                attachmentId = attachmentId,
+                kind = AttachmentKind.IMAGE,
+                source = AttachmentSourceDescriptor(
+                    displayName = safeName,
+                    declaredMimeType = declaredMimeType,
+                    declaredSize = bytes.size.toLong(),
+                    openStream = { ByteArrayInputStream(bytes) },
+                ),
+            )
+            try {
+                check(stored.mimeType == declaredMimeType) { "GENERATED_IMAGE_MIME_MISMATCH" }
+                val timestamp = nowMillis()
+                val entity = AttachmentEntity(
+                    attachmentId = attachmentId,
+                    draftId = null,
+                    taskId = taskId,
+                    messageLocalId = toolCallId,
+                    ordinal = 0,
+                    kind = AttachmentKind.IMAGE.name,
+                    state = AttachmentState.SENT.name,
+                    source = AttachmentSource.GENERATED_IMAGE.name,
+                    displayName = safeName,
+                    mimeType = stored.mimeType,
+                    byteSize = stored.byteSize,
+                    payloadSha256 = stored.sha256,
+                    payloadFileName = stored.payloadFileName,
+                    thumbnailFileName = stored.thumbnailFileName,
+                    width = stored.width,
+                    height = stored.height,
+                    createdAtMillis = timestamp,
+                    updatedAtMillis = timestamp,
+                )
+                dao.insertAttachment(entity)
+                validatedTaskRecord(entity)
+            } catch (error: Throwable) {
+                store.delete(stored.payloadFileName, stored.thumbnailFileName)
+                throw error
+            }
+        }
+    }
+
+    override suspend fun discardGeneratedImage(taskId: String, attachmentId: String): Boolean =
+        withContext(ioDispatcher) {
+            requireToken(taskId, "taskId")
+            requireUuid(attachmentId)
+            mutationMutex.withLock {
+                val existing = dao.attachment(attachmentId)
+                    ?.takeIf {
+                        it.taskId == taskId && it.source == AttachmentSource.GENERATED_IMAGE.name
+                    }
+                    ?: return@withLock false
+                check(
+                    dao.deleteTaskAttachmentBySource(
+                        taskId,
+                        attachmentId,
+                        AttachmentSource.GENERATED_IMAGE.name,
+                    ) == 1,
+                ) { "GENERATED_IMAGE_DELETE_LOST" }
+                store.delete(existing.payloadFileName, existing.thumbnailFileName)
+                generatedImageContentDirectory(attachmentId).deleteRecursively()
+                true
+            }
+        }
+
+    override suspend fun generatedImageBytes(taskId: String, attachmentId: String): ByteArray? =
+        withContext(ioDispatcher) {
+            val entity = generatedImageEntity(taskId, attachmentId) ?: return@withContext null
+            val payload = generatedImagePayload(entity) ?: return@withContext null
+            runCatching { payload.readBytes() }
+                .getOrNull()
+                ?.takeIf { it.size.toLong() == entity.byteSize }
+        }
+
+    override suspend fun generatedImageContentUri(taskId: String, attachmentId: String): Uri? =
+        withContext(ioDispatcher) {
+            val entity = generatedImageEntity(taskId, attachmentId) ?: return@withContext null
+            val payload = generatedImagePayload(entity) ?: return@withContext null
+            val shareFile = runCatching {
+                val shareDirectory = generatedImageContentDirectory(attachmentId)
+                check(shareDirectory.exists() || shareDirectory.mkdirs())
+                val output = shareDirectory.resolve(generatedImageDisplayName(entity))
+                val temporary = shareDirectory.resolve(".${output.name}.tmp")
+                temporary.delete()
+                try {
+                    payload.copyTo(temporary, overwrite = true)
+                    check(temporary.length() == entity.byteSize)
+                    output.delete()
+                    check(temporary.renameTo(output))
+                    output
+                } finally {
+                    temporary.delete()
+                }
+            }.getOrNull() ?: return@withContext null
+            runCatching {
+                FileProvider.getUriForFile(
+                    appContext,
+                    "${appContext.packageName}.attachments",
+                    shareFile,
+                )
+            }.getOrNull()
+        }
+
+    override suspend fun saveGeneratedImageToPictures(taskId: String, attachmentId: String): Uri? =
+        withContext(ioDispatcher) {
+            val entity = generatedImageEntity(taskId, attachmentId) ?: return@withContext null
+            val payload = generatedImagePayload(entity) ?: return@withContext null
+            val values = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, generatedImageDisplayName(entity))
+                put(MediaStore.Images.Media.MIME_TYPE, entity.mimeType)
+                put(
+                    MediaStore.Images.Media.RELATIVE_PATH,
+                    "${Environment.DIRECTORY_PICTURES}/Momoding",
+                )
+                put(MediaStore.Images.Media.IS_PENDING, 1)
+            }
+            val output = runCatching {
+                resolver.insert(
+                    MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY),
+                    values,
+                )
+            }.getOrNull() ?: return@withContext null
+            val saved = runCatching {
+                resolver.openOutputStream(output, "w")?.use { stream ->
+                    payload.inputStream().buffered().use { input -> input.copyTo(stream) }
+                } ?: error("GENERATED_IMAGE_OUTPUT_UNAVAILABLE")
+                values.clear()
+                values.put(MediaStore.Images.Media.IS_PENDING, 0)
+                check(resolver.update(output, values, null, null) == 1)
+            }.isSuccess
+            if (!saved) {
+                runCatching { resolver.delete(output, null, null) }
+                return@withContext null
+            }
+            output
+        }
+
+    private fun generatedImageEntity(taskId: String, attachmentId: String): AttachmentEntity? {
+        requireToken(taskId, "taskId")
+        requireUuid(attachmentId)
+        return dao.attachment(attachmentId)?.takeIf {
+            it.taskId == taskId && it.source == AttachmentSource.GENERATED_IMAGE.name
+        }
+    }
+
+    private fun generatedImagePayload(entity: AttachmentEntity) =
+        appContext.filesDir.resolve("attachments/v1/${entity.payloadFileName}")
+            .takeIf { it.isFile && it.length() == entity.byteSize }
+
+    private fun generatedImageContentDirectory(attachmentId: String) =
+        appContext.cacheDir.resolve("generated-image-content/v1/$attachmentId")
+
+    private fun generatedImageDisplayName(entity: AttachmentEntity): String {
+        val extension = when (entity.mimeType) {
+            "image/png" -> "png"
+            "image/jpeg" -> "jpg"
+            "image/webp" -> "webp"
+            else -> "img"
+        }
+        val displayName = sanitizeDisplayName(entity.displayName, "Momoding image.$extension")
+        return if (displayName.endsWith(".$extension", ignoreCase = true)) {
+            displayName
+        } else {
+            "$displayName.$extension"
+        }
     }
 
     override suspend fun importTaskPhotoPickerSelection(
@@ -851,6 +1055,11 @@ private fun deterministicShareAttachmentId(receiptId: String, sourceIndex: Int):
 private fun deterministicCameraAttachmentId(captureId: String): String = UUID.nameUUIDFromBytes(
     "momoding-camera-v1:$captureId".toByteArray(StandardCharsets.UTF_8),
 ).toString()
+
+private fun deterministicGeneratedAttachmentId(taskId: String, toolCallId: String): String =
+    UUID.nameUUIDFromBytes(
+        "momoding-generated-image-v1:$taskId:$toolCallId".toByteArray(StandardCharsets.UTF_8),
+    ).toString()
 
 data class RuntimeAttachmentBatch(
     val images: List<PiRuntimeImageInput>,

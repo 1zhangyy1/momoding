@@ -14,6 +14,7 @@
 +SECURITY.md
 +SUPPORT.md
 +THIRD_PARTY_NOTICES.md
++version.properties
 
 # Public product documentation and license texts
 +docs/ARCHITECTURE.md
@@ -55,6 +56,7 @@
 +scripts/export-public-repo.sh
 +scripts/generate-p2-fixtures.mjs
 +scripts/lib/p2-fixture-projection.mjs
++scripts/lib/release-version.mjs
 +scripts/public-export-paths.txt
 +scripts/verify-release-apk.mjs
 +scripts/verify-signed-release-apk.mjs

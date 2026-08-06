@@ -110,6 +110,8 @@ internal fun classifyTaskFailure(errorMessage: String?): TaskFailure = when (err
         TaskFailureRecovery.RETRY,
     )
     "OpenRouter request failed",
+    "OpenRouter stream failed",
+    "OpenRouter rejected the request",
     "OpenRouter returned an invalid stream",
     -> TaskFailure(
         TaskFailureKind.PROVIDER_OTHER,

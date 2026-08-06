@@ -500,6 +500,31 @@ function registerLiveToolImages(
   details: unknown,
   isError: boolean,
 ): void {
+  if (
+    request.kind === "android_image_generation_tool" &&
+    request.toolName === "image_generate"
+  ) {
+    if (isError) return;
+    const attachmentId = isRecord(details) ? details.attachmentId : undefined;
+    const mimeType = isRecord(details) ? details.mimeType : undefined;
+    if (
+      content.length !== 1 ||
+      content[0].type !== "text" ||
+      !isRecord(details) ||
+      details.kind !== "generated_image_artifact" ||
+      details.persistent !== true ||
+      typeof attachmentId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+        attachmentId,
+      ) ||
+      (mimeType !== "image/png" &&
+        mimeType !== "image/jpeg" &&
+        mimeType !== "image/webp")
+    ) {
+      throw new Error("PI_MOBILE_GENERATED_IMAGE_DETAILS_INVALID");
+    }
+    return;
+  }
   const images = content.filter(
     (block): block is ImageContent => block.type === "image",
   );

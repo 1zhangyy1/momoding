@@ -4,6 +4,8 @@ import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -11,6 +13,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.media.projection.MediaProjectionManager
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -187,7 +190,12 @@ class MainActivity : ComponentActivity() {
     private val providerSetupViewModel: ProviderSetupViewModel by viewModels {
         ProviderSetupViewModel.Factory(
             container.providerCredentialVault,
+            container.providerSelectionStore,
+            container.activeChatProviderStore,
+            container.codexOAuthGateway,
+            container.codexCredentialManager,
             container.openRouterClient,
+            container.openRouterImageGateway,
         )
     }
     private lateinit var toolPermissionLauncher: ActivityResultLauncher<Array<String>>
@@ -223,9 +231,10 @@ class MainActivity : ComponentActivity() {
             val sharedRoute by externalNewTaskRoute.collectAsStateWithLifecycle()
             val capabilityRequest by container.androidCapabilityRequestCoordinator.pending
                 .collectAsStateWithLifecycle()
-            val phoneLocalModelId = providerState.savedProfile?.modelId ?: providerState.modelId
+            val phoneLocalModelId = providerState.activeModelId
+            val phoneLocalProviderName = providerState.activeProviderName
             val taskHomeViewModel: TaskHomeViewModel = viewModel(
-                key = "task-home-phone-local",
+                key = "task-home-phone-local:$phoneLocalProviderName:$phoneLocalModelId",
                 factory = TaskHomeViewModel.PhoneLocalFactory(
                     container.taskRepository,
                     phoneLocalModelId,
@@ -233,7 +242,7 @@ class MainActivity : ComponentActivity() {
             )
             val collectedTaskHomeState by taskHomeViewModel.state.collectAsStateWithLifecycle()
             val taskHomeState = collectedTaskHomeState.copy(
-                hostAlias = "On-device · $phoneLocalModelId",
+                hostAlias = "On-device · $phoneLocalProviderName · $phoneLocalModelId",
             )
             val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
             val dark = resolvesToDark(state.appearance, systemDark)
@@ -250,7 +259,7 @@ class MainActivity : ComponentActivity() {
                 val attentionOwnerFactory: AttentionRouteViewModelFactory = remember(container) {
                     { identity -> container.attentionViewModelFactory(identity) }
                 }
-                MomodingApp(
+                CodexApp(
                     state = state,
                     onAction = settingsViewModel::dispatch,
                     providerSetupState = providerState,
@@ -269,6 +278,7 @@ class MainActivity : ComponentActivity() {
                             route = route,
                             container = container,
                             modelId = phoneLocalModelId,
+                            providerName = phoneLocalProviderName,
                             onOpenTask = onOpenTask,
                             onBack = onBack,
                             onOpenFullAccessSetup = onOpenFullAccessSetup,
@@ -566,7 +576,7 @@ data class AttentionNavigationReturn(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun MomodingApp(
+internal fun CodexApp(
     state: SettingsUiState,
     onAction: (SettingsAction) -> Unit,
     providerSetupState: ProviderSetupUiState? = null,
@@ -603,6 +613,7 @@ internal fun MomodingApp(
     initialBackStack: List<NavKey> = listOf(HostGateRoute),
     onAccessibilityAnnouncement: ((String) -> Unit)? = null,
 ) {
+    val context = LocalContext.current
     val accessibilityView = LocalView.current
     val announceAccessibility = onAccessibilityAnnouncement ?: remember(accessibilityView) {
         { message: String -> accessibilityView.announceForAccessibility(message) }
@@ -930,6 +941,25 @@ internal fun MomodingApp(
             TaskDetailOneShot.OpenFullAccessSetup -> if (backStack.lastOrNull() == route) {
                 openDeviceCapabilities(startFullAccessSetup = true)
             }
+            is TaskDetailOneShot.CopyGeneratedImage -> if (backStack.lastOrNull() == route) {
+                runCatching {
+                    context.getSystemService(ClipboardManager::class.java).setPrimaryClip(
+                        ClipData.newUri(context.contentResolver, oneShot.displayName, oneShot.uri),
+                    )
+                }.onSuccess {
+                    Toast.makeText(context, "Image copied", Toast.LENGTH_SHORT).show()
+                }.onFailure {
+                    Toast.makeText(context, "The image could not be copied", Toast.LENGTH_SHORT).show()
+                }
+            }
+            TaskDetailOneShot.GeneratedImageSaved -> if (backStack.lastOrNull() == route) {
+                Toast.makeText(context, "Saved to Pictures/Momoding", Toast.LENGTH_SHORT).show()
+            }
+            is TaskDetailOneShot.GeneratedImageActionFailed -> if (
+                backStack.lastOrNull() == route
+            ) {
+                Toast.makeText(context, oneShot.message, Toast.LENGTH_SHORT).show()
+            }
             is TaskDetailOneShot.OpenAttention -> if (
                 backStack.lastOrNull() == route && oneShot.callId.isNotBlank()
             ) {
@@ -1107,6 +1137,12 @@ internal fun MomodingApp(
                         null
                     },
                     providerProfile = providerSetupState?.savedProfile,
+                    localProviderName = providerSetupState
+                        ?.takeIf(ProviderSetupUiState::configured)
+                        ?.activeProviderName,
+                    localProviderModelId = providerSetupState
+                        ?.takeIf(ProviderSetupUiState::configured)
+                        ?.activeModelId,
                     onOpenProviderSetup = if (providerSetupState != null) {
                         { openProviderSetup() }
                     } else {
@@ -1193,7 +1229,7 @@ internal fun MomodingApp(
             entry<DiffPlaceholderRoute> {
                 StagePlaceholder(
                     "Diff unavailable",
-                    "Diff content is not available for this task.",
+                    "Diff content is unavailable in this build.",
                     PaddingValues(24.dp),
                 )
             }
@@ -1703,10 +1739,15 @@ private fun DeviceCapabilitiesRouteContent(
         }
     }
     fun launchNotificationPermission() {
-        val permission = POST_NOTIFICATIONS_PERMISSION
-        val runtimePermissionGranted =
-            Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-            ContextCompat.checkSelfPermission(context, permission) ==
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            specialAccessLauncher.launch(
+                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
+            )
+            return
+        }
+        val permission = Manifest.permission.POST_NOTIFICATIONS
+        val runtimePermissionGranted = ContextCompat.checkSelfPermission(context, permission) ==
             PackageManager.PERMISSION_GRANTED
         if (runtimePermissionGranted) {
             specialAccessLauncher.launch(
@@ -2116,7 +2157,6 @@ private fun markCapabilityPermissionsAsked(
 private const val CAPABILITY_RESULT_REFRESH_ATTEMPTS = 10
 private const val CAPABILITY_RESULT_REFRESH_DELAY_MILLIS = 200L
 private const val CAPABILITY_PERMISSION_PREFS = "tool_permission_requests"
-private const val POST_NOTIFICATIONS_PERMISSION = "android.permission.POST_NOTIFICATIONS"
 
 @Composable
 private fun ExtensionsRouteContent(
@@ -2190,6 +2230,7 @@ private fun NewTaskRouteContent(
     route: NewTaskRoute,
     container: AppContainer,
     modelId: String,
+    providerName: String,
     onOpenTask: (String) -> Unit,
     onBack: () -> Unit,
     onOpenFullAccessSetup: () -> Unit,
@@ -2202,6 +2243,7 @@ private fun NewTaskRouteContent(
             drafts = container.draftRepository,
             coordinator = container.phoneLocalTaskCoordinator,
             modelId = modelId,
+            providerName = providerName,
             authorizedFolders = container.authorizedFoldersRepository,
             attachments = container.attachmentRepository,
             photoAttachmentInputEnabled = AttachmentFeatureGate.PHOTO_PRODUCT_INPUT_ENABLED,
@@ -2445,7 +2487,7 @@ private fun AttentionFoundation(
             modifier = Modifier.focusRequester(titleFocus).focusable().semantics { heading() },
         )
         LaunchedEffect(Unit) { titleFocus.requestFocus() }
-        Text("This request is not currently actionable. Dismiss does not approve or reject it.")
+        Text("Review the request below. Closing this sheet does not approve or reject it.")
         if (dismissIntent != null) {
             Button(
                 onClick = {

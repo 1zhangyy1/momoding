@@ -8,6 +8,7 @@ import app.momoding.core.data.TaskDetailSnapshot
 import app.momoding.core.data.TaskAttentionKind
 import kotlinx.serialization.json.JsonPrimitive
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -15,6 +16,40 @@ import org.junit.Test
 import java.security.MessageDigest
 
 class PiUiReducerTest {
+    @Test
+    fun `generated image tool result projects a durable task artifact`() {
+        val attachmentId = "77777777-7777-4777-8777-777777777777"
+        val output = PiUiReducer().reduce(
+            snapshot(
+                messages = listOf(
+                    TaskDetailMessageRecord(
+                        stableItemId = "assistant-image-tool",
+                        ordinal = 0,
+                        kind = "pi-message",
+                        rawPayload =
+                            """{"role":"assistant","content":[{"type":"toolCall","id":"call-image","name":"image_generate","arguments":{"prompt":"A green robot"}}]}""",
+                    ),
+                    TaskDetailMessageRecord(
+                        stableItemId = "generated-image-result",
+                        ordinal = 1,
+                        kind = "pi-message",
+                        rawPayload =
+                            """{"role":"toolResult","toolCallId":"call-image","toolName":"image_generate","content":[{"type":"text","text":"{\"ok\":true,\"kind\":\"generated_image_artifact\",\"persistent\":true,\"attachmentId\":\"$attachmentId\"}"}],"details":{"ok":true,"kind":"generated_image_artifact","persistent":true,"attachmentId":"$attachmentId","mimeType":"image/jpeg"},"isError":false}""",
+                    ),
+                ),
+                windowEnd = 2,
+            ),
+        )
+
+        val tool = output.timeline.settledItems.single() as TimelineItem.ToolActivity
+        assertEquals("Generated image", tool.title)
+        assertEquals(ToolActivityState.SUCCESS, tool.state)
+        assertEquals(listOf(attachmentId), tool.result?.images?.map { it.attachmentId })
+        assertEquals("", tool.result?.text)
+        assertTrue(tool.expanded)
+        assertTrue(tool.toString().contains("base64").not())
+    }
+
     @Test
     fun `image-only Pi user message projects attachment reference without exposing payload`() {
         val attachmentId = "11111111-1111-4111-8111-111111111111"
@@ -439,7 +474,90 @@ class PiUiReducerTest {
         assertEquals(ToolActivityState.SUCCESS, tool.state)
         assertEquals("Tests passed", tool.title)
         assertEquals("12 tests completed, 0 failed", tool.result?.text)
-        assertEquals(listOf("app/build.gradle.kts", "README.md"), tool.result?.sources)
+        assertEquals(
+            listOf(ToolSourceUiModel("app/build.gradle.kts"), ToolSourceUiModel("README.md")),
+            tool.result?.sources,
+        )
+    }
+
+    @Test
+    fun `provider web search events replace running activity with bounded clickable sources`() {
+        val projection = PiUiReducer().reduce(
+            snapshot(
+                rawEvents = listOf(
+                    event(
+                        1,
+                        """{"type":"provider_web_search","state":"running","requestId":"provider-1","searchRequests":1,"sources":[]}""",
+                    ),
+                    event(
+                        2,
+                        """{"type":"provider_web_search","state":"completed","requestId":"provider-1","searchRequests":1,"sources":[{"url":"https://example.com/latest","title":"Latest update","domain":"example.com"},{"url":"https://example.com/latest","title":"Duplicate","domain":"example.com"}]}""",
+                    ),
+                ),
+                throughSequence = 2,
+            ),
+        )
+
+        val search = projection.timeline.settledItems.single() as TimelineItem.ToolActivity
+        assertEquals("Searched web", search.title)
+        assertEquals(ToolActivityState.SUCCESS, search.state)
+        assertEquals(ToolActivityKind.WEB_ACCESS, search.kind)
+        assertEquals("1 search · 1 source", search.detail)
+        assertEquals(
+            listOf(
+                ToolSourceUiModel(
+                    label = "Latest update",
+                    url = "https://example.com/latest",
+                ),
+            ),
+            search.result?.sources,
+        )
+        assertFalse(search.expanded)
+    }
+
+    @Test
+    fun `provider web activity reports combined search and page reading`() {
+        val projection = PiUiReducer().reduce(
+            snapshot(
+                rawEvents = listOf(
+                    event(
+                        1,
+                        """{"type":"provider_web_activity","state":"running","requestId":"provider-1","searchRequests":1,"fetchRequests":2,"sources":[]}""",
+                    ),
+                    event(
+                        2,
+                        """{"type":"provider_web_activity","state":"completed","requestId":"provider-1","searchRequests":1,"fetchRequests":2,"sources":[]}""",
+                    ),
+                ),
+                throughSequence = 2,
+            ),
+        )
+
+        val web = projection.timeline.settledItems.single() as TimelineItem.ToolActivity
+        assertEquals("Researched web", web.title)
+        assertEquals("1 search · 2 pages read", web.detail)
+        assertEquals(ToolActivityKind.WEB_ACCESS, web.kind)
+        assertEquals(ToolActivityState.SUCCESS, web.state)
+    }
+
+    @Test
+    fun `provider web activity stays generic when OpenRouter reports only server tool count`() {
+        val projection = PiUiReducer().reduce(
+            snapshot(
+                rawEvents = listOf(
+                    event(
+                        1,
+                        """{"type":"provider_web_activity","state":"completed","requestId":"provider-1","webRequests":1,"sources":[]}""",
+                    ),
+                ),
+                throughSequence = 1,
+            ),
+        )
+
+        val web = projection.timeline.settledItems.single() as TimelineItem.ToolActivity
+        assertEquals("Used web", web.title)
+        assertEquals("1 web action", web.detail)
+        assertEquals(ToolActivityKind.WEB_ACCESS, web.kind)
     }
 
     @Test
@@ -911,7 +1029,10 @@ class PiUiReducerTest {
         assertEquals(ToolActivityState.FAILURE, tests.state)
         assertEquals("Tests failed", tests.title)
         assertTrue(requireNotNull(tests.result).text.contains("AssertionError"))
-        assertEquals(listOf("test-results/failing-test.html"), tests.result?.sources)
+        assertEquals(
+            listOf(ToolSourceUiModel("test-results/failing-test.html")),
+            tests.result?.sources,
+        )
     }
 
     @Test
@@ -1061,6 +1182,29 @@ class PiUiReducerTest {
         )
         assertTrue(output.timeline.settledItems.none { it is TimelineItem.UnsupportedActivity })
         assertTrue(output.timeline.settledItems.none { it.toString().contains("secret upstream detail") })
+    }
+
+    @Test
+    fun `failed snapshot reclassifies legacy stream error for recovery`() {
+        val output = PiUiReducer().reduce(
+            snapshot(
+                messages = listOf(
+                    TaskDetailMessageRecord(
+                        "legacy-stream-error",
+                        0,
+                        "pi-message",
+                        """{"role":"assistant","content":[],"stopReason":"error","errorMessage":"OpenRouter stream failed"}""",
+                    ),
+                ),
+                windowEnd = 1,
+                runState = "FAILED",
+                isStreaming = false,
+            ),
+        )
+
+        assertEquals(TaskDetailRunState.FAILED, output.runState)
+        assertEquals("PROVIDER_OTHER", output.failure?.kind?.name)
+        assertEquals("RETRY", output.failure?.recovery?.name)
     }
 
     @Test
@@ -1269,17 +1413,19 @@ class PiUiReducerTest {
         rawEvents: List<TaskDetailEventRecord> = emptyList(),
         throughSequence: Long = 0,
         pendingAttention: List<TaskDetailAttentionRecord> = emptyList(),
+        runState: String = "RUNNING",
+        isStreaming: Boolean = true,
     ) = TaskDetailSnapshot(
         taskId = TASK_ID,
         title = "Fixture task",
-        runState = "RUNNING",
+        runState = runState,
         recoveryState = "NORMAL",
         streamId = STREAM_ID,
         throughSequence = throughSequence,
         snapshotVersion = 1,
         windowStart = 0,
         windowEndExclusive = windowEnd,
-        isStreaming = true,
+        isStreaming = isStreaming,
         queueJson = "[]",
         messages = messages,
         rawEvents = rawEvents,

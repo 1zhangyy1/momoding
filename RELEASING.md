@@ -18,7 +18,8 @@ not a Play Store release.
 
 ## Source release checklist
 
-1. Update `CHANGELOG.md`, version code/name, and user-facing documentation.
+1. Update `CHANGELOG.md`, user-facing documentation, and the single release version source
+   `version.properties`. Android packaging and APK verification read the code/name from that file.
 2. Review every dependency and lockfile change. Regenerate Gradle verification metadata only for
    intentional, reviewed updates.
 3. Recheck `THIRD_PARTY_NOTICES.md` and bundled license/NOTICE files.

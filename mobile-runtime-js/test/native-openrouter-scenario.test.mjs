@@ -102,6 +102,180 @@ test("real AgentHarness exposes a user prompt through the same native Provider m
   throw new Error("Native Provider prompt did not settle");
 });
 
+test("OpenRouter web search annotations become bounded task events without persisting excerpts", async () => {
+  const context = await bootRuntime();
+  JSON.parse(call(
+    context,
+    "startNativeOpenRouterTaskSessionJson",
+    JSON.stringify("task-web-search"),
+    JSON.stringify("What changed today?"),
+    JSON.stringify("deepseek/deepseek-v4-pro"),
+  ));
+  const request = await nextProviderRequest(context);
+  const annotation = {
+    type: "url_citation",
+    url_citation: {
+      url: "https://example.com/latest",
+      title: "Latest update",
+      content: "untrusted webpage excerpt that must not be persisted",
+      start_index: 0,
+      end_index: 13,
+    },
+  };
+  pushChunk(context, request.id, {
+    id: "generation-web-search",
+    choices: [{
+      delta: {
+        content: "Grounded answer",
+        annotations: [annotation, annotation],
+      },
+      finish_reason: "stop",
+    }],
+    usage: {
+      prompt_tokens: 8,
+      completion_tokens: 4,
+      total_tokens: 12,
+      server_tool_use_details: {
+        tool_calls_executed: 1,
+        tool_calls_requested: 1,
+        web_search_requests: 1,
+      },
+    },
+  });
+  completeRequest(context, request.id, "generation-web-search");
+
+  const status = await waitForTerminal(context);
+  const events = status.events.filter((event) => event.type === "provider_web_activity");
+  assert.deepEqual(events.map((event) => event.state), ["running", "completed"]);
+  assert.equal(events[1].searchRequests, 1);
+  assert.equal(events[1].sources.length, 1);
+  assert.deepEqual(events[1].sources[0], {
+    url: "https://example.com/latest",
+    title: "Latest update",
+    domain: "example.com",
+    startIndex: 0,
+    endIndex: 13,
+  });
+  assert.equal(JSON.stringify(events).includes("untrusted webpage excerpt"), false);
+  assert.deepEqual(JSON.parse(call(context, "closeJson")), { ok: true, closed: true });
+});
+
+test("current OpenRouter server tool usage emits a search activity without citations", async () => {
+  const context = await bootRuntime();
+  JSON.parse(call(
+    context,
+    "startNativeOpenRouterTaskSessionJson",
+    JSON.stringify("task-web-search-usage"),
+    JSON.stringify("Search for the latest release"),
+    JSON.stringify("deepseek/deepseek-v4-pro"),
+  ));
+  const request = await nextProviderRequest(context);
+  finishTextRequestWithUsage(context, request, "Grounded answer without citations", {
+    prompt_tokens: 8,
+    completion_tokens: 4,
+    total_tokens: 12,
+    server_tool_use_details: {
+      tool_calls_executed: 2,
+      tool_calls_requested: 2,
+      web_search_requests: 2,
+    },
+  });
+
+  const status = await waitForTerminal(context);
+  const events = status.events.filter((event) => event.type === "provider_web_activity");
+  assert.deepEqual(events.map((event) => event.state), ["running", "completed"]);
+  assert.equal(events[1].searchRequests, 2);
+  assert.deepEqual(events[1].sources, []);
+  assert.deepEqual(JSON.parse(call(context, "closeJson")), { ok: true, closed: true });
+});
+
+test("current OpenRouter generic server-tool usage becomes one bounded web activity", async () => {
+  const context = await bootRuntime();
+  JSON.parse(call(
+    context,
+    "startNativeOpenRouterTaskSessionJson",
+    JSON.stringify("task-web-fetch-usage"),
+    JSON.stringify("Read https://example.com/docs"),
+    JSON.stringify("deepseek/deepseek-v4-pro"),
+  ));
+  const request = await nextProviderRequest(context);
+  finishTextRequestWithUsage(context, request, "The page explains the API.", {
+    prompt_tokens: 8,
+    completion_tokens: 4,
+    total_tokens: 12,
+    server_tool_use_details: {
+      tool_calls_executed: 1,
+      tool_calls_requested: 1,
+    },
+  });
+
+  const status = await waitForTerminal(context);
+  const events = status.events.filter((event) => event.type === "provider_web_activity");
+  assert.deepEqual(events.map((event) => event.state), ["running", "completed"]);
+  assert.equal(events[1].webRequests, 1);
+  assert.equal(events[1].fetchRequests, undefined);
+  assert.equal(events[1].searchRequests, undefined);
+  assert.deepEqual(events[1].sources, []);
+  assert.deepEqual(JSON.parse(call(context, "closeJson")), { ok: true, closed: true });
+});
+
+test("malformed OpenRouter web citation fails the provider stream closed", async () => {
+  const context = await bootRuntime();
+  JSON.parse(call(
+    context,
+    "startNativeOpenRouterTaskSessionJson",
+    JSON.stringify("task-web-search-invalid"),
+    JSON.stringify("Search the web"),
+    JSON.stringify("deepseek/deepseek-v4-pro"),
+  ));
+  const request = await nextProviderRequest(context);
+  pushChunk(context, request.id, {
+    id: "generation-web-search-invalid",
+    choices: [{
+      delta: {
+        annotations: [{ type: "url_citation", url_citation: { url: 42 } }],
+      },
+    }],
+  });
+
+  const status = await waitForTerminal(context);
+  assert.equal(status.providerRequestsFailed, 1);
+  assert.equal(status.providerError, "OpenRouter returned an invalid stream");
+  assert.equal(status.events.some((event) => event.type === "provider_web_activity"), false);
+  assert.deepEqual(JSON.parse(call(context, "closeJson")), { ok: true, closed: true });
+});
+
+test("Stop cancels an observed web search without replaying provider work", async () => {
+  const context = await bootRuntime();
+  JSON.parse(call(
+    context,
+    "startNativeOpenRouterTaskSessionJson",
+    JSON.stringify("task-web-search-stop"),
+    JSON.stringify("Search, then stop"),
+    JSON.stringify("deepseek/deepseek-v4-pro"),
+  ));
+  const request = await nextProviderRequest(context);
+  pushChunk(context, request.id, {
+    id: "generation-web-search-stop",
+    choices: [],
+    usage: {
+      prompt_tokens: 2,
+      completion_tokens: 0,
+      total_tokens: 2,
+      server_tool_use: { web_search_requests: 1 },
+    },
+  });
+  JSON.parse(call(context, "abortNativeOpenRouterScenarioJson"));
+
+  const status = await waitForTerminal(context);
+  const events = status.events.filter((event) => event.type === "provider_web_activity");
+  assert.deepEqual(events.map((event) => event.state), ["running", "cancelled"]);
+  assert.equal(status.providerRequestsIssued, 1);
+  assert.equal(status.providerCancellationsIssued, 1);
+  assert.equal(status.lateProviderRequestsAfterStop, 0);
+  assert.deepEqual(JSON.parse(call(context, "closeJson")), { ok: true, closed: true });
+});
+
 test("one phone-local task keeps the same real AgentHarness context across three prompts", async () => {
   const context = await bootRuntime();
   const taskId = "task-m1-three-turn";
@@ -120,7 +294,12 @@ test("one phone-local task keeps the same real AgentHarness context across three
   let status = await waitForTerminal(context);
   assert.equal(status.taskId, taskId);
   assert.equal(status.turnCount, 1);
-  assert.equal(status.sessionEntryCount, 2);
+  assert.equal(status.sessionEntryCount, 3);
+  const firstSnapshot = JSON.parse(call(context, "nativeOpenRouterTaskSessionSnapshotJson"));
+  assert.deepEqual(
+    firstSnapshot.entries.find((entry) => entry.customType === "pi_mobile_provider_binding")?.data,
+    { kind: "openrouter", modelId: "deepseek/deepseek-v4-pro" },
+  );
 
   JSON.parse(call(
     context,
@@ -142,7 +321,7 @@ test("one phone-local task keeps the same real AgentHarness context across three
   finishTextRequest(context, second, "Three steps: build, test, release.");
   status = await waitForTerminal(context);
   assert.equal(status.turnCount, 2);
-  assert.equal(status.sessionEntryCount, 4);
+  assert.equal(status.sessionEntryCount, 5);
 
   JSON.parse(call(
     context,
@@ -169,7 +348,7 @@ test("one phone-local task keeps the same real AgentHarness context across three
   );
   status = await waitForTerminal(context);
   assert.equal(status.turnCount, 3);
-  assert.equal(status.sessionEntryCount, 6);
+  assert.equal(status.sessionEntryCount, 7);
   assert.equal(status.providerRequestsIssued, 1);
   assert.equal(status.commandError, null);
 
@@ -178,7 +357,7 @@ test("one phone-local task keeps the same real AgentHarness context across three
   );
   assert.equal(snapshot.taskId, taskId);
   assert.equal(snapshot.turnCount, 3);
-  assert.equal(snapshot.entries.length, 6);
+  assert.equal(snapshot.entries.length, 7);
   assert.deepEqual(
     snapshot.entries
       .filter((entry) => entry.type === "message")
@@ -358,7 +537,7 @@ test("a persisted Pi Session restores without replay and continues with full his
   assert.equal(restored.taskId, taskId);
   assert.equal(restored.terminal, true);
   assert.equal(restored.turnCount, 3);
-  assert.equal(restored.sessionEntryCount, 6);
+  assert.equal(restored.sessionEntryCount, 7);
   assert.deepEqual(
     JSON.parse(call(secondProcess, "drainNativeProviderRequestsJson")),
     [],
@@ -506,6 +685,109 @@ test("Pi native images serialize to OpenRouter and restore only through attachme
   assert.equal(restoredDuplicateBytes.terminal, true);
   assert.deepEqual(JSON.parse(call(thirdProcess, "drainNativeProviderRequestsJson")), []);
   assert.deepEqual(JSON.parse(call(thirdProcess, "closeJson")), { ok: true, closed: true });
+});
+
+test("image generation is opt-in and persists only an attachment reference", async () => {
+  const disabled = await bootRuntime();
+  JSON.parse(call(
+    disabled,
+    "startNativeOpenRouterTaskSessionJson",
+    JSON.stringify("task-image-disabled"),
+    JSON.stringify("Draw a cat."),
+    JSON.stringify("deepseek/deepseek-v4-pro"),
+  ));
+  const disabledRequest = await nextProviderRequest(disabled);
+  assert.equal(
+    disabledRequest.tools.some((tool) => tool.function.name === "image_generate"),
+    false,
+  );
+  finishTextRequest(disabled, disabledRequest, "Image generation is not enabled.");
+  await waitForTerminal(disabled);
+  assert.deepEqual(JSON.parse(call(disabled, "closeJson")), { ok: true, closed: true });
+
+  const context = await bootRuntime();
+  const taskId = "task-image-enabled";
+  const sessionId = "session-image-enabled";
+  const attachmentId = "77777777-7777-4777-8777-777777777777";
+  const imageData = "/9j/2Q==";
+  JSON.parse(call(
+    context,
+    "startNativeOpenRouterTaskSessionJson",
+    JSON.stringify(taskId),
+    JSON.stringify("Draw a small green robot."),
+    JSON.stringify("deepseek/deepseek-v4-pro"),
+    JSON.stringify(sessionId),
+    "false",
+    JSON.stringify("[]"),
+    JSON.stringify("[]"),
+    JSON.stringify("[]"),
+    "true",
+  ));
+  const first = await nextProviderRequest(context);
+  const imageTool = first.tools.find((tool) => tool.function.name === "image_generate");
+  assert.ok(imageTool);
+  assert.equal(first.tools.length, 25);
+  assert.equal(imageTool.function.parameters.additionalProperties, false);
+  assert.deepEqual(imageTool.function.parameters.required, ["prompt"]);
+  finishToolCall(
+    context,
+    first,
+    "call-image-generate",
+    "image_generate",
+    { prompt: "A small green robot", aspect_ratio: "1:1" },
+  );
+  const nativeRequest = await nextNativeToolRequest(context);
+  assert.equal(nativeRequest.kind, "android_image_generation_tool");
+  const artifact = {
+    ok: true,
+    kind: "generated_image_artifact",
+    persistent: true,
+    attachmentId,
+    displayName: "Momoding image.jpg",
+    model: "openai/gpt-image-2",
+    mimeType: "image/jpeg",
+    byteSize: 4,
+    sha256: "a".repeat(64),
+  };
+  JSON.parse(call(
+    context,
+    "resolveNativeProviderToolRequestJson",
+    JSON.stringify(nativeRequest.id),
+    JSON.stringify(JSON.stringify(artifact)),
+    JSON.stringify(JSON.stringify(artifact)),
+    "false",
+    JSON.stringify(JSON.stringify([
+      { type: "text", text: JSON.stringify(artifact) },
+    ])),
+  ));
+
+  const followUp = await nextProviderRequest(context);
+  assert.equal(JSON.stringify(followUp.messages).includes(imageData), false);
+  assert.match(JSON.stringify(followUp.messages), new RegExp(attachmentId));
+  finishTextRequest(context, followUp, "Created the image.");
+  await waitForTerminal(context);
+  const snapshot = JSON.parse(call(context, "nativeOpenRouterTaskSessionSnapshotJson"));
+  const persisted = JSON.stringify(snapshot);
+  assert.equal(persisted.includes(imageData), false);
+  assert.match(persisted, new RegExp(attachmentId));
+  assert.deepEqual(JSON.parse(call(context, "closeJson")), { ok: true, closed: true });
+
+  const restoredContext = await bootRuntime();
+  const restored = JSON.parse(call(
+    restoredContext,
+    "restoreNativeOpenRouterTaskSessionJson",
+    JSON.stringify(taskId),
+    JSON.stringify(sessionId),
+    JSON.stringify(snapshot.turnCount),
+    JSON.stringify(JSON.stringify(snapshot.entries)),
+    JSON.stringify("deepseek/deepseek-v4-pro"),
+    JSON.stringify("[]"),
+    JSON.stringify("[]"),
+    "true",
+  ));
+  assert.equal(restored.terminal, true);
+  assert.deepEqual(JSON.parse(call(restoredContext, "drainNativeProviderRequestsJson")), []);
+  assert.deepEqual(JSON.parse(call(restoredContext, "closeJson")), { ok: true, closed: true });
 });
 
 test("text attachments stay as Pi Session metadata and read through the Android task tool", async () => {

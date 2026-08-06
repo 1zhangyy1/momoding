@@ -10,6 +10,8 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
@@ -90,6 +92,57 @@ class OpenRouterNativeClientTest {
     }
 
     @Test
+    fun combinesPiFunctionToolsWithBoundedOpenRouterWebAccess() = runBlocking {
+        server.enqueue(
+            sseResponse(
+                """
+                data: {"id":"gen-search","choices":[{"delta":{"content":"Grounded"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"server_tool_use":{"web_search_requests":1}}}
+
+                data: [DONE]
+
+                """.trimIndent(),
+            ),
+        )
+        val functionTools = buildJsonArray {
+            add(
+                buildJsonObject {
+                    put("type", "function")
+                    put("function", buildJsonObject { put("name", "device_calendar") })
+                },
+            )
+        }
+
+        client.stream(
+            credential(),
+            request().copy(
+                functionTools = functionTools,
+                webSearch = OpenRouterWebSearchConfig(),
+                webFetch = OpenRouterWebFetchConfig(),
+            ),
+        ) {}
+
+        val payload = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
+        val tools = payload.getValue("tools").jsonArray
+        assertEquals(3, tools.size)
+        assertEquals("function", tools[0].jsonObject.getValue("type").jsonPrimitive.content)
+        val search = tools[1].jsonObject
+        assertEquals("openrouter:web_search", search.getValue("type").jsonPrimitive.content)
+        val parameters = search.getValue("parameters").jsonObject
+        assertEquals("exa", parameters.getValue("engine").jsonPrimitive.content)
+        assertEquals("3", parameters.getValue("max_uses").jsonPrimitive.content)
+        assertEquals("5", parameters.getValue("max_results").jsonPrimitive.content)
+        assertEquals("15", parameters.getValue("max_total_results").jsonPrimitive.content)
+        assertEquals("2000", parameters.getValue("max_characters").jsonPrimitive.content)
+        val fetch = tools[2].jsonObject
+        assertEquals("openrouter:web_fetch", fetch.getValue("type").jsonPrimitive.content)
+        val fetchParameters = fetch.getValue("parameters").jsonObject
+        assertEquals("openrouter", fetchParameters.getValue("engine").jsonPrimitive.content)
+        assertEquals("3", fetchParameters.getValue("max_uses").jsonPrimitive.content)
+        assertEquals("20000", fetchParameters.getValue("max_content_tokens").jsonPrimitive.content)
+        assertEquals("3", payload.getValue("max_tool_calls").jsonPrimitive.content)
+    }
+
+    @Test
     fun mapsHttpAuthenticationAndRateLimitWithoutEchoingRemoteBodyOrKey() = runBlocking {
         server.enqueue(
             MockResponse()
@@ -147,7 +200,29 @@ class OpenRouterNativeClientTest {
         assertEquals(503, failure.statusCode)
         assertEquals("provider_overloaded", failure.errorType)
         assertEquals(OpenRouterFailurePhase.MID_STREAM, failure.phase)
+        assertEquals("OpenRouter provider is unavailable", failure.safeTaskMessage())
         assertFalse(failure.toString().contains("provider detail"))
+    }
+
+    @Test
+    fun mapsUncodedStreamFailureToSafeRetryableProviderMessage() = runBlocking {
+        server.enqueue(
+            sseResponse(
+                """
+                data: {"id":"gen-search","error":{"message":"private upstream detail","metadata":{"error_type":"provider_error"}},"choices":[{"delta":{"content":""},"finish_reason":"error"}]}
+
+                """.trimIndent(),
+            ),
+        )
+
+        val failure = assertThrows(OpenRouterRequestException::class.java) {
+            runBlocking { client.stream(credential(), request()) {} }
+        }
+
+        assertEquals(null, failure.statusCode)
+        assertEquals("provider_error", failure.errorType)
+        assertEquals("OpenRouter request failed", failure.safeTaskMessage())
+        assertFalse(failure.toString().contains("private upstream detail"))
     }
 
     @Test
@@ -213,6 +288,19 @@ class OpenRouterNativeClientTest {
                 ) {}
             }
         }
+        assertThrows(IllegalArgumentException::class.java) {
+            runBlocking {
+                client.stream(
+                    credential(),
+                    request().copy(
+                        webSearch = OpenRouterWebSearchConfig(
+                            maxUses = 3,
+                            maxServerToolCalls = 2,
+                        ),
+                    ),
+                ) {}
+            }
+        }
         assertEquals(0, server.requestCount)
     }
 
@@ -224,8 +312,8 @@ class OpenRouterNativeClientTest {
                 .setHeader("Content-Type", "application/json")
                 .setBody(
                     """{"data":[
-                    {"id":"deepseek/deepseek-v4-pro","name":"DeepSeek V4 Pro","context_length":131072,"architecture":{"input_modalities":["text"]},"supported_parameters":["tools"]},
-                    {"id":"openai/gpt-5","name":"GPT-5","context_length":400000,"architecture":{"input_modalities":["text","image"]},"supported_parameters":["reasoning","tools"]}
+                    {"id":"deepseek/deepseek-v4-pro","name":"DeepSeek V4 Pro","context_length":131072,"architecture":{"input_modalities":["text"],"output_modalities":["text"]},"supported_parameters":["tools"]},
+                    {"id":"openai/gpt-5","name":"GPT-5","context_length":400000,"architecture":{"input_modalities":["text","image"],"output_modalities":["text"]},"supported_parameters":["reasoning","tools"]}
                     ]}""".trimIndent(),
                 ),
         )
@@ -234,6 +322,7 @@ class OpenRouterNativeClientTest {
 
         assertEquals(listOf(MODEL_ID, "openai/gpt-5"), models.map { it.id })
         assertEquals(listOf("text", "image"), models[1].inputModalities)
+        assertEquals(listOf("text"), models[1].outputModalities)
         assertEquals(listOf("reasoning", "tools"), models[1].supportedParameters)
         assertEquals(400_000, models[1].contextLength)
         val request = requireNotNull(server.takeRequest())
