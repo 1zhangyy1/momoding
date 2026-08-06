@@ -19,10 +19,15 @@ user and the device platform in control.
 
 ## Install the Android alpha
 
-Download the signed `momoding-0.1.0-alpha.2.apk` and its SHA-256 checksum from
+Download the signed `momoding-0.1.0-alpha.3.apk` and its SHA-256 checksum from
 [GitHub Releases](https://github.com/1zhangyy1/momoding/releases). Android may ask you to allow your
 browser or file manager to install unknown apps. Momoding never bundles a model credential; enter
 your own OpenRouter API key during setup.
+
+Starting with alpha.3, Momoding can check GitHub Releases from `Settings → About Momoding → Check
+for updates`. It verifies the checksum, package identity, newer version, and release signer before
+opening Android's installer. Alpha.2 and earlier must install alpha.3 manually once; updates after
+alpha.3 can be discovered in the app.
 
 The public alpha is the Core release build. It includes the on-device Pi agent and reviewed Android
 capabilities, but excludes the debug-only PRoot/Alpine project-command environment.

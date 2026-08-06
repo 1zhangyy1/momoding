@@ -5,6 +5,24 @@ All notable public changes will be documented here. The project follows
 
 ## Unreleased
 
+## 0.1.0-alpha.3 - 2026-08-06
+
+### Added
+
+- Trusted in-app update checks from GitHub Releases, available from `Settings → About Momoding`.
+- A compact task-home update notice with verified APK download progress and retry state.
+
+### Changed
+
+- The public Compose application entry point now consistently uses the Momoding name.
+
+### Security
+
+- Downloaded updates must match the expected checksum, application ID, version, and current signing
+  certificate before Android's package installer is opened.
+- Momoding cannot install silently: Android still requires install-source trust and explicit user
+  confirmation.
+
 ## 0.1.0-alpha.2 - 2026-08-06
 
 ### Added

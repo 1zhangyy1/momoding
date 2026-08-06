@@ -39,6 +39,7 @@ import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.SettingsBrightness
+import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -82,6 +83,8 @@ import app.momoding.wire.P1aProtocol
 import app.momoding.BuildConfig
 import app.momoding.core.appearance.AppearanceMode
 import app.momoding.core.provider.ProviderProfile
+import app.momoding.core.update.AppRelease
+import app.momoding.core.update.AppUpdateUiState
 import app.momoding.core.transport.SecureTransportUiPhase
 import app.momoding.ui.components.MomodingMark
 import app.momoding.ui.components.ProductTopBar
@@ -112,6 +115,9 @@ fun SettingsScreen(
     onOpenProviderSetup: (() -> Unit)? = null,
     onOpenRemoteHost: (() -> Unit)? = null,
     onBack: (() -> Unit)? = null,
+    updateState: AppUpdateUiState = AppUpdateUiState.Idle,
+    onCheckForUpdates: () -> Unit = {},
+    onInstallUpdate: () -> Unit = {},
 ) {
     var page by rememberSaveable { mutableStateOf(SettingsPage.ROOT) }
     var appearanceOpen by rememberSaveable { mutableStateOf(false) }
@@ -217,6 +223,7 @@ fun SettingsScreen(
                 onBannerFocusChanged = { bannerFocused = it },
                 canOpenVersionDetails = canOpenVersionDetails,
                 onOpenVersionDetails = { versionDetailsOrigin = VersionDetailsOrigin.BANNER },
+                updateState = updateState,
             )
             SettingsPage.HELP -> SettingsHelpPage(
                 state = state,
@@ -224,7 +231,12 @@ fun SettingsScreen(
                 interactionPolicy = interactionPolicy,
                 onAction = onAction,
             )
-            SettingsPage.ABOUT -> SettingsAboutPage(contentPadding)
+            SettingsPage.ABOUT -> SettingsAboutPage(
+                contentPadding = contentPadding,
+                updateState = updateState,
+                onCheckForUpdates = onCheckForUpdates,
+                onInstallUpdate = onInstallUpdate,
+            )
             SettingsPage.ADVANCED -> SettingsAdvancedPage(
                 state = state,
                 contentPadding = contentPadding,
@@ -382,6 +394,7 @@ private fun SettingsRootPage(
     onBannerFocusChanged: (Boolean) -> Unit,
     canOpenVersionDetails: Boolean,
     onOpenVersionDetails: () -> Unit,
+    updateState: AppUpdateUiState,
 ) {
     SettingsList(contentPadding) {
         if (
@@ -491,7 +504,13 @@ private fun SettingsRootPage(
                 SettingsRow(
                     icon = Icons.Outlined.Info,
                     title = "About Momoding",
-                    detail = "Version ${BuildConfig.VERSION_NAME}",
+                    detail = when (updateState) {
+                        is AppUpdateUiState.Available ->
+                            "Version ${updateState.release.versionName} is available"
+                        is AppUpdateUiState.Downloading ->
+                            "Downloading version ${updateState.release.versionName}"
+                        else -> "Version ${BuildConfig.VERSION_NAME}"
+                    },
                     modifier = Modifier
                         .testTag("settings-open-about")
                         .structuralAction("OpenAbout"),
@@ -736,7 +755,12 @@ private fun DiagnosticsRow(
 }
 
 @Composable
-private fun SettingsAboutPage(contentPadding: PaddingValues) {
+private fun SettingsAboutPage(
+    contentPadding: PaddingValues,
+    updateState: AppUpdateUiState,
+    onCheckForUpdates: () -> Unit,
+    onInstallUpdate: () -> Unit,
+) {
     SettingsList(contentPadding) {
         item("about-identity") {
             Column(
@@ -765,6 +789,12 @@ private fun SettingsAboutPage(contentPadding: PaddingValues) {
                     BuildConfig.VERSION_NAME,
                 )
                 SettingsDivider()
+                AppUpdateSettingsRow(
+                    state = updateState,
+                    onCheckForUpdates = onCheckForUpdates,
+                    onInstallUpdate = onInstallUpdate,
+                )
+                SettingsDivider()
                 SettingsRow(
                     Icons.Outlined.Description,
                     "Open-source license",
@@ -778,6 +808,67 @@ private fun SettingsAboutPage(contentPadding: PaddingValues) {
                 body = "Momoding is an independent open-source project and is not an official OpenAI app.",
             )
         }
+    }
+}
+
+@Composable
+private fun AppUpdateSettingsRow(
+    state: AppUpdateUiState,
+    onCheckForUpdates: () -> Unit,
+    onInstallUpdate: () -> Unit,
+) {
+    val detail: String
+    val value: String?
+    val onClick: (() -> Unit)?
+    when (state) {
+        AppUpdateUiState.Idle -> {
+            detail = "Look for a newer GitHub release"
+            value = "Check"
+            onClick = onCheckForUpdates
+        }
+        AppUpdateUiState.Checking -> {
+            detail = "Looking for a newer version"
+            value = "Checking…"
+            onClick = null
+        }
+        is AppUpdateUiState.UpToDate -> {
+            detail = "Version ${state.versionName} is up to date"
+            value = "Check again"
+            onClick = onCheckForUpdates
+        }
+        is AppUpdateUiState.Available -> {
+            detail = "Version ${state.release.versionName} · ${formatUpdateSize(state.release)}"
+            value = "Update"
+            onClick = onInstallUpdate
+        }
+        is AppUpdateUiState.Downloading -> {
+            detail = "Downloading version ${state.release.versionName}"
+            value = state.progressPercent?.let { "$it%" } ?: "Downloading…"
+            onClick = null
+        }
+        is AppUpdateUiState.Failed -> {
+            detail = state.message
+            value = "Retry"
+            onClick = if (state.release == null) onCheckForUpdates else onInstallUpdate
+        }
+    }
+    SettingsRow(
+        icon = Icons.Outlined.SystemUpdate,
+        title = "Check for updates",
+        detail = detail,
+        value = value,
+        modifier = Modifier.testTag("settings-check-update"),
+        showChevron = false,
+        onClick = onClick,
+    )
+}
+
+private fun formatUpdateSize(release: AppRelease): String {
+    val bytes = release.apk.sizeBytes
+    return when {
+        bytes >= 1024L * 1024L -> "%.1f MB".format(bytes.toDouble() / (1024.0 * 1024.0))
+        bytes >= 1024L -> "%.1f KB".format(bytes.toDouble() / 1024.0)
+        else -> "$bytes B"
     }
 }
 
