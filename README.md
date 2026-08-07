@@ -39,20 +39,21 @@ add files or photos, and let the on-device agent use only the Android capabiliti
       <sub>Review first; nothing is sent automatically.</sub>
     </td>
     <td width="33%" align="center">
-      <img src="docs/assets/screenshots/alpha4-codex-setup.png" alt="Codex provider setup in Momoding" width="240" /><br />
-      <strong>Choose your model connection</strong><br />
-      <sub>Use Codex or bring an OpenRouter key.</sub>
+      <img src="docs/assets/screenshots/alpha4-checklist-result.png" alt="Momoding returning a mobile-friendly alpha launch checklist" width="240" /><br />
+      <strong>Get a reviewable result</strong><br />
+      <sub>Continue the same task and keep consequential actions paused.</sub>
     </td>
     <td width="33%" align="center">
-      <img src="docs/assets/screenshots/alpha4-device-capabilities.png" alt="Android device capability controls in Momoding" width="240" /><br />
-      <strong>Review phone access</strong><br />
-      <sub>Android permissions stay separate and visible.</sub>
+      <img src="docs/assets/screenshots/alpha4-device-tool-activity.png" alt="Momoding showing a completed Android capability tool call" width="240" /><br />
+      <strong>See every phone tool call</strong><br />
+      <sub>Tool activity and live permission state stay visible.</sub>
     </td>
   </tr>
 </table>
 
-Screenshots show the public alpha.4 APK on an Android API 35 emulator with synthetic data. See the
-[capture notes](docs/assets/screenshots/README.md).
+Screenshots show the signed public alpha.4 APK on an Android API 35 emulator. The task text is
+synthetic; the model responses and capability check are real executions from the capture session.
+See the [capture notes](docs/assets/screenshots/README.md).
 
 | Bring in real context | Keep the work alive | Stay in control |
 | --- | --- | --- |

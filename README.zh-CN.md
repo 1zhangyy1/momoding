@@ -39,20 +39,20 @@
       <sub>先检查，内容不会自动发送。</sub>
     </td>
     <td width="33%" align="center">
-      <img src="docs/assets/screenshots/alpha4-codex-setup.png" alt="Momoding 中的 Codex Provider 设置" width="240" /><br />
-      <strong>选择模型连接</strong><br />
-      <sub>使用 Codex，或填写 OpenRouter Key。</sub>
+      <img src="docs/assets/screenshots/alpha4-checklist-result.png" alt="Momoding 返回适合手机阅读的 Alpha 发布清单" width="240" /><br />
+      <strong>得到可检查的结果</strong><br />
+      <sub>在同一任务中继续，并停在重要操作之前。</sub>
     </td>
     <td width="33%" align="center">
-      <img src="docs/assets/screenshots/alpha4-device-capabilities.png" alt="Momoding 的 Android 设备能力控制" width="240" /><br />
-      <strong>检查手机权限</strong><br />
-      <sub>Android 权限保持独立、可见。</sub>
+      <img src="docs/assets/screenshots/alpha4-device-tool-activity.png" alt="Momoding 展示已完成的 Android 设备能力工具调用" width="240" /><br />
+      <strong>看见每次手机工具调用</strong><br />
+      <sub>工具活动和实时权限状态保持可见。</sub>
     </td>
   </tr>
 </table>
 
-截图来自运行公开 alpha.4 APK 的 Android API 35 模拟器，使用的都是合成数据。详见
-[截图说明](docs/assets/screenshots/README.md)。
+截图来自运行已签名公开 alpha.4 APK 的 Android API 35 模拟器。任务文字为合成内容；模型回复与
+设备能力检查是在截图会话中真实执行的。详见[截图说明](docs/assets/screenshots/README.md)。
 
 | 带入真实上下文 | 让工作持续下去 | 控制权仍在你手里 |
 | --- | --- | --- |
