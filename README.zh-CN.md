@@ -1,163 +1,157 @@
 <p align="center">
-  <img src="android-app/app/src/main/res/drawable-nodpi/momoding_head.png" width="144" alt="Momoding" />
+  <img src="android-app/app/src/main/res/drawable-nodpi/momoding_portrait.png" width="132" alt="Momoding 角色形象" />
 </p>
 
-# Momoding
+<h1 align="center">Momoding</h1>
 
-<p align="center"><strong>住在你设备里的个人 AI Agent，从 Android 开始。</strong></p>
+<p align="center"><strong>分享给它，让任务在手机上继续。</strong></p>
 
-Momoding 是一个本地优先的个人 AI Agent，当前从 Android 开始。你给它一个任务，它可以记住
-上下文、制定计划、请求所需权限、调用已经授权的设备能力，并把执行结果交还给你。Momoding
-希望让 AI 从“陪你聊天”走向“帮你做事”，同时让控制权始终留在用户和设备平台手中。
+<p align="center">
+  一个本地优先、开源的 Android 个人 AI Agent。任务状态留在你的设备上，只使用你批准的
+  能力，并把执行过程和结果清楚地交还给你。
+</p>
 
-[English](README.md)
+<p align="center">
+  <a href="https://github.com/1zhangyy1/momoding/releases/tag/v0.1.0-alpha.4"><strong>下载 alpha.4</strong></a>
+  · <a href="#三分钟开始">三分钟开始</a>
+  · <a href="README.md">English</a>
+</p>
 
-> **开发者预览版：** 当前仓库适合源码审阅和本地开发，但还不是正式发行版或 Play 商店版本，
-> 也尚未经过独立安全审计。
+<p align="center">
+  <a href="https://github.com/1zhangyy1/momoding/releases"><img alt="GitHub release" src="https://img.shields.io/github/v/release/1zhangyy1/momoding?include_prereleases&label=release" /></a>
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/github/license/1zhangyy1/momoding" /></a>
+  <img alt="Android 11 或更高版本" src="https://img.shields.io/badge/Android-11%2B-3DDC84?logo=android&logoColor=white" />
+</p>
 
-## 安装 Android Alpha
+> **开发者预览版：** Momoding 当前适合源码审阅和早期试用，不适合生产用途；尚未上架
+> Google Play，也尚未经过独立安全审计。
 
-请从 [GitHub Releases](https://github.com/1zhangyy1/momoding/releases) 下载已签名的
-`momoding-0.1.0-alpha.4.apk` 和对应的 SHA-256 校验文件。Android 可能要求你允许浏览器或文件
-管理器“安装未知应用”。Momoding 不会内置模型凭据；首次设置时请填写你自己的 OpenRouter
-API Key。
+## 从系统分享，变成一个持续任务
 
-从 alpha.3 开始，可以在 `设置 → 关于 Momoding → 检查更新` 中检查 GitHub Releases。下载完成
-后，Momoding 会校验文件摘要、包名、新版本号和发布签名，再打开 Android 系统安装器。alpha.2
-及更早版本需要手动安装一次 alpha.3；后续版本才可以由 App 内发现。
+在其他 Android App 中，把文字、图片或链接分享给 Momoding。你可以在同一个任务中继续补充
+文件和照片，并让手机上的 Agent 只调用你明确启用的 Android 能力。
 
-公开 Alpha 是 Core Release 构建：包含运行在手机上的 Pi Agent 和已经审阅的 Android 能力，
-但不包含只用于 Debug 构建的 PRoot/Alpine 项目命令环境。
+<p align="center">
+  <img src="docs/assets/screenshots/alpha4-share-draft.png" alt="分享文字进入 Momoding 新任务草稿" width="320" /><br />
+  <strong>1. 分享进入任务</strong><br />
+  <sub>先检查，内容不会自动发送。</sub>
+</p>
 
-## 平台进展
+<p align="center">
+  <img src="docs/assets/screenshots/alpha4-checklist-result.png" alt="Momoding 返回适合手机阅读的 Alpha 发布清单" width="320" /><br />
+  <strong>2. 得到可检查的结果</strong><br />
+  <sub>在同一任务中继续，并停在重要操作之前。</sub>
+</p>
 
-| 平台 | 当前状态 |
-| --- | --- |
-| Android | 当前主要实现；开源开发者预览版 |
-| iOS | 规划与可行性探索中；尚未承诺发布日期 |
-| 其他平台 | 长期方向；尚未承诺具体形态或发布日期 |
+<p align="center">
+  <img src="docs/assets/screenshots/alpha4-device-tool-activity.png" alt="Momoding 展示已完成的 Android 设备能力工具调用" width="320" /><br />
+  <strong>3. 看见每次手机工具调用</strong><br />
+  <sub>工具活动和实时权限状态保持可见。</sub>
+</p>
 
-Momoding 的产品愿景不是 Android-only，但当前仓库和当前可运行版本确实只支持 Android。不同
-平台提供的权限和系统能力不同，未来版本不会承诺逐项复制 Android 能力。
+截图来自运行已签名公开 alpha.4 APK 的 Android API 35 模拟器。任务文字为合成内容；模型回复与
+设备能力检查是在截图会话中真实执行的。详见[截图说明](docs/assets/screenshots/README.md)。
 
-## 产品定位
+Momoding 不是远程控制 Shell，也不只是套着聊天界面的模型。Pi Agent 循环运行在手机上；凭据、
+权限、策略检查和设备侧副作用仍由 Android 掌控。
 
-Momoding 的长期方向是跨设备的通用个人 Agent，当前实现从 Android 开始；它不是一款以编程
-为主的产品。编程、项目文件和终端工具只是它的一组能力，与图片、相机、屏幕上下文、受控界面
-操作、应用信息、附件和共享存储平级。
+**完整闭环：**分享真实上下文 → 继续一个持续任务 → 批准模型或手机能力 → 检查可见结果。
 
-它也不只是一个语音助手入口或套着聊天界面的模型。Momoding 围绕可持续的任务组织工作：它能
-制定计划、使用工具、等待审批、恢复状态，并跨会话继续执行。Pi Agent 运行时在设备上执行，
-模型凭据、系统权限、策略判断和设备侧副作用仍由 Android 掌控。
+- **带入真实上下文：**文字、图片、链接、文件，或直接拍一张照片。
+- **让工作持续下去：**对话、计划、Goal、工具结果和恢复状态都会跟随任务。
+- **控制权仍在你手里：**系统权限、敏感读取和重要修改都有明确边界。
 
-“本地优先”不等于“完全离线”。用户授权的提示词、上下文和工具结果会发送给用户选择的
-OpenRouter 模型。本地优先指 Agent 的控制面留在设备上：API Key、任务状态、能力状态、审批
-记录和副作用记录都由 Android 应用持有。
+## 现在可以试什么
 
-Momoding 坚持四个产品原则：
+- **从其他 App 继续一件事。** 把文字、图片或链接分享到一个新任务，不必在另一个聊天框里
+  重新拼凑上下文。
+- **使用手机里的上下文。** 添加文件和照片、拍照、查看照片 metadata，或调用有界的日历、
+  联系人、位置、剪贴板和 Momoding 自有通知工具。
+- **运行不止一轮对话的工作。** 任务可以跨会话保留计划、Goal、Skill、子 Agent、审批与恢复
+  状态。
+- **谨慎启用更强的 Android 能力。** 屏幕捕获、基于无障碍的界面检查与受控操作、共享存储、
+  应用信息，各自都有独立的系统授权门。
 
-- **Agent 与手机生活在一起。** 任务循环、状态和能力模型属于 Android 应用，而不是一个轻量
-  的远程控制界面。
-- **每一种权限都要明确。** 发起模型请求并不自动获得文件、屏幕、无障碍、应用信息或共享
-  存储权限。
-- **任务不止于一次对话。** 计划、Goal、工具结果、审批和恢复状态都可以持续跟随当前任务。
-- **界面必须反映真实能力。** 能力状态来自当前 Android 环境与授权情况；不可用的路径不会被
-  包装成已经可用。
+这些能力仍处于实验阶段，也会受到 Android 版本和设备 Provider 的影响。Momoding 会展示实时
+权限和可用性；无法确认操作结果时，应当失败关闭，而不是假装成功。
 
-```mermaid
-flowchart LR
-    user["你"] --> agent["Android 上的<br/>Momoding Agent"]
-    agent <-->|"经用户授权的上下文"| model["用户选择的 OpenRouter 模型"]
-    agent -->|"明确授权"| media["文件与媒体"]
-    agent -->|"明确授权"| screen["屏幕与界面"]
-    agent -->|"明确授权"| device["应用与设备能力"]
-    agent -->|"审阅后访问"| projects["项目与工具"]
-```
+## 三分钟开始
 
-## 适合谁
+1. 在 **Android 11 或更高版本**的设备上，下载已签名的
+   [`momoding-0.1.0-alpha.4.apk`](https://github.com/1zhangyy1/momoding/releases/download/v0.1.0-alpha.4/momoding-0.1.0-alpha.4.apk)
+   及对应的 [SHA-256 校验文件](https://github.com/1zhangyy1/momoding/releases/download/v0.1.0-alpha.4/momoding-0.1.0-alpha.4.apk.sha256)。
+2. Android 提示时，允许当前浏览器或文件管理器安装此 App。正式包名是 `app.momoding`。
+3. 在 Momoding 中选择模型连接方式：
+   - 使用 ChatGPT 登录可选的 Codex Provider；或
+   - 填写自己的 OpenRouter API Key，并选择支持的模型。
+4. 在 Momoding 中新建任务，或从其他 App 使用 Android 的**分享**动作。
 
-Momoding 的长期方向，是服务那些希望一个 AI Agent 能够跨越单个聊天框、单一 App 和单一设备，
-协助处理不同任务的人。当前开发者预览版首先验证 Android 手机上的这套体验。
+Momoding 不会内置模型凭据。从 alpha.3 开始，可以在
+`设置 → 关于 Momoding → 检查更新` 中发现新版本；App 会校验摘要、包名、版本号和发布签名，
+再打开 Android 系统安装器，最终安装仍需要你确认。
 
-当前开源开发者预览版更适合 Android 高级用户、开发者和研究者，尤其是重视自带模型密钥、
-源码可审阅、权限边界明确，以及副作用发生前可检查的人。它还不是面向普通消费者的成熟助手，
-也不是运行恶意代码的强化安全沙箱。
+公开 APK 是 Core Release 构建：包含运行在手机上的 Pi Agent 和已经审阅的 Android 能力，
+但不包含仅用于 Debug 构建的 PRoot/Alpine 项目命令环境。
 
-Momoding 是一个独立项目，与 OpenAI、OpenRouter、Shizuku 及 Pi 上游维护者不存在隶属、官方
-合作或背书关系。
+## 隐私、联网与埋点
 
-## Momoding 目前能做什么
+当前 Alpha **没有接入产品分析、广告或崩溃上报 SDK**，也没有 Momoding 账号或由 Momoding
+运营的云同步。
 
-- 持久化任务、计划、Goal、子 Agent、Skill、附件、审批与恢复状态。
-- Pi Agent 循环在 QuickJS 中运行，并连接到用户选择的 OpenRouter 模型。
-- 用户自带模型 API Key，并由 Android Keystore 支持的加密方案保存。
-- 图片元数据、拍照、系统分享导入、文本附件和共享存储工具。
-- 有界的日历和联系人查询，以及使用不透明句柄、Android 运行时权限、审批策略和操作后校验
-  的新建、修改与删除流程。
-- 带明确用途说明的前台当前位置查询，可请求粗略或精确定位；Momoding 不申请后台定位。
-- 前台剪贴板读取、写入和清空，并对敏感内容做过滤、对输出做限长。
-- 由 Momoding 自己创建的通知可发布、列出、更新和取消；不会读取或控制其他 App 的通知。
-- 通过不透明媒体句柄收藏、取消收藏、移入或移出回收站以及删除图片；Android 要求时会显示
-  系统确认。
-- 用户主动开启的屏幕捕获，以及基于无障碍服务的界面检查和受控操作。
-- 通过用户另行安装并授权的 Shizuku，执行只读的应用列表与单应用信息查询。
-- 用户授权项目目录、受控内容读取、变更预览以及写入前确认。
-- 在支持的 Debug 构建中提供手机本地 Linux 项目环境，以及命令和测试工具。
+“本地优先”不等于“完全离线”：
 
-这些 Android 领域工具仍属于实验能力，当前真机门还没有达到完整发布 PASS。在 Android 13
-的小米 12X 上，日历 CRUD、精确定位、剪贴板、Momoding 自有通知和媒体收藏核心路径已经实际
-执行，但生命周期覆盖仍不完整；删除存放在小米账号中的联系人时，系统联系人 Provider 保留了
-记录，Momoding 无法确认删除成功。因此，依赖厂商 Provider 的写操作必须失败关闭，不能宣称
-已经普遍适配所有设备。
+- 凭据、任务状态、能力状态、审批与副作用记录由 Android App 在本地控制；
+- 你授权的提示词和工具内容会发送给你选择的模型服务；
+- 检查和下载更新时会访问 GitHub Releases；
+- 手机能力受 App 界面和 Android 系统展示的权限约束。
 
-## Momoding 如何让权限保持可见
+开源早期阶段，我们先通过公开 Release 下载量、Star、Issue 和直接反馈判断需求。如果未来提议
+加入可选遥测，也应该在上线前公开说明，做到数据最少、不采集内容，并且默认关闭。
+
+## 权限边界保持可见
 
 | 能力 | 当前边界 |
 | --- | --- |
-| API Key | 本地加密；不会有意写入 JavaScript、日志或 APK |
+| Provider 凭据 | 使用 Android Keystore 支持的方案在本地加密；不会有意暴露给 JavaScript Runtime、日志或 APK |
+| 模型请求 | 只有经授权的提示词和工具内容会发送到所选择的 Codex 或 OpenRouter 服务 |
 | 项目目录 | 由用户通过 Android Storage Access Framework 选择 |
-| 文件内容 | 通过任务级工具和当前有效的 Android 授权读取 |
-| 文件修改 | 先准备和展示差异，再经过 Android 策略检查后提交 |
-| 共享存储 | 需要用户在系统设置中授予“所有文件访问”权限 |
-| 日历 | 读写权限分开；写操作先准备、经过策略检查，并在执行后校验 |
-| 联系人 | 读写权限分开；使用不透明句柄和实时冲突检查；厂商 Provider 行为可能不同 |
-| 当前位置 | 只在前台获取；返回粗略/精确等级、采集时间和准确度 |
-| 剪贴板 | 只在前台访问；文本限长、敏感内容过滤、写操作后校验 |
-| 通知 | 需要 Android 通知权限；只管理 Momoding 自己的有界通知频道 |
-| 图片修改 | 受当前照片权限范围、不透明句柄、策略检查和 Android 系统确认约束 |
-| 屏幕捕获 | 需要用户主动启动 MediaProjection；图像只在当前工具轮次使用 |
-| 界面控制 | 需要开启无障碍服务；操作只接受最新快照产生的不透明节点句柄 |
-| 应用信息 | 需要 Shizuku；只提供有界、只读的列表和详情查询 |
-| 项目命令 | 运行在 PRoot/Alpine 环境；PRoot 不是面向恶意代码的安全沙箱 |
-| 模型服务 | 用户授权的提示词与工具内容会发送到所选择的 OpenRouter 模型 |
+| 文件修改 | 先准备并展示变更，再经过策略检查后提交 |
+| 日历与联系人 | 读写权限分开；写操作先准备并在执行后校验；厂商 Provider 行为可能不同 |
+| 位置与剪贴板 | 只在前台访问，输出有界，并受 Android 权限与内容检查约束 |
+| 照片 | 受当前授权范围、不透明句柄、策略检查和必要的 Android 系统确认约束 |
+| 屏幕与界面控制 | 屏幕捕获由用户主动启动；无障碍服务需明确开启；界面操作使用最新节点句柄 |
+| 已安装应用 | 需要单独授权 Shizuku；只提供有界、只读的应用信息 |
+| 项目命令 | 仅在 Debug 构建中提供；PRoot 不是面向恶意代码的安全沙箱 |
 
-更完整的说明见[安全模型](docs/SECURITY_MODEL.md)。这些设计用于减少越权和误操作，不构成
-形式化安全证明。
+完整说明见[安全模型](docs/SECURITY_MODEL.md)。这些设计用于减少越权和误操作，不构成形式化
+安全证明。
 
-## 仓库结构
+## 当前状态
 
-```text
-android-app/        Android 应用、Room 存储、设备策略、界面与测试
-mobile-runtime-js/  为 QuickJS 构建的固定版本 Pi 运行时
-wire/               共享协议与 Kotlin 合约
-scripts/            运行时构建、验证与公开发布检查
-third_party/        复现可选原生组件所需的已审阅补丁
-```
+| 平台 | 状态 |
+| --- | --- |
+| Android | 当前主要实现；开源开发者预览版 |
+| iOS | 可行性探索中；尚未承诺发布日期 |
+| 其他平台 | 长期方向；尚未承诺具体形态或发布日期 |
 
-公开仓库由私有主仓库中的明确白名单生成。内部调研、真机记录、凭据、远程 Host 服务、内部
-编排代码和历史验证材料不会进入公开仓库；Android 应用所需的公开客户端与协议代码仍然保留。
-详见[开源范围](OPEN_SOURCE_SCOPE.md)。
+当前 Android Domain Tools 的真机 Gate 还不是完整发布 PASS。在 Android 13 的小米 12X 上，
+日历 CRUD、精确定位、剪贴板、Momoding 自有通知和媒体收藏核心路径已经实际执行，但生命周期与
+厂商覆盖仍不完整。其中，小米账号联系人删除后，系统 Provider 仍保留记录，因此无法确认删除
+成功。
 
-## 环境要求
+每个版本的变化见[更新日志](CHANGELOG.md)。Momoding 是独立项目，与 OpenAI、OpenRouter、
+Shizuku 及 Pi 上游维护者不存在隶属关系或官方背书。
+
+## 从源码构建
+
+### 环境要求
 
 - JDK 17
 - Android SDK Platform 37.0（`platforms;android-37.0`）、Build Tools 37.0.0、NDK 28.2.13676358
 - Node.js 22.22.3、npm 10.9.8
 - Git、curl、patch、ripgrep
 
-请配置 `JAVA_HOME` 和 `ANDROID_HOME`，不要提交 `local.properties`。
-
-## 构建与测试
+请设置 `JAVA_HOME` 和 `ANDROID_HOME`，不要提交 `local.properties`。
 
 ```bash
 npm ci --prefix mobile-runtime-js
@@ -169,19 +163,37 @@ ANDROID_HOME=/path/to/android-sdk \
   testDebugUnitTest lintDebug assembleDebug assembleRelease
 ```
 
-Debug 构建会下载固定版本的 PRoot、talloc 和 Alpine 源码/资源，校验 SHA-256 后生成手机本地
-项目运行环境。在完整审查对应源码和第三方声明义务之前，不应对外分发生成的 APK。
+Debug 构建会下载固定版本的 PRoot、talloc 和 Alpine 源码/资源，校验 SHA-256 后生成手机本地项目
+环境。在完整审查对应源码和第三方声明义务之前，不应对外分发生成的 APK。
 
-完整验证：
+完整仓库验证：
 
 ```bash
 ./scripts/verify.sh
 ```
 
-## 参与贡献与安全问题
+## 仓库结构
 
-提交 Pull Request 前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。安全问题请按
-[SECURITY.md](SECURITY.md) 私下报告；不要在公开 Issue 中提交真实凭据、私有项目文件或诊断包。
+```text
+android-app/        Android 应用、Room 存储、设备策略、界面与测试
+mobile-runtime-js/  为 QuickJS 构建的固定版本 Pi Runtime
+wire/               共享协议与 Kotlin 合约
+scripts/            Runtime 构建、验证与公开发布检查
+third_party/        复现可选原生组件所需的已审阅补丁
+```
+
+公开仓库由明确白名单生成。内部调研、真机记录、凭据、远程 Host 服务、内部编排代码和历史验证
+材料不会进入公开仓库。详见[开源范围](OPEN_SOURCE_SCOPE.md)。
+
+## 一起把 Momoding 做出来
+
+- 试用最新 Alpha，告诉我们你打开它后最想完成的第一个任务。
+- 针对一个具体工作流[提交功能建议](https://github.com/1zhangyy1/momoding/issues/new?template=feature_request.yml)，
+  不要只写一个宽泛的能力名。
+- [报告可复现问题](https://github.com/1zhangyy1/momoding/issues/new?template=bug_report.yml)时，
+  请移除凭据、私有文件、账号信息和设备标识。
+- 提交 Pull Request 前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。安全问题请按
+  [SECURITY.md](SECURITY.md) 私下报告。
 
 ## 许可证
 

@@ -19,6 +19,7 @@
 # Public product documentation and license texts
 +docs/ARCHITECTURE.md
 +docs/SECURITY_MODEL.md
++docs/assets/screenshots
 +docs/design/fixtures/r0-contract-fixtures.json
 +licenses
 

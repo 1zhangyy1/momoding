@@ -1,171 +1,160 @@
 <p align="center">
-  <img src="android-app/app/src/main/res/drawable-nodpi/momoding_head.png" width="144" alt="Momoding" />
+  <img src="android-app/app/src/main/res/drawable-nodpi/momoding_portrait.png" width="132" alt="Momoding character" />
 </p>
 
-# Momoding
+<h1 align="center">Momoding</h1>
 
-<p align="center"><strong>A personal AI agent that lives on your devices — starting with Android.</strong></p>
+<p align="center"><strong>Share something. Let the task continue on your phone.</strong></p>
 
-Momoding is a local-first personal AI agent that is starting on Android. Give it a task and it can
-keep the context, make a plan, ask for the authority it needs, use approved device capabilities,
-and report what happened. It is designed to grow from conversation into action while keeping the
-user and the device platform in control.
+<p align="center">
+  An open-source, local-first personal AI agent for Android. Momoding keeps task state on your
+  device, works with the capabilities you approve, and shows you what happened.
+</p>
 
-[简体中文](README.zh-CN.md)
+<p align="center">
+  <a href="https://github.com/1zhangyy1/momoding/releases/tag/v0.1.0-alpha.4"><strong>Download alpha.4</strong></a>
+  · <a href="#quick-start">Quick start</a>
+  · <a href="README.zh-CN.md">简体中文</a>
+</p>
 
-> **Developer preview:** this repository is suitable for source review and local development. It
-> is not yet a production or Play Store release, and it has not received an independent security
-> audit.
+<p align="center">
+  <a href="https://github.com/1zhangyy1/momoding/releases"><img alt="GitHub release" src="https://img.shields.io/github/v/release/1zhangyy1/momoding?include_prereleases&label=release" /></a>
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/github/license/1zhangyy1/momoding" /></a>
+  <img alt="Android 11 or newer" src="https://img.shields.io/badge/Android-11%2B-3DDC84?logo=android&logoColor=white" />
+</p>
 
-## Install the Android alpha
+> **Developer preview:** Momoding is ready for source review and early testing, not production use.
+> It is not on Google Play and has not received an independent security audit.
 
-Download the signed `momoding-0.1.0-alpha.4.apk` and its SHA-256 checksum from
-[GitHub Releases](https://github.com/1zhangyy1/momoding/releases). Android may ask you to allow your
-browser or file manager to install unknown apps. Momoding never bundles a model credential; enter
-your own OpenRouter API key during setup.
+## From share sheet to a durable task
 
-Starting with alpha.3, Momoding can check GitHub Releases from `Settings → About Momoding → Check
-for updates`. It verifies the checksum, package identity, newer version, and release signer before
-opening Android's installer. Alpha.2 and earlier must install alpha.3 manually once; updates after
-alpha.3 can be discovered in the app.
+Send text, an image, or a link to Momoding from another Android app. Keep working in the same task,
+add files or photos, and let the on-device agent use only the Android capabilities you enable.
 
-The public alpha is the Core release build. It includes the on-device Pi agent and reviewed Android
+<p align="center">
+  <img src="docs/assets/screenshots/alpha4-share-draft.png" alt="Shared text ready to review in a new Momoding task" width="320" /><br />
+  <strong>1. Share into a task</strong><br />
+  <sub>Review first; nothing is sent automatically.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/assets/screenshots/alpha4-checklist-result.png" alt="Momoding returning a mobile-friendly alpha launch checklist" width="320" /><br />
+  <strong>2. Get a reviewable result</strong><br />
+  <sub>Continue the same task and keep consequential actions paused.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/assets/screenshots/alpha4-device-tool-activity.png" alt="Momoding showing a completed Android capability tool call" width="320" /><br />
+  <strong>3. See every phone tool call</strong><br />
+  <sub>Tool activity and live permission state stay visible.</sub>
+</p>
+
+Screenshots show the signed public alpha.4 APK on an Android API 35 emulator. The task text is
+synthetic; the model responses and capability check are real executions from the capture session.
+See the [capture notes](docs/assets/screenshots/README.md).
+
+Momoding is not a remote-control shell or a chatbot wrapper. The Pi agent loop runs on the phone;
+Android owns credentials, permissions, policy checks, and device-side effects.
+
+**The loop:** share real context → continue a durable task → approve model or phone access → review
+the visible result.
+
+- **Bring in real context:** text, images, links, files, or a new camera capture.
+- **Keep the work alive:** the conversation, plan, goal, tool results, and recovery state stay with
+  the task.
+- **Stay in control:** system permissions, sensitive reads, and consequential changes remain
+  explicit.
+
+## What you can try today
+
+- **Continue something from another app.** Share text, an image, or a link into a new task instead
+  of rebuilding the context in another chat box.
+- **Work with phone context.** Attach files and photos, take a photo, inspect photo metadata, or use
+  bounded calendar, contact, location, clipboard, and Momoding-owned notification tools.
+- **Run work that lasts longer than one reply.** Tasks can carry plans, goals, skills, child agents,
+  approvals, and recovery state across sessions.
+- **Use powerful Android capabilities deliberately.** Screen capture, accessibility-based UI
+  inspection and bounded actions, shared storage, and package facts each have their own system gate.
+
+These capabilities are experimental and vary by Android version and device provider. Momoding
+reports live permission and availability state and is designed to fail closed when it cannot verify
+an operation.
+
+## Quick start
+
+1. On a device running **Android 11 or newer**, download the signed
+   [`momoding-0.1.0-alpha.4.apk`](https://github.com/1zhangyy1/momoding/releases/download/v0.1.0-alpha.4/momoding-0.1.0-alpha.4.apk)
+   and its [SHA-256 checksum](https://github.com/1zhangyy1/momoding/releases/download/v0.1.0-alpha.4/momoding-0.1.0-alpha.4.apk.sha256).
+2. Allow your browser or file manager to install this app when Android asks. The package name is
+   `app.momoding`.
+3. Choose a model connection in Momoding:
+   - sign in with ChatGPT for the optional Codex provider; or
+   - enter your own OpenRouter API key and choose a supported model.
+4. Start a task in Momoding, or use Android's **Share** action from another app.
+
+Momoding never bundles a model credential. From alpha.3 onward, you can use
+`Settings → About Momoding → Check for updates`; the app verifies the checksum, package identity,
+version, and release signer before opening Android's installer. Android still requires your
+confirmation.
+
+The public APK is the Core release build. It includes the on-device Pi agent and reviewed Android
 capabilities, but excludes the debug-only PRoot/Alpine project-command environment.
 
-## Platform status
+## Privacy, network, and analytics
 
-| Platform | Current status |
-| --- | --- |
-| Android | Current primary implementation; open-source developer preview |
-| iOS | Planning and feasibility exploration; no committed release date |
-| Other platforms | Long-term direction; no committed form or release date |
+The current alpha contains **no product analytics, advertising, or crash-reporting SDK**. There is
+also no Momoding account or Momoding-operated cloud sync.
 
-Momoding's product vision is not Android-only, but this repository and the currently runnable
-preview support Android only. Platform permissions and system capabilities differ, so future
-versions are not expected to copy every Android capability one-for-one.
+“Local-first” does not mean fully offline:
 
-## Positioning
+- credentials, task state, capability state, approvals, and side-effect records stay under the
+  Android application's control;
+- prompts and tool content you authorize are sent to the model provider you selected;
+- update checks and downloads contact GitHub Releases; and
+- system capabilities use the Android permissions shown by the app and the operating system.
 
-Momoding's long-term direction is a general-purpose personal agent across devices, starting with
-Android; it is not a coding-first product. Coding, project files, and terminal tools are one
-capability family alongside photos, camera, screen context, bounded UI actions, app information,
-attachments, and shared storage.
+For this early open-source phase, project learning comes from public release downloads, stars,
+issues, and direct user reports. If optional telemetry is ever proposed, it should be documented,
+minimal, content-free, and off by default before it ships.
 
-It is also more than a voice-assistant entry point or a chatbot wrapper. Momoding is organized
-around durable tasks: it can plan, use tools, wait for approval, recover state, and continue work
-across sessions. The Pi agent runtime executes on the device, while Android remains the authority
-for credentials, permissions, policy decisions, and device-side effects.
-
-“Local-first” does not mean fully offline. Authorized prompts, context, and tool results are sent to
-the OpenRouter model selected by the user. It means the agent's control plane stays on the
-device: the API key, task state, capability state, approvals, and side-effect records are owned by
-the Android application.
-
-Momoding is built around four product principles:
-
-- **The agent lives with the phone.** Its task loop, state, and capability model are part of the
-  Android application rather than a thin remote-control surface.
-- **Authority stays explicit.** A model request does not automatically grant file, screen,
-  accessibility, package, or shared-storage access.
-- **Tasks outlive a chat turn.** Plans, goals, tool results, approvals, and recovery state can remain
-  attached to the work.
-- **The interface tells the truth.** Capabilities reflect live Android availability and permission
-  state; unavailable paths are not presented as working.
-
-```mermaid
-flowchart LR
-    user["You"] --> agent["Momoding agent<br/>on Android"]
-    agent <-->|"authorized context"| model["Your OpenRouter model"]
-    agent -->|"explicit permission"| media["Files and media"]
-    agent -->|"explicit permission"| screen["Screen and UI"]
-    agent -->|"explicit permission"| device["Apps and device capabilities"]
-    agent -->|"reviewed access"| projects["Projects and tools"]
-```
-
-## Who it is for
-
-The long-term direction is for people who want one AI agent to help across chat boxes, app silos,
-and devices. The current developer preview first tests that experience on Android phones.
-
-The current open-source developer preview is best suited to Android power users, developers, and
-researchers who value bring-your-own-key model access, inspectable source, explicit permission
-boundaries, and review before side effects. It is not yet a consumer-ready assistant or a hardened
-sandbox for hostile code.
-
-Momoding is an independent project. It is not affiliated with or endorsed by OpenAI, OpenRouter,
-Shizuku, or the upstream Pi maintainers.
-
-## What Momoding can do today
-
-- Persistent tasks, plans, goals, child agents, skills, attachments, approvals, and recovery state.
-- On-device Pi agent loop in QuickJS with a user-selected OpenRouter model.
-- Bring-your-own-key setup with Android Keystore-backed credential encryption.
-- Photo metadata, camera capture, share-sheet import, text attachments, and shared-storage tools.
-- Bounded calendar and contact lookup plus create, update, and delete flows that use opaque handles,
-  Android runtime permissions, approval policy, and post-operation verification.
-- Foreground current-location lookup with an explicit purpose and requested coarse or precise
-  accuracy; Momoding does not request background location.
-- Foreground clipboard read, set, and clear flows with sensitive-content filtering and bounded
-  output.
-- Momoding-owned notification post, list, update, and cancel flows; it does not read or control
-  other apps' notifications.
-- Opaque-handle photo-library favorite, trash, restore, and delete flows with Android system consent
-  where the platform requires it.
-- User-started screen capture plus accessibility-based UI inspection and bounded UI actions.
-- Read-only installed-package listing and inspection through a separately installed and authorized
-  Shizuku service.
-- User-authorized project folders, bounded content reads, prepared diffs, and explicit write
-  confirmation.
-- A phone-local Linux project runtime with model-visible command and test tools in supported debug
-  builds.
-
-These Android domain tools are still experimental. The current physical-device gate is not a full
-release pass: calendar CRUD, precise location, clipboard, Momoding-owned notifications, and a core
-media favorite flow were exercised on a Xiaomi 12X running Android 13, but lifecycle coverage
-remains incomplete. Deleting a contact stored in a Xiaomi account could not be verified because
-that device's contacts provider retained the record. Provider-dependent mutations must therefore
-fail closed and should not be treated as universally supported.
-
-## How Momoding keeps authority visible
+## Authority stays visible
 
 | Capability | Current boundary |
 | --- | --- |
-| API key | Encrypted locally; never intentionally placed in JavaScript, logs, or the APK |
+| Provider credentials | Encrypted locally with Android Keystore support; not intentionally exposed to the JavaScript runtime, logs, or APK |
+| Model requests | Only authorized prompt and tool content is sent to the selected Codex or OpenRouter service |
 | Project folders | Selected by the user through Android's Storage Access Framework |
-| File contents | Read through task-scoped tools and current Android grants |
-| File changes | Prepared first, shown for review, and committed only after Android policy checks |
-| Shared storage | Requires the Android all-files access setting; the app reports the live state |
-| Calendar | Separate read/write permissions; mutations are prepared, policy-checked, and verified |
-| Contacts | Separate read/write permissions; opaque handles and live conflict checks; provider behavior varies |
-| Current location | Foreground only; coarse/precise permission and capture time/accuracy are reported |
-| Clipboard | Foreground only; bounded text, sensitive-content filtering, and verified mutations |
-| Notifications | Android notification permission; only the app's own bounded notification channel |
-| Photo mutations | Current photo-library scope, opaque handles, policy checks, and Android consent |
-| Screen capture | Requires a user-started MediaProjection session; captured images are turn-local |
-| UI control | Requires the accessibility service; actions use fresh opaque node handles |
-| Package facts | Requires Shizuku; limited to bounded read-only list and inspection operations |
-| Project commands | Run inside a PRoot/Alpine environment; PRoot is not a hostile-code sandbox |
-| Model provider | Authorized prompt and tool content is sent to the selected OpenRouter model |
+| File changes | Prepared first, shown for review, and committed only after policy checks |
+| Calendar and contacts | Separate runtime permissions; mutations are prepared and verified; provider behavior may vary |
+| Location and clipboard | Foreground only, bounded, and subject to Android permission and content checks |
+| Photos | Scoped access, opaque handles, policy checks, and Android consent where required |
+| Screen and UI control | User-started screen capture or an explicitly enabled accessibility service; UI actions use fresh node handles |
+| Installed apps | Separately authorized Shizuku service; bounded, read-only package facts |
+| Project commands | Debug builds only; PRoot is not a hostile-code sandbox |
 
-See [Security model](docs/SECURITY_MODEL.md) for details. This design reduces accidental authority;
-it is not a security proof.
+Read the [security model](docs/SECURITY_MODEL.md) for the complete boundary. These controls reduce
+accidental authority; they are not a security proof.
 
-## Repository layout
+## Current status
 
-```text
-android-app/        Android application, Room storage, device policies, UI, and tests
-mobile-runtime-js/  Pinned Pi runtime bundle built for QuickJS
-wire/               Shared protocol schemas and Kotlin contract
-scripts/            Runtime builders, verification, and public-release checks
-third_party/        Reviewed patches needed to reproduce optional native components
-```
+| Platform | Status |
+| --- | --- |
+| Android | Primary implementation; open-source developer preview |
+| iOS | Feasibility exploration; no committed release date |
+| Other platforms | Long-term direction; no committed form or release date |
 
-The public repository is generated from an explicit allowlist in the private source repository.
-Internal research, device captures, credentials, the remote-host service and internal orchestration,
-and historical validation artifacts are excluded. Public client and wire contracts needed by the
-Android application remain included. See [Open-source scope](OPEN_SOURCE_SCOPE.md).
+The current Android domain-tool gate is not a full release pass. Calendar CRUD, precise location,
+clipboard, Momoding-owned notifications, and a core media-favorite flow were exercised on a Xiaomi
+12X running Android 13, but lifecycle and device-provider coverage remain incomplete. In particular,
+a Xiaomi-account contact deletion could not be verified because the provider retained the record.
 
-## Prerequisites
+See the [changelog](CHANGELOG.md) for release-by-release details. Momoding is an independent project
+and is not affiliated with or endorsed by OpenAI, OpenRouter, Shizuku, or the upstream Pi
+maintainers.
+
+## Build from source
+
+### Prerequisites
 
 - JDK 17
 - Android SDK Platform 37.0 (`platforms;android-37.0`), Build Tools 37.0.0, and NDK 28.2.13676358
@@ -173,8 +162,6 @@ Android application remain included. See [Open-source scope](OPEN_SOURCE_SCOPE.m
 - Git, curl, patch, and ripgrep
 
 Set `JAVA_HOME` and `ANDROID_HOME`. Do not commit `local.properties`.
-
-## Build and test
 
 ```bash
 npm ci --prefix mobile-runtime-js
@@ -187,20 +174,38 @@ ANDROID_HOME=/path/to/android-sdk \
 ```
 
 The debug build downloads pinned PRoot, talloc, and Alpine sources/assets, verifies their SHA-256
-digests, and creates the phone-local project runtime. Do not redistribute a generated APK until
-all corresponding-source and third-party notice obligations have been reviewed.
+digests, and creates the phone-local project runtime. Do not redistribute a generated APK until all
+corresponding-source and third-party notice obligations have been reviewed.
 
-For the full repository gate:
+Run the complete repository gate with:
 
 ```bash
 ./scripts/verify.sh
 ```
 
-## Contributing and security
+## Repository map
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Report suspected
-vulnerabilities privately as described in [SECURITY.md](SECURITY.md); never put real credentials,
-private project files, or diagnostics archives in a public issue.
+```text
+android-app/        Android application, Room storage, device policies, UI, and tests
+mobile-runtime-js/  Pinned Pi runtime bundle built for QuickJS
+wire/               Shared protocol schemas and Kotlin contract
+scripts/            Runtime builders, verification, and public-release checks
+third_party/        Reviewed patches needed to reproduce optional native components
+```
+
+This public repository is generated from an explicit allowlist. Internal research, device captures,
+credentials, remote-host services, internal orchestration, and historical validation artifacts are
+excluded. See the [open-source scope](OPEN_SOURCE_SCOPE.md).
+
+## Help shape Momoding
+
+- Try the latest alpha and tell us the first task you wanted Momoding to complete.
+- [Open a feature request](https://github.com/1zhangyy1/momoding/issues/new?template=feature_request.yml)
+  for a concrete workflow, not just a capability name.
+- [Report a reproducible bug](https://github.com/1zhangyy1/momoding/issues/new?template=bug_report.yml)
+  without credentials, private files, account details, or device identifiers.
+- Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Report suspected
+  vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
 
 ## License
 
