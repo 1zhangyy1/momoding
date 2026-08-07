@@ -31,6 +31,29 @@
 在其他 Android App 中，把文字、图片或链接分享给 Momoding。你可以在同一个任务中继续补充
 文件和照片，并让手机上的 Agent 只调用你明确启用的 Android 能力。
 
+<table>
+  <tr>
+    <td width="33%" align="center">
+      <img src="docs/assets/screenshots/alpha4-share-draft.png" alt="分享文字进入 Momoding 新任务草稿" width="240" /><br />
+      <strong>分享进入任务</strong><br />
+      <sub>先检查，内容不会自动发送。</sub>
+    </td>
+    <td width="33%" align="center">
+      <img src="docs/assets/screenshots/alpha4-codex-setup.png" alt="Momoding 中的 Codex Provider 设置" width="240" /><br />
+      <strong>选择模型连接</strong><br />
+      <sub>使用 Codex，或填写 OpenRouter Key。</sub>
+    </td>
+    <td width="33%" align="center">
+      <img src="docs/assets/screenshots/alpha4-device-capabilities.png" alt="Momoding 的 Android 设备能力控制" width="240" /><br />
+      <strong>检查手机权限</strong><br />
+      <sub>Android 权限保持独立、可见。</sub>
+    </td>
+  </tr>
+</table>
+
+截图来自运行公开 alpha.4 APK 的 Android API 35 模拟器，使用的都是合成数据。详见
+[截图说明](docs/assets/screenshots/README.md)。
+
 | 带入真实上下文 | 让工作持续下去 | 控制权仍在你手里 |
 | --- | --- | --- |
 | 分享文字、图片、链接、文件，或直接拍一张照片。 | 对话、计划、Goal、工具结果和恢复状态都会跟随任务。 | 系统权限、敏感读取和重要修改都有明确边界。 |

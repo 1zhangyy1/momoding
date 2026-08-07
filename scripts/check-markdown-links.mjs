@@ -15,10 +15,21 @@ const missing = [];
 for (const file of files) {
   const absoluteFile = resolve(repositoryDir, file);
   const markdown = readFileSync(absoluteFile, "utf8");
-  for (const match of markdown.matchAll(/!?\[[^\]]*]\(([^)]+)\)/g)) {
-    let target = match[1].trim();
+  const targets = [
+    ...[...markdown.matchAll(/!?\[[^\]]*]\(([^)]+)\)/g)].map(match => ({
+      format: "Markdown",
+      value: match[1],
+    })),
+    ...[...markdown.matchAll(/\b(?:href|src)\s*=\s*["']([^"']+)["']/gi)].map(match => ({
+      format: "HTML",
+      value: match[1],
+    })),
+  ];
+
+  for (const candidate of targets) {
+    let target = candidate.value.trim();
     if (target.startsWith("<") && target.endsWith(">")) target = target.slice(1, -1);
-    target = target.split(/\s+["']/)[0];
+    if (candidate.format === "Markdown") target = target.split(/\s+["']/)[0];
     const pathPart = target.split("#")[0];
     if (
       pathPart.length === 0 ||

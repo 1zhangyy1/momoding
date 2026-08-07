@@ -31,6 +31,29 @@
 Send text, an image, or a link to Momoding from another Android app. Keep working in the same task,
 add files or photos, and let the on-device agent use only the Android capabilities you enable.
 
+<table>
+  <tr>
+    <td width="33%" align="center">
+      <img src="docs/assets/screenshots/alpha4-share-draft.png" alt="Shared text ready to review in a new Momoding task" width="240" /><br />
+      <strong>Share into a task</strong><br />
+      <sub>Review first; nothing is sent automatically.</sub>
+    </td>
+    <td width="33%" align="center">
+      <img src="docs/assets/screenshots/alpha4-codex-setup.png" alt="Codex provider setup in Momoding" width="240" /><br />
+      <strong>Choose your model connection</strong><br />
+      <sub>Use Codex or bring an OpenRouter key.</sub>
+    </td>
+    <td width="33%" align="center">
+      <img src="docs/assets/screenshots/alpha4-device-capabilities.png" alt="Android device capability controls in Momoding" width="240" /><br />
+      <strong>Review phone access</strong><br />
+      <sub>Android permissions stay separate and visible.</sub>
+    </td>
+  </tr>
+</table>
+
+Screenshots show the public alpha.4 APK on an Android API 35 emulator with synthetic data. See the
+[capture notes](docs/assets/screenshots/README.md).
+
 | Bring in real context | Keep the work alive | Stay in control |
 | --- | --- | --- |
 | Share text, images, links, files, or a new camera capture. | Tasks keep their conversation, plan, goal, tool results, and recovery state. | System permissions, sensitive reads, and consequential changes remain explicit. |
