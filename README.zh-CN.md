@@ -18,7 +18,7 @@ Momoding 是一个本地优先的个人 AI Agent，当前从 Android 开始。�
 ## 安装 Android Alpha
 
 请从 [GitHub Releases](https://github.com/1zhangyy1/momoding/releases) 下载已签名的
-`momoding-0.1.0-alpha.3.apk` 和对应的 SHA-256 校验文件。Android 可能要求你允许浏览器或文件
+`momoding-0.1.0-alpha.4.apk` 和对应的 SHA-256 校验文件。Android 可能要求你允许浏览器或文件
 管理器“安装未知应用”。Momoding 不会内置模型凭据；首次设置时请填写你自己的 OpenRouter
 API Key。
 

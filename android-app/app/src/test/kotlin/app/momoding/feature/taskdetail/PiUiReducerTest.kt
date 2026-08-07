@@ -516,6 +516,60 @@ class PiUiReducerTest {
     }
 
     @Test
+    fun `provider search interleaved with one assistant message keeps timeline keys unique`() {
+        val events = listOf(
+            event(
+                1,
+                """{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"Searching","partial":{"role":"assistant","timestamp":7,"content":[{"type":"text","text":"Searching"}]}}}""",
+            ),
+            event(
+                2,
+                """{"type":"provider_web_search","state":"running","requestId":"provider-1","sources":[]}""",
+            ),
+            event(
+                3,
+                """{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":" Reddit","partial":{"role":"assistant","timestamp":7,"content":[{"type":"text","text":"Searching Reddit"}]}}}""",
+            ),
+            event(
+                4,
+                """{"type":"provider_web_search","state":"completed","requestId":"provider-1","searchRequests":1,"sources":[{"url":"https://www.reddit.com/r/MachineLearning/","title":"Machine Learning","domain":"reddit.com"}]}""",
+            ),
+            event(
+                5,
+                """{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":" complete","partial":{"role":"assistant","timestamp":7,"content":[{"type":"text","text":"Searching Reddit complete"}]}}}""",
+            ),
+        )
+        val reducer = PiUiReducer()
+        val crashPoint = reducer.reduce(
+            snapshot(
+                rawEvents = events.take(3),
+                throughSequence = 3,
+            ),
+        )
+        assertEquals(
+            crashPoint.timeline.allItems.size,
+            crashPoint.timeline.allItems.map(TimelineItem::stableKey).distinct().size,
+        )
+
+        val projection = reducer.reduce(
+            snapshot(
+                rawEvents = events,
+                throughSequence = 5,
+            ),
+        )
+
+        val allItems = projection.timeline.allItems
+        assertEquals(allItems.size, allItems.map(TimelineItem::stableKey).distinct().size)
+        assertEquals(
+            "Searching Reddit complete",
+            (projection.timeline.activeItem as TimelineItem.AssistantText).text,
+        )
+        val search = projection.timeline.settledItems.single() as TimelineItem.ToolActivity
+        assertEquals("Searched web", search.title)
+        assertEquals(ToolActivityState.SUCCESS, search.state)
+    }
+
+    @Test
     fun `provider web activity reports combined search and page reading`() {
         val projection = PiUiReducer().reduce(
             snapshot(
