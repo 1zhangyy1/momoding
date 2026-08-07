@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/1zhangyy1/momoding/releases/tag/v0.1.0-alpha.4"><strong>Download alpha.4</strong></a>
+  <a href="https://github.com/1zhangyy1/momoding/releases"><strong>Download Momoding</strong></a>
   · <a href="#quick-start">Quick start</a>
   · <a href="README.zh-CN.md">简体中文</a>
 </p>
@@ -32,22 +32,15 @@ Send text, an image, or a link to Momoding from another Android app. Keep workin
 add files or photos, and let the on-device agent use only the Android capabilities you enable.
 
 <p align="center">
-  <img src="docs/assets/screenshots/alpha4-share-draft.png" alt="Shared text ready to review in a new Momoding task" width="320" /><br />
-  <strong>1. Share into a task</strong><br />
-  <sub>Review first; nothing is sent automatically.</sub>
+  <picture>
+    <source media="(max-width: 600px)" srcset="docs/assets/screenshots/momoding-product-flow-mobile.webp" />
+    <img src="docs/assets/screenshots/momoding-product-flow-wide.webp" alt="Momoding flow from reviewing shared context, to receiving a useful result, to inspecting a visible Android tool call" width="1200" />
+  </picture>
 </p>
 
-<p align="center">
-  <img src="docs/assets/screenshots/alpha4-checklist-result.png" alt="Momoding returning a mobile-friendly alpha launch checklist" width="320" /><br />
-  <strong>2. Get a reviewable result</strong><br />
-  <sub>Continue the same task and keep consequential actions paused.</sub>
-</p>
-
-<p align="center">
-  <img src="docs/assets/screenshots/alpha4-device-tool-activity.png" alt="Momoding showing a completed Android capability tool call" width="320" /><br />
-  <strong>3. See every phone tool call</strong><br />
-  <sub>Tool activity and live permission state stay visible.</sub>
-</p>
+Open the original captures at full resolution: [share draft](docs/assets/screenshots/alpha4-share-draft.png),
+[AI result](docs/assets/screenshots/alpha4-checklist-result.png), and
+[device tool activity](docs/assets/screenshots/alpha4-device-tool-activity.png).
 
 Screenshots show the signed public alpha.4 APK on an Android API 35 emulator. The task text is
 synthetic; the model responses and capability check are real executions from the capture session.
@@ -82,9 +75,8 @@ an operation.
 
 ## Quick start
 
-1. On a device running **Android 11 or newer**, download the signed
-   [`momoding-0.1.0-alpha.4.apk`](https://github.com/1zhangyy1/momoding/releases/download/v0.1.0-alpha.4/momoding-0.1.0-alpha.4.apk)
-   and its [SHA-256 checksum](https://github.com/1zhangyy1/momoding/releases/download/v0.1.0-alpha.4/momoding-0.1.0-alpha.4.apk.sha256).
+1. On a device running **Android 11 or newer**, open [GitHub Releases](https://github.com/1zhangyy1/momoding/releases)
+   and download the current signed `.apk` together with its matching `.sha256` checksum file.
 2. Allow your browser or file manager to install this app when Android asks. The package name is
    `app.momoding`.
 3. Choose a model connection in Momoding:

@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/1zhangyy1/momoding/releases/tag/v0.1.0-alpha.4"><strong>下载 alpha.4</strong></a>
+  <a href="https://github.com/1zhangyy1/momoding/releases"><strong>下载 Momoding</strong></a>
   · <a href="#三分钟开始">三分钟开始</a>
   · <a href="README.md">English</a>
 </p>
@@ -32,22 +32,15 @@
 文件和照片，并让手机上的 Agent 只调用你明确启用的 Android 能力。
 
 <p align="center">
-  <img src="docs/assets/screenshots/alpha4-share-draft.png" alt="分享文字进入 Momoding 新任务草稿" width="320" /><br />
-  <strong>1. 分享进入任务</strong><br />
-  <sub>先检查，内容不会自动发送。</sub>
+  <picture>
+    <source media="(max-width: 600px)" srcset="docs/assets/screenshots/momoding-product-flow-mobile-zh.webp" />
+    <img src="docs/assets/screenshots/momoding-product-flow-wide-zh.webp" alt="Momoding 从检查分享内容、得到有用结果，到查看 Android 工具调用的三步流程" width="1200" />
+  </picture>
 </p>
 
-<p align="center">
-  <img src="docs/assets/screenshots/alpha4-checklist-result.png" alt="Momoding 返回适合手机阅读的 Alpha 发布清单" width="320" /><br />
-  <strong>2. 得到可检查的结果</strong><br />
-  <sub>在同一任务中继续，并停在重要操作之前。</sub>
-</p>
-
-<p align="center">
-  <img src="docs/assets/screenshots/alpha4-device-tool-activity.png" alt="Momoding 展示已完成的 Android 设备能力工具调用" width="320" /><br />
-  <strong>3. 看见每次手机工具调用</strong><br />
-  <sub>工具活动和实时权限状态保持可见。</sub>
-</p>
+可打开原图查看完整细节：[分享草稿](docs/assets/screenshots/alpha4-share-draft.png)、
+[AI 结果](docs/assets/screenshots/alpha4-checklist-result.png)和
+[设备工具活动](docs/assets/screenshots/alpha4-device-tool-activity.png)。
 
 截图来自运行已签名公开 alpha.4 APK 的 Android API 35 模拟器。任务文字为合成内容；模型回复与
 设备能力检查是在截图会话中真实执行的。详见[截图说明](docs/assets/screenshots/README.md)。
@@ -77,9 +70,8 @@ Momoding 不是远程控制 Shell，也不只是套着聊天界面的模型。Pi
 
 ## 三分钟开始
 
-1. 在 **Android 11 或更高版本**的设备上，下载已签名的
-   [`momoding-0.1.0-alpha.4.apk`](https://github.com/1zhangyy1/momoding/releases/download/v0.1.0-alpha.4/momoding-0.1.0-alpha.4.apk)
-   及对应的 [SHA-256 校验文件](https://github.com/1zhangyy1/momoding/releases/download/v0.1.0-alpha.4/momoding-0.1.0-alpha.4.apk.sha256)。
+1. 在 **Android 11 或更高版本**的设备上，打开 [GitHub Releases](https://github.com/1zhangyy1/momoding/releases)，
+   下载当前已签名的 `.apk`，以及与它对应的 `.sha256` 校验文件。
 2. Android 提示时，允许当前浏览器或文件管理器安装此 App。正式包名是 `app.momoding`。
 3. 在 Momoding 中选择模型连接方式：
    - 使用 ChatGPT 登录可选的 Codex Provider；或
