@@ -31,43 +31,35 @@
 在其他 Android App 中，把文字、图片或链接分享给 Momoding。你可以在同一个任务中继续补充
 文件和照片，并让手机上的 Agent 只调用你明确启用的 Android 能力。
 
-<table>
-  <tr>
-    <td width="33%" align="center">
-      <img src="docs/assets/screenshots/alpha4-share-draft.png" alt="分享文字进入 Momoding 新任务草稿" width="240" /><br />
-      <strong>分享进入任务</strong><br />
-      <sub>先检查，内容不会自动发送。</sub>
-    </td>
-    <td width="33%" align="center">
-      <img src="docs/assets/screenshots/alpha4-checklist-result.png" alt="Momoding 返回适合手机阅读的 Alpha 发布清单" width="240" /><br />
-      <strong>得到可检查的结果</strong><br />
-      <sub>在同一任务中继续，并停在重要操作之前。</sub>
-    </td>
-    <td width="33%" align="center">
-      <img src="docs/assets/screenshots/alpha4-device-tool-activity.png" alt="Momoding 展示已完成的 Android 设备能力工具调用" width="240" /><br />
-      <strong>看见每次手机工具调用</strong><br />
-      <sub>工具活动和实时权限状态保持可见。</sub>
-    </td>
-  </tr>
-</table>
+<p align="center">
+  <img src="docs/assets/screenshots/alpha4-share-draft.png" alt="分享文字进入 Momoding 新任务草稿" width="320" /><br />
+  <strong>1. 分享进入任务</strong><br />
+  <sub>先检查，内容不会自动发送。</sub>
+</p>
+
+<p align="center">
+  <img src="docs/assets/screenshots/alpha4-checklist-result.png" alt="Momoding 返回适合手机阅读的 Alpha 发布清单" width="320" /><br />
+  <strong>2. 得到可检查的结果</strong><br />
+  <sub>在同一任务中继续，并停在重要操作之前。</sub>
+</p>
+
+<p align="center">
+  <img src="docs/assets/screenshots/alpha4-device-tool-activity.png" alt="Momoding 展示已完成的 Android 设备能力工具调用" width="320" /><br />
+  <strong>3. 看见每次手机工具调用</strong><br />
+  <sub>工具活动和实时权限状态保持可见。</sub>
+</p>
 
 截图来自运行已签名公开 alpha.4 APK 的 Android API 35 模拟器。任务文字为合成内容；模型回复与
 设备能力检查是在截图会话中真实执行的。详见[截图说明](docs/assets/screenshots/README.md)。
 
-| 带入真实上下文 | 让工作持续下去 | 控制权仍在你手里 |
-| --- | --- | --- |
-| 分享文字、图片、链接、文件，或直接拍一张照片。 | 对话、计划、Goal、工具结果和恢复状态都会跟随任务。 | 系统权限、敏感读取和重要修改都有明确边界。 |
-
 Momoding 不是远程控制 Shell，也不只是套着聊天界面的模型。Pi Agent 循环运行在手机上；凭据、
 权限、策略检查和设备侧副作用仍由 Android 掌控。
 
-```mermaid
-flowchart LR
-    share["分享文字、图片或链接"] --> task["一个持续存在的 Momoding 任务"]
-    task <-->|"经授权的上下文"| model["Codex 或你的 OpenRouter 模型"]
-    task -->|"明确授权"| phone["文件、照片、屏幕和手机工具"]
-    phone --> result["可见的结果或确认步骤"]
-```
+**完整闭环：**分享真实上下文 → 继续一个持续任务 → 批准模型或手机能力 → 检查可见结果。
+
+- **带入真实上下文：**文字、图片、链接、文件，或直接拍一张照片。
+- **让工作持续下去：**对话、计划、Goal、工具结果和恢复状态都会跟随任务。
+- **控制权仍在你手里：**系统权限、敏感读取和重要修改都有明确边界。
 
 ## 现在可以试什么
 

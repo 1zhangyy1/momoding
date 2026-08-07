@@ -31,44 +31,39 @@
 Send text, an image, or a link to Momoding from another Android app. Keep working in the same task,
 add files or photos, and let the on-device agent use only the Android capabilities you enable.
 
-<table>
-  <tr>
-    <td width="33%" align="center">
-      <img src="docs/assets/screenshots/alpha4-share-draft.png" alt="Shared text ready to review in a new Momoding task" width="240" /><br />
-      <strong>Share into a task</strong><br />
-      <sub>Review first; nothing is sent automatically.</sub>
-    </td>
-    <td width="33%" align="center">
-      <img src="docs/assets/screenshots/alpha4-checklist-result.png" alt="Momoding returning a mobile-friendly alpha launch checklist" width="240" /><br />
-      <strong>Get a reviewable result</strong><br />
-      <sub>Continue the same task and keep consequential actions paused.</sub>
-    </td>
-    <td width="33%" align="center">
-      <img src="docs/assets/screenshots/alpha4-device-tool-activity.png" alt="Momoding showing a completed Android capability tool call" width="240" /><br />
-      <strong>See every phone tool call</strong><br />
-      <sub>Tool activity and live permission state stay visible.</sub>
-    </td>
-  </tr>
-</table>
+<p align="center">
+  <img src="docs/assets/screenshots/alpha4-share-draft.png" alt="Shared text ready to review in a new Momoding task" width="320" /><br />
+  <strong>1. Share into a task</strong><br />
+  <sub>Review first; nothing is sent automatically.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/assets/screenshots/alpha4-checklist-result.png" alt="Momoding returning a mobile-friendly alpha launch checklist" width="320" /><br />
+  <strong>2. Get a reviewable result</strong><br />
+  <sub>Continue the same task and keep consequential actions paused.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/assets/screenshots/alpha4-device-tool-activity.png" alt="Momoding showing a completed Android capability tool call" width="320" /><br />
+  <strong>3. See every phone tool call</strong><br />
+  <sub>Tool activity and live permission state stay visible.</sub>
+</p>
 
 Screenshots show the signed public alpha.4 APK on an Android API 35 emulator. The task text is
 synthetic; the model responses and capability check are real executions from the capture session.
 See the [capture notes](docs/assets/screenshots/README.md).
 
-| Bring in real context | Keep the work alive | Stay in control |
-| --- | --- | --- |
-| Share text, images, links, files, or a new camera capture. | Tasks keep their conversation, plan, goal, tool results, and recovery state. | System permissions, sensitive reads, and consequential changes remain explicit. |
-
 Momoding is not a remote-control shell or a chatbot wrapper. The Pi agent loop runs on the phone;
 Android owns credentials, permissions, policy checks, and device-side effects.
 
-```mermaid
-flowchart LR
-    share["Share text, image, or link"] --> task["A durable Momoding task"]
-    task <-->|"authorized context"| model["Codex or your OpenRouter model"]
-    task -->|"explicit permission"| phone["Files, photos, screen, and phone tools"]
-    phone --> result["Visible result or review step"]
-```
+**The loop:** share real context → continue a durable task → approve model or phone access → review
+the visible result.
+
+- **Bring in real context:** text, images, links, files, or a new camera capture.
+- **Keep the work alive:** the conversation, plan, goal, tool results, and recovery state stay with
+  the task.
+- **Stay in control:** system permissions, sensitive reads, and consequential changes remain
+  explicit.
 
 ## What you can try today
 
