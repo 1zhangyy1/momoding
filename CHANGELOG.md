@@ -5,6 +5,13 @@ All notable public changes will be documented here. The project follows
 
 ## Unreleased
 
+## 0.1.0-alpha.4 - 2026-08-07
+
+### Fixed
+
+- Prevented task detail from crashing when a web-search activity is interleaved with one streaming
+  assistant message.
+
 ## 0.1.0-alpha.3 - 2026-08-06
 
 ### Added

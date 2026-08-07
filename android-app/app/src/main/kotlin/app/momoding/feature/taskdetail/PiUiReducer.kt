@@ -210,13 +210,18 @@ class PiUiReducer {
             ?.let { "assistant:${record.streamId}:$it" }
             ?: prior?.stableKey
             ?: "assistant:${record.streamId}:${record.sequence}"
+        val settledPrior = settledItems
+            .asReversed()
+            .firstOrNull { it is TimelineItem.AssistantText && it.stableKey == key }
+            as? TimelineItem.AssistantText
+        val messagePrior = prior?.takeIf { it.stableKey == key } ?: settledPrior
         val delta = assistantEvent
             ?.takeIf { it.string("type") == "text_delta" }
             ?.primitive("delta")
             ?.contentOrNull
         val partialText = extractContentText(message["content"], setOf("text"))
-        val text = if (prior?.stableKey == key && delta != null) {
-            val appended = prior.text + delta
+        val text = if (messagePrior != null && delta != null) {
+            val appended = messagePrior.text + delta
             // Pi may publish text_start and the first text_delta with the same partial.
             // The partial is authoritative when the delta cannot advance the current prefix.
             partialText.takeIf { it.isNotBlank() && it != appended } ?: appended
@@ -224,7 +229,17 @@ class PiUiReducer {
             partialText
         }
         if (text.isBlank()) return
-        activeItem = TimelineItem.AssistantText(key, sanitizeText(text), partial = true)
+        val next = TimelineItem.AssistantText(key, sanitizeText(text), partial = true)
+        if (prior?.stableKey == key) {
+            activeItem = next
+        } else {
+            // Provider-owned activities may arrive in the middle of one Assistant message.
+            // Settle that activity, then reopen the accumulated message after it instead of
+            // rendering the same stable key in both the settled and active sections.
+            settleActive()
+            removeSettledItem(key)
+            activeItem = next
+        }
         transientRunState = TaskDetailRunState.RUNNING
     }
 
@@ -423,8 +438,18 @@ class PiUiReducer {
 
     private fun settleActive() {
         val active = activeItem ?: return
-        settledItems = settledItems + active
+        val existing = settledItems.indexOfLast { it.stableKey == active.stableKey }
+        settledItems = if (existing < 0) {
+            settledItems + active
+        } else {
+            settledItems.toMutableList().also { it[existing] = active }
+        }
         activeItem = null
+    }
+
+    private fun removeSettledItem(stableKey: String) {
+        if (settledItems.none { it.stableKey == stableKey }) return
+        settledItems = settledItems.filterNot { it.stableKey == stableKey }
     }
 
     private fun replaceOrAppendTool(tool: TimelineItem.ToolActivity) {
