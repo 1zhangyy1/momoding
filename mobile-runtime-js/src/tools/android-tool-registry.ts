@@ -24,7 +24,10 @@ export type NativeToolRequestKind =
   | "android_capability_tool"
   | "android_project_tool"
   | "android_attachment_tool"
-  | "android_image_generation_tool";
+  | "android_skill_tool"
+  | "android_image_generation_tool"
+  | "android_extension_package"
+  | "connector_tool";
 
 export interface NativeToolRequest {
   id: string;
@@ -64,6 +67,7 @@ export const UI_ACTION_TOOL_NAME = "device_ui_action";
 export const PACKAGES_LIST_TOOL_NAME = "device_packages_list";
 export const PACKAGE_INSPECT_TOOL_NAME = "device_package_inspect";
 export const ATTACHMENT_READ_TOOL_NAME = "attachment_read";
+export const SKILL_RESOURCE_TOOL_NAME = "skill_resource";
 export const IMAGE_GENERATE_TOOL_NAME = "image_generate";
 export const RUN_COMMAND_TOOL_NAME = "run_command";
 export const RUN_TESTS_TOOL_NAME = "run_tests";
@@ -83,7 +87,7 @@ export function createAndroidFixtureTool(
 
 export function createAndroidProductTools(
   executeNativeTool: NativeToolExecutor,
-  options: { imageGenerationEnabled?: boolean } = {},
+  options: { imageGenerationEnabled?: boolean; skillResourceEnabled?: boolean } = {},
 ): AgentTool[] {
   const schemas = createAndroidToolSchemas();
   return [
@@ -123,6 +127,9 @@ export function createAndroidProductTools(
       executeNativeTool,
       true,
     ),
+    ...(options.skillResourceEnabled
+      ? [createAndroidSkillResourceTool(executeNativeTool, schemas)]
+      : []),
     nativeTool(
       CAPABILITIES_TOOL_NAME,
       "Get device capabilities",
@@ -284,6 +291,21 @@ export function createAndroidProductTools(
       executeNativeTool,
     ),
   ];
+}
+
+export function createAndroidSkillResourceTool(
+  executeNativeTool: NativeToolExecutor,
+  schemas = createAndroidToolSchemas(),
+): AgentTool {
+  return nativeTool(
+    SKILL_RESOURCE_TOOL_NAME,
+    "Read installed Skill resource",
+    "List or read one bounded resource from an enabled on-device Skill package. Read SKILL.md when an available Skill matches the task, then follow only the package resources needed. Use either the listed /mobile-skills/<skill>/... virtual location or a path relative to that Skill. List results are paged; scripts are returned only as text and this tool never executes them.",
+    schemas.skillResource,
+    "android_skill_tool",
+    executeNativeTool,
+    true,
+  );
 }
 
 function projectCommandTool(

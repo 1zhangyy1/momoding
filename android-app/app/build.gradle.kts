@@ -65,6 +65,7 @@ android {
         versionCode = releaseVersionCode
         versionName = releaseVersionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        manifestPlaceholders["appAuthRedirectScheme"] = "app.momoding"
 
         val resolvedSourceRevision = sourceRevision.get()
         require(Regex("^[0-9a-f]{40}$").matches(resolvedSourceRevision)) {
@@ -155,6 +156,15 @@ kotlin {
     }
 }
 
+configurations.configureEach {
+    // KMP variant redirection can reintroduce these JVM modules after the dependency-edge exclude.
+    // Momoding has no Ktor server runtime; the MCP Streamable HTTP client only needs client modules.
+    exclude(group = "io.ktor", module = "ktor-server-websockets")
+    exclude(group = "io.ktor", module = "ktor-server-websockets-jvm")
+    exclude(group = "io.ktor", module = "ktor-server-core")
+    exclude(group = "io.ktor", module = "ktor-server-core-jvm")
+}
+
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
@@ -181,6 +191,11 @@ dependencies {
     implementation(libs.androidx.exifinterface)
     implementation(libs.shizuku.api)
     implementation(libs.shizuku.provider)
+    implementation(libs.mcp.kotlin.client)
+    implementation(libs.ktor.client.okhttp)
+    implementation(libs.appauth)
+    implementation(libs.androidx.browser)
+    implementation(libs.androidx.appcompat)
 
     testImplementation(libs.junit4)
     testImplementation(libs.androidx.room.testing)

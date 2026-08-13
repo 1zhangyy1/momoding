@@ -266,7 +266,7 @@ class MainActivity : ComponentActivity() {
                 val attentionOwnerFactory: AttentionRouteViewModelFactory = remember(container) {
                     { identity -> container.attentionViewModelFactory(identity) }
                 }
-                MomodingApp(
+                CodexApp(
                     state = state,
                     onAction = settingsViewModel::dispatch,
                     providerSetupState = providerState,
@@ -420,11 +420,7 @@ class MainActivity : ComponentActivity() {
             if (packageManager.canRequestPackageInstalls()) {
                 installAvailableUpdate()
             } else {
-                Toast.makeText(
-                    this,
-                    "Allow Momoding to install updates to continue.",
-                    Toast.LENGTH_LONG,
-                ).show()
+                Toast.makeText(this, "Allow Momoding to install updates to continue.", Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -438,11 +434,7 @@ class MainActivity : ComponentActivity() {
             try {
                 updateSourceSettingsLauncher.launch(intent)
             } catch (_: ActivityNotFoundException) {
-                Toast.makeText(
-                    this,
-                    "Install-source settings are unavailable.",
-                    Toast.LENGTH_LONG,
-                ).show()
+                Toast.makeText(this, "Install-source settings are unavailable.", Toast.LENGTH_LONG).show()
             }
             return
         }
@@ -651,7 +643,7 @@ data class AttentionNavigationReturn(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun MomodingApp(
+internal fun CodexApp(
     state: SettingsUiState,
     onAction: (SettingsAction) -> Unit,
     providerSetupState: ProviderSetupUiState? = null,
@@ -2251,6 +2243,9 @@ private fun ExtensionsRouteContent(
         factory = ExtensionsViewModel.Factory(
             repository = container.skillRepository,
             catalog = container.skillCatalogService,
+            extensionRepository = container.extensionPackageRepository,
+            extensionCatalog = container.extensionPackageCatalogService,
+            credentialVault = container.piExtensionCredentialVault,
         ),
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -2259,6 +2254,16 @@ private fun ExtensionsRouteContent(
     ) { uri ->
         viewModel.dispatch(ExtensionsAction.ImportFinished(uri))
     }
+    val packagePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree(),
+    ) { uri ->
+        viewModel.dispatch(ExtensionsAction.PackageImportFinished(uri))
+    }
+    val extensionPackagePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree(),
+    ) { uri ->
+        viewModel.dispatch(ExtensionsAction.ExtensionPackageImportFinished(uri))
+    }
     LaunchedEffect(viewModel) {
         viewModel.oneShots.collect { oneShot ->
             when (oneShot) {
@@ -2266,6 +2271,8 @@ private fun ExtensionsRouteContent(
                 ExtensionsOneShot.LaunchSkillPicker -> documentPicker.launch(
                     arrayOf("text/*", "application/octet-stream"),
                 )
+                ExtensionsOneShot.LaunchSkillPackagePicker -> packagePicker.launch(null)
+                ExtensionsOneShot.LaunchExtensionPackagePicker -> extensionPackagePicker.launch(null)
             }
         }
     }

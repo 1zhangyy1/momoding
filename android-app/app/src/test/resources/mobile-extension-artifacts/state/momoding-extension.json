@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 2,
+  "id": "fixtures.state",
+  "name": "Package state fixture",
+  "version": "1.0.0",
+  "description": "A package-scoped bounded state contract fixture.",
+  "runtime": "pi-register-tool-v1",
+  "entrypoint": "dist/index.js",
+  "tools": [
+    {
+      "type": "pi-register-tool",
+      "name": "fixture_counter",
+      "label": "Fixture counter",
+      "description": "Increment package-scoped bounded state.",
+      "promptSnippet": null,
+      "promptGuidelines": [],
+      "executionMode": "sequential",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "reset": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  ],
+  "hostTools": [],
+  "requiredCapabilities": [],
+  "optionalCapabilities": [],
+  "httpPolicy": {
+    "origins": [],
+    "methods": [],
+    "credentialSlots": []
+  },
+  "packageDigest": "faf3f9fa22b6ab5a3365c50dca2eb786540c4c99debbd85e96dd460ae5deb037"
+}

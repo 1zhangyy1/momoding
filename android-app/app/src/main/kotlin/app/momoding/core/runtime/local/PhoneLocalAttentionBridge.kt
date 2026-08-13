@@ -92,6 +92,8 @@ class PhoneLocalAttentionBridge(
     private val uiTools: PhoneLocalUiToolHandler? = null,
     private val packageTools: PhoneLocalPackageToolHandler? = null,
     private val capabilityRequestTools: PhoneLocalCapabilityRequestToolHandler? = null,
+    private val skillResourceTools: PhoneLocalSkillResourceToolHandler? = null,
+    private val extensionPackageTools: PhoneLocalExtensionPackageToolExecutor? = null,
     private val approvalModeForTask: suspend (String) -> TaskApprovalMode = {
         TaskApprovalMode.REQUEST_APPROVAL
     },
@@ -214,6 +216,18 @@ class PhoneLocalAttentionBridge(
             }
             require(handler.handles(request.toolName)) { "PI_MOBILE_NATIVE_TOOL_NOT_ALLOWED" }
             handler.execute(taskId, request)
+        }
+        SKILL_NATIVE_KIND -> withContext(ioDispatcher) {
+            val handler = requireNotNull(skillResourceTools) {
+                "PI_MOBILE_SKILL_RESOURCE_TOOL_EXECUTOR_MISSING"
+            }
+            require(handler.handles(request.toolName)) { "PI_MOBILE_NATIVE_TOOL_NOT_ALLOWED" }
+            PiNativeAndroidToolResult(handler.execute(taskId, request))
+        }
+        PhoneLocalExtensionPackageToolExecutor.NATIVE_KIND -> withContext(ioDispatcher) {
+            requireNotNull(extensionPackageTools) {
+                "PI_MOBILE_EXTENSION_PACKAGE_EXECUTOR_MISSING"
+            }.execute(taskId, request)
         }
         else -> throw IllegalArgumentException("PI_MOBILE_NATIVE_TOOL_KIND_UNSUPPORTED")
     }
@@ -2310,6 +2324,7 @@ class PhoneLocalAttentionBridge(
         mediaMutationTools?.stopTask(taskId, reason)
         screenCaptureTools?.stopTask(taskId, reason)
         uiTools?.stopTask(taskId, reason)
+        extensionPackageTools?.stopTask(taskId)
         decisionMutex.withLock {
             bindingsByCallId.values.filter { it.taskId == taskId }.forEach { binding ->
                 val record = ledger.record(binding.callId)
@@ -3411,6 +3426,7 @@ class PhoneLocalAttentionBridge(
         const val UI_NATIVE_KIND = "android_ui_tool"
         const val PACKAGE_NATIVE_KIND = "android_package_tool"
         const val CAPABILITY_REQUEST_NATIVE_KIND = "android_capability_tool"
+        const val SKILL_NATIVE_KIND = "android_skill_tool"
         const val MEDIA_LIST_TOOL = DeviceMediaListExecutor.TOOL_NAME
         const val MEDIA_TOOL = PhoneLocalMediaToolExecutor.TOOL_NAME
         const val UI_ACTION_TOOL = PhoneLocalUiToolExecutor.ACTION_TOOL

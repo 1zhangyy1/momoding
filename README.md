@@ -66,6 +66,8 @@ the visible result.
   bounded calendar, contact, location, clipboard, and Momoding-owned notification tools.
 - **Run work that lasts longer than one reply.** Tasks can carry plans, goals, skills, child agents,
   approvals, and recovery state across sessions.
+- **Extend the same task loop.** Install reviewed Skill packages or bounded mobile Pi Extension
+  packages, and connect task-scoped external tools without introducing a second agent runtime.
 - **Use powerful Android capabilities deliberately.** Screen capture, accessibility-based UI
   inspection and bounded actions, shared storage, and package facts each have their own system gate.
 

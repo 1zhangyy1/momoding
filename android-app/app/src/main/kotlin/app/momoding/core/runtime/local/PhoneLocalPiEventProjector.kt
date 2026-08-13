@@ -14,6 +14,7 @@ import app.momoding.core.data.RoomProjectionTransactionStore
 import app.momoding.core.data.TaskEntity
 import app.momoding.core.data.storedTaskFailure
 import app.momoding.core.data.taskFailureForRunState
+import app.momoding.core.extensions.ExtensionToolActivityContract
 import app.momoding.core.policy.TaskApprovalMode
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -118,12 +119,16 @@ class PhoneLocalPiEventProjector(
         attachmentIds: List<String> = emptyList(),
         textAttachments: List<PiRuntimeTextAttachmentInput> = emptyList(),
     ) {
+        val activities = durableExtensionActivities(taskId, emptyList())
         replaceSnapshot(
             taskId = taskId,
             piSessionId = piSessionId,
             streamId = streamId,
-            messages = sessionMessages(taskId, priorEntries) +
-                userMessage(prompt, attachmentIds, textAttachments),
+            messages = weaveExtensionActivities(
+                sessionMessages(taskId, priorEntries) +
+                    userMessage(prompt, attachmentIds, textAttachments),
+                activities,
+            ),
             runState = TaskRunState.STARTING,
             isStreaming = true,
         )
@@ -135,14 +140,17 @@ class PhoneLocalPiEventProjector(
         streamId: String,
         snapshot: PiNativeTaskSessionSnapshot,
         runState: TaskRunState,
+        extensionActivities: List<JsonObject> = emptyList(),
     ) {
         check(snapshot.taskId == taskId) { "PI_MOBILE_SESSION_SNAPSHOT_TASK_MISMATCH" }
         database.runInTransaction {
+            val messages = sessionMessages(taskId, snapshot.entries)
+            val durableActivities = durableExtensionActivities(taskId, extensionActivities)
             replaceSnapshot(
                 taskId = taskId,
                 piSessionId = piSessionId,
                 streamId = streamId,
-                messages = sessionMessages(taskId, snapshot.entries),
+                messages = weaveExtensionActivities(messages, durableActivities),
                 runState = runState,
                 isStreaming = false,
             )
@@ -365,6 +373,69 @@ class PhoneLocalPiEventProjector(
             }
         }
     }
+
+    private fun durableExtensionActivities(
+        taskId: String,
+        newEvents: List<JsonObject>,
+    ): List<JsonObject> {
+        val prior = store.read(taskId)?.messages.orEmpty().mapNotNull { message ->
+            val wrapper = message as? JsonObject ?: return@mapNotNull null
+            if (
+                wrapper.keys != EXTENSION_ACTIVITY_MESSAGE_KEYS ||
+                wrapper.stringValue("role") != EXTENSION_ACTIVITY_ROLE
+            ) {
+                return@mapNotNull null
+            }
+            wrapper["event"] as? JsonObject
+        }
+        val latest = linkedMapOf<String, JsonObject>()
+        (prior + newEvents).forEach { event ->
+            val parsed = ExtensionToolActivityContract.parse(event) ?: return@forEach
+            latest[parsed.identity] = event
+        }
+        return latest.values.filter { event ->
+            ExtensionToolActivityContract.parse(event)?.terminal == true
+        }
+    }
+
+    private fun weaveExtensionActivities(
+        messages: List<JsonElement>,
+        activities: List<JsonObject>,
+    ): List<JsonElement> {
+        if (activities.isEmpty()) return messages
+        val byToolCallId = activities.groupBy { activity ->
+            requireNotNull(ExtensionToolActivityContract.parse(activity)).outerToolCallId
+        }
+            .toMutableMap()
+        return buildList {
+            messages.forEach { message ->
+                add(message)
+                val objectValue = message as? JsonObject ?: return@forEach
+                if (objectValue.stringValue("role") != "assistant") return@forEach
+                val callIds = (objectValue["content"] as? JsonArray).orEmpty().mapNotNull { block ->
+                    val content = block as? JsonObject ?: return@mapNotNull null
+                    if (content.stringValue("type") == "toolCall") {
+                        content.stringValue("id")
+                    } else {
+                        null
+                    }
+                }
+                callIds.forEach { callId ->
+                    byToolCallId.remove(callId).orEmpty().forEach { activity ->
+                        add(extensionActivityMessage(activity))
+                    }
+                }
+            }
+        }
+    }
+
+    private fun extensionActivityMessage(activity: JsonObject): JsonObject = buildJsonObject {
+        put("role", EXTENSION_ACTIVITY_ROLE)
+        put("event", activity)
+    }
+
+    private fun JsonObject.stringValue(key: String): String? =
+        (this[key] as? JsonPrimitive)?.takeIf(JsonPrimitive::isString)?.contentOrNull
 
     private fun parsePlanImplementationControl(
         taskId: String,
@@ -637,6 +708,8 @@ class PhoneLocalPiEventProjector(
         const val GOAL_CONTROL_TYPE = "pi_mobile_goal_continuation"
         const val SKILL_CONTROL_TYPE = "pi_mobile_skill_invocation"
         const val TEXT_ATTACHMENT_CONTROL_TYPE = "pi_mobile_text_attachments"
+        const val EXTENSION_ACTIVITY_ROLE = "phoneLocalExtensionActivity"
+        val EXTENSION_ACTIVITY_MESSAGE_KEYS = setOf("role", "event")
         val SHA256 = Regex("^[0-9a-f]{64}$")
         val GOAL_ID = Regex("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
         val SKILL_NAME = Regex("^[a-z0-9]+(?:-[a-z0-9]+)*$")

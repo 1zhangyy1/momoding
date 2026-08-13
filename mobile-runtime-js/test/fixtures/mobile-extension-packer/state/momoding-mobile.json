@@ -1,0 +1,33 @@
+{
+  "profileVersion": 1,
+  "package": {
+    "id": "fixtures.state",
+    "name": "Package state fixture",
+    "version": "1.0.0",
+    "description": "A package-scoped bounded state contract fixture."
+  },
+  "source": {
+    "entrypoint": "./index.ts"
+  },
+  "tools": [
+    {
+      "name": "fixture_counter",
+      "label": "Fixture counter",
+      "description": "Increment package-scoped bounded state.",
+      "promptSnippet": null,
+      "promptGuidelines": [],
+      "executionMode": "sequential",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "reset": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      }
+    }
+  ],
+  "hostTools": [],
+  "capabilities": { "required": [], "optional": [] },
+  "https": { "origins": [], "methods": [] },
+  "credentials": []
+}

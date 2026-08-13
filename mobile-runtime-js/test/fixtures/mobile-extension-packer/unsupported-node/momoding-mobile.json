@@ -1,0 +1,31 @@
+{
+  "profileVersion": 1,
+  "package": {
+    "id": "fixtures.unsupported-node",
+    "name": "Unsupported Node fixture",
+    "version": "1.0.0",
+    "description": "A negative fixture that must not become a mobile artifact."
+  },
+  "source": {
+    "entrypoint": "./index.ts"
+  },
+  "tools": [
+    {
+      "name": "fixture_host_file",
+      "label": "Fixture host file",
+      "description": "Negative fixture that attempts direct host filesystem access.",
+      "promptSnippet": null,
+      "promptGuidelines": [],
+      "executionMode": "sequential",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    }
+  ],
+  "hostTools": [],
+  "capabilities": { "required": [], "optional": [] },
+  "https": { "origins": [], "methods": [] },
+  "credentials": []
+}

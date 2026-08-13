@@ -50,10 +50,20 @@ import app.momoding.core.runtime.local.PhoneLocalProjectWorkspace
 import app.momoding.core.runtime.local.TaskFolderGrantBinder
 import app.momoding.core.runtime.local.PhoneLocalScreenCaptureToolExecutor
 import app.momoding.core.runtime.local.PhoneLocalShizukuToolExecutor
+import app.momoding.core.runtime.local.PhoneLocalSkillResourceToolExecutor
+import app.momoding.core.runtime.local.PhoneLocalExtensionPackageToolExecutor
 import app.momoding.core.runtime.local.PhoneLocalUiToolExecutor
 import app.momoding.core.shizuku.ShizukuController
 import app.momoding.core.skills.SkillCatalogService
+import app.momoding.core.extensions.ExtensionPackageCatalogService
+import app.momoding.core.extensions.ExtensionPackageImportReader
+import app.momoding.core.extensions.ExtensionPackageManifestParser
+import app.momoding.core.extensions.ExtensionPackageRepository
+import app.momoding.core.extensions.PiExtensionCredentialVault
+import app.momoding.core.extensions.PiExtensionHostHttpClient
+import app.momoding.core.extensions.PiExtensionWorkerClient
 import app.momoding.core.skills.SkillImportReader
+import app.momoding.core.skills.SkillPackageImportReader
 import app.momoding.core.skills.SkillRepository
 import app.momoding.core.data.MomodingDatabase
 import app.momoding.core.data.DraftRepository
@@ -239,6 +249,20 @@ class AppContainer(application: Application) {
         handles = mediaHandles,
         consentRequester = androidMediaConsentCoordinator,
     )
+    val skillRepository = SkillRepository(database)
+    val piExtensionCredentialVault = PiExtensionCredentialVault.create(application)
+    val extensionPackageRepository = ExtensionPackageRepository(
+        database = database,
+        clearPackageCredentials = piExtensionCredentialVault::removePackage,
+    )
+    private val piExtensionWorkerClient = PiExtensionWorkerClient(
+        context = application,
+        authorize = extensionPackageRepository::authorizePiRegisterToolArtifact,
+        commitState = extensionPackageRepository::commitPiRegisterToolState,
+    )
+    private val piExtensionHostHttpClient = PiExtensionHostHttpClient(
+        credentials = piExtensionCredentialVault,
+    )
     val phoneLocalAttentionBridge = PhoneLocalAttentionBridge(
         ledger = RoomAttentionLedger(database),
         metadataTools = DeviceMetadataToolExecutor(
@@ -276,12 +300,17 @@ class AppContainer(application: Application) {
         uiTools = phoneLocalUiToolExecutor,
         packageTools = phoneLocalShizukuToolExecutor,
         capabilityRequestTools = phoneLocalCapabilityRequestToolExecutor,
+        skillResourceTools = PhoneLocalSkillResourceToolExecutor(skillRepository),
+        extensionPackageTools = PhoneLocalExtensionPackageToolExecutor(
+            repository = extensionPackageRepository,
+            piWorkerClient = piExtensionWorkerClient,
+            piHttpExecute = piExtensionHostHttpClient::execute,
+        ),
         approvalModeForTask = { taskId ->
             database.momodingDao().task(taskId)?.approvalMode ?: TaskApprovalMode.REQUEST_APPROVAL
         },
     )
     val phoneLocalChildAgentRepository = PhoneLocalChildAgentRepository(database)
-    val skillRepository = SkillRepository(database)
     val phoneLocalPiRuntime = PhoneLocalPiOpenRouterRuntime(
         application,
         phoneLocalAttentionBridge,
@@ -294,8 +323,14 @@ class AppContainer(application: Application) {
     val skillCatalogService = SkillCatalogService(
         assets = application.assets,
         importReader = SkillImportReader(application.contentResolver),
+        packageImportReader = SkillPackageImportReader(application.contentResolver),
         parser = phoneLocalPiRuntime,
         repository = skillRepository,
+    )
+    val extensionPackageCatalogService = ExtensionPackageCatalogService(
+        reader = ExtensionPackageImportReader(application.contentResolver),
+        parser = ExtensionPackageManifestParser(),
+        repository = extensionPackageRepository,
     )
     val phoneLocalGoalRepository = PhoneLocalGoalRepository(database)
     val phoneLocalTaskCoordinator = PhoneLocalTaskCoordinator(
@@ -307,6 +342,7 @@ class AppContainer(application: Application) {
         goalRepository = phoneLocalGoalRepository,
         childAgentRepository = phoneLocalChildAgentRepository,
         skillRepository = skillRepository,
+        extensionPackageRepository = extensionPackageRepository,
         attachmentRepository = attachmentRepository,
     )
 }

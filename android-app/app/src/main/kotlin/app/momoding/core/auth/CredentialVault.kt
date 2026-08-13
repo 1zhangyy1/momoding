@@ -136,6 +136,7 @@ class AndroidKeystoreAead(
 class AndroidNoBackupVaultFileStore(
     context: Context,
     fileName: String = DEFAULT_FILE_NAME,
+    private val maxBytes: Int = VaultEnvelopeCodec.MAX_ENVELOPE_BYTES,
 ) : VaultFileStore {
     private val directory = context.applicationContext.noBackupFilesDir.canonicalFile
     private val target = File(directory, fileName)
@@ -144,6 +145,7 @@ class AndroidNoBackupVaultFileStore(
         require('/' !in fileName && '\\' !in fileName && fileName !in setOf(".", "..")) {
             "Vault file name is invalid"
         }
+        require(maxBytes in 1..MAX_SUPPORTED_BYTES) { "Vault file bound is invalid" }
         directory.mkdirs()
         require(directory.isDirectory) { "Vault directory is unavailable" }
         require(target.canonicalFile.parentFile == directory) { "Vault path escapes noBackupFilesDir" }
@@ -152,7 +154,7 @@ class AndroidNoBackupVaultFileStore(
     override fun read(): ByteArray? {
         if (!Files.exists(target.toPath(), LinkOption.NOFOLLOW_LINKS)) return null
         val stat = requireRegularFile(target)
-        require(stat.st_size in 1..VaultEnvelopeCodec.MAX_ENVELOPE_BYTES.toLong()) {
+        require(stat.st_size in 1..maxBytes.toLong()) {
             "Vault file size is invalid"
         }
         return FileInputStream(target).use { stream ->
@@ -161,7 +163,7 @@ class AndroidNoBackupVaultFileStore(
                 while (true) {
                     val count = stream.read(buffer)
                     if (count < 0) break
-                    require(output.size() + count <= VaultEnvelopeCodec.MAX_ENVELOPE_BYTES) {
+                    require(output.size() + count <= maxBytes) {
                         "Vault file is too large"
                     }
                     output.write(buffer, 0, count)
@@ -172,7 +174,7 @@ class AndroidNoBackupVaultFileStore(
     }
 
     override fun writeAtomically(bytes: ByteArray) {
-        require(bytes.size in 1..VaultEnvelopeCodec.MAX_ENVELOPE_BYTES) { "Vault file size is invalid" }
+        require(bytes.size in 1..maxBytes) { "Vault file size is invalid" }
         if (Files.exists(target.toPath(), LinkOption.NOFOLLOW_LINKS)) requireRegularFile(target)
         val temporary = File(directory, "${target.name}.tmp-${SecureRandom().nextLong().toULong()}")
         var descriptor: java.io.FileDescriptor? = null
@@ -228,6 +230,7 @@ class AndroidNoBackupVaultFileStore(
 
     companion object {
         const val DEFAULT_FILE_NAME = "host-credential.vault"
+        const val MAX_SUPPORTED_BYTES = 256 * 1024
         private const val FILE_MODE = 0x180 // 0600
     }
 }

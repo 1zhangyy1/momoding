@@ -615,6 +615,132 @@ class PiUiReducerTest {
     }
 
     @Test
+    fun `extension Host activity keeps its outer Tool and settles as one concise row`() {
+        val projection = PiUiReducer().reduce(
+            snapshot(
+                rawEvents = listOf(
+                    event(
+                        1,
+                        """{"type":"tool_execution_start","toolCallId":"outer-1","toolName":"fixture_calendar_summary","args":{}}""",
+                    ),
+                    event(
+                        2,
+                        """{"type":"extension_tool_activity","state":"running","toolCallId":"outer-1","seq":2,"kind":"host_tool","packageId":"fixtures.host-call","name":"capabilities","targetTool":"device_capabilities_get"}""",
+                    ),
+                    event(
+                        3,
+                        """{"type":"extension_tool_activity","state":"completed","toolCallId":"outer-1","seq":2,"kind":"host_tool","packageId":"fixtures.host-call","name":"capabilities","targetTool":"device_capabilities_get"}""",
+                    ),
+                    event(
+                        4,
+                        """{"type":"tool_execution_end","toolCallId":"outer-1","toolName":"fixture_calendar_summary","result":{"content":[{"type":"text","text":"done"}]},"isError":false}""",
+                    ),
+                ),
+                throughSequence = 4,
+            ),
+        )
+
+        val tools = projection.timeline.settledItems.filterIsInstance<TimelineItem.ToolActivity>()
+        assertEquals(2, tools.size)
+        assertEquals("outer-1", tools.first().toolCallId)
+        val activity = tools.single { it.toolCallId.startsWith("extension-activity/") }
+        assertEquals("Checked mobile capabilities", activity.title)
+        assertEquals("Extension · Capabilities", activity.detail)
+        assertEquals(ToolActivityState.SUCCESS, activity.state)
+        assertEquals(ToolActivityKind.GENERIC, activity.kind)
+        assertEquals(null, projection.timeline.activeItem)
+    }
+
+    @Test
+    fun `extension HTTPS activity exposes only bounded audit summary and replaces running state`() {
+        val projection = PiUiReducer().reduce(
+            snapshot(
+                rawEvents = listOf(
+                    event(
+                        1,
+                        """{"type":"extension_tool_activity","state":"running","toolCallId":"outer-http","seq":0,"kind":"https","packageId":"fixtures.network","method":"GET","origin":"https://status.example.test"}""",
+                    ),
+                    event(
+                        2,
+                        """{"type":"extension_tool_activity","state":"completed","toolCallId":"outer-http","seq":0,"kind":"https","packageId":"fixtures.network","method":"GET","origin":"https://status.example.test","status":200,"responseBytes":1536,"durationMillis":8,"redirects":0}""",
+                    ),
+                ),
+                throughSequence = 2,
+            ),
+        )
+
+        val activity = projection.timeline.settledItems.single() as TimelineItem.ToolActivity
+        assertEquals("Called web service", activity.title)
+        assertEquals("GET · status.example.test · HTTP 200 · 1 KB · 8 ms", activity.detail)
+        assertEquals(ToolActivityState.SUCCESS, activity.state)
+        assertEquals(ToolActivityKind.WEB_ACCESS, activity.kind)
+        assertFalse(activity.detail.contains("/v1/"))
+    }
+
+    @Test
+    fun `stopped extension Host activity settles as cancelled with its stable error code`() {
+        val projection = PiUiReducer().reduce(
+            snapshot(
+                rawEvents = listOf(
+                    event(
+                        1,
+                        """{"type":"extension_tool_activity","state":"running","toolCallId":"outer-stop","seq":1,"kind":"host_tool","packageId":"fixtures.host-call","name":"calendar","targetTool":"device_calendar"}""",
+                    ),
+                    event(
+                        2,
+                        """{"type":"extension_tool_activity","state":"cancelled","toolCallId":"outer-stop","seq":1,"kind":"host_tool","packageId":"fixtures.host-call","name":"calendar","targetTool":"device_calendar","code":"EXTENSION_PACKAGE_STOPPED"}""",
+                    ),
+                ),
+                throughSequence = 2,
+            ),
+        )
+
+        val activity = projection.timeline.settledItems.single() as TimelineItem.ToolActivity
+        assertEquals("Calendar step stopped", activity.title)
+        assertEquals("Extension · Calendar · EXTENSION_PACKAGE_STOPPED", activity.detail)
+        assertEquals(ToolActivityState.CANCELLED, activity.state)
+    }
+
+    @Test
+    fun `extension activity with an uncontracted sensitive field fails closed in place`() {
+        val projection = PiUiReducer().reduce(
+            snapshot(
+                rawEvents = listOf(
+                    event(
+                        1,
+                        """{"type":"extension_tool_activity","state":"running","toolCallId":"outer-http","seq":0,"kind":"https","packageId":"fixtures.network","method":"GET","origin":"https://status.example.test","url":"https://status.example.test/private?token=secret"}""",
+                    ),
+                    event(
+                        2,
+                        """{"type":"extension_tool_activity","state":"failed","toolCallId":"outer-http","seq":0,"kind":"https","packageId":"fixtures.network","method":"GET","origin":"https://status.example.test","code":"EXTENSION_PACKAGE_HOST_TIMEOUT","url":"https://status.example.test/private?token=secret"}""",
+                    ),
+                ),
+                throughSequence = 2,
+            ),
+        )
+
+        assertTrue(projection.timeline.settledItems.single() is TimelineItem.UnsupportedActivity)
+        assertTrue(projection.timeline.settledItems.none { it.toString().contains("token=secret") })
+    }
+
+    @Test
+    fun `extension HTTPS activity rejects a noncanonical default port`() {
+        val projection = PiUiReducer().reduce(
+            snapshot(
+                rawEvents = listOf(
+                    event(
+                        1,
+                        """{"type":"extension_tool_activity","state":"completed","toolCallId":"outer-http","seq":0,"kind":"https","packageId":"fixtures.network","method":"GET","origin":"https://status.example.test:443","status":200,"responseBytes":12,"durationMillis":8,"redirects":0}""",
+                    ),
+                ),
+                throughSequence = 1,
+            ),
+        )
+
+        assertTrue(projection.timeline.settledItems.single() is TimelineItem.UnsupportedActivity)
+    }
+
+    @Test
     fun `attention results are human readable and never expose result json`() {
         val output = PiUiReducer().reduce(
             snapshot(

@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "profile": "momoding-pi-mobile-v1",
+  "kind": "local",
+  "packageName": "@momoding-fixtures/official-register-tool",
+  "packageVersion": "1.0.0",
+  "sourceDigest": "453250ad841e652b2b149ea747a13156a620dd07e1f07b1830b3dd6bfd28caba",
+  "registryIntegrity": null,
+  "repositoryUrl": null,
+  "revision": null,
+  "packer": {
+    "node": "22.22.3",
+    "typescript": "5.9.3",
+    "esbuild": "0.27.2"
+  }
+}

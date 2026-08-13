@@ -77,6 +77,10 @@ import {
   currentSkillDocumentParse,
   requirePiMobileSkillResources,
 } from "./skills/mobile-skill-runtime.js";
+import { mobileExtensionHostContract } from "./extensions/mobile-extension-host-fixture.js";
+import { piRegisterToolExtensionContract } from "./extensions/pi-register-tool-extension-fixture.js";
+import { requireConnectorToolSnapshot } from "./extensions/connector-extension.js";
+import { requireExtensionPackageSnapshots } from "./extensions/declarative-extension-package.js";
 
 declare const __PI_VERSION__: string;
 declare const __BUNDLE_SCHEMA_VERSION__: string;
@@ -243,6 +247,14 @@ export function statusJson(): string {
   });
 }
 
+export async function mobileExtensionHostContractJson(): Promise<string> {
+  return JSON.stringify(await mobileExtensionHostContract());
+}
+
+export async function piRegisterToolExtensionContractJson(): Promise<string> {
+  return JSON.stringify(await piRegisterToolExtensionContract());
+}
+
 export function startScenarioJson(kind: string): string {
   if (runtimeState === null) throw new Error("PI_MOBILE_RUNTIME_NOT_BOOTED");
   if (!isFakeScenarioKind(kind)) throw new Error(`PI_MOBILE_SCENARIO_UNKNOWN ${kind}`);
@@ -313,6 +325,8 @@ export function startNativeOpenRouterTaskSessionJson(
   imageInputsJson = "[]",
   textAttachmentInputsJson = "[]",
   imageGenerationEnabled = false,
+  connectorToolSnapshotJson = "null",
+  extensionPackagesJson = "[]",
 ): string {
   if (runtimeState === null) throw new Error("PI_MOBILE_RUNTIME_NOT_BOOTED");
   return JSON.stringify(
@@ -327,6 +341,8 @@ export function startNativeOpenRouterTaskSessionJson(
       requireRuntimeImageInputs(JSON.parse(imageInputsJson) as unknown),
       requireRuntimeTextAttachmentInputs(JSON.parse(textAttachmentInputsJson) as unknown),
       imageGenerationEnabled,
+      requireConnectorToolSnapshot(JSON.parse(connectorToolSnapshotJson) as unknown),
+      requireExtensionPackageSnapshots(JSON.parse(extensionPackagesJson) as unknown),
     ),
   );
 }
@@ -339,6 +355,8 @@ export function startNativeCodexTaskSessionJson(
   planMode = false,
   skillResourcesJson = "[]",
   textAttachmentInputsJson = "[]",
+  connectorToolSnapshotJson = "null",
+  extensionPackagesJson = "[]",
 ): string {
   if (runtimeState === null) throw new Error("PI_MOBILE_RUNTIME_NOT_BOOTED");
   return JSON.stringify(
@@ -351,6 +369,8 @@ export function startNativeCodexTaskSessionJson(
       planMode,
       requirePiMobileSkillResources(JSON.parse(skillResourcesJson) as unknown),
       requireRuntimeTextAttachmentInputs(JSON.parse(textAttachmentInputsJson) as unknown),
+      requireConnectorToolSnapshot(JSON.parse(connectorToolSnapshotJson) as unknown),
+      requireExtensionPackageSnapshots(JSON.parse(extensionPackagesJson) as unknown),
     ),
   );
 }
@@ -362,6 +382,8 @@ export function startNativeCodexTaskSkillSessionJson(
   modelId: string,
   sessionId?: string,
   skillResourcesJson = "[]",
+  connectorToolSnapshotJson = "null",
+  extensionPackagesJson = "[]",
 ): string {
   if (runtimeState === null) throw new Error("PI_MOBILE_RUNTIME_NOT_BOOTED");
   return JSON.stringify(
@@ -373,6 +395,8 @@ export function startNativeCodexTaskSkillSessionJson(
       createBootstrapEnv(),
       sessionId,
       requirePiMobileSkillResources(JSON.parse(skillResourcesJson) as unknown),
+      requireConnectorToolSnapshot(JSON.parse(connectorToolSnapshotJson) as unknown),
+      requireExtensionPackageSnapshots(JSON.parse(extensionPackagesJson) as unknown),
     ),
   );
 }
@@ -385,6 +409,8 @@ export function startNativeOpenRouterTaskSkillSessionJson(
   sessionId?: string,
   skillResourcesJson = "[]",
   imageGenerationEnabled = false,
+  connectorToolSnapshotJson = "null",
+  extensionPackagesJson = "[]",
 ): string {
   if (runtimeState === null) throw new Error("PI_MOBILE_RUNTIME_NOT_BOOTED");
   return JSON.stringify(
@@ -397,6 +423,8 @@ export function startNativeOpenRouterTaskSkillSessionJson(
       sessionId,
       requirePiMobileSkillResources(JSON.parse(skillResourcesJson) as unknown),
       imageGenerationEnabled,
+      requireConnectorToolSnapshot(JSON.parse(connectorToolSnapshotJson) as unknown),
+      requireExtensionPackageSnapshots(JSON.parse(extensionPackagesJson) as unknown),
     ),
   );
 }
@@ -495,6 +523,8 @@ export function restoreNativeOpenRouterTaskSessionJson(
   skillResourcesJson = "[]",
   imageInputsJson = "[]",
   imageGenerationEnabled = false,
+  connectorToolSnapshotJson = "null",
+  extensionPackagesJson = "[]",
 ): string {
   if (runtimeState === null) throw new Error("PI_MOBILE_RUNTIME_NOT_BOOTED");
   return JSON.stringify(
@@ -508,6 +538,8 @@ export function restoreNativeOpenRouterTaskSessionJson(
       requirePiMobileSkillResources(JSON.parse(skillResourcesJson) as unknown),
       requireRuntimeImageInputs(JSON.parse(imageInputsJson) as unknown),
       imageGenerationEnabled,
+      requireConnectorToolSnapshot(JSON.parse(connectorToolSnapshotJson) as unknown),
+      requireExtensionPackageSnapshots(JSON.parse(extensionPackagesJson) as unknown),
     ),
   );
 }
@@ -519,6 +551,8 @@ export function restoreNativeCodexTaskSessionJson(
   entriesJson: string,
   modelId: string,
   skillResourcesJson = "[]",
+  connectorToolSnapshotJson = "null",
+  extensionPackagesJson = "[]",
 ): string {
   if (runtimeState === null) throw new Error("PI_MOBILE_RUNTIME_NOT_BOOTED");
   return JSON.stringify(
@@ -530,6 +564,8 @@ export function restoreNativeCodexTaskSessionJson(
       modelId,
       createBootstrapEnv(),
       requirePiMobileSkillResources(JSON.parse(skillResourcesJson) as unknown),
+      requireConnectorToolSnapshot(JSON.parse(connectorToolSnapshotJson) as unknown),
+      requireExtensionPackageSnapshots(JSON.parse(extensionPackagesJson) as unknown),
     ),
   );
 }

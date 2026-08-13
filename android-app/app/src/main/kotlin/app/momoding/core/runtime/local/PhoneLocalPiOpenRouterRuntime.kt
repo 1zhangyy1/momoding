@@ -1,6 +1,10 @@
 package app.momoding.core.runtime.local
 
 import android.content.Context
+import app.momoding.core.connector.ConnectorToolSnapshot
+import app.momoding.core.connector.ConnectorToolSnapshotPolicy
+import app.momoding.core.connector.PhoneLocalConnectorToolExecutor
+import app.momoding.core.connector.PhoneLocalConnectorToolHandler
 import app.momoding.core.provider.ActiveChatProviderSelection
 import app.momoding.core.provider.ActiveChatProviderStore
 import app.momoding.core.provider.ActiveChatProviderPolicy
@@ -22,6 +26,8 @@ import app.momoding.core.provider.ProviderSelection
 import app.momoding.core.provider.ProviderSelectionStore
 import app.momoding.core.skills.PhoneLocalSkillParser
 import app.momoding.core.skills.EnabledSkillResourceSet
+import app.momoding.core.extensions.EnabledExtensionPackageSet
+import app.momoding.core.extensions.extensionPackageSetDigest
 import app.momoding.core.skills.SkillAvailability
 import app.momoding.core.skills.SkillDocumentParseException
 import app.momoding.core.skills.SkillDocumentParseResult
@@ -64,6 +70,7 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
     private val ownerDispatcher: ExecutorCoroutineDispatcher,
     private val networkScope: CoroutineScope,
     private val attentionBridge: PhoneLocalAttentionBridge? = null,
+    private val connectorTools: PhoneLocalConnectorToolHandler? = null,
     private val childUpdateSink: (
         List<PiChildAgentEventEnvelope>,
         List<PiChildAgentSnapshot>,
@@ -223,7 +230,7 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
                     delay(skillParsePollMillis)
                     status = parserEngine.skillDocumentParseStatus(status.parseId)
                 }
-                status.toSkillDocumentParseResult()
+                status.toSkillDocumentParseResult().copy(sourceDocumentSha256 = content.sha256())
             } finally {
                 try {
                     withContext(NonCancellable) {
@@ -294,6 +301,8 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
         skillResources: EnabledSkillResourceSet = emptySkillResourceSet(),
         images: List<PiRuntimeImageInput> = emptyList(),
         textAttachments: List<PiRuntimeTextAttachmentInput> = emptyList(),
+        connectorToolSnapshot: ConnectorToolSnapshot? = null,
+        extensionPackages: EnabledExtensionPackageSet = emptyExtensionPackageSet(),
         onStatus: (PiNativeOpenRouterScenarioStatus) -> Unit = {},
     ): PiNativeOpenRouterScenarioStatus = withContext(ownerDispatcher) {
         checkOpen()
@@ -303,6 +312,13 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
             "PI_MOBILE_TASK_SESSION_ALREADY_OPEN"
         }
         requireValidSkillResourceSet(skillResources)
+        requireValidExtensionPackageSet(extensionPackages)
+        val approvedConnectorSnapshot = connectorToolSnapshot?.let(
+            ConnectorToolSnapshotPolicy::requireValid,
+        )
+        if (approvedConnectorSnapshot != null) {
+            requireNotNull(connectorTools) { "PI_MOBILE_CONNECTOR_EXECUTOR_MISSING" }
+        }
         val provider = loadActiveProvider()
         val imageGenerationEnabled = imageGenerationEnabled(provider)
         if (images.isNotEmpty()) requireImageInputCapability(provider)
@@ -315,6 +331,7 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
             codexClient = codexClient,
             networkScope = networkScope,
             attentionBridge = attentionBridge,
+            connectorTools = connectorTools,
             taskId = taskId,
             childUpdateSink = childUpdateSink,
             webSearch = {
@@ -348,6 +365,8 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
                     images = images,
                     textAttachments = textAttachments,
                     imageGenerationEnabled = imageGenerationEnabled,
+                    connectorToolSnapshot = approvedConnectorSnapshot,
+                    extensionPackages = extensionPackages.packages,
                 )
                 is RuntimeChatProvider.Codex -> activeEngine.startNativeCodexTaskSession(
                     taskId = taskId,
@@ -357,10 +376,13 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
                     planMode = planMode,
                     skillResources = skillResources.resources,
                     textAttachments = textAttachments,
+                    connectorToolSnapshot = approvedConnectorSnapshot,
+                    extensionPackages = extensionPackages.packages,
                 )
             }
             pumpUntilTerminal(initial, activePump, onStatus).also { terminal ->
                 requireTrustedSkillResourceSet(terminal, skillResources)
+                requireTrustedExtensionPackageSet(terminal, extensionPackages)
             }
         } catch (error: Throwable) {
             closeActiveEngine()
@@ -376,6 +398,7 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
         additionalInstructions: String?,
         sessionId: String = taskId,
         skillResources: EnabledSkillResourceSet,
+        extensionPackages: EnabledExtensionPackageSet = emptyExtensionPackageSet(),
         onStatus: (PiNativeOpenRouterScenarioStatus) -> Unit = {},
     ): PiNativeOpenRouterScenarioStatus = withContext(ownerDispatcher) {
         checkOpen()
@@ -385,6 +408,7 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
             "PI_MOBILE_TASK_SESSION_ALREADY_OPEN"
         }
         requireValidSkillResourceSet(skillResources)
+        requireValidExtensionPackageSet(extensionPackages)
         check(skillResources.resources.any { it.name == skillName }) {
             "PI_MOBILE_SKILL_NOT_ENABLED"
         }
@@ -429,6 +453,7 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
                     modelId = provider.modelId,
                     skillResources = skillResources.resources,
                     imageGenerationEnabled = imageGenerationEnabled,
+                    extensionPackages = extensionPackages.packages,
                 )
                 is RuntimeChatProvider.Codex -> activeEngine.startNativeCodexTaskSkillSession(
                     taskId = taskId,
@@ -437,10 +462,12 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
                     additionalInstructions = additionalInstructions,
                     modelId = provider.modelId,
                     skillResources = skillResources.resources,
+                    extensionPackages = extensionPackages.packages,
                 )
             }
             pumpUntilTerminal(initial, activePump, onStatus).also { terminal ->
                 requireTrustedSkillResourceSet(terminal, skillResources)
+                requireTrustedExtensionPackageSet(terminal, extensionPackages)
             }
         } catch (error: Throwable) {
             closeActiveEngine()
@@ -676,6 +703,19 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
         }
     }
 
+    suspend fun taskExtensionPackageSetMatches(
+        taskId: String,
+        extensionPackages: EnabledExtensionPackageSet,
+    ): Boolean = withContext(ownerDispatcher) {
+        checkOpen()
+        requireValidExtensionPackageSet(extensionPackages)
+        if (activeTaskId != taskId || running) return@withContext false
+        val activeEngine = engine ?: return@withContext false
+        val status = activeEngine.nativeOpenRouterScenarioStatus()
+        status.terminal && status.extensionSetTrusted &&
+            status.extensionSetDigest == extensionPackages.digest
+    }
+
     suspend fun continueTaskSkill(
         taskId: String,
         skillName: String,
@@ -712,6 +752,8 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
         skillResources: EnabledSkillResourceSet = emptySkillResourceSet(),
         images: List<PiRuntimeImageInput> = emptyList(),
         requiresTools: Boolean = false,
+        connectorToolSnapshot: ConnectorToolSnapshot? = null,
+        extensionPackages: EnabledExtensionPackageSet = emptyExtensionPackageSet(),
     ): PiNativeOpenRouterScenarioStatus = withContext(ownerDispatcher) {
         checkOpen()
         check(!skillParsing) { "PI_MOBILE_SKILL_PARSE_IN_PROGRESS" }
@@ -721,6 +763,13 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
         }
         check(snapshot.taskId == taskId) { "PI_MOBILE_SESSION_SNAPSHOT_TASK_MISMATCH" }
         requireValidSkillResourceSet(skillResources)
+        requireValidExtensionPackageSet(extensionPackages)
+        val approvedConnectorSnapshot = connectorToolSnapshot?.let(
+            ConnectorToolSnapshotPolicy::requireValid,
+        )
+        if (approvedConnectorSnapshot != null) {
+            requireNotNull(connectorTools) { "PI_MOBILE_CONNECTOR_EXECUTOR_MISSING" }
+        }
         val provider = loadProviderForSnapshot(snapshot.entries)
         val imageGenerationEnabled = imageGenerationEnabled(provider)
         if (images.isNotEmpty()) requireImageInputCapability(provider)
@@ -733,6 +782,7 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
             codexClient = codexClient,
             networkScope = networkScope,
             attentionBridge = attentionBridge,
+            connectorTools = connectorTools,
             taskId = taskId,
             childUpdateSink = childUpdateSink,
             webSearch = {
@@ -765,6 +815,8 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
                         skillResources = skillResources.resources,
                         images = images,
                         imageGenerationEnabled = imageGenerationEnabled,
+                        connectorToolSnapshot = approvedConnectorSnapshot,
+                        extensionPackages = extensionPackages.packages,
                     )
                 is RuntimeChatProvider.Codex -> activeEngine.restoreNativeCodexTaskSession(
                     taskId = taskId,
@@ -773,6 +825,8 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
                     entries = snapshot.entries,
                     modelId = provider.modelId,
                     skillResources = skillResources.resources,
+                    connectorToolSnapshot = approvedConnectorSnapshot,
+                    extensionPackages = extensionPackages.packages,
                 )
             }
             check(
@@ -787,6 +841,7 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
                 "PI_MOBILE_TASK_SESSION_RESTORE_REPLAYED_WORK"
             }
             requireTrustedSkillResourceSet(restored, skillResources)
+            requireTrustedExtensionPackageSet(restored, extensionPackages)
             lastStatus = restored
             restored
         } catch (error: Throwable) {
@@ -1159,6 +1214,22 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
         }
     }
 
+    private fun requireValidExtensionPackageSet(packageSet: EnabledExtensionPackageSet) {
+        check(extensionPackageSetDigest(packageSet.packages) == packageSet.digest) {
+            "PI_MOBILE_EXTENSION_PACKAGE_SET_DIGEST_MISMATCH"
+        }
+    }
+
+    private fun requireTrustedExtensionPackageSet(
+        status: PiNativeOpenRouterScenarioStatus,
+        packageSet: EnabledExtensionPackageSet,
+    ) {
+        check(status.extensionSetTrusted) { "PI_MOBILE_EXTENSION_PACKAGES_UNTRUSTED" }
+        check(status.extensionSetDigest == packageSet.digest) {
+            "PI_MOBILE_EXTENSION_PACKAGE_SET_DIGEST_MISMATCH"
+        }
+    }
+
     private sealed interface PendingTaskCommand {
         val taskId: String?
 
@@ -1211,6 +1282,11 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
 private fun emptySkillResourceSet(): EnabledSkillResourceSet = EnabledSkillResourceSet(
     resources = emptyList(),
     digest = skillResourceSetDigest(emptyList()),
+)
+
+private fun emptyExtensionPackageSet(): EnabledExtensionPackageSet = EnabledExtensionPackageSet(
+    packages = emptyList(),
+    digest = extensionPackageSetDigest(emptyList()),
 )
 
 private fun missingChildPersistenceSink(
@@ -1266,6 +1342,7 @@ internal class NativeProviderRequestPump(
     private val codexClient: CodexNativeClient?,
     private val networkScope: CoroutineScope,
     private val attentionBridge: PhoneLocalAttentionBridge?,
+    private val connectorTools: PhoneLocalConnectorToolHandler? = null,
     private val taskId: String?,
     private val childUpdateSink: (
         List<PiChildAgentEventEnvelope>,
@@ -1355,6 +1432,7 @@ internal class NativeProviderRequestPump(
         jobs.values.toList().forEach { it.cancelAndJoin() }
         jobs.clear()
         networkEvents.clear()
+        taskId?.let { connectorTools?.closeTask(it) }
     }
 
     suspend fun cancelAndroidTools(reason: String) {
@@ -1477,9 +1555,6 @@ internal class NativeProviderRequestPump(
     private suspend fun startAndroidToolRequests() {
         val requests = engine.drainNativeProviderToolRequests()
         if (requests.isEmpty()) return
-        val bridge = requireNotNull(attentionBridge) {
-            "PI_MOBILE_ANDROID_TOOL_BRIDGE_MISSING"
-        }
         val boundTaskId = requireNotNull(taskId) {
             "PI_MOBILE_ANDROID_TOOL_TASK_MISSING"
         }
@@ -1489,7 +1564,11 @@ internal class NativeProviderRequestPump(
             }
             androidToolJobs[request.id] = networkScope.launch {
                 try {
-                    val result = if (
+                    val result = if (request.kind == PhoneLocalConnectorToolExecutor.NATIVE_KIND) {
+                        requireNotNull(connectorTools) {
+                            "PI_MOBILE_CONNECTOR_EXECUTOR_MISSING"
+                        }.execute(boundTaskId, request)
+                    } else if (
                         request.toolName == PhoneLocalScreenCaptureToolExecutor.TOOL_NAME &&
                         !supportsScreenToolImages()
                     ) {
@@ -1507,6 +1586,9 @@ internal class NativeProviderRequestPump(
                             isError = true,
                         )
                     } else {
+                        val bridge = requireNotNull(attentionBridge) {
+                            "PI_MOBILE_ANDROID_TOOL_BRIDGE_MISSING"
+                        }
                         bridge.handleNativeRequest(boundTaskId, request)
                     }
                     androidToolEvents += if (result == null) {

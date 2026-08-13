@@ -6,6 +6,8 @@
 **/build/
 **/node_modules/
 **/dist/
+!android-app/app/src/test/resources/mobile-extension-artifacts/**/dist/
+!android-app/app/src/test/resources/mobile-extension-artifacts/**/dist/index.js
 **/.npm-cache/
 **/__pycache__/
 *.pyc

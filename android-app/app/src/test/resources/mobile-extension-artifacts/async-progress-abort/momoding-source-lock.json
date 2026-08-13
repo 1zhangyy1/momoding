@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "profile": "momoding-pi-mobile-v1",
+  "kind": "local",
+  "packageName": "@momoding-fixtures/async-progress-abort",
+  "packageVersion": "1.0.0",
+  "sourceDigest": "7d59a410ed682c2f6a1268505cc41303e859142a005d67377313190467819906",
+  "registryIntegrity": null,
+  "repositoryUrl": null,
+  "revision": null,
+  "packer": {
+    "node": "22.22.3",
+    "typescript": "5.9.3",
+    "esbuild": "0.27.2"
+  }
+}

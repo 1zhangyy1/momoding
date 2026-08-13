@@ -85,6 +85,7 @@ const expectedExported = new Map([
     "provider:rikka.shizuku.ShizukuProvider",
     "android.permission.INTERACT_ACROSS_USERS_FULL",
   ],
+  ["activity:net.openid.appauth.RedirectUriReceiverActivity", null],
   ["receiver:androidx.profileinstaller.ProfileInstallReceiver", "android.permission.DUMP"],
 ]);
 if (exported.length !== expectedExported.size) {

@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "fixtures.async-progress-abort",
+  "name": "Async progress and abort fixture",
+  "version": "1.0.0",
+  "description": "An official-shaped asynchronous handler contract fixture.",
+  "runtime": "pi-register-tool-v1",
+  "entrypoint": "dist/index.js",
+  "tools": [
+    {
+      "type": "pi-register-tool",
+      "name": "fixture_progress",
+      "label": "Fixture progress",
+      "description": "Emit bounded progress and honor cancellation.",
+      "promptSnippet": null,
+      "promptGuidelines": [],
+      "executionMode": "sequential",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    }
+  ],
+  "hostTools": [],
+  "requiredCapabilities": [],
+  "optionalCapabilities": [],
+  "httpPolicy": {
+    "origins": [],
+    "methods": [],
+    "credentialSlots": []
+  },
+  "packageDigest": "d556e8aaf5643badc2b5974ea37d3d63442cf1c50dd358059113b3a46d622db0"
+}

@@ -6,6 +6,10 @@ import app.momoding.core.data.AttentionResponseState
 import app.momoding.core.data.TaskFailure
 import app.momoding.core.data.TaskAttentionKind
 import app.momoding.core.data.classifyTaskFailure
+import app.momoding.core.extensions.ExtensionToolActivityContract
+import app.momoding.core.extensions.ExtensionToolActivityEvent
+import app.momoding.core.extensions.ExtensionToolActivityKind
+import app.momoding.core.extensions.ExtensionToolActivityState
 import java.security.MessageDigest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -167,6 +171,7 @@ class PiUiReducer {
             "tool_execution_start" -> applyToolStart(record, event)
             "tool_execution_update" -> applyToolUpdate(record, event)
             "tool_execution_end" -> applyToolEnd(record, event)
+            "extension_tool_activity" -> applyExtensionToolActivity(record, event)
             "provider_web_search", "provider_web_activity" -> applyProviderWebActivity(record, event)
             "queue_update" -> eventQueue = parseQueueEvent(event)
             "compaction_start" -> {
@@ -426,6 +431,156 @@ class PiUiReducer {
         transientRunState = TaskDetailRunState.RUNNING
     }
 
+    private fun applyExtensionToolActivity(
+        record: TaskDetailEventRecord,
+        event: JsonObject,
+    ) {
+        val identity = extensionActivityIdentityOrNull(event)
+        val item = parseExtensionToolActivity(event)
+        if (item == null) {
+            replaceExtensionActivityWithUnsupported(record, identity)
+            return
+        }
+        if (activeItem?.stableKey == item.stableKey) {
+            activeItem = item
+        } else {
+            settleActive()
+            replaceOrAppendExtensionActivity(item)
+            if (item.state == ToolActivityState.RUNNING) {
+                val existing = settledItems.indexOfLast { it.stableKey == item.stableKey }
+                if (existing >= 0) {
+                    settledItems = settledItems.toMutableList().also { it.removeAt(existing) }
+                }
+                activeItem = item
+            }
+        }
+        if (item.state != ToolActivityState.RUNNING) settleActive()
+        transientRunState = TaskDetailRunState.RUNNING
+    }
+
+    private fun parseExtensionToolActivity(event: JsonObject): TimelineItem.ToolActivity? {
+        val parsed = ExtensionToolActivityContract.parse(event) ?: return null
+        val identity = extensionActivityIdentity(parsed.identity)
+        return when (parsed.kind) {
+            ExtensionToolActivityKind.HOST_TOOL -> extensionHostToolActivity(parsed, identity)
+            ExtensionToolActivityKind.HTTPS -> extensionHttpsActivity(parsed, identity)
+        }
+    }
+
+    private fun extensionActivityIdentityOrNull(event: JsonObject): String? =
+        ExtensionToolActivityContract.identityOrNull(event)?.let(::extensionActivityIdentity)
+
+    private fun extensionHostToolActivity(
+        event: ExtensionToolActivityEvent,
+        identity: String,
+    ): TimelineItem.ToolActivity? {
+        val name = event.name ?: return null
+        val copy = event.targetTool?.let(EXTENSION_HOST_TOOL_COPY::get) ?: return null
+        val state = event.state.toUiState()
+        return TimelineItem.ToolActivity(
+            stableKey = identity,
+            toolCallId = identity,
+            title = when (state) {
+                ToolActivityState.RUNNING -> copy.running
+                ToolActivityState.SUCCESS -> copy.completed
+                ToolActivityState.FAILURE -> "${copy.subject} failed"
+                ToolActivityState.CANCELLED -> "${copy.subject} stopped"
+                ToolActivityState.UNSUPPORTED -> "Extension activity unavailable"
+            },
+            detail = buildString {
+                append("Extension · ").append(extensionDisplayName(name))
+                if (event.code != null) append(" · ").append(event.code)
+            },
+            state = state,
+            kind = ToolActivityKind.GENERIC,
+        )
+    }
+
+    private fun extensionHttpsActivity(
+        event: ExtensionToolActivityEvent,
+        identity: String,
+    ): TimelineItem.ToolActivity {
+        val state = event.state.toUiState()
+        val method = requireNotNull(event.method)
+        val host = requireNotNull(event.origin).removePrefix("https://")
+        val detail = buildList {
+            add(method)
+            add(host)
+            if (event.state == ExtensionToolActivityState.COMPLETED) {
+                add("HTTP ${event.status}")
+                add(extensionByteCount(requireNotNull(event.responseBytes)))
+                add("${requireNotNull(event.durationMillis)} ms")
+                requireNotNull(event.redirects).takeIf { it > 0 }?.let {
+                    add("$it redirect${if (it == 1) "" else "s"}")
+                }
+            }
+            event.code?.let(::add)
+        }.joinToString(" · ")
+        return TimelineItem.ToolActivity(
+            stableKey = identity,
+            toolCallId = identity,
+            title = when (state) {
+                ToolActivityState.RUNNING -> "Calling web service"
+                ToolActivityState.SUCCESS -> "Called web service"
+                ToolActivityState.FAILURE -> "Web request failed"
+                ToolActivityState.CANCELLED -> "Web request stopped"
+                ToolActivityState.UNSUPPORTED -> "Web activity unavailable"
+            },
+            detail = detail,
+            state = state,
+            kind = ToolActivityKind.WEB_ACCESS,
+        )
+    }
+
+    private fun ExtensionToolActivityState.toUiState(): ToolActivityState = when (this) {
+        ExtensionToolActivityState.RUNNING -> ToolActivityState.RUNNING
+        ExtensionToolActivityState.COMPLETED -> ToolActivityState.SUCCESS
+        ExtensionToolActivityState.FAILED -> ToolActivityState.FAILURE
+        ExtensionToolActivityState.CANCELLED -> ToolActivityState.CANCELLED
+    }
+
+    private fun replaceExtensionActivityWithUnsupported(
+        record: TaskDetailEventRecord,
+        identity: String?,
+    ) {
+        val stableKey = identity ?: "event:${record.streamId}:${record.sequence}:unsupported-extension-activity"
+        val fallback = TimelineItem.UnsupportedActivity(stableKey)
+        if (activeItem?.stableKey == stableKey) {
+            activeItem = fallback
+            settleActive()
+        } else {
+            val existing = settledItems.indexOfFirst { it.stableKey == stableKey }
+            settledItems = if (existing < 0) {
+                settledItems + fallback
+            } else {
+                settledItems.toMutableList().also { it[existing] = fallback }
+            }
+        }
+        transientRunState = TaskDetailRunState.RUNNING
+    }
+
+    private fun replaceOrAppendExtensionActivity(item: TimelineItem.ToolActivity) {
+        val existing = settledItems.indexOfFirst { it.stableKey == item.stableKey }
+        settledItems = if (existing < 0) {
+            settledItems + item
+        } else {
+            settledItems.toMutableList().also { it[existing] = item }
+        }
+    }
+
+    private fun extensionActivityIdentity(identity: String): String =
+        "extension-activity/${sha256(identity).take(24)}"
+
+    private fun extensionDisplayName(name: String): String = name
+        .split('_')
+        .joinToString(" ") { part -> part.replaceFirstChar(Char::uppercase) }
+
+    private fun extensionByteCount(bytes: Int): String = when {
+        bytes >= 1_048_576 -> "${bytes / 1_048_576} MB"
+        bytes >= 1_024 -> "${bytes / 1_024} KB"
+        else -> "$bytes B"
+    }
+
     private enum class WebActivity(
         val runningTitle: String,
         val completedTitle: String,
@@ -435,6 +590,12 @@ class PiUiReducer {
         SEARCH_AND_FETCH("Researching web", "Researched web"),
         GENERIC("Using web", "Used web"),
     }
+
+    private data class ExtensionHostToolCopy(
+        val running: String,
+        val completed: String,
+        val subject: String,
+    )
 
     private fun settleActive() {
         val active = activeItem ?: return
@@ -535,6 +696,20 @@ class PiUiReducer {
                         }
                     }
                     else -> output += TimelineItem.UnsupportedActivity("snapshot:${row.stableItemId}")
+                }
+                "phoneLocalExtensionActivity" -> {
+                    val event = message["event"] as? JsonObject
+                    val item = event?.let(::parseExtensionToolActivity)
+                    if (
+                        message.keys != EXTENSION_ACTIVITY_MESSAGE_KEYS ||
+                        item == null ||
+                        item.state == ToolActivityState.RUNNING
+                    ) {
+                        output += TimelineItem.UnsupportedActivity("snapshot:${row.stableItemId}")
+                    } else {
+                        val existing = output.indexOfFirst { it.stableKey == item.stableKey }
+                        if (existing < 0) output += item else output[existing] = item
+                    }
                 }
                 "assistant" -> projectAssistantMessage(row.stableItemId, message, output)
                 "toolResult" -> projectToolResult(row.stableItemId, message, output)
@@ -1469,6 +1644,28 @@ class PiUiReducer {
         const val MAX_PROVIDER_SOURCE_TITLE_CHARS = 240
         val PROVIDER_REQUEST_ID = Regex("^provider-[1-9][0-9]{0,8}$")
         val WEB_URL = Regex("^https?://[^\\s]+$", RegexOption.IGNORE_CASE)
+        val EXTENSION_ACTIVITY_MESSAGE_KEYS = setOf("role", "event")
+        val EXTENSION_HOST_TOOL_COPY = mapOf(
+            "device_capabilities_get" to ExtensionHostToolCopy(
+                "Checking mobile capabilities", "Checked mobile capabilities", "Mobile capability check",
+            ),
+            "device_media_list" to ExtensionHostToolCopy("Checking photos", "Checked photos", "Photo access"),
+            "device_calendar" to ExtensionHostToolCopy("Using calendar", "Used calendar", "Calendar step"),
+            "device_contacts" to ExtensionHostToolCopy("Using contacts", "Used contacts", "Contacts step"),
+            "device_location" to ExtensionHostToolCopy("Getting location", "Checked location", "Location step"),
+            "device_clipboard" to ExtensionHostToolCopy("Using clipboard", "Used clipboard", "Clipboard step"),
+            "device_notification" to ExtensionHostToolCopy(
+                "Using notifications", "Used notifications", "Notification step",
+            ),
+            "device_ui_inspect" to ExtensionHostToolCopy(
+                "Inspecting the interface", "Inspected the interface", "Interface inspection",
+            ),
+            "device_ui_action" to ExtensionHostToolCopy(
+                "Using the interface", "Used the interface", "Interface action",
+            ),
+            "device_packages_list" to ExtensionHostToolCopy("Checking apps", "Checked apps", "App check"),
+            "device_package_inspect" to ExtensionHostToolCopy("Inspecting an app", "Inspected an app", "App check"),
+        )
         const val MAX_CALENDAR_PRESENTATION_ITEMS = 5
         const val MAX_PRESENTATION_CHARS = 32_768
 

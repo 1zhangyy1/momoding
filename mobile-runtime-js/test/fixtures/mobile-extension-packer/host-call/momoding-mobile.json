@@ -1,0 +1,45 @@
+{
+  "profileVersion": 1,
+  "package": {
+    "id": "fixtures.host-call",
+    "name": "Sequential Host call fixture",
+    "version": "1.0.0",
+    "description": "A two-step Android Host Tool delegation contract fixture."
+  },
+  "source": {
+    "entrypoint": "./index.ts"
+  },
+  "tools": [
+    {
+      "name": "fixture_calendar_summary",
+      "label": "Fixture calendar summary",
+      "description": "Read capabilities and then query the calendar through declared Host tools.",
+      "promptSnippet": null,
+      "promptGuidelines": [],
+      "executionMode": "sequential",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string", "maxLength": 120 }
+        },
+        "required": ["query"],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "hostTools": [
+    {
+      "name": "capabilities",
+      "targetTool": "device_capabilities_get",
+      "capability": null
+    },
+    {
+      "name": "calendar",
+      "targetTool": "device_calendar",
+      "capability": "calendar"
+    }
+  ],
+  "capabilities": { "required": ["calendar"], "optional": [] },
+  "https": { "origins": [], "methods": [] },
+  "credentials": []
+}

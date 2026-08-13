@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "verify": "node scripts/verify-bundle.mjs",
     "verify:reproducible": "node scripts/verify-reproducible.mjs",
+    "pack:extension": "node scripts/mobile-extension-packer.mjs",
     "test": "node --test test/*.test.mjs",
     "check": "npm run typecheck && npm run build && npm run verify && npm run verify:reproducible && npm test"
   },

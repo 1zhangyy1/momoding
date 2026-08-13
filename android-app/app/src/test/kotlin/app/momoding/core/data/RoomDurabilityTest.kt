@@ -55,7 +55,7 @@ class RoomDurabilityTest {
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
         context.deleteDatabase(DATABASE_NAME)
-        tempRoot = Files.createTempDirectory("momoding-room-test-")
+        tempRoot = Files.createTempDirectory("codex-room-test-")
         database = openRobolectricDatabase()
     }
 
@@ -859,7 +859,7 @@ class RoomDurabilityTest {
     @Test
     fun `schema is versioned adds Android private file state and rejects main-thread access`() {
         val tables = onIo { database.momodingDao().tableNames() }.filterNot { it.startsWith("room_") }
-        assertEquals(16, MomodingDatabase.SCHEMA_VERSION)
+        assertEquals(19, MomodingDatabase.SCHEMA_VERSION)
         assertEquals(
             setOf(
                 "tasks",
@@ -881,6 +881,10 @@ class RoomDurabilityTest {
                 "task_child_agents",
                 "task_child_agent_events",
                 "skills",
+                "skill_package_files",
+                "extension_packages",
+                "extension_package_files",
+                "extension_package_state",
                 "attachments",
                 "android_metadata",
             ),
@@ -897,6 +901,10 @@ class RoomDurabilityTest {
             tables.filter { it == "task_child_agent_events" },
         )
         assertEquals(listOf("skills"), tables.filter { it == "skills" })
+        assertEquals(
+            listOf("skill_package_files"),
+            tables.filter { it == "skill_package_files" },
+        )
         assertEquals(listOf("attachments"), tables.filter { it == "attachments" })
         assertThrows(IllegalStateException::class.java) {
             database.momodingDao().task(TASK_ID)

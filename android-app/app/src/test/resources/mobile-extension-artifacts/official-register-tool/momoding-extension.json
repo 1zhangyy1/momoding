@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 2,
+  "id": "fixtures.official-register-tool",
+  "name": "Official registerTool fixture",
+  "version": "1.0.0",
+  "description": "A minimal official-shaped registerTool source fixture.",
+  "runtime": "pi-register-tool-v1",
+  "entrypoint": "dist/index.js",
+  "tools": [
+    {
+      "type": "pi-register-tool",
+      "name": "fixture_echo",
+      "label": "Fixture echo",
+      "description": "Return one bounded text value.",
+      "promptSnippet": null,
+      "promptGuidelines": [],
+      "executionMode": "sequential",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 160
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "hostTools": [],
+  "requiredCapabilities": [],
+  "optionalCapabilities": [],
+  "httpPolicy": {
+    "origins": [],
+    "methods": [],
+    "credentialSlots": []
+  },
+  "packageDigest": "96390030bb0509c40f0404cd2f0d6b4ad99f0d0569a90f1de73aad05257600c1"
+}

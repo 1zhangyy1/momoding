@@ -480,8 +480,8 @@ private fun SettingsRootPage(
                     SettingsDivider()
                     SettingsRow(
                         icon = Icons.Outlined.Extension,
-                        title = "Skills & tools",
-                        detail = "Manage what Momoding can use",
+                        title = "Skills & extensions",
+                        detail = "Add instructions and tools to Momoding",
                         value = "Manage",
                         modifier = action.modifier,
                         onClick = action.onClick,

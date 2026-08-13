@@ -13,37 +13,66 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.io.File
 import java.io.IOException
 import java.security.MessageDigest
+import java.util.concurrent.TimeUnit
 
 internal class AppUpdateDownloader(
     private val application: Application,
-    private val client: OkHttpClient = OkHttpClient(),
+    private val client: OkHttpClient = OkHttpClient.Builder()
+        .callTimeout(UPDATE_CALL_TIMEOUT_MINUTES, TimeUnit.MINUTES)
+        .build(),
 ) : AppUpdateDownload {
+    private val resumableDownloader = ResumableFileDownloader(client)
+
     override suspend fun download(
         release: AppRelease,
         onProgress: (Int?) -> Unit,
     ): File = withContext(Dispatchers.IO) {
         requireTrustedReleaseUrl(release.apk.downloadUrl)
         requireTrustedReleaseUrl(release.checksum.downloadUrl)
+        val files = AppUpdateFileStore(
+            File(application.cacheDir, UPDATE_DIRECTORY),
+        ).prepareFor(release)
         val expectedChecksum = downloadChecksum(release)
-        val updateDirectory = File(application.cacheDir, UPDATE_DIRECTORY).apply { mkdirs() }
-        val destination = File(updateDirectory, release.apk.name)
-        if (destination.isFile && sha256(destination) == expectedChecksum) {
-            validatePackage(destination, release)
-            return@withContext destination
+        val destination = files.destination
+        if (
+            destination.isFile &&
+            destination.length() == release.apk.sizeBytes &&
+            sha256(destination) == expectedChecksum
+        ) {
+            return@withContext try {
+                validatePackage(destination, release)
+                destination
+            } catch (error: Throwable) {
+                destination.delete()
+                throw error
+            }
         }
         destination.delete()
-        val partial = File(updateDirectory, "${release.apk.name}.part")
-        partial.delete()
+        val partial = files.partial
+        val partialBinding = files.binding
+        prepareBoundPartialDownload(
+            partial = partial,
+            binding = partialBinding,
+            expectedChecksum = expectedChecksum,
+            expectedSize = release.apk.sizeBytes,
+        )
+        if (!partial.isFile || partial.length() < release.apk.sizeBytes) {
+            resumableDownloader.download(release.apk, partial, onProgress)
+        }
+        val actualChecksum = sha256(partial)
+        if (actualChecksum != expectedChecksum) {
+            partial.delete()
+            partialBinding.delete()
+            error("Downloaded APK checksum does not match the release")
+        }
+        check(partial.renameTo(destination)) { "Could not finalize the downloaded APK" }
         try {
-            streamApk(release, partial, onProgress)
-            val actualChecksum = sha256(partial)
-            check(actualChecksum == expectedChecksum) { "Downloaded APK checksum does not match the release" }
-            check(partial.renameTo(destination)) { "Could not finalize the downloaded APK" }
             validatePackage(destination, release)
+            partialBinding.delete()
             destination
         } catch (error: Throwable) {
-            partial.delete()
             destination.delete()
+            partialBinding.delete()
             throw error
         }
     }
@@ -63,40 +92,6 @@ internal class AppUpdateDownloader(
             val match = CHECKSUM_LINE.find(text) ?: error("Release checksum is invalid")
             check(match.groupValues[2] == release.apk.name) { "Release checksum names another APK" }
             match.groupValues[1].lowercase()
-        }
-    }
-
-    private fun streamApk(
-        release: AppRelease,
-        partial: File,
-        onProgress: (Int?) -> Unit,
-    ) {
-        val request = Request.Builder()
-            .url(release.apk.downloadUrl)
-            .header("User-Agent", "Momoding-Android-Updater")
-            .build()
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) error("APK download returned HTTP ${response.code}")
-            val body = response.body
-            val contentLength = body.contentLength().takeIf { it > 0 }
-            check(contentLength == null || contentLength <= MAX_APK_BYTES) {
-                "Release APK is too large"
-            }
-            var total = 0L
-            body.byteStream().use { input ->
-                partial.outputStream().buffered().use { output ->
-                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                    while (true) {
-                        val read = input.read(buffer)
-                        if (read < 0) break
-                        total += read
-                        check(total <= MAX_APK_BYTES) { "Release APK is too large" }
-                        output.write(buffer, 0, read)
-                        onProgress(contentLength?.let { ((total * 100L) / it).toInt().coerceIn(0, 100) })
-                    }
-                }
-            }
-            check(total > 0L) { "Downloaded APK is empty" }
         }
     }
 
@@ -173,8 +168,8 @@ internal class AppUpdateDownloader(
 
     private companion object {
         const val UPDATE_DIRECTORY = "app-updates/v1"
-        const val MAX_APK_BYTES = 250L * 1024L * 1024L
         const val MAX_CHECKSUM_BYTES = 4L * 1024L
+        const val UPDATE_CALL_TIMEOUT_MINUTES = 30L
         val CHECKSUM_LINE = Regex("(?m)^([0-9a-fA-F]{64})[ \\t]+\\*?([^\\r\\n]+)$")
     }
 }

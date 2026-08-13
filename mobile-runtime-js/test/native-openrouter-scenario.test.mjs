@@ -3580,6 +3580,8 @@ test("Pi loadSkills authoritatively parses one bounded mobile SKILL.md", async (
     content: "# Review\nReturn PASS or FAIL with one reason.",
     contentSha256: parsed.resource.contentSha256,
     disableModelInvocation: true,
+    packageDigest: parsed.resource.contentSha256,
+    packageFileCount: 1,
   });
   assert.match(parsed.resource.contentSha256, /^[0-9a-f]{64}$/);
 
@@ -3690,10 +3692,78 @@ test("mobile Skill parsing fails closed for invalid metadata, bounds, and HTML r
   assert.deepEqual(JSON.parse(call(context, "closeJson")), { ok: true, closed: true });
 });
 
+test("enabled complete Skill package exposes one bounded on-demand resource tool", async () => {
+  const context = await bootRuntime();
+  const parsed = await parseSkillDocument(context, [
+    "---",
+    "name: mobile-review",
+    "description: Reviews a bounded Android change",
+    "---",
+    "# Review",
+    "Return PASS or FAIL with one reason.",
+  ].join("\n"));
+  const packaged = {
+    ...parsed.resource,
+    packageDigest: "a".repeat(64),
+    packageFileCount: 3,
+  };
+  JSON.parse(call(
+    context,
+    "startNativeOpenRouterTaskSessionJson",
+    JSON.stringify("task-skill-package-resource"),
+    JSON.stringify("Use the installed review Skill."),
+    JSON.stringify("deepseek/deepseek-v4-pro"),
+    "undefined",
+    "false",
+    JSON.stringify(JSON.stringify([packaged])),
+  ));
+
+  const first = await nextProviderRequest(context);
+  assert.equal(
+    first.tools.some((tool) => tool.function.name === "skill_resource"),
+    true,
+  );
+  assert.match(JSON.stringify(first.messages), /mobile-review/);
+  finishToolCall(
+    context,
+    first,
+    "call-skill-resource",
+    "skill_resource",
+    { action: "list", skillName: "mobile-review", prefix: "references", offset: 0, limit: 64 },
+  );
+  const nativeRequest = await nextNativeToolRequest(context);
+  assert.equal(nativeRequest.kind, "android_skill_tool");
+  assert.equal(nativeRequest.toolName, "skill_resource");
+  assert.deepEqual(nativeRequest.arguments, {
+    action: "list",
+    skillName: "mobile-review",
+    prefix: "references",
+    offset: 0,
+    limit: 64,
+  });
+  resolveNativeTool(context, nativeRequest.id, {
+    ok: true,
+    action: "list",
+    skillName: "mobile-review",
+    items: [{
+      path: "references/checklist.md",
+      mimeType: "text/markdown",
+      byteSize: 12,
+      sha256: "b".repeat(64),
+    }],
+    count: 1,
+  });
+  const afterTool = await nextProviderRequest(context);
+  assert.match(JSON.stringify(afterTool.messages), /references\/checklist\.md/);
+  finishTextRequest(context, afterTool, "The package reference is available.");
+  await waitForTerminal(context);
+  assert.deepEqual(JSON.parse(call(context, "closeJson")), { ok: true, closed: true });
+});
+
 test("settled Harness replaces Skill resources exactly once and skips an identical set", async () => {
   const context = await bootRuntime();
   const parsed = await parseSkillDocument(context, validSkillDocument());
-  const resource = parsed.resource;
+  const resource = { ...parsed.resource, disableModelInvocation: false };
 
   JSON.parse(call(
     context,
@@ -3721,6 +3791,21 @@ test("settled Harness replaces Skill resources exactly once and skips an identic
   const resourceEvent = status.events.findLast((event) => event.type === "resources_update");
   assert.deepEqual(resourceEvent.skillNames, ["mobile-review"]);
   assert.equal(JSON.stringify(resourceEvent).includes(resource.content), false);
+
+  JSON.parse(call(
+    context,
+    "continueNativeOpenRouterTaskPromptJson",
+    JSON.stringify("Use the newly enabled Skill."),
+  ));
+  const afterSync = await nextProviderRequest(context);
+  assert.equal(
+    afterSync.tools.some((tool) => tool.function.name === "skill_resource"),
+    true,
+    "a Skill enabled after Task creation must still have its resource Tool",
+  );
+  assert.match(JSON.stringify(afterSync.messages), /\/mobile-skills\/mobile-review\/SKILL\.md/);
+  finishTextRequest(context, afterSync, "The enabled Skill is available.");
+  status = await waitForTerminal(context);
 
   const eventCount = status.events.length;
   JSON.parse(call(
@@ -3753,6 +3838,49 @@ test("settled Harness replaces Skill resources exactly once and skips an identic
     ),
     /PI_MOBILE_SKILL_NAME_DUPLICATED/,
   );
+  assert.deepEqual(JSON.parse(call(context, "closeJson")), { ok: true, closed: true });
+});
+
+test("Skill resource sync keeps the Plan Mode restore snapshot exact", async () => {
+  const context = await bootRuntime();
+  const parsed = await parseSkillDocument(context, validSkillDocument());
+  const resource = { ...parsed.resource, disableModelInvocation: false };
+  JSON.parse(call(
+    context,
+    "startNativeOpenRouterTaskSessionJson",
+    JSON.stringify("task-skill-plan-sync"),
+    JSON.stringify("Start one ordinary turn."),
+    JSON.stringify("deepseek/deepseek-v4-pro"),
+  ));
+  const first = await nextProviderRequest(context);
+  finishTextRequest(context, first, "Ready.");
+  await waitForTerminal(context);
+
+  JSON.parse(call(context, "setNativeOpenRouterTaskPlanModeJson", "true"));
+  await waitForTerminal(context);
+  JSON.parse(call(
+    context,
+    "setNativeOpenRouterTaskResourcesJson",
+    JSON.stringify(JSON.stringify([resource])),
+  ));
+  await waitForTerminal(context);
+  JSON.parse(call(context, "setNativeOpenRouterTaskPlanModeJson", "false"));
+  let status = await waitForTerminal(context);
+  assert.equal(status.activeToolNames.includes("skill_resource"), true);
+
+  JSON.parse(call(context, "setNativeOpenRouterTaskPlanModeJson", "true"));
+  await waitForTerminal(context);
+  JSON.parse(call(
+    context,
+    "setNativeOpenRouterTaskResourcesJson",
+    JSON.stringify(JSON.stringify([])),
+  ));
+  await waitForTerminal(context);
+  JSON.parse(call(context, "setNativeOpenRouterTaskPlanModeJson", "false"));
+  status = await waitForTerminal(context);
+  assert.equal(status.activeToolNames.includes("skill_resource"), false);
+  assert.equal(status.commandError, null);
+  assert.deepEqual(JSON.parse(call(context, "drainNativeProviderRequestsJson")), []);
   assert.deepEqual(JSON.parse(call(context, "closeJson")), { ok: true, closed: true });
 });
 
