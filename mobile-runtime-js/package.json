@@ -22,6 +22,6 @@
   },
   "devDependencies": {
     "esbuild": "0.27.2",
-    "typescript": "5.9.3"
+    "typescript": "7.0.2"
   }
 }
