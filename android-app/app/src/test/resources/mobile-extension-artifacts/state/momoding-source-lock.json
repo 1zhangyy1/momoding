@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "profile": "momoding-pi-mobile-v1",
+  "kind": "local",
+  "packageName": "@momoding-fixtures/state",
+  "packageVersion": "1.0.0",
+  "sourceDigest": "730a75314cd92151823c1ecf88075ffd85dac1d1c157cbce90384c9f78150e39",
+  "registryIntegrity": null,
+  "repositoryUrl": null,
+  "revision": null,
+  "packer": {
+    "node": "22.22.3",
+    "typescript": "5.9.3",
+    "esbuild": "0.27.2"
+  }
+}

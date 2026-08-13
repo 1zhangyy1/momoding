@@ -1,0 +1,2328 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 17,
+    "identityHash": "fed26eb7cd2c5ee2d7217efd27e8d1a0",
+    "entities": [
+      {
+        "tableName": "tasks",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`taskId` TEXT NOT NULL, `title` TEXT NOT NULL, `runState` TEXT, `recoveryState` TEXT, `readState` TEXT NOT NULL, `attentionState` TEXT NOT NULL, `streamId` TEXT, `throughSequence` INTEGER NOT NULL, `snapshotVersion` INTEGER, `windowStart` INTEGER NOT NULL, `windowEndExclusive` INTEGER NOT NULL, `nextStageBatchOrdinal` INTEGER NOT NULL, `queueJson` TEXT NOT NULL, `piSessionId` TEXT, `isStreaming` INTEGER NOT NULL, `updatedAtMillis` INTEGER NOT NULL, `listedByHost` INTEGER NOT NULL DEFAULT 1, `lastListSyncGeneration` TEXT, `lastListRevision` INTEGER, `hostUpdatedAtMillis` INTEGER, `titleSource` TEXT NOT NULL DEFAULT 'LEGACY', `pinnedAtMillis` INTEGER DEFAULT NULL, `archivedAtMillis` INTEGER DEFAULT NULL, `approvalMode` TEXT NOT NULL DEFAULT 'REQUEST_APPROVAL', `failureKind` TEXT DEFAULT NULL, `failureMessage` TEXT DEFAULT NULL, `failureRecovery` TEXT DEFAULT NULL, PRIMARY KEY(`taskId`))",
+        "fields": [
+          {
+            "fieldPath": "taskId",
+            "columnName": "taskId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "runState",
+            "columnName": "runState",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "recoveryState",
+            "columnName": "recoveryState",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "readState",
+            "columnName": "readState",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attentionState",
+            "columnName": "attentionState",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "streamId",
+            "columnName": "streamId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "throughSequence",
+            "columnName": "throughSequence",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "snapshotVersion",
+            "columnName": "snapshotVersion",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "windowStart",
+            "columnName": "windowStart",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "windowEndExclusive",
+            "columnName": "windowEndExclusive",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nextStageBatchOrdinal",
+            "columnName": "nextStageBatchOrdinal",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "queueJson",
+            "columnName": "queueJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "piSessionId",
+            "columnName": "piSessionId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "isStreaming",
+            "columnName": "isStreaming",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtMillis",
+            "columnName": "updatedAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "listedByHost",
+            "columnName": "listedByHost",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "1"
+          },
+          {
+            "fieldPath": "lastListSyncGeneration",
+            "columnName": "lastListSyncGeneration",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastListRevision",
+            "columnName": "lastListRevision",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "hostUpdatedAtMillis",
+            "columnName": "hostUpdatedAtMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "titleSource",
+            "columnName": "titleSource",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'LEGACY'"
+          },
+          {
+            "fieldPath": "pinnedAtMillis",
+            "columnName": "pinnedAtMillis",
+            "affinity": "INTEGER",
+            "defaultValue": "NULL"
+          },
+          {
+            "fieldPath": "archivedAtMillis",
+            "columnName": "archivedAtMillis",
+            "affinity": "INTEGER",
+            "defaultValue": "NULL"
+          },
+          {
+            "fieldPath": "approvalMode",
+            "columnName": "approvalMode",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'REQUEST_APPROVAL'"
+          },
+          {
+            "fieldPath": "failureKind",
+            "columnName": "failureKind",
+            "affinity": "TEXT",
+            "defaultValue": "NULL"
+          },
+          {
+            "fieldPath": "failureMessage",
+            "columnName": "failureMessage",
+            "affinity": "TEXT",
+            "defaultValue": "NULL"
+          },
+          {
+            "fieldPath": "failureRecovery",
+            "columnName": "failureRecovery",
+            "affinity": "TEXT",
+            "defaultValue": "NULL"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "taskId"
+          ]
+        }
+      },
+      {
+        "tableName": "pi_session_snapshots",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`taskId` TEXT NOT NULL, `piSessionId` TEXT NOT NULL, `entriesJson` TEXT NOT NULL, `schemaVersion` INTEGER NOT NULL, `updatedAtMillis` INTEGER NOT NULL, PRIMARY KEY(`taskId`), FOREIGN KEY(`taskId`) REFERENCES `tasks`(`taskId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "taskId",
+            "columnName": "taskId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "piSessionId",
+            "columnName": "piSessionId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "entriesJson",
+            "columnName": "entriesJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "schemaVersion",
+            "columnName": "schemaVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtMillis",
+            "columnName": "updatedAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "taskId"
+          ]
+        },
+        "foreignKeys": [
+          {
+            "table": "tasks",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "taskId"
+            ],
+            "referencedColumns": [
+              "taskId"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "task_goals",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`taskId` TEXT NOT NULL, `goalId` TEXT NOT NULL, `instruction` TEXT NOT NULL, `state` TEXT NOT NULL, `progressSummary` TEXT, `progressMarker` TEXT, `terminalReason` TEXT, `pauseReason` TEXT, `automaticTurnCount` INTEGER NOT NULL, `lastTurnIndex` INTEGER NOT NULL, `nextTurnClaimed` INTEGER NOT NULL, `generation` INTEGER NOT NULL, `startedAtMillis` INTEGER NOT NULL, `updatedAtMillis` INTEGER NOT NULL, PRIMARY KEY(`taskId`), FOREIGN KEY(`taskId`) REFERENCES `tasks`(`taskId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "taskId",
+            "columnName": "taskId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "goalId",
+            "columnName": "goalId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instruction",
+            "columnName": "instruction",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "progressSummary",
+            "columnName": "progressSummary",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "progressMarker",
+            "columnName": "progressMarker",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "terminalReason",
+            "columnName": "terminalReason",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "pauseReason",
+            "columnName": "pauseReason",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "automaticTurnCount",
+            "columnName": "automaticTurnCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastTurnIndex",
+            "columnName": "lastTurnIndex",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nextTurnClaimed",
+            "columnName": "nextTurnClaimed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "generation",
+            "columnName": "generation",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAtMillis",
+            "columnName": "startedAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtMillis",
+            "columnName": "updatedAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "taskId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_task_goals_goalId",
+            "unique": true,
+            "columnNames": [
+              "goalId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_task_goals_goalId` ON `${TABLE_NAME}` (`goalId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "tasks",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "taskId"
+            ],
+            "referencedColumns": [
+              "taskId"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "task_child_agents",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`taskId` TEXT NOT NULL, `parentToolCallId` TEXT NOT NULL, `childId` TEXT NOT NULL, `childName` TEXT NOT NULL, `instruction` TEXT NOT NULL, `state` TEXT NOT NULL, `resultSummary` TEXT, `resultText` TEXT, `resultTruncated` INTEGER NOT NULL, `terminalReason` TEXT, `stopReason` TEXT, `model` TEXT, `turnCount` INTEGER NOT NULL, `inputTokens` INTEGER NOT NULL, `outputTokens` INTEGER NOT NULL, `cacheReadTokens` INTEGER NOT NULL, `cacheWriteTokens` INTEGER NOT NULL, `contextTokens` INTEGER NOT NULL, `costUsd` REAL NOT NULL, `eventTypesJson` TEXT NOT NULL, `eventCount` INTEGER NOT NULL, `createdAtMillis` INTEGER NOT NULL, `updatedAtMillis` INTEGER NOT NULL, PRIMARY KEY(`taskId`, `parentToolCallId`), FOREIGN KEY(`taskId`) REFERENCES `tasks`(`taskId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "taskId",
+            "columnName": "taskId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "parentToolCallId",
+            "columnName": "parentToolCallId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "childId",
+            "columnName": "childId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "childName",
+            "columnName": "childName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instruction",
+            "columnName": "instruction",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "resultSummary",
+            "columnName": "resultSummary",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "resultText",
+            "columnName": "resultText",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "resultTruncated",
+            "columnName": "resultTruncated",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "terminalReason",
+            "columnName": "terminalReason",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "stopReason",
+            "columnName": "stopReason",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "model",
+            "columnName": "model",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "turnCount",
+            "columnName": "turnCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "inputTokens",
+            "columnName": "inputTokens",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "outputTokens",
+            "columnName": "outputTokens",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cacheReadTokens",
+            "columnName": "cacheReadTokens",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cacheWriteTokens",
+            "columnName": "cacheWriteTokens",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contextTokens",
+            "columnName": "contextTokens",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "costUsd",
+            "columnName": "costUsd",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "eventTypesJson",
+            "columnName": "eventTypesJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "eventCount",
+            "columnName": "eventCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtMillis",
+            "columnName": "createdAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtMillis",
+            "columnName": "updatedAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "taskId",
+            "parentToolCallId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_task_child_agents_taskId",
+            "unique": false,
+            "columnNames": [
+              "taskId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_task_child_agents_taskId` ON `${TABLE_NAME}` (`taskId`)"
+          },
+          {
+            "name": "index_task_child_agents_taskId_childId",
+            "unique": false,
+            "columnNames": [
+              "taskId",
+              "childId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_task_child_agents_taskId_childId` ON `${TABLE_NAME}` (`taskId`, `childId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "tasks",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "taskId"
+            ],
+            "referencedColumns": [
+              "taskId"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "task_child_agent_events",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`taskId` TEXT NOT NULL, `parentToolCallId` TEXT NOT NULL, `eventOrdinal` INTEGER NOT NULL, `childId` TEXT NOT NULL, `childName` TEXT NOT NULL, `eventType` TEXT NOT NULL, `eventJson` TEXT NOT NULL, `digest` TEXT NOT NULL, PRIMARY KEY(`taskId`, `parentToolCallId`, `eventOrdinal`), FOREIGN KEY(`taskId`, `parentToolCallId`) REFERENCES `task_child_agents`(`taskId`, `parentToolCallId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "taskId",
+            "columnName": "taskId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "parentToolCallId",
+            "columnName": "parentToolCallId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "eventOrdinal",
+            "columnName": "eventOrdinal",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "childId",
+            "columnName": "childId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "childName",
+            "columnName": "childName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "eventType",
+            "columnName": "eventType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "eventJson",
+            "columnName": "eventJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "digest",
+            "columnName": "digest",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "taskId",
+            "parentToolCallId",
+            "eventOrdinal"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_task_child_agent_events_taskId_parentToolCallId",
+            "unique": false,
+            "columnNames": [
+              "taskId",
+              "parentToolCallId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_task_child_agent_events_taskId_parentToolCallId` ON `${TABLE_NAME}` (`taskId`, `parentToolCallId`)"
+          },
+          {
+            "name": "index_task_child_agent_events_taskId_childId",
+            "unique": false,
+            "columnNames": [
+              "taskId",
+              "childId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_task_child_agent_events_taskId_childId` ON `${TABLE_NAME}` (`taskId`, `childId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "task_child_agents",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "taskId",
+              "parentToolCallId"
+            ],
+            "referencedColumns": [
+              "taskId",
+              "parentToolCallId"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "skills",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`skillId` TEXT NOT NULL, `source` TEXT NOT NULL, `name` TEXT NOT NULL, `description` TEXT NOT NULL, `content` TEXT NOT NULL, `contentSha256` TEXT NOT NULL, `disableModelInvocation` INTEGER NOT NULL, `enabled` INTEGER NOT NULL, `availability` TEXT NOT NULL, `diagnosticCode` TEXT, `diagnosticMessage` TEXT, `createdAtMillis` INTEGER NOT NULL, `updatedAtMillis` INTEGER NOT NULL, PRIMARY KEY(`skillId`))",
+        "fields": [
+          {
+            "fieldPath": "skillId",
+            "columnName": "skillId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "content",
+            "columnName": "content",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contentSha256",
+            "columnName": "contentSha256",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "disableModelInvocation",
+            "columnName": "disableModelInvocation",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "enabled",
+            "columnName": "enabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "availability",
+            "columnName": "availability",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "diagnosticCode",
+            "columnName": "diagnosticCode",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "diagnosticMessage",
+            "columnName": "diagnosticMessage",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAtMillis",
+            "columnName": "createdAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtMillis",
+            "columnName": "updatedAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "skillId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_skills_name",
+            "unique": true,
+            "columnNames": [
+              "name"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_skills_name` ON `${TABLE_NAME}` (`name`)"
+          }
+        ]
+      },
+      {
+        "tableName": "skill_package_files",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`skillId` TEXT NOT NULL, `relativePath` TEXT NOT NULL, `mimeType` TEXT NOT NULL, `byteSize` INTEGER NOT NULL, `contentSha256` TEXT NOT NULL, `content` BLOB NOT NULL, PRIMARY KEY(`skillId`, `relativePath`), FOREIGN KEY(`skillId`) REFERENCES `skills`(`skillId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "skillId",
+            "columnName": "skillId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "relativePath",
+            "columnName": "relativePath",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mimeType",
+            "columnName": "mimeType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "byteSize",
+            "columnName": "byteSize",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contentSha256",
+            "columnName": "contentSha256",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "content",
+            "columnName": "content",
+            "affinity": "BLOB",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "skillId",
+            "relativePath"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_skill_package_files_skillId",
+            "unique": false,
+            "columnNames": [
+              "skillId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_skill_package_files_skillId` ON `${TABLE_NAME}` (`skillId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "skills",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "skillId"
+            ],
+            "referencedColumns": [
+              "skillId"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "raw_pi_events",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`taskId` TEXT NOT NULL, `sequence` INTEGER NOT NULL, `streamId` TEXT NOT NULL, `digest` TEXT NOT NULL, `rawEnvelope` BLOB NOT NULL, `eventJson` TEXT NOT NULL, PRIMARY KEY(`taskId`, `sequence`), FOREIGN KEY(`taskId`) REFERENCES `tasks`(`taskId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "taskId",
+            "columnName": "taskId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sequence",
+            "columnName": "sequence",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "streamId",
+            "columnName": "streamId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "digest",
+            "columnName": "digest",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rawEnvelope",
+            "columnName": "rawEnvelope",
+            "affinity": "BLOB",
+            "notNull": true
+          },
+          {
+            "fieldPath": "eventJson",
+            "columnName": "eventJson",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "taskId",
+            "sequence"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_raw_pi_events_taskId",
+            "unique": false,
+            "columnNames": [
+              "taskId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_raw_pi_events_taskId` ON `${TABLE_NAME}` (`taskId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "tasks",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "taskId"
+            ],
+            "referencedColumns": [
+              "taskId"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "pending_resync",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`taskId` TEXT NOT NULL, `reason` TEXT NOT NULL, `requestedStreamId` TEXT NOT NULL, `currentStreamId` TEXT NOT NULL, `snapshotVersion` INTEGER NOT NULL, PRIMARY KEY(`taskId`), FOREIGN KEY(`taskId`) REFERENCES `tasks`(`taskId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "taskId",
+            "columnName": "taskId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reason",
+            "columnName": "reason",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "requestedStreamId",
+            "columnName": "requestedStreamId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "currentStreamId",
+            "columnName": "currentStreamId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "snapshotVersion",
+            "columnName": "snapshotVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "taskId"
+          ]
+        },
+        "foreignKeys": [
+          {
+            "table": "tasks",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "taskId"
+            ],
+            "referencedColumns": [
+              "taskId"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "staged_raw_frames",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`taskId` TEXT NOT NULL, `batchOrdinal` INTEGER NOT NULL, `frameOrdinal` INTEGER NOT NULL, `batchKind` TEXT NOT NULL, `kind` TEXT NOT NULL, `rawLogicalFrame` BLOB NOT NULL, `sha256` TEXT NOT NULL, `byteCount` INTEGER NOT NULL, PRIMARY KEY(`taskId`, `batchOrdinal`, `frameOrdinal`), FOREIGN KEY(`taskId`) REFERENCES `tasks`(`taskId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "taskId",
+            "columnName": "taskId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "batchOrdinal",
+            "columnName": "batchOrdinal",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "frameOrdinal",
+            "columnName": "frameOrdinal",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "batchKind",
+            "columnName": "batchKind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rawLogicalFrame",
+            "columnName": "rawLogicalFrame",
+            "affinity": "BLOB",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sha256",
+            "columnName": "sha256",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "byteCount",
+            "columnName": "byteCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "taskId",
+            "batchOrdinal",
+            "frameOrdinal"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_staged_raw_frames_taskId",
+            "unique": false,
+            "columnNames": [
+              "taskId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_staged_raw_frames_taskId` ON `${TABLE_NAME}` (`taskId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "tasks",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "taskId"
+            ],
+            "referencedColumns": [
+              "taskId"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "timeline_projections",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`taskId` TEXT NOT NULL, `stableItemId` TEXT NOT NULL, `ordinal` INTEGER NOT NULL, `kind` TEXT NOT NULL, `rawPayload` TEXT NOT NULL, `presentationJson` TEXT NOT NULL, PRIMARY KEY(`taskId`, `stableItemId`), FOREIGN KEY(`taskId`) REFERENCES `tasks`(`taskId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "taskId",
+            "columnName": "taskId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stableItemId",
+            "columnName": "stableItemId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ordinal",
+            "columnName": "ordinal",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rawPayload",
+            "columnName": "rawPayload",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "presentationJson",
+            "columnName": "presentationJson",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "taskId",
+            "stableItemId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_timeline_projections_taskId_ordinal",
+            "unique": true,
+            "columnNames": [
+              "taskId",
+              "ordinal"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_timeline_projections_taskId_ordinal` ON `${TABLE_NAME}` (`taskId`, `ordinal`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "tasks",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "taskId"
+            ],
+            "referencedColumns": [
+              "taskId"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "pending_attention",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`callId` TEXT NOT NULL, `taskId` TEXT NOT NULL, `toolName` TEXT NOT NULL, `originFocusKey` TEXT NOT NULL, `responseState` TEXT NOT NULL, `selectedOptionIndex` INTEGER, `customAnswer` TEXT NOT NULL, `selectionStart` INTEGER NOT NULL, `selectionEnd` INTEGER NOT NULL, `validationCode` TEXT, `dismissedAtMillis` INTEGER, `terminalDisplayJson` TEXT, `updatedAtMillis` INTEGER NOT NULL, PRIMARY KEY(`callId`), FOREIGN KEY(`taskId`, `callId`) REFERENCES `device_operations`(`taskId`, `callId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "callId",
+            "columnName": "callId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "taskId",
+            "columnName": "taskId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "toolName",
+            "columnName": "toolName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "originFocusKey",
+            "columnName": "originFocusKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "responseState",
+            "columnName": "responseState",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "selectedOptionIndex",
+            "columnName": "selectedOptionIndex",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "customAnswer",
+            "columnName": "customAnswer",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "selectionStart",
+            "columnName": "selectionStart",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "selectionEnd",
+            "columnName": "selectionEnd",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "validationCode",
+            "columnName": "validationCode",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "dismissedAtMillis",
+            "columnName": "dismissedAtMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "terminalDisplayJson",
+            "columnName": "terminalDisplayJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "updatedAtMillis",
+            "columnName": "updatedAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "callId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_pending_attention_taskId_callId",
+            "unique": true,
+            "columnNames": [
+              "taskId",
+              "callId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_pending_attention_taskId_callId` ON `${TABLE_NAME}` (`taskId`, `callId`)"
+          },
+          {
+            "name": "index_pending_attention_taskId_responseState",
+            "unique": false,
+            "columnNames": [
+              "taskId",
+              "responseState"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_pending_attention_taskId_responseState` ON `${TABLE_NAME}` (`taskId`, `responseState`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "device_operations",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "taskId",
+              "callId"
+            ],
+            "referencedColumns": [
+              "taskId",
+              "callId"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "device_operations",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`callId` TEXT NOT NULL, `taskId` TEXT NOT NULL, `piToolCallId` TEXT NOT NULL, `deviceId` TEXT NOT NULL, `toolName` TEXT NOT NULL, `argumentsCanonicalJson` TEXT NOT NULL, `sideEffect` INTEGER NOT NULL, `operationId` TEXT, `expiresAt` TEXT NOT NULL, `capabilityVersion` INTEGER NOT NULL, `requestSha256` TEXT NOT NULL, `ledgerState` TEXT NOT NULL, `terminalKind` TEXT, `terminalFrameCanonicalJson` TEXT, `terminalSha256` TEXT, `hostObservationState` TEXT, `cancelObservationReason` TEXT, `cancelObservedAtMillis` INTEGER, `deliveryState` TEXT NOT NULL, `progressSequence` INTEGER NOT NULL, `receivedAtMillis` INTEGER NOT NULL, `updatedAtMillis` INTEGER NOT NULL, PRIMARY KEY(`callId`), FOREIGN KEY(`taskId`) REFERENCES `tasks`(`taskId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "callId",
+            "columnName": "callId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "taskId",
+            "columnName": "taskId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "piToolCallId",
+            "columnName": "piToolCallId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deviceId",
+            "columnName": "deviceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "toolName",
+            "columnName": "toolName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "argumentsCanonicalJson",
+            "columnName": "argumentsCanonicalJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sideEffect",
+            "columnName": "sideEffect",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "operationId",
+            "columnName": "operationId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "expiresAt",
+            "columnName": "expiresAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "capabilityVersion",
+            "columnName": "capabilityVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "requestSha256",
+            "columnName": "requestSha256",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ledgerState",
+            "columnName": "ledgerState",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "terminalKind",
+            "columnName": "terminalKind",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "terminalFrameCanonicalJson",
+            "columnName": "terminalFrameCanonicalJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "terminalSha256",
+            "columnName": "terminalSha256",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "hostObservationState",
+            "columnName": "hostObservationState",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "cancelObservationReason",
+            "columnName": "cancelObservationReason",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "cancelObservedAtMillis",
+            "columnName": "cancelObservedAtMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "deliveryState",
+            "columnName": "deliveryState",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "progressSequence",
+            "columnName": "progressSequence",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "receivedAtMillis",
+            "columnName": "receivedAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtMillis",
+            "columnName": "updatedAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "callId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_device_operations_taskId_callId",
+            "unique": true,
+            "columnNames": [
+              "taskId",
+              "callId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_device_operations_taskId_callId` ON `${TABLE_NAME}` (`taskId`, `callId`)"
+          },
+          {
+            "name": "index_device_operations_operationId",
+            "unique": true,
+            "columnNames": [
+              "operationId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_device_operations_operationId` ON `${TABLE_NAME}` (`operationId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "tasks",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "taskId"
+            ],
+            "referencedColumns": [
+              "taskId"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "host_pending_attention_observations",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`taskId` TEXT NOT NULL, `ordinal` INTEGER NOT NULL, `callId` TEXT, `toolName` TEXT, `argumentsJson` TEXT, `state` TEXT, `expiresAt` TEXT, `originFocusKey` TEXT, `terminalResultJson` TEXT, `rawPayload` TEXT NOT NULL, PRIMARY KEY(`taskId`, `ordinal`), FOREIGN KEY(`taskId`) REFERENCES `tasks`(`taskId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "taskId",
+            "columnName": "taskId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ordinal",
+            "columnName": "ordinal",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "callId",
+            "columnName": "callId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "toolName",
+            "columnName": "toolName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "argumentsJson",
+            "columnName": "argumentsJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "expiresAt",
+            "columnName": "expiresAt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "originFocusKey",
+            "columnName": "originFocusKey",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "terminalResultJson",
+            "columnName": "terminalResultJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "rawPayload",
+            "columnName": "rawPayload",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "taskId",
+            "ordinal"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_host_pending_attention_observations_taskId",
+            "unique": false,
+            "columnNames": [
+              "taskId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_host_pending_attention_observations_taskId` ON `${TABLE_NAME}` (`taskId`)"
+          },
+          {
+            "name": "index_host_pending_attention_observations_callId",
+            "unique": false,
+            "columnNames": [
+              "callId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_host_pending_attention_observations_callId` ON `${TABLE_NAME}` (`callId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "tasks",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "taskId"
+            ],
+            "referencedColumns": [
+              "taskId"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "host_device_call_observations",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`taskId` TEXT NOT NULL, `callId` TEXT NOT NULL, `operationId` TEXT, `toolName` TEXT, `hostState` TEXT NOT NULL, `terminalSummaryJson` TEXT, `ordinal` INTEGER NOT NULL, PRIMARY KEY(`taskId`, `callId`), FOREIGN KEY(`taskId`) REFERENCES `tasks`(`taskId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "taskId",
+            "columnName": "taskId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "callId",
+            "columnName": "callId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "operationId",
+            "columnName": "operationId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "toolName",
+            "columnName": "toolName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "hostState",
+            "columnName": "hostState",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "terminalSummaryJson",
+            "columnName": "terminalSummaryJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "ordinal",
+            "columnName": "ordinal",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "taskId",
+            "callId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_host_device_call_observations_taskId",
+            "unique": false,
+            "columnNames": [
+              "taskId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_host_device_call_observations_taskId` ON `${TABLE_NAME}` (`taskId`)"
+          },
+          {
+            "name": "index_host_device_call_observations_operationId",
+            "unique": false,
+            "columnNames": [
+              "operationId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_host_device_call_observations_operationId` ON `${TABLE_NAME}` (`operationId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "tasks",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "taskId"
+            ],
+            "referencedColumns": [
+              "taskId"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "outbound_commands",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`requestId` TEXT NOT NULL, `commandId` TEXT, `kind` TEXT NOT NULL, `taskId` TEXT, `canonicalPayload` TEXT NOT NULL, `payloadSha256` TEXT NOT NULL, `state` TEXT NOT NULL, `responseJson` TEXT, `responseSha256` TEXT, `stopFenceState` TEXT, `createdAtMillis` INTEGER NOT NULL, `updatedAtMillis` INTEGER NOT NULL, PRIMARY KEY(`requestId`))",
+        "fields": [
+          {
+            "fieldPath": "requestId",
+            "columnName": "requestId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "commandId",
+            "columnName": "commandId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "taskId",
+            "columnName": "taskId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "canonicalPayload",
+            "columnName": "canonicalPayload",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "payloadSha256",
+            "columnName": "payloadSha256",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "responseJson",
+            "columnName": "responseJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "responseSha256",
+            "columnName": "responseSha256",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "stopFenceState",
+            "columnName": "stopFenceState",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAtMillis",
+            "columnName": "createdAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtMillis",
+            "columnName": "updatedAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "requestId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_outbound_commands_commandId",
+            "unique": true,
+            "columnNames": [
+              "commandId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_outbound_commands_commandId` ON `${TABLE_NAME}` (`commandId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "drafts",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`draftId` TEXT NOT NULL, `text` TEXT NOT NULL, `selectedHostId` TEXT, `selectedModelId` TEXT, `selectedMode` TEXT, `selectedGrantId` TEXT DEFAULT NULL, `createCommandId` TEXT NOT NULL, `promptCommandId` TEXT NOT NULL, `taskId` TEXT, `updatedAtMillis` INTEGER NOT NULL, `selectionStart` INTEGER NOT NULL DEFAULT 0, `selectionEnd` INTEGER NOT NULL DEFAULT 0, `attemptOrdinal` INTEGER NOT NULL DEFAULT 0, `approvalMode` TEXT NOT NULL DEFAULT 'REQUEST_APPROVAL', PRIMARY KEY(`draftId`))",
+        "fields": [
+          {
+            "fieldPath": "draftId",
+            "columnName": "draftId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "text",
+            "columnName": "text",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "selectedHostId",
+            "columnName": "selectedHostId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "selectedModelId",
+            "columnName": "selectedModelId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "selectedMode",
+            "columnName": "selectedMode",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "selectedGrantId",
+            "columnName": "selectedGrantId",
+            "affinity": "TEXT",
+            "defaultValue": "NULL"
+          },
+          {
+            "fieldPath": "createCommandId",
+            "columnName": "createCommandId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "promptCommandId",
+            "columnName": "promptCommandId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "taskId",
+            "columnName": "taskId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "updatedAtMillis",
+            "columnName": "updatedAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "selectionStart",
+            "columnName": "selectionStart",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "selectionEnd",
+            "columnName": "selectionEnd",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "attemptOrdinal",
+            "columnName": "attemptOrdinal",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "approvalMode",
+            "columnName": "approvalMode",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'REQUEST_APPROVAL'"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "draftId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_drafts_taskId",
+            "unique": true,
+            "columnNames": [
+              "taskId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_drafts_taskId` ON `${TABLE_NAME}` (`taskId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "authorized_folders",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`grantId` TEXT NOT NULL, `treeUri` TEXT NOT NULL, `treeUriSha256` TEXT NOT NULL, `displayName` TEXT NOT NULL, `authority` TEXT NOT NULL, `persistedRead` INTEGER NOT NULL, `persistedWrite` INTEGER NOT NULL, `status` TEXT NOT NULL, `createdAtMillis` INTEGER NOT NULL, `updatedAtMillis` INTEGER NOT NULL, PRIMARY KEY(`grantId`))",
+        "fields": [
+          {
+            "fieldPath": "grantId",
+            "columnName": "grantId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "treeUri",
+            "columnName": "treeUri",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "treeUriSha256",
+            "columnName": "treeUriSha256",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displayName",
+            "columnName": "displayName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "authority",
+            "columnName": "authority",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "persistedRead",
+            "columnName": "persistedRead",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "persistedWrite",
+            "columnName": "persistedWrite",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtMillis",
+            "columnName": "createdAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtMillis",
+            "columnName": "updatedAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "grantId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_authorized_folders_treeUriSha256",
+            "unique": true,
+            "columnNames": [
+              "treeUriSha256"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_authorized_folders_treeUriSha256` ON `${TABLE_NAME}` (`treeUriSha256`)"
+          }
+        ]
+      },
+      {
+        "tableName": "task_content_grants",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`callId` TEXT NOT NULL, `taskId` TEXT NOT NULL, `grantId` TEXT NOT NULL, `documentAliasesJson` TEXT NOT NULL, `mimeTypesJson` TEXT NOT NULL, `perFileByteBudgetsJson` TEXT NOT NULL, `totalByteBudget` INTEGER NOT NULL, `consumedBytes` INTEGER NOT NULL, `expiresAtMillis` INTEGER NOT NULL, `revokedAtMillis` INTEGER, `createdAtMillis` INTEGER NOT NULL, `updatedAtMillis` INTEGER NOT NULL, PRIMARY KEY(`callId`), FOREIGN KEY(`taskId`, `callId`) REFERENCES `device_operations`(`taskId`, `callId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "callId",
+            "columnName": "callId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "taskId",
+            "columnName": "taskId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "grantId",
+            "columnName": "grantId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "documentAliasesJson",
+            "columnName": "documentAliasesJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mimeTypesJson",
+            "columnName": "mimeTypesJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "perFileByteBudgetsJson",
+            "columnName": "perFileByteBudgetsJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "totalByteBudget",
+            "columnName": "totalByteBudget",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "consumedBytes",
+            "columnName": "consumedBytes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "expiresAtMillis",
+            "columnName": "expiresAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "revokedAtMillis",
+            "columnName": "revokedAtMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "createdAtMillis",
+            "columnName": "createdAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtMillis",
+            "columnName": "updatedAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "callId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_task_content_grants_taskId_callId",
+            "unique": true,
+            "columnNames": [
+              "taskId",
+              "callId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_task_content_grants_taskId_callId` ON `${TABLE_NAME}` (`taskId`, `callId`)"
+          },
+          {
+            "name": "index_task_content_grants_grantId",
+            "unique": false,
+            "columnNames": [
+              "grantId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_task_content_grants_grantId` ON `${TABLE_NAME}` (`grantId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "device_operations",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "taskId",
+              "callId"
+            ],
+            "referencedColumns": [
+              "taskId",
+              "callId"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "file_change_sets",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`preparedId` TEXT NOT NULL, `taskId` TEXT NOT NULL, `grantId` TEXT NOT NULL, `purpose` TEXT NOT NULL, `planDigest` TEXT NOT NULL, `operationsCanonicalJson` TEXT NOT NULL, `previewCanonicalJson` TEXT NOT NULL, `operationCount` INTEGER NOT NULL, `state` TEXT NOT NULL, `expiresAtMillis` INTEGER NOT NULL, `commitCallId` TEXT, `commitOperationId` TEXT, `approvalTokenSha256` TEXT, `approvalBindingSha256` TEXT, `approvalReceiptId` TEXT, `resultCanonicalJson` TEXT, `failureCode` TEXT, `createdAtMillis` INTEGER NOT NULL, `updatedAtMillis` INTEGER NOT NULL, PRIMARY KEY(`preparedId`), FOREIGN KEY(`taskId`) REFERENCES `tasks`(`taskId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "preparedId",
+            "columnName": "preparedId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "taskId",
+            "columnName": "taskId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "grantId",
+            "columnName": "grantId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "purpose",
+            "columnName": "purpose",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "planDigest",
+            "columnName": "planDigest",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "operationsCanonicalJson",
+            "columnName": "operationsCanonicalJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "previewCanonicalJson",
+            "columnName": "previewCanonicalJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "operationCount",
+            "columnName": "operationCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "expiresAtMillis",
+            "columnName": "expiresAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "commitCallId",
+            "columnName": "commitCallId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "commitOperationId",
+            "columnName": "commitOperationId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "approvalTokenSha256",
+            "columnName": "approvalTokenSha256",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "approvalBindingSha256",
+            "columnName": "approvalBindingSha256",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "approvalReceiptId",
+            "columnName": "approvalReceiptId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "resultCanonicalJson",
+            "columnName": "resultCanonicalJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "failureCode",
+            "columnName": "failureCode",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAtMillis",
+            "columnName": "createdAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtMillis",
+            "columnName": "updatedAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "preparedId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_file_change_sets_taskId",
+            "unique": false,
+            "columnNames": [
+              "taskId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_file_change_sets_taskId` ON `${TABLE_NAME}` (`taskId`)"
+          },
+          {
+            "name": "index_file_change_sets_commitCallId",
+            "unique": true,
+            "columnNames": [
+              "commitCallId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_file_change_sets_commitCallId` ON `${TABLE_NAME}` (`commitCallId`)"
+          },
+          {
+            "name": "index_file_change_sets_commitOperationId",
+            "unique": true,
+            "columnNames": [
+              "commitOperationId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_file_change_sets_commitOperationId` ON `${TABLE_NAME}` (`commitOperationId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "tasks",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "taskId"
+            ],
+            "referencedColumns": [
+              "taskId"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "attachments",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`attachmentId` TEXT NOT NULL, `draftId` TEXT, `taskId` TEXT, `messageLocalId` TEXT, `ordinal` INTEGER NOT NULL, `kind` TEXT NOT NULL, `state` TEXT NOT NULL, `source` TEXT NOT NULL, `displayName` TEXT NOT NULL, `mimeType` TEXT NOT NULL, `byteSize` INTEGER NOT NULL, `payloadSha256` TEXT NOT NULL, `payloadFileName` TEXT NOT NULL, `thumbnailFileName` TEXT, `width` INTEGER, `height` INTEGER, `createdAtMillis` INTEGER NOT NULL, `updatedAtMillis` INTEGER NOT NULL, PRIMARY KEY(`attachmentId`), FOREIGN KEY(`draftId`) REFERENCES `drafts`(`draftId`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`taskId`) REFERENCES `tasks`(`taskId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "attachmentId",
+            "columnName": "attachmentId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "draftId",
+            "columnName": "draftId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "taskId",
+            "columnName": "taskId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "messageLocalId",
+            "columnName": "messageLocalId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "ordinal",
+            "columnName": "ordinal",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displayName",
+            "columnName": "displayName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mimeType",
+            "columnName": "mimeType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "byteSize",
+            "columnName": "byteSize",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "payloadSha256",
+            "columnName": "payloadSha256",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "payloadFileName",
+            "columnName": "payloadFileName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "thumbnailFileName",
+            "columnName": "thumbnailFileName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "width",
+            "columnName": "width",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "height",
+            "columnName": "height",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "createdAtMillis",
+            "columnName": "createdAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtMillis",
+            "columnName": "updatedAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "attachmentId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_attachments_draftId",
+            "unique": false,
+            "columnNames": [
+              "draftId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_attachments_draftId` ON `${TABLE_NAME}` (`draftId`)"
+          },
+          {
+            "name": "index_attachments_draftId_ordinal",
+            "unique": true,
+            "columnNames": [
+              "draftId",
+              "ordinal"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_attachments_draftId_ordinal` ON `${TABLE_NAME}` (`draftId`, `ordinal`)"
+          },
+          {
+            "name": "index_attachments_taskId_messageLocalId",
+            "unique": false,
+            "columnNames": [
+              "taskId",
+              "messageLocalId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_attachments_taskId_messageLocalId` ON `${TABLE_NAME}` (`taskId`, `messageLocalId`)"
+          },
+          {
+            "name": "index_attachments_taskId_messageLocalId_ordinal",
+            "unique": true,
+            "columnNames": [
+              "taskId",
+              "messageLocalId",
+              "ordinal"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_attachments_taskId_messageLocalId_ordinal` ON `${TABLE_NAME}` (`taskId`, `messageLocalId`, `ordinal`)"
+          },
+          {
+            "name": "index_attachments_payloadFileName",
+            "unique": true,
+            "columnNames": [
+              "payloadFileName"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_attachments_payloadFileName` ON `${TABLE_NAME}` (`payloadFileName`)"
+          },
+          {
+            "name": "index_attachments_thumbnailFileName",
+            "unique": true,
+            "columnNames": [
+              "thumbnailFileName"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_attachments_thumbnailFileName` ON `${TABLE_NAME}` (`thumbnailFileName`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "drafts",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "draftId"
+            ],
+            "referencedColumns": [
+              "draftId"
+            ]
+          },
+          {
+            "table": "tasks",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "taskId"
+            ],
+            "referencedColumns": [
+              "taskId"
+            ]
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'fed26eb7cd2c5ee2d7217efd27e8d1a0')"
+    ]
+  }
+}

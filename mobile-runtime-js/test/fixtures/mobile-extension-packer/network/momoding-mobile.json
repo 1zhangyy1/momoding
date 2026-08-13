@@ -1,0 +1,40 @@
+{
+  "profileVersion": 1,
+  "package": {
+    "id": "fixtures.network",
+    "name": "Android-owned network fixture",
+    "version": "1.0.0",
+    "description": "A declared HTTPS origin and credential slot contract fixture."
+  },
+  "source": {
+    "entrypoint": "./index.ts"
+  },
+  "tools": [
+    {
+      "name": "fixture_status",
+      "label": "Fixture status",
+      "description": "Fetch bounded JSON from one declared HTTPS origin.",
+      "promptSnippet": null,
+      "promptGuidelines": [],
+      "executionMode": "sequential",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    }
+  ],
+  "hostTools": [],
+  "capabilities": { "required": [], "optional": [] },
+  "https": {
+    "origins": ["https://status.example.test"],
+    "methods": ["GET"]
+  },
+  "credentials": [
+    {
+      "slot": "status-api",
+      "origin": "https://status.example.test",
+      "placement": "authorization_bearer"
+    }
+  ]
+}

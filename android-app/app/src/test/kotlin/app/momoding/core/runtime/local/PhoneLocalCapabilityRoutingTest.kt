@@ -119,6 +119,34 @@ class PhoneLocalCapabilityRoutingTest {
         assertEquals("accessibility_control", capabilityHandler.capability)
     }
 
+    @Test
+    fun `Skill package resource tool routes as a read only native capability`() = runTest {
+        val skillHandler = FixtureSkillResourceHandler()
+        val bridge = PhoneLocalAttentionBridge(
+            ledger = RoomAttentionLedger(database),
+            skillResourceTools = skillHandler,
+            ioDispatcher = Dispatchers.Unconfined,
+        )
+
+        val result = requireNotNull(
+            bridge.handleNativeRequest(
+                taskId = "task-1",
+                request = request(
+                    kind = "android_skill_tool",
+                    toolName = "skill_resource",
+                    arguments = buildJsonObject {
+                        put("action", "list")
+                        put("skillName", "review")
+                    },
+                ),
+            ),
+        )
+
+        assertFalse(result.isError)
+        assertEquals("task-1", skillHandler.taskId)
+        assertEquals("review", skillHandler.skillName)
+    }
+
     private fun request(
         kind: String,
         toolName: String,
@@ -181,5 +209,20 @@ class PhoneLocalCapabilityRoutingTest {
                 contentPayload = buildJsonObject { put("ready", true) },
             )
         }
+    }
+
+    private class FixtureSkillResourceHandler : PhoneLocalSkillResourceToolHandler {
+        var taskId: String? = null
+        var skillName: String? = null
+
+        override fun handles(toolName: String): Boolean = toolName == "skill_resource"
+
+        override suspend fun execute(taskId: String, request: PiNativeToolRequest) =
+            buildJsonObject {
+                this@FixtureSkillResourceHandler.taskId = taskId
+                this@FixtureSkillResourceHandler.skillName =
+                    request.arguments["skillName"]?.jsonPrimitive?.content
+                put("ok", true)
+            }
     }
 }

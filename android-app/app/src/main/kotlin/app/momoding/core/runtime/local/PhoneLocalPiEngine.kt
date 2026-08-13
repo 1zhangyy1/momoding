@@ -2,6 +2,9 @@ package app.momoding.core.runtime.local
 
 import android.content.res.AssetManager
 import com.dokar.quickjs.QuickJs
+import app.momoding.core.connector.ConnectorToolSnapshot
+import app.momoding.core.extensions.ExtensionPackageSnapshot
+import app.momoding.core.extensions.extensionPackageSnapshotsWireJson
 import app.momoding.core.skills.PhoneLocalSkillResource
 import java.security.MessageDigest
 import java.security.SecureRandom
@@ -254,13 +257,26 @@ data class PiNativeOpenRouterScenarioStatus(
     val planTransitionPending: Boolean = false,
     val goal: PiTaskGoalSnapshot? = null,
     val goalTransitionPending: Boolean = false,
+    val connector: PiConnectorBinding? = null,
     val childAgents: List<PiChildAgentSnapshot> = emptyList(),
     val queuedChildEventCount: Int = 0,
     val resourceSetDigest: String? = null,
     val resourceSetTrusted: Boolean = true,
     val resourceTransitionPending: Boolean = false,
     val resourceUpdateCount: Int = 0,
+    val extensionSetDigest: String? = null,
+    val extensionSetTrusted: Boolean = true,
     val skillNames: List<String> = emptyList(),
+)
+
+@Serializable
+data class PiConnectorBinding(
+    val connectorId: String,
+    val connectionId: String,
+    val sourceLabel: String,
+    val mode: String,
+    val schemaDigest: String,
+    val exposedToolNames: List<String>,
 )
 
 @Serializable
@@ -537,6 +553,8 @@ class PhoneLocalPiEngine(
         images: List<PiRuntimeImageInput> = emptyList(),
         textAttachments: List<PiRuntimeTextAttachmentInput> = emptyList(),
         imageGenerationEnabled: Boolean = false,
+        connectorToolSnapshot: ConnectorToolSnapshot? = null,
+        extensionPackages: List<ExtensionPackageSnapshot> = emptyList(),
     ): PiNativeOpenRouterScenarioStatus {
         checkReady()
         return decodeNativeOpenRouterStatus(
@@ -547,7 +565,9 @@ class PhoneLocalPiEngine(
                     "${jsString(json.encodeToString(skillResources))}," +
                     "${jsString(json.encodeToString(images))}," +
                     "${jsString(json.encodeToString(textAttachments))}," +
-                    "$imageGenerationEnabled)",
+                    "$imageGenerationEnabled," +
+                    "${jsString(json.encodeToString(connectorToolSnapshot))}," +
+                    "${jsString(extensionPackageSnapshotsWireJson(extensionPackages))})",
                 "pi-mobile-native-task-start.js",
             ),
         )
@@ -561,6 +581,8 @@ class PhoneLocalPiEngine(
         planMode: Boolean = false,
         skillResources: List<PhoneLocalSkillResource> = emptyList(),
         textAttachments: List<PiRuntimeTextAttachmentInput> = emptyList(),
+        connectorToolSnapshot: ConnectorToolSnapshot? = null,
+        extensionPackages: List<ExtensionPackageSnapshot> = emptyList(),
     ): PiNativeOpenRouterScenarioStatus {
         checkReady()
         return decodeNativeOpenRouterStatus(
@@ -569,7 +591,9 @@ class PhoneLocalPiEngine(
                     "${jsString(taskId)},${jsString(prompt)},${jsString(modelId)}," +
                     "${jsString(sessionId)},$planMode," +
                     "${jsString(json.encodeToString(skillResources))}," +
-                    "${jsString(json.encodeToString(textAttachments))})",
+                    "${jsString(json.encodeToString(textAttachments))}," +
+                    "${jsString(json.encodeToString(connectorToolSnapshot))}," +
+                    "${jsString(extensionPackageSnapshotsWireJson(extensionPackages))})",
                 "pi-mobile-native-codex-task-start.js",
             ),
         )
@@ -582,6 +606,7 @@ class PhoneLocalPiEngine(
         additionalInstructions: String?,
         modelId: String,
         skillResources: List<PhoneLocalSkillResource>,
+        extensionPackages: List<ExtensionPackageSnapshot> = emptyList(),
     ): PiNativeOpenRouterScenarioStatus {
         checkReady()
         val instructions = additionalInstructions?.let(::jsString) ?: "undefined"
@@ -590,7 +615,8 @@ class PhoneLocalPiEngine(
                 "PiMobileRuntimeBundle.startNativeCodexTaskSkillSessionJson(" +
                     "${jsString(taskId)},${jsString(skillName)},$instructions," +
                     "${jsString(modelId)},${jsString(sessionId)}," +
-                    "${jsString(json.encodeToString(skillResources))})",
+                    "${jsString(json.encodeToString(skillResources))},null," +
+                    "${jsString(extensionPackageSnapshotsWireJson(extensionPackages))})",
                 "pi-mobile-native-codex-task-skill-start.js",
             ),
         )
@@ -604,6 +630,7 @@ class PhoneLocalPiEngine(
         modelId: String,
         skillResources: List<PhoneLocalSkillResource>,
         imageGenerationEnabled: Boolean = false,
+        extensionPackages: List<ExtensionPackageSnapshot> = emptyList(),
     ): PiNativeOpenRouterScenarioStatus {
         checkReady()
         val instructions = additionalInstructions?.let(::jsString) ?: "undefined"
@@ -613,7 +640,8 @@ class PhoneLocalPiEngine(
                     "${jsString(taskId)},${jsString(skillName)},$instructions," +
                     "${jsString(modelId)},${jsString(sessionId)}," +
                     "${jsString(json.encodeToString(skillResources))}," +
-                    "$imageGenerationEnabled)",
+                    "$imageGenerationEnabled,null," +
+                    "${jsString(extensionPackageSnapshotsWireJson(extensionPackages))})",
                 "pi-mobile-native-task-skill-start.js",
             ),
         )
@@ -744,6 +772,8 @@ class PhoneLocalPiEngine(
         skillResources: List<PhoneLocalSkillResource> = emptyList(),
         images: List<PiRuntimeImageInput> = emptyList(),
         imageGenerationEnabled: Boolean = false,
+        connectorToolSnapshot: ConnectorToolSnapshot? = null,
+        extensionPackages: List<ExtensionPackageSnapshot> = emptyList(),
     ): PiNativeOpenRouterScenarioStatus {
         checkReady()
         return decodeNativeOpenRouterStatus(
@@ -753,7 +783,9 @@ class PhoneLocalPiEngine(
                     "${jsString(entries.toString())},${jsString(modelId)}," +
                     "${jsString(json.encodeToString(skillResources))}," +
                     "${jsString(json.encodeToString(images))}," +
-                    "$imageGenerationEnabled)",
+                    "$imageGenerationEnabled," +
+                    "${jsString(json.encodeToString(connectorToolSnapshot))}," +
+                    "${jsString(extensionPackageSnapshotsWireJson(extensionPackages))})",
                 "pi-mobile-native-task-restore.js",
             ),
         )
@@ -766,6 +798,8 @@ class PhoneLocalPiEngine(
         entries: JsonArray,
         modelId: String,
         skillResources: List<PhoneLocalSkillResource> = emptyList(),
+        connectorToolSnapshot: ConnectorToolSnapshot? = null,
+        extensionPackages: List<ExtensionPackageSnapshot> = emptyList(),
     ): PiNativeOpenRouterScenarioStatus {
         checkReady()
         return decodeNativeOpenRouterStatus(
@@ -773,7 +807,9 @@ class PhoneLocalPiEngine(
                 "PiMobileRuntimeBundle.restoreNativeCodexTaskSessionJson(" +
                     "${jsString(taskId)},${jsString(sessionId)},$turnCount," +
                     "${jsString(entries.toString())},${jsString(modelId)}," +
-                    "${jsString(json.encodeToString(skillResources))})",
+                    "${jsString(json.encodeToString(skillResources))}," +
+                    "${jsString(json.encodeToString(connectorToolSnapshot))}," +
+                    "${jsString(extensionPackageSnapshotsWireJson(extensionPackages))})",
                 "pi-mobile-native-codex-task-restore.js",
             ),
         )

@@ -14,6 +14,13 @@ export interface PiMobileSkillResource {
   content: string;
   contentSha256: string;
   disableModelInvocation: boolean;
+  packageDigest: string;
+  packageFileCount: number;
+}
+
+interface PiMobilePackagedSkill extends Skill {
+  mobilePackageDigest?: string;
+  mobilePackageFileCount?: number;
 }
 
 interface PiMobileSkillParseSuccess {
@@ -112,7 +119,9 @@ export function toPiSkills(resources: PiMobileSkillResource[]): Skill[] {
     content: resource.content,
     filePath: skillFilePath(resource.name),
     disableModelInvocation: resource.disableModelInvocation,
-  }));
+    mobilePackageDigest: resource.packageDigest,
+    mobilePackageFileCount: resource.packageFileCount,
+  }) as PiMobilePackagedSkill);
 }
 
 export function resourcesFromPiSkills(skills: Skill[]): PiMobileSkillResource[] {
@@ -126,6 +135,9 @@ export function skillResourceSetDigest(resources: PiMobileSkillResource[]): stri
     `${resource.description.length}:`,
     resource.description,
     resource.contentSha256,
+    resource.packageDigest !== resource.contentSha256 || resource.packageFileCount !== 1
+      ? `package:${resource.packageDigest}:${resource.packageFileCount}:`
+      : "",
     resource.disableModelInvocation ? "1" : "0",
   ].join("")).join("");
   return sha256(canonical);
@@ -287,6 +299,8 @@ function mobileSkillResource(skill: Skill): PiMobileSkillResource {
     content: skill.content,
     contentSha256: sha256(skill.content),
     disableModelInvocation: skill.disableModelInvocation === true,
+    packageDigest: (skill as PiMobilePackagedSkill).mobilePackageDigest ?? sha256(skill.content),
+    packageFileCount: (skill as PiMobilePackagedSkill).mobilePackageFileCount ?? 1,
   };
 }
 
@@ -322,6 +336,8 @@ function requirePiMobileSkillResource(value: unknown): PiMobileSkillResource {
   const content = value.content;
   const contentSha256 = value.contentSha256;
   const disableModelInvocation = value.disableModelInvocation;
+  const packageDigest = value.packageDigest ?? contentSha256;
+  const packageFileCount = value.packageFileCount ?? 1;
   if (typeof name !== "string" || !isValidSkillName(name)) {
     throw new Error("PI_MOBILE_SKILL_NAME_INVALID");
   }
@@ -350,7 +366,26 @@ function requirePiMobileSkillResource(value: unknown): PiMobileSkillResource {
   if (typeof disableModelInvocation !== "boolean") {
     throw new Error("PI_MOBILE_SKILL_VISIBILITY_INVALID");
   }
-  return { name, description, content, contentSha256, disableModelInvocation };
+  if (typeof packageDigest !== "string" || !/^[0-9a-f]{64}$/.test(packageDigest)) {
+    throw new Error("PI_MOBILE_SKILL_PACKAGE_DIGEST_INVALID");
+  }
+  if (
+    typeof packageFileCount !== "number" ||
+    !Number.isSafeInteger(packageFileCount) ||
+    packageFileCount < 1 ||
+    packageFileCount > 256
+  ) {
+    throw new Error("PI_MOBILE_SKILL_PACKAGE_FILE_COUNT_INVALID");
+  }
+  return {
+    name,
+    description,
+    content,
+    contentSha256,
+    disableModelInvocation,
+    packageDigest,
+    packageFileCount,
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -14,6 +14,7 @@ import app.momoding.core.data.TaskRepository
 import app.momoding.feature.taskdetail.PiUiReducer
 import app.momoding.feature.taskdetail.TaskDetailRunState
 import app.momoding.feature.taskdetail.TimelineItem
+import app.momoding.feature.taskdetail.ToolActivityState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
@@ -159,6 +160,136 @@ class PhoneLocalPiEventProjectorTest {
             assertEquals(1, persisted.snapshot.turnCount)
             assertEquals(2, persisted.snapshot.entries.size)
         }
+
+    @Test
+    fun `Extension activity survives terminal snapshot compaction and restore without sensitive fields`() =
+        runTest {
+            val projector = PhoneLocalPiEventProjector(database)
+            projector.createTask(
+                taskId = TASK_ID,
+                title = "Use an Extension",
+                piSessionId = SESSION_ID,
+                streamId = STREAM_ID,
+                initialPrompt = "Use the calendar Extension.",
+            )
+            val running = extensionHostActivity("running")
+            val completed = extensionHostActivity("completed")
+            val rejected = buildJsonObject {
+                completed.forEach { (key, value) -> put(key, value) }
+                put("url", "https://private.example.test/path?token=secret")
+            }
+            projector.append(TASK_ID, SESSION_ID, STREAM_ID, listOf(running, completed))
+            val session = extensionSessionSnapshot()
+            projector.replaceWithSessionSnapshot(
+                taskId = TASK_ID,
+                piSessionId = SESSION_ID,
+                streamId = STREAM_ID,
+                snapshot = session,
+                runState = TaskRunState.COMPLETED,
+                extensionActivities = listOf(running, completed, rejected),
+            )
+
+            val compacted = TaskDetailRepository(database).observe(TASK_ID).filterNotNull().first()
+            assertTrue(compacted.rawEvents.isEmpty())
+            assertEquals(
+                listOf("user", "assistant", "phoneLocalExtensionActivity", "toolResult", "assistant"),
+                compacted.messages.map { row ->
+                    Json.parseToJsonElement(row.rawPayload).jsonObject["role"]?.jsonPrimitive?.content
+                },
+            )
+            val compactedActivity = PiUiReducer().reduce(compacted).timeline.settledItems
+                .filterIsInstance<TimelineItem.ToolActivity>()
+                .single { it.toolCallId.startsWith("extension-activity/") }
+            assertEquals("Checked mobile capabilities", compactedActivity.title)
+            assertEquals(ToolActivityState.SUCCESS, compactedActivity.state)
+            assertTrue(compacted.messages.none { it.rawPayload.contains("token=secret") })
+
+            projector.replaceWithSessionSnapshot(
+                taskId = TASK_ID,
+                piSessionId = SESSION_ID,
+                streamId = STREAM_ID,
+                snapshot = session,
+                runState = TaskRunState.COMPLETED,
+            )
+            val restored = TaskDetailRepository(database).observe(TASK_ID).filterNotNull().first()
+            assertEquals(
+                1,
+                PiUiReducer().reduce(restored).timeline.settledItems
+                    .filterIsInstance<TimelineItem.ToolActivity>()
+                    .count { it.toolCallId.startsWith("extension-activity/") },
+            )
+
+            projector.appendPendingPrompt(
+                taskId = TASK_ID,
+                piSessionId = SESSION_ID,
+                streamId = STREAM_ID,
+                priorEntries = session.entries,
+                prompt = "Continue after a Runtime rebuild.",
+            )
+            val nextPrompt = TaskDetailRepository(database).observe(TASK_ID).filterNotNull().first()
+            assertEquals(
+                1,
+                nextPrompt.messages.count { row ->
+                    Json.parseToJsonElement(row.rawPayload).jsonObject["role"]
+                        ?.jsonPrimitive
+                        ?.content == "phoneLocalExtensionActivity"
+                },
+            )
+            assertEquals(
+                1,
+                PiUiReducer().reduce(nextPrompt).timeline.settledItems
+                    .filterIsInstance<TimelineItem.ToolActivity>()
+                    .count { it.toolCallId.startsWith("extension-activity/") },
+            )
+        }
+
+    @Test
+    fun `Extension activity is dropped when Pi compaction removes its outer Tool call`() = runTest {
+        val projector = PhoneLocalPiEventProjector(database)
+        projector.createTask(
+            taskId = TASK_ID,
+            title = "Use an Extension",
+            piSessionId = SESSION_ID,
+            streamId = STREAM_ID,
+            initialPrompt = "Use the calendar Extension.",
+        )
+        val completed = extensionHostActivity("completed")
+        projector.replaceWithSessionSnapshot(
+            taskId = TASK_ID,
+            piSessionId = SESSION_ID,
+            streamId = STREAM_ID,
+            snapshot = extensionSessionSnapshot(),
+            runState = TaskRunState.COMPLETED,
+            extensionActivities = listOf(completed),
+        )
+
+        projector.replaceWithSessionSnapshot(
+            taskId = TASK_ID,
+            piSessionId = SESSION_ID,
+            streamId = STREAM_ID,
+            snapshot = PiNativeTaskSessionSnapshot(
+                taskId = TASK_ID,
+                turnCount = 1,
+                entries = buildJsonArray {
+                    add(messageEntry(userMessage("Use the calendar Extension.")))
+                    add(messageEntry(assistantMessage("Compacted summary.")))
+                },
+            ),
+            runState = TaskRunState.COMPLETED,
+        )
+
+        val compacted = TaskDetailRepository(database).observe(TASK_ID).filterNotNull().first()
+        assertTrue(compacted.messages.none { row ->
+            Json.parseToJsonElement(row.rawPayload).jsonObject["role"]
+                ?.jsonPrimitive
+                ?.content == "phoneLocalExtensionActivity"
+        })
+        assertTrue(
+            PiUiReducer().reduce(compacted).timeline.settledItems.none { item ->
+                item is TimelineItem.ToolActivity && item.toolCallId.startsWith("extension-activity/")
+            },
+        )
+    }
 
     @Test
     fun `startup marks an unresumable local run interrupted instead of leaving a false running row`() =
@@ -527,6 +658,69 @@ class PhoneLocalPiEventProjectorTest {
         put("errorMessage", errorMessage)
         put("timestamp", 2)
     }
+
+    private fun extensionHostActivity(state: String) = buildJsonObject {
+        put("type", "extension_tool_activity")
+        put("state", state)
+        put("toolCallId", "outer-extension")
+        put("seq", 0)
+        put("kind", "host_tool")
+        put("packageId", "fixtures.host-call")
+        put("name", "capabilities")
+        put("targetTool", "device_capabilities_get")
+    }
+
+    private fun extensionSessionSnapshot() = PiNativeTaskSessionSnapshot(
+        taskId = TASK_ID,
+        turnCount = 1,
+        entries = buildJsonArray {
+            add(messageEntry(userMessage("Use the calendar Extension.")))
+            add(buildJsonObject {
+                put("type", "message")
+                put("id", "extension-tool-call")
+                put("parentId", "entry-user")
+                put("timestamp", "2026-08-11T00:00:01.000Z")
+                put("message", buildJsonObject {
+                    put("role", "assistant")
+                    put("content", buildJsonArray {
+                        add(buildJsonObject {
+                            put("type", "toolCall")
+                            put("id", "outer-extension")
+                            put("name", "fixture_calendar_summary")
+                            put("arguments", buildJsonObject { put("query", "today") })
+                        })
+                    })
+                    put("timestamp", 2)
+                })
+            })
+            add(buildJsonObject {
+                put("type", "message")
+                put("id", "extension-tool-result")
+                put("parentId", "extension-tool-call")
+                put("timestamp", "2026-08-11T00:00:02.000Z")
+                put("message", buildJsonObject {
+                    put("role", "toolResult")
+                    put("toolCallId", "outer-extension")
+                    put("toolName", "fixture_calendar_summary")
+                    put("content", buildJsonArray {
+                        add(buildJsonObject {
+                            put("type", "text")
+                            put("text", "done")
+                        })
+                    })
+                    put("isError", false)
+                    put("timestamp", 3)
+                })
+            })
+            add(buildJsonObject {
+                put("type", "message")
+                put("id", "extension-final")
+                put("parentId", "extension-tool-result")
+                put("timestamp", "2026-08-11T00:00:03.000Z")
+                put("message", assistantMessage("Finished."))
+            })
+        },
+    )
 
     private fun textContent(text: String): JsonArray = buildJsonArray {
         add(

@@ -1,0 +1,12 @@
+{
+  "name": "@momoding-fixtures/unsupported-node",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.80.6"
+  }
+}

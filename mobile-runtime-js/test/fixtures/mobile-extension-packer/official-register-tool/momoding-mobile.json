@@ -1,0 +1,34 @@
+{
+  "profileVersion": 1,
+  "package": {
+    "id": "fixtures.official-register-tool",
+    "name": "Official registerTool fixture",
+    "version": "1.0.0",
+    "description": "A minimal official-shaped registerTool source fixture."
+  },
+  "source": {
+    "entrypoint": "./index.ts"
+  },
+  "tools": [
+    {
+      "name": "fixture_echo",
+      "label": "Fixture echo",
+      "description": "Return one bounded text value.",
+      "promptSnippet": null,
+      "promptGuidelines": [],
+      "executionMode": "sequential",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": { "type": "string", "maxLength": 160 }
+        },
+        "required": ["text"],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "hostTools": [],
+  "capabilities": { "required": [], "optional": [] },
+  "https": { "origins": [], "methods": [] },
+  "credentials": []
+}

@@ -173,6 +173,113 @@ class SkillRepositoryTest {
         }
     }
 
+    @Test
+    fun `complete package is atomic listable and readable only while enabled`() = runTest {
+        val body = "Use [the guide](references/guide.md)."
+        val rawSkill = """
+            ---
+            name: packaged
+            description: Uses local package resources
+            ---
+            $body
+        """.trimIndent()
+        val files = listOf(
+            packageFile("SKILL.md", "text/markdown", rawSkill.toByteArray()),
+            packageFile("references/guide.md", "text/markdown", "Return PASS.".toByteArray()),
+            packageFile("scripts/check.py", "text/x-python", "print('ok')".toByteArray()),
+        )
+        val parsed = parsed("packaged", "Uses local package resources", body).let { result ->
+            result.copy(
+                resource = result.resource.copy(
+                    packageDigest = skillPackageDigest(files),
+                    packageFileCount = files.size,
+                ),
+                sourceDocumentSha256 = rawSkill.sha256Utf8(),
+            )
+        }
+
+        repository.importSkill(parsed, files)
+        assertReadCode("SKILL_NOT_ENABLED") {
+            repository.readEnabledTextResource("packaged", "references/guide.md", 0, 256)
+        }
+        repository.setEnabled("packaged", true)
+
+        val enabled = repository.enabledResourceSet().resources.single()
+        assertEquals(3, enabled.packageFileCount)
+        assertEquals(skillPackageDigest(files), enabled.packageDigest)
+        assertEquals(
+            listOf("references/guide.md"),
+            repository.listEnabledResources("packaged", "references", 0, 64)
+                .items.map(SkillResourceEntry::path),
+        )
+        val page = repository.readEnabledTextResource("packaged", "scripts/check.py", 0, 256)
+        assertEquals("print('ok')", page.content)
+        assertTrue(page.eof)
+
+        assertTrue(repository.deleteImported("packaged"))
+        assertTrue(withContext(Dispatchers.IO) {
+            database.skillPackageFileDao().metadataForSkill("skill:imported:packaged").isEmpty()
+        })
+    }
+
+    @Test
+    fun `package rejects mismatched metadata and binary resources fail closed`() = runTest {
+        val files = listOf(
+            packageFile("SKILL.md", "text/markdown", "Body".toByteArray()),
+            packageFile("assets/data.bin", "application/octet-stream", byteArrayOf(0xC3.toByte(), 0x28)),
+        )
+        val invalid = parsed("binary", "Binary package", "Body")
+        assertTrue(
+            runCatching { repository.importSkill(invalid, files) }
+                .exceptionOrNull()?.message == "SKILL_PACKAGE_DIGEST_MISMATCH",
+        )
+        val mismatchedDocument = files.map { file ->
+            if (file.relativePath == "SKILL.md") {
+                packageFile("SKILL.md", "text/markdown", "Other body".toByteArray())
+            } else {
+                file
+            }
+        }
+        val mismatchedParsed = invalid.copy(
+            resource = invalid.resource.copy(
+                packageDigest = skillPackageDigest(mismatchedDocument),
+                packageFileCount = mismatchedDocument.size,
+            ),
+            sourceDocumentSha256 = "Body".sha256Utf8(),
+        )
+        assertEquals(
+            "SKILL_PACKAGE_DOCUMENT_MISMATCH",
+            runCatching { repository.importSkill(mismatchedParsed, mismatchedDocument) }
+                .exceptionOrNull()?.message,
+        )
+        val valid = invalid.copy(
+            resource = invalid.resource.copy(
+                packageDigest = skillPackageDigest(files),
+                packageFileCount = files.size,
+            ),
+            sourceDocumentSha256 = "Body".sha256Utf8(),
+        )
+        repository.importSkill(valid, files)
+        repository.setEnabled("binary", true)
+
+        assertReadCode("SKILL_RESOURCE_BINARY") {
+            repository.readEnabledTextResource("binary", "assets/data.bin", 0, 256)
+        }
+    }
+
+    private suspend fun assertReadCode(expected: String, block: suspend () -> Unit) {
+        val error = runCatching { block() }.exceptionOrNull()
+        assertTrue(error is SkillResourceReadException)
+        assertEquals(expected, (error as SkillResourceReadException).code)
+    }
+
+    private fun packageFile(path: String, mimeType: String, content: ByteArray) = SkillPackageFile(
+        relativePath = path,
+        mimeType = mimeType,
+        content = content,
+        contentSha256 = content.sha256(),
+    )
+
     private fun parsed(
         name: String,
         description: String,

@@ -153,6 +153,20 @@ export async function exitPlanMode(
   });
 }
 
+export async function replacePlanModeToolSnapshot(
+  state: PlanExtensionState,
+  activeToolNames: string[],
+): Promise<void> {
+  if (!state.planMode || state.prePlanActiveToolNames === null) {
+    throw new Error("PI_MOBILE_PLAN_TOOL_SNAPSHOT_MISSING");
+  }
+  await state.session.appendCustomEntry(PLAN_MODE_ENTRY_TYPE, {
+    enabled: true,
+    prePlanActiveToolNames: activeToolNames,
+  });
+  state.prePlanActiveToolNames = [...activeToolNames];
+}
+
 export async function preparePlanImplementation(
   state: PlanExtensionState,
   plan: TaskPlanSnapshot,

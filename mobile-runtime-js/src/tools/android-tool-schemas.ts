@@ -5,6 +5,7 @@ type ToolParameters = AgentTool["parameters"];
 export interface AndroidToolSchemas {
   projectCommand: (defaultTimeoutMillis: number) => ToolParameters;
   attachmentRead: ToolParameters;
+  skillResource: ToolParameters;
   imageGeneration: ToolParameters;
   capabilities: ToolParameters;
   capabilityRequest: ToolParameters;
@@ -74,6 +75,45 @@ export function createAndroidToolSchemas(): AndroidToolSchemas {
       },
       required: ["attachmentId", "offset", "limit"],
       additionalProperties: false,
+    } as ToolParameters,
+    skillResource: {
+      type: "object",
+      oneOf: [
+        {
+          type: "object",
+          properties: {
+            action: { type: "string", const: "list" },
+            skillName: {
+              type: "string",
+              minLength: 1,
+              maxLength: 64,
+              pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            },
+            prefix: { type: "string", minLength: 1, maxLength: 600 },
+            offset: { type: "integer", minimum: 0, default: 0 },
+            limit: { type: "integer", minimum: 1, maximum: 64, default: 64 },
+          },
+          required: ["action", "skillName", "offset", "limit"],
+          additionalProperties: false,
+        },
+        {
+          type: "object",
+          properties: {
+            action: { type: "string", const: "read" },
+            skillName: {
+              type: "string",
+              minLength: 1,
+              maxLength: 64,
+              pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            },
+            path: { type: "string", minLength: 1, maxLength: 600 },
+            offset: { type: "integer", minimum: 0, default: 0 },
+            limit: { type: "integer", minimum: 256, maximum: 65_536, default: 16_384 },
+          },
+          required: ["action", "skillName", "path", "offset", "limit"],
+          additionalProperties: false,
+        },
+      ],
     } as ToolParameters,
     imageGeneration: {
       type: "object",

@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "profile": "momoding-pi-mobile-v1",
+  "kind": "local",
+  "packageName": "@momoding-fixtures/host-call",
+  "packageVersion": "1.0.0",
+  "sourceDigest": "b7772f4cf31d86dec3cc179fb262d7fd910748f0543f2d442b5cc63691bb15c4",
+  "registryIntegrity": null,
+  "repositoryUrl": null,
+  "revision": null,
+  "packer": {
+    "node": "22.22.3",
+    "typescript": "5.9.3",
+    "esbuild": "0.27.2"
+  }
+}

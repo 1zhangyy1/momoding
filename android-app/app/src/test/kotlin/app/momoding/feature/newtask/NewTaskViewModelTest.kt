@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.lifecycle.viewModelScope
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import app.momoding.core.data.MomodingDatabase
@@ -26,9 +27,11 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.job
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -112,7 +115,9 @@ class NewTaskViewModelTest {
         assertEquals(latest.text, saved.text)
         assertEquals(latest.selection.start, saved.selectionStart)
         assertEquals(latest.selection.end, saved.selectionEnd)
-        applicationScope.cancel()
+        viewModel.viewModelScope.coroutineContext.job.cancelAndJoin()
+        applicationScope.coroutineContext.job.cancelAndJoin()
+        advanceUntilIdle()
     }
 
     @Test

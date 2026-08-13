@@ -7,6 +7,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import java.net.SocketTimeoutException
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AppUpdateManagerTest {
@@ -48,6 +49,30 @@ class AppUpdateManagerTest {
         advanceUntilIdle()
 
         assertTrue(manager.state.value is AppUpdateUiState.UpToDate)
+    }
+
+    @Test
+    fun `download timeout tells the user retry will continue`() = runTest {
+        val release = release("0.1.0-alpha.2")
+        val manager = AppUpdateManager(
+            scope = this,
+            currentVersionName = "0.1.0-alpha.1",
+            source = AppUpdateSource { release },
+            downloader = AppUpdateDownload { _, _ -> throw SocketTimeoutException("timeout") },
+            elapsedRealtime = { testScheduler.currentTime },
+        )
+        manager.checkNow()
+        advanceUntilIdle()
+
+        assertTrue(manager.prepareUpdate().isFailure)
+
+        assertEquals(
+            AppUpdateUiState.Failed(
+                "Download timed out. Tap Retry; saved progress will be reused.",
+                release,
+            ),
+            manager.state.value,
+        )
     }
 
     private fun release(version: String) = AppRelease(

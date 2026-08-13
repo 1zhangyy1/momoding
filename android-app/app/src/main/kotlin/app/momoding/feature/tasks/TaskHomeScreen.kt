@@ -167,6 +167,7 @@ fun TaskHomeScreen(
                     item("app-update") {
                         AppUpdateTip(
                             release = release,
+                            detail = updateState.message,
                             action = "Retry",
                             onClick = onInstallUpdate,
                         )
@@ -273,6 +274,7 @@ fun TaskHomeScreen(
 @Composable
 private fun AppUpdateTip(
     release: AppRelease,
+    detail: String = formatUpdateSize(release.apk.sizeBytes),
     action: String,
     onClick: (() -> Unit)?,
 ) {
@@ -312,9 +314,11 @@ private fun AppUpdateTip(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                formatUpdateSize(release.apk.sizeBytes),
+                detail,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
         }
         Text(

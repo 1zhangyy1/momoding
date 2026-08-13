@@ -25,6 +25,9 @@ import app.momoding.core.skills.SkillComposerInput
 import app.momoding.core.skills.SkillRepository
 import app.momoding.core.skills.parseSkillComposerInput
 import app.momoding.core.skills.skillResourceSetDigest
+import app.momoding.core.extensions.EnabledExtensionPackageSet
+import app.momoding.core.extensions.ExtensionPackageRepository
+import app.momoding.core.extensions.extensionPackageSetDigest
 import app.momoding.feature.newtask.DraftTitlePolicy
 import app.momoding.feature.newtask.TaskCreationProgress
 import app.momoding.feature.newtask.TaskCreationStage
@@ -68,6 +71,7 @@ class PhoneLocalTaskCoordinator(
     private val goalRepository: PhoneLocalGoalRepository? = null,
     private val childAgentRepository: PhoneLocalChildAgentRepository? = null,
     private val skillRepository: SkillRepository? = null,
+    private val extensionPackageRepository: ExtensionPackageRepository? = null,
     private val attachmentRepository: AttachmentRepository? = null,
     private val beforeGoalContinuationStartFence: suspend (String) -> Unit = {},
     private val beforeGoalStartPiEntry: suspend (String) -> Unit = {},
@@ -605,6 +609,7 @@ class PhoneLocalTaskCoordinator(
             is SkillComposerInput.Prompt -> null
         }
         val desiredSkills = skillContext?.enabledResourceSet ?: desiredSkillResources()
+        val desiredExtensions = desiredExtensionPackages()
 
         creationProgressFor(draftId).value = TaskCreationProgress.Working(
             TaskCreationStage.CREATE,
@@ -649,6 +654,7 @@ class PhoneLocalTaskCoordinator(
                         additionalInstructions = composerInput.additionalInstructions,
                         sessionId = piSessionId,
                         skillResources = desiredSkills,
+                        extensionPackages = desiredExtensions,
                         onStatus = onStatus,
                     )
                     is SkillComposerInput.Prompt -> runtime.startTaskSession(
@@ -657,6 +663,7 @@ class PhoneLocalTaskCoordinator(
                         sessionId = piSessionId,
                         planMode = draft.selectedMode == "PLAN",
                         skillResources = desiredSkills,
+                        extensionPackages = desiredExtensions,
                         images = runtimeAttachments.images,
                         textAttachments = runtimeAttachments.textFiles,
                         onStatus = onStatus,
@@ -702,7 +709,8 @@ class PhoneLocalTaskCoordinator(
             is SkillComposerInput.Prompt -> null
         }
         val desiredSkills = skillContext?.enabledResourceSet ?: desiredSkillResources()
-        claimExistingSettledSession(taskId, refreshProvider, desiredSkills)
+        val desiredExtensions = desiredExtensionPackages()
+        claimExistingSettledSession(taskId, refreshProvider, desiredSkills, desiredExtensions)
         try {
             runtime.syncTaskSkillResources(taskId, desiredSkills)
             val piSessionId = taskSession(taskId)
@@ -841,6 +849,9 @@ class PhoneLocalTaskCoordinator(
                 // Keep the task non-terminal until attachment reconciliation has completed.
                 // Observers may treat a terminal run state as the durable postcondition gate.
                 runState = TaskRunState.RUNNING,
+                extensionActivities = terminal.events.filter { event ->
+                    (event["type"] as? JsonPrimitive)?.contentOrNull == "extension_tool_activity"
+                },
             )
             attachmentRepository?.reconcileTaskImages(
                 taskId,
@@ -1240,8 +1251,10 @@ class PhoneLocalTaskCoordinator(
         taskId: String,
         refreshProvider: Boolean = false,
         skillResources: EnabledSkillResourceSet? = null,
+        extensionPackages: EnabledExtensionPackageSet? = null,
     ) {
         val desiredSkills = skillResources ?: desiredSkillResources()
+        val desiredExtensions = extensionPackages ?: desiredExtensionPackages()
         sessionTransition.withLock {
             val currentRunning = synchronized(stateLock) { runningTaskId }
             check(currentRunning == null) { "PI_MOBILE_TASK_SESSION_BUSY" }
@@ -1256,6 +1269,18 @@ class PhoneLocalTaskCoordinator(
             if (alreadyOpen && refreshProvider) {
                 check(runtime.closeTaskSession(taskId)) {
                     "PI_MOBILE_TASK_SESSION_PROVIDER_REFRESH_FAILED"
+                }
+                synchronized(stateLock) {
+                    if (sessionTaskId == taskId) sessionTaskId = null
+                }
+                alreadyOpen = false
+            }
+            if (
+                alreadyOpen &&
+                !runtime.taskExtensionPackageSetMatches(taskId, desiredExtensions)
+            ) {
+                check(runtime.closeTaskSession(taskId)) {
+                    "PI_MOBILE_TASK_SESSION_EXTENSION_REFRESH_FAILED"
                 }
                 synchronized(stateLock) {
                     if (sessionTaskId == taskId) sessionTaskId = null
@@ -1279,6 +1304,7 @@ class PhoneLocalTaskCoordinator(
                     skillResources = desiredSkills,
                     images = runtimeImages,
                     requiresTools = textReferences.isNotEmpty(),
+                    extensionPackages = desiredExtensions,
                 )
                 taskStreams[taskId] = persisted.streamId
                 taskSessions[taskId] = persisted.piSessionId
@@ -1377,6 +1403,12 @@ class PhoneLocalTaskCoordinator(
         skillRepository?.enabledResourceSet() ?: EnabledSkillResourceSet(
             resources = emptyList(),
             digest = skillResourceSetDigest(emptyList()),
+        )
+
+    private suspend fun desiredExtensionPackages(): EnabledExtensionPackageSet =
+        extensionPackageRepository?.enabledPackageSet() ?: EnabledExtensionPackageSet(
+            packages = emptyList(),
+            digest = extensionPackageSetDigest(emptyList()),
         )
 
     private suspend fun resolveSkillInvocation(

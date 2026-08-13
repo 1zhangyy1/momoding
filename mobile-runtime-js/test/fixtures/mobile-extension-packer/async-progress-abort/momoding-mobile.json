@@ -1,0 +1,31 @@
+{
+  "profileVersion": 1,
+  "package": {
+    "id": "fixtures.async-progress-abort",
+    "name": "Async progress and abort fixture",
+    "version": "1.0.0",
+    "description": "An official-shaped asynchronous handler contract fixture."
+  },
+  "source": {
+    "entrypoint": "./index.ts"
+  },
+  "tools": [
+    {
+      "name": "fixture_progress",
+      "label": "Fixture progress",
+      "description": "Emit bounded progress and honor cancellation.",
+      "promptSnippet": null,
+      "promptGuidelines": [],
+      "executionMode": "sequential",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    }
+  ],
+  "hostTools": [],
+  "capabilities": { "required": [], "optional": [] },
+  "https": { "origins": [], "methods": [] },
+  "credentials": []
+}

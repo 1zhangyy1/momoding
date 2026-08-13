@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "profile": "momoding-pi-mobile-v1",
+  "kind": "local",
+  "packageName": "@momoding-fixtures/network",
+  "packageVersion": "1.0.0",
+  "sourceDigest": "1dc2f934b71650b4235cc3976816984f24395449a296eb5b11a61580565fb09b",
+  "registryIntegrity": null,
+  "repositoryUrl": null,
+  "revision": null,
+  "packer": {
+    "node": "22.22.3",
+    "typescript": "5.9.3",
+    "esbuild": "0.27.2"
+  }
+}

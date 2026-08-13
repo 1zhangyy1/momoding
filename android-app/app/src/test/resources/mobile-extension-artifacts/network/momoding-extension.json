@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 2,
+  "id": "fixtures.network",
+  "name": "Android-owned network fixture",
+  "version": "1.0.0",
+  "description": "A declared HTTPS origin and credential slot contract fixture.",
+  "runtime": "pi-register-tool-v1",
+  "entrypoint": "dist/index.js",
+  "tools": [
+    {
+      "type": "pi-register-tool",
+      "name": "fixture_status",
+      "label": "Fixture status",
+      "description": "Fetch bounded JSON from one declared HTTPS origin.",
+      "promptSnippet": null,
+      "promptGuidelines": [],
+      "executionMode": "sequential",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    }
+  ],
+  "hostTools": [],
+  "requiredCapabilities": [],
+  "optionalCapabilities": [],
+  "httpPolicy": {
+    "origins": [
+      "https://status.example.test"
+    ],
+    "methods": [
+      "GET"
+    ],
+    "credentialSlots": [
+      {
+        "slot": "status-api",
+        "origin": "https://status.example.test",
+        "placement": "authorization_bearer"
+      }
+    ]
+  },
+  "packageDigest": "c3b8294b212b9397fe20fb28ed0826ed89ccd550eebc5dd69817cf0a15cc8664"
+}

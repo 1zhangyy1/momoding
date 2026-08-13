@@ -10,7 +10,7 @@ import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-const val MOMODING_DATABASE_SCHEMA_VERSION: Int = 16
+const val MOMODING_DATABASE_SCHEMA_VERSION: Int = 19
 
 val MIGRATION_1_2: Migration = object : Migration(1, 2) {
     override fun migrate(db: SupportSQLiteDatabase) {
@@ -448,6 +448,84 @@ private val MIGRATION_15_16_STATEMENTS = listOf(
     "ALTER TABLE tasks ADD COLUMN failureRecovery TEXT DEFAULT NULL",
 )
 
+val MIGRATION_16_17: Migration = object : Migration(16, 17) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        MIGRATION_16_17_STATEMENTS.forEach(db::execSQL)
+    }
+
+    override fun migrate(connection: SQLiteConnection) {
+        MIGRATION_16_17_STATEMENTS.forEach { sql ->
+            connection.prepare(sql).use { statement ->
+                check(!statement.step()) { "Migration statement unexpectedly returned a row" }
+            }
+        }
+    }
+}
+
+private val MIGRATION_16_17_STATEMENTS = listOf(
+    "CREATE TABLE IF NOT EXISTS skill_package_files (" +
+        "skillId TEXT NOT NULL, relativePath TEXT NOT NULL, mimeType TEXT NOT NULL, " +
+        "byteSize INTEGER NOT NULL, contentSha256 TEXT NOT NULL, content BLOB NOT NULL, " +
+        "PRIMARY KEY(skillId, relativePath), FOREIGN KEY(skillId) REFERENCES skills(skillId) " +
+        "ON UPDATE NO ACTION ON DELETE CASCADE)",
+    "CREATE INDEX IF NOT EXISTS index_skill_package_files_skillId ON skill_package_files(skillId)",
+)
+
+val MIGRATION_17_18: Migration = object : Migration(17, 18) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        MIGRATION_17_18_STATEMENTS.forEach(db::execSQL)
+    }
+
+    override fun migrate(connection: SQLiteConnection) {
+        MIGRATION_17_18_STATEMENTS.forEach { sql ->
+            connection.prepare(sql).use { statement ->
+                check(!statement.step()) { "Migration statement unexpectedly returned a row" }
+            }
+        }
+    }
+}
+
+private val MIGRATION_17_18_STATEMENTS = listOf(
+    "CREATE TABLE IF NOT EXISTS extension_packages (" +
+        "packageId TEXT NOT NULL, name TEXT NOT NULL, version TEXT NOT NULL, " +
+        "description TEXT NOT NULL, manifestCanonicalJson TEXT NOT NULL, " +
+        "packageDigest TEXT NOT NULL, enabled INTEGER NOT NULL, fileCount INTEGER NOT NULL, " +
+        "createdAtMillis INTEGER NOT NULL, updatedAtMillis INTEGER NOT NULL, " +
+        "PRIMARY KEY(packageId))",
+    "CREATE TABLE IF NOT EXISTS extension_package_files (" +
+        "packageId TEXT NOT NULL, relativePath TEXT NOT NULL, mimeType TEXT NOT NULL, " +
+        "byteSize INTEGER NOT NULL, contentSha256 TEXT NOT NULL, content BLOB NOT NULL, " +
+        "PRIMARY KEY(packageId, relativePath), " +
+        "FOREIGN KEY(packageId) REFERENCES extension_packages(packageId) " +
+        "ON UPDATE NO ACTION ON DELETE CASCADE)",
+    "CREATE INDEX IF NOT EXISTS index_extension_package_files_packageId " +
+        "ON extension_package_files(packageId)",
+)
+
+val MIGRATION_18_19: Migration = object : Migration(18, 19) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        MIGRATION_18_19_STATEMENTS.forEach(db::execSQL)
+    }
+
+    override fun migrate(connection: SQLiteConnection) {
+        MIGRATION_18_19_STATEMENTS.forEach { sql ->
+            connection.prepare(sql).use { statement ->
+                check(!statement.step()) { "Migration statement unexpectedly returned a row" }
+            }
+        }
+    }
+}
+
+private val MIGRATION_18_19_STATEMENTS = listOf(
+    "CREATE TABLE IF NOT EXISTS extension_package_state (" +
+        "packageId TEXT NOT NULL, stateKey TEXT NOT NULL, valueJson TEXT NOT NULL, " +
+        "updatedAtMillis INTEGER NOT NULL, PRIMARY KEY(packageId, stateKey), " +
+        "FOREIGN KEY(packageId) REFERENCES extension_packages(packageId) " +
+        "ON UPDATE NO ACTION ON DELETE CASCADE)",
+    "CREATE INDEX IF NOT EXISTS index_extension_package_state_packageId " +
+        "ON extension_package_state(packageId)",
+)
+
 @Database(
     entities = [
         TaskEntity::class,
@@ -456,6 +534,10 @@ private val MIGRATION_15_16_STATEMENTS = listOf(
         TaskChildAgentEntity::class,
         TaskChildAgentEventEntity::class,
         SkillEntity::class,
+        SkillPackageFileEntity::class,
+        ExtensionPackageEntity::class,
+        ExtensionPackageFileEntity::class,
+        ExtensionPackageStateEntity::class,
         RawPiEventEntity::class,
         PendingResyncEntity::class,
         StagedRawFrameEntity::class,
@@ -478,6 +560,10 @@ private val MIGRATION_15_16_STATEMENTS = listOf(
 abstract class MomodingDatabase : RoomDatabase() {
     abstract fun momodingDao(): MomodingDao
     abstract fun skillDao(): SkillDao
+    abstract fun skillPackageFileDao(): SkillPackageFileDao
+    abstract fun extensionPackageDao(): ExtensionPackageDao
+    abstract fun extensionPackageFileDao(): ExtensionPackageFileDao
+    abstract fun extensionPackageStateDao(): ExtensionPackageStateDao
     abstract fun attachmentDao(): AttachmentDao
 
     companion object {
@@ -507,6 +593,9 @@ abstract class MomodingDatabase : RoomDatabase() {
                     MIGRATION_13_14,
                     MIGRATION_14_15,
                     MIGRATION_15_16,
+                    MIGRATION_16_17,
+                    MIGRATION_17_18,
+                    MIGRATION_18_19,
                 )
                 .build()
     }

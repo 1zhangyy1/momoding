@@ -13,6 +13,7 @@ import {
 import {
   AgentHarness,
   Session,
+  formatSkillsForSystemPrompt,
   type AgentHarnessEvent,
   type AgentTool,
   type AgentToolResult,
@@ -43,6 +44,7 @@ import {
   exitPlanMode,
   preparePlanImplementation,
   recordInitialPlanMode,
+  replacePlanModeToolSnapshot,
   restorePlanExtensionState,
   type TaskPlanSnapshot,
 } from "./extensions/plan-mode.js";
@@ -59,6 +61,29 @@ import {
   type TaskGoalSnapshot,
   type TaskGoalTargetState,
 } from "./extensions/goal-mode.js";
+import { createBuiltInMobileExtensionHost } from "./extensions/built-in-mobile-extensions.js";
+import type { MobileExtensionHost } from "./extensions/mobile-extension-host.js";
+import {
+  CONNECTOR_SNAPSHOT_ENTRY_TYPE,
+  connectorBinding,
+  connectorExtensionToolNames,
+  createConnectorExtension,
+  requireConnectorToolSnapshot,
+  requireMatchingConnectorRestore,
+  restoreConnectorBinding,
+  type ConnectorToolSnapshot,
+} from "./extensions/connector-extension.js";
+import {
+  createDeclarativeExtensionPackageDescriptors,
+  extensionPackageSetDigest,
+  requireExtensionPackageSnapshots,
+  type ExtensionPackageSnapshot,
+} from "./extensions/declarative-extension-package.js";
+import {
+  createPiRegisterToolExtensionDescriptor,
+  type PiRegisterToolActivity,
+} from "./extensions/pi-register-tool-extension.js";
+import { createNativePiRegisterToolTransport } from "./extensions/pi-register-tool-native-transport.js";
 import { sha256 } from "./sha256.js";
 import {
   GOAL_MODE_SYSTEM_PROMPT,
@@ -90,6 +115,9 @@ import {
 import {
   createAndroidFixtureTool,
   createAndroidProductTools,
+  createAndroidSkillResourceTool,
+  SKILL_RESOURCE_TOOL_NAME,
+  type NativeToolExecutor,
   type NativeToolRequest,
   type NativeToolRequestKind,
 } from "./tools/android-tool-registry.js";
@@ -162,7 +190,10 @@ interface NativeScenarioState
   providerKind: NativeProviderKind;
   modelId: string;
   providerBindingRecorded: boolean;
+  connectorBindingRecorded: boolean;
+  connectorSnapshot: ConnectorToolSnapshot | null;
   harness: AgentHarness;
+  extensionHost: MobileExtensionHost;
   session: Session;
   taskId: string | null;
   unsubscribe: () => void;
@@ -199,9 +230,12 @@ interface NativeScenarioState
   resourceSetTrusted: boolean;
   resourceTransitionPending: boolean;
   resourceUpdateCount: number;
+  extensionSetDigest: string;
+  extensionSetTrusted: boolean;
   childAgents: PiChildAgentManager | null;
   childEventOutbox: PiChildEventEnvelope[];
   childEventAckHighWater: Map<string, number>;
+  executeNativeTool: NativeToolExecutor;
 }
 
 const PROVIDER_ID = "openrouter";
@@ -291,6 +325,8 @@ export function startNativeOpenRouterTaskSession(
   imageInputs: PiRuntimeImageInput[] = [],
   textAttachmentInputs: PiRuntimeTextAttachmentInput[] = [],
   imageGenerationEnabled = false,
+  connectorToolSnapshot: ConnectorToolSnapshot | null = null,
+  extensionPackages: ExtensionPackageSnapshot[] = [],
 ): Record<string, unknown> {
   requireTaskId(taskId);
   const images = requireRuntimeImageInputs(imageInputs);
@@ -312,6 +348,9 @@ export function startNativeOpenRouterTaskSession(
     images,
     textAttachments,
     imageGenerationEnabled,
+    "openrouter",
+    connectorToolSnapshot,
+    requireExtensionPackageSnapshots(extensionPackages),
   );
 }
 
@@ -324,6 +363,8 @@ export function startNativeCodexTaskSession(
   planMode = false,
   skillResources: PiMobileSkillResource[] = [],
   textAttachmentInputs: PiRuntimeTextAttachmentInput[] = [],
+  connectorToolSnapshot: ConnectorToolSnapshot | null = null,
+  extensionPackages: ExtensionPackageSnapshot[] = [],
 ): Record<string, unknown> {
   requireTaskId(taskId);
   const textAttachments = requireRuntimeTextAttachmentInputs(textAttachmentInputs);
@@ -345,6 +386,8 @@ export function startNativeCodexTaskSession(
     textAttachments,
     false,
     "codex",
+    connectorToolSnapshot,
+    requireExtensionPackageSnapshots(extensionPackages),
   );
 }
 
@@ -356,6 +399,8 @@ export function startNativeCodexTaskSkillSession(
   env: ExecutionEnv,
   sessionId = `phone-local-task-${taskId}`,
   skillResources: PiMobileSkillResource[] = [],
+  connectorToolSnapshot: ConnectorToolSnapshot | null = null,
+  extensionPackages: ExtensionPackageSnapshot[] = [],
 ): Record<string, unknown> {
   requireTaskId(taskId);
   requireSessionId(sessionId);
@@ -376,6 +421,8 @@ export function startNativeCodexTaskSkillSession(
     [],
     false,
     "codex",
+    connectorToolSnapshot,
+    requireExtensionPackageSnapshots(extensionPackages),
   );
   return invokeNativeOpenRouterTaskSkill(skillName, additionalInstructions);
 }
@@ -389,6 +436,8 @@ export function startNativeOpenRouterTaskSkillSession(
   sessionId = `phone-local-task-${taskId}`,
   skillResources: PiMobileSkillResource[] = [],
   imageGenerationEnabled = false,
+  connectorToolSnapshot: ConnectorToolSnapshot | null = null,
+  extensionPackages: ExtensionPackageSnapshot[] = [],
 ): Record<string, unknown> {
   requireTaskId(taskId);
   requireSessionId(sessionId);
@@ -408,6 +457,9 @@ export function startNativeOpenRouterTaskSkillSession(
     [],
     [],
     imageGenerationEnabled,
+    "openrouter",
+    connectorToolSnapshot,
+    requireExtensionPackageSnapshots(extensionPackages),
   );
   return invokeNativeOpenRouterTaskSkill(skillName, additionalInstructions);
 }
@@ -422,6 +474,8 @@ export function restoreNativeOpenRouterTaskSession(
   skillResources: PiMobileSkillResource[] = [],
   imageInputs: PiRuntimeImageInput[] = [],
   imageGenerationEnabled = false,
+  connectorToolSnapshot: ConnectorToolSnapshot | null = null,
+  extensionPackages: ExtensionPackageSnapshot[] = [],
 ): Record<string, unknown> {
   requireTaskId(taskId);
   requireSessionId(sessionId);
@@ -445,6 +499,9 @@ export function restoreNativeOpenRouterTaskSession(
     images,
     [],
     imageGenerationEnabled,
+    "openrouter",
+    connectorToolSnapshot,
+    requireExtensionPackageSnapshots(extensionPackages),
   );
 }
 
@@ -456,6 +513,8 @@ export function restoreNativeCodexTaskSession(
   modelId: string,
   env: ExecutionEnv,
   skillResources: PiMobileSkillResource[] = [],
+  connectorToolSnapshot: ConnectorToolSnapshot | null = null,
+  extensionPackages: ExtensionPackageSnapshot[] = [],
 ): Record<string, unknown> {
   requireTaskId(taskId);
   requireSessionId(sessionId);
@@ -479,6 +538,8 @@ export function restoreNativeCodexTaskSession(
     [],
     false,
     "codex",
+    connectorToolSnapshot,
+    requireExtensionPackageSnapshots(extensionPackages),
   );
 }
 
@@ -729,12 +790,25 @@ function startNativeOpenRouterRun(
   initialTextAttachments: PiRuntimeTextAttachmentInput[] = [],
   imageGenerationEnabled = false,
   providerKind: NativeProviderKind = "openrouter",
+  connectorToolSnapshot: ConnectorToolSnapshot | null = null,
+  extensionPackages: ExtensionPackageSnapshot[] = [],
 ): Record<string, unknown> {
   if (nativeScenarioState !== null && !nativeScenarioState.terminal) {
     throw new Error("PI_MOBILE_NATIVE_PROVIDER_SCENARIO_ALREADY_RUNNING");
   }
   closeNativeOpenRouterScenario();
   requireModelId(modelId, providerKind);
+  const normalizedConnectorSnapshot = requireConnectorToolSnapshot(connectorToolSnapshot);
+  const normalizedExtensionPackages = requireExtensionPackageSnapshots(extensionPackages);
+  if (normalizedConnectorSnapshot !== null && taskId === null) {
+    throw new Error("PI_MOBILE_CONNECTOR_TASK_MISSING");
+  }
+  if (normalizedExtensionPackages.length > 0 && taskId === null) {
+    throw new Error("PI_MOBILE_EXTENSION_PACKAGE_TASK_MISSING");
+  }
+  const restoredConnector = restoreConnectorBinding(restoredEntries);
+  const isRestore = prompt === null && (restoredTurnCount > 0 || restoredEntries.length > 0);
+  requireMatchingConnectorRestore(restoredConnector, normalizedConnectorSnapshot, isRestore);
   const restoredProviderBinding = providerBindingFromEntries(restoredEntries);
   if (
     restoredProviderBinding !== null &&
@@ -838,26 +912,81 @@ function startNativeOpenRouterRun(
   const productTools: AgentTool[] = kind === "prompt" && taskId !== null
     ? [
         childAgents!.delegateTool(),
-        ...createAndroidProductTools(executeNativeTool, { imageGenerationEnabled }),
+        ...createAndroidProductTools(executeNativeTool, {
+          imageGenerationEnabled,
+          skillResourceEnabled: normalizedSkillResources.length > 0,
+        }),
         createPlanUpdateTool(() => state),
         ...createGoalTools(() => state),
       ]
     : [];
-  const tools = enableFixtureTool ? [fixtureTool] : productTools;
+  const piRegisterTransport = createNativePiRegisterToolTransport(executeNativeTool);
+  const taskExtensions = [
+    ...(normalizedConnectorSnapshot === null
+      ? []
+      : [createConnectorExtension(normalizedConnectorSnapshot, executeNativeTool)]),
+    ...normalizedExtensionPackages.flatMap((extensionPackage) =>
+      extensionPackage.schemaVersion === 2
+        ? [createPiRegisterToolExtensionDescriptor(
+            extensionPackage,
+            productTools,
+            piRegisterTransport,
+            {
+              onActivity: (activity) => recordPiRegisterToolActivity(state, activity),
+            },
+          )]
+        : createDeclarativeExtensionPackageDescriptors(
+            [extensionPackage],
+            productTools,
+            normalizedConnectorSnapshot,
+            executeNativeTool,
+          )
+    ),
+  ];
+  const extensionHost = createBuiltInMobileExtensionHost(taskExtensions);
+  const legacyTools = enableFixtureTool ? [fixtureTool] : productTools;
+  const tools = extensionHost.composeTools(legacyTools);
+  const packageToolNames = normalizedExtensionPackages.flatMap((extensionPackage) =>
+    extensionPackage.tools.map((tool) => tool.name)
+  );
   const defaultActiveToolNames = tools
     .map((candidate) => candidate.name)
     .filter((name) => name !== TASK_PLAN_UPDATE_TOOL_NAME && !GOAL_TOOL_NAMES.includes(name));
-  const restoredGoal = restoreGoalExtensionState(restoredEntries);
+  const restoredGoalSnapshot = restoreGoalExtensionState(restoredEntries);
+  const restoredGoal = restoredGoalSnapshot === null
+    ? null
+    : {
+        ...restoredGoalSnapshot,
+        preGoalActiveToolNames: reconcilePackageToolSnapshot(
+          restoredGoalSnapshot.preGoalActiveToolNames,
+          tools,
+          packageToolNames,
+        ),
+      };
   const planMode = taskId !== null && (initialPlanMode || restoredPlan.planMode);
   if (planMode && restoredGoal?.state === "active") {
     throw new Error("PI_MOBILE_GOAL_PLAN_MODE_CONFLICT");
   }
   const prePlanActiveToolNames = planMode
-    ? restoredPlan.prePlanActiveToolNames ?? defaultActiveToolNames
+    ? restoredPlan.prePlanActiveToolNames === null
+      ? defaultActiveToolNames
+      : reconcilePackageToolSnapshot(
+          restoredPlan.prePlanActiveToolNames,
+          tools,
+          packageToolNames,
+        )
     : null;
-  const initialActiveToolNames = planMode
-    ? PLAN_ALLOWED_TOOL_NAMES.filter((name) => tools.some((tool) => tool.name === name))
-    : restoredPlan.activeToolNames?.filter((name) =>
+  const restoredActiveToolNames = restoredPlan.activeToolNames === null
+    ? null
+    : reconcilePackageToolSnapshot(
+        restoredPlan.activeToolNames,
+        tools,
+        packageToolNames,
+      );
+  const requestedActiveToolNames = planMode
+    ? [...PLAN_ALLOWED_TOOL_NAMES, ...connectorExtensionToolNames(normalizedConnectorSnapshot)]
+      .filter((name) => tools.some((tool) => tool.name === name))
+    : restoredActiveToolNames?.filter((name) =>
       name !== TASK_PLAN_UPDATE_TOOL_NAME &&
       (restoredGoal?.state === "active" || !GOAL_TOOL_NAMES.includes(name)) &&
       tools.some((tool) => tool.name === name)
@@ -866,22 +995,43 @@ function startNativeOpenRouterRun(
         ? [...defaultActiveToolNames, ...GOAL_TOOL_NAMES]
         : defaultActiveToolNames
     );
-  const harness = new AgentHarness({
-    env,
-    session,
-    models,
-    model,
+  const initialActiveToolNames = extensionHost.createActiveToolSnapshot(
     tools,
-    activeToolNames: initialActiveToolNames,
-    resources: { skills: toPiSkills(normalizedSkillResources) },
-    systemPrompt: kind === "prompt"
-      ? () => state.planMode
-        ? `${MOMODING_TASK_SYSTEM_PROMPT} ${PLAN_MODE_SYSTEM_PROMPT}`
-        : state.goal?.state === "active"
-          ? `${MOMODING_TASK_SYSTEM_PROMPT} ${GOAL_MODE_SYSTEM_PROMPT} Active goal: ${state.goal.instruction}`
-          : MOMODING_TASK_SYSTEM_PROMPT
-      : "Phone-local native OpenRouter Provider bridge gate",
-  });
+    requestedActiveToolNames,
+  );
+  let harness: AgentHarness;
+  try {
+    harness = new AgentHarness({
+      env,
+      session,
+      models,
+      model,
+      tools,
+      activeToolNames: initialActiveToolNames,
+      resources: { skills: toPiSkills(normalizedSkillResources) },
+      systemPrompt: kind === "prompt"
+        ? ({ resources }) => {
+            const base = state.planMode
+              ? `${MOMODING_TASK_SYSTEM_PROMPT} ${PLAN_MODE_SYSTEM_PROMPT}`
+              : state.goal?.state === "active"
+                ? `${MOMODING_TASK_SYSTEM_PROMPT} ${GOAL_MODE_SYSTEM_PROMPT} Active goal: ${state.goal.instruction}`
+                : MOMODING_TASK_SYSTEM_PROMPT;
+            const skillIndex = formatSkillsForSystemPrompt(resources.skills ?? []);
+            return skillIndex.length === 0
+              ? base
+              : `${base}\n\n${skillIndex}\nThese locations are virtual on-device paths, not host filesystem paths. Pass the listed absolute /mobile-skills/<skill>/SKILL.md location to skill_resource, or pass a path relative to that Skill. Use paged list/read calls, do not invent paths, and never claim that reading a script executed it.`;
+          }
+        : "Phone-local native OpenRouter Provider bridge gate",
+    });
+    extensionHost.attach(harness);
+  } catch (error) {
+    try {
+      extensionHost.dispose();
+    } catch {
+      // Preserve the Harness construction failure after best-effort cleanup.
+    }
+    throw error;
+  }
   const releaseNativeResultHook = harness.on("tool_result", (event) => {
     const envelope = event.details as Partial<NativeToolResultEnvelope> | null;
     if (envelope?.[NATIVE_TOOL_RESULT_MARKER] !== true) return undefined;
@@ -901,7 +1051,10 @@ function startNativeOpenRouterRun(
     providerKind,
     modelId,
     providerBindingRecorded: restoredProviderBinding !== null,
+    connectorBindingRecorded: restoredConnector !== null,
+    connectorSnapshot: normalizedConnectorSnapshot,
     harness,
+    extensionHost,
     session,
     taskId,
     unsubscribe: () => undefined,
@@ -957,15 +1110,21 @@ function startNativeOpenRouterRun(
     resourceSetTrusted: true,
     resourceTransitionPending: false,
     resourceUpdateCount: 0,
+    extensionSetDigest: extensionPackageSetDigest(normalizedExtensionPackages),
+    extensionSetTrusted: true,
     childAgents,
     childEventOutbox,
     childEventAckHighWater: new Map<string, number>(),
+    executeNativeTool,
   };
   const releaseEventSubscription = harness.subscribe((event) => recordEvent(state, event));
   state.unsubscribe = () => {
-    releaseEventSubscription();
-    releaseNativeResultHook();
-    releaseLiveImageContextHook();
+    runCleanupActions("PI_MOBILE_SCENARIO_UNSUBSCRIBE_FAILED", [
+      ["events", releaseEventSubscription],
+      ["native_result", releaseNativeResultHook],
+      ["live_image_context", releaseLiveImageContextHook],
+      ["extensions", () => extensionHost.dispose()],
+    ]);
   };
   nativeScenarioState = state;
   if (prompt !== null) {
@@ -983,6 +1142,23 @@ function startNativeOpenRouterRun(
     }
   }
   return nativeOpenRouterScenarioStatus();
+}
+
+function reconcilePackageToolSnapshot(
+  previous: readonly string[],
+  tools: readonly AgentTool[],
+  currentPackageToolNames: readonly string[],
+): string[] {
+  const available = new Set(tools.map((tool) => tool.name));
+  const reconciled = previous.filter((name) => available.has(name));
+  const seen = new Set(reconciled);
+  for (const name of currentPackageToolNames) {
+    if (available.has(name) && !seen.has(name)) {
+      reconciled.push(name);
+      seen.add(name);
+    }
+  }
+  return reconciled;
 }
 
 function requireSessionEntries(value: unknown): SessionTreeEntry[] {
@@ -1074,6 +1250,15 @@ async function ensureProviderBinding(state: NativeScenarioState): Promise<void> 
     modelId: state.modelId,
   });
   state.providerBindingRecorded = true;
+}
+
+async function ensureConnectorBinding(state: NativeScenarioState): Promise<void> {
+  if (state.connectorSnapshot === null || state.connectorBindingRecorded) return;
+  await state.session.appendCustomEntry(
+    CONNECTOR_SNAPSHOT_ENTRY_TYPE,
+    connectorBinding(state.connectorSnapshot),
+  );
+  state.connectorBindingRecorded = true;
 }
 
 function requireSessionId(value: string): void {
@@ -1287,6 +1472,7 @@ async function runHarnessPrompt(
 ): Promise<void> {
   try {
     await ensureProviderBinding(state);
+    await ensureConnectorBinding(state);
     const effectivePrompt = await promptWithTextAttachments(
       state.session,
       prompt,
@@ -1318,6 +1504,7 @@ async function runHarnessSkill(
 ): Promise<void> {
   try {
     await ensureProviderBinding(state);
+    await ensureConnectorBinding(state);
     await state.session.appendCustomEntry(SKILL_INVOCATION_CONTROL_ENTRY_TYPE, {
       kind: "skill_invocation",
       name: skillName,
@@ -1349,6 +1536,7 @@ async function applyNativeOpenRouterTaskResources(
 ): Promise<void> {
   const updateCountBefore = state.resourceUpdateCount;
   try {
+    await syncSkillResourceTool(state, resources.length > 0);
     await state.harness.setResources({
       ...state.harness.getResources(),
       skills: toPiSkills(resources),
@@ -1373,6 +1561,44 @@ async function applyNativeOpenRouterTaskResources(
   } finally {
     state.resourceTransitionPending = false;
     updateTerminal(state);
+  }
+}
+
+async function syncSkillResourceTool(
+  state: NativeScenarioState,
+  enabled: boolean,
+): Promise<void> {
+  const tools = state.harness.getTools();
+  const hasTool = tools.some((tool) => tool.name === SKILL_RESOURCE_TOOL_NAME);
+  if (hasTool === enabled) return;
+  const activeNames = activeToolNames(state).filter((name) => name !== SKILL_RESOURCE_TOOL_NAME);
+  let prePlanNames: string[] | null = null;
+  if (state.planMode) {
+    if (state.prePlanActiveToolNames === null) {
+      throw new Error("PI_MOBILE_PLAN_TOOL_SNAPSHOT_MISSING");
+    }
+    prePlanNames = state.prePlanActiveToolNames.filter(
+      (name) => name !== SKILL_RESOURCE_TOOL_NAME,
+    );
+  }
+  if (!enabled) {
+    await state.harness.setTools(
+      tools.filter((tool) => tool.name !== SKILL_RESOURCE_TOOL_NAME),
+      activeNames,
+    );
+    if (prePlanNames !== null) await replacePlanModeToolSnapshot(state, prePlanNames);
+    return;
+  }
+  const skillTool = createAndroidSkillResourceTool(state.executeNativeTool);
+  const attachmentIndex = tools.findIndex((tool) => tool.name === "attachment_read");
+  const nextTools = [...tools];
+  nextTools.splice(attachmentIndex < 0 ? nextTools.length : attachmentIndex + 1, 0, skillTool);
+  await state.harness.setTools(
+    nextTools,
+    state.planMode ? activeNames : [...activeNames, SKILL_RESOURCE_TOOL_NAME],
+  );
+  if (prePlanNames !== null) {
+    await replacePlanModeToolSnapshot(state, [...prePlanNames, SKILL_RESOURCE_TOOL_NAME]);
   }
 }
 
@@ -1715,10 +1941,13 @@ export function nativeOpenRouterScenarioStatus(): Record<string, unknown> {
     planTransitionPending: state.planTransitionPending,
     goal: state.goal,
     goalTransitionPending: state.goalTransitionPending,
+    connector: state.connectorSnapshot === null ? null : connectorBinding(state.connectorSnapshot),
     resourceSetDigest: state.resourceSetDigest,
     resourceSetTrusted: state.resourceSetTrusted,
     resourceTransitionPending: state.resourceTransitionPending,
     resourceUpdateCount: state.resourceUpdateCount,
+    extensionSetDigest: state.extensionSetDigest,
+    extensionSetTrusted: state.extensionSetTrusted,
     skillNames: (state.harness.getResources().skills ?? []).map((skill) => skill.name),
     childAgents: state.childAgents?.snapshots() ?? [],
     queuedChildEventCount: state.childEventOutbox.length,
@@ -1731,18 +1960,23 @@ export function nativeOpenRouterScenarioStatus(): Record<string, unknown> {
 export function closeNativeOpenRouterScenario(): void {
   const state = nativeScenarioState;
   if (state === null) return;
-  state.childAgents?.close("runtime_rebuilt");
-  state.unsubscribe();
-  closeOpenRouterNativeBridge(state);
-  closeCodexNativeBridge(state);
-  for (const pending of state.pendingTools.values()) {
-    clearToolAbort(pending);
-    pending.reject(new Error("PI_MOBILE_RUNTIME_CLOSED"));
+  try {
+    runCleanupActions("PI_MOBILE_SCENARIO_CLOSE_FAILED", [
+      ["child_agents", () => state.childAgents?.close("runtime_rebuilt")],
+      ["subscriptions", state.unsubscribe],
+      ["openrouter_bridge", () => closeOpenRouterNativeBridge(state)],
+      ["codex_bridge", () => closeCodexNativeBridge(state)],
+    ]);
+  } finally {
+    for (const pending of state.pendingTools.values()) {
+      clearToolAbort(pending);
+      pending.reject(new Error("PI_MOBILE_RUNTIME_CLOSED"));
+    }
+    state.pendingTools.clear();
+    state.toolOutbox.length = 0;
+    state.childEventOutbox.length = 0;
+    nativeScenarioState = null;
   }
-  state.pendingTools.clear();
-  state.toolOutbox.length = 0;
-  state.childEventOutbox.length = 0;
-  nativeScenarioState = null;
 }
 
 function createNativeProviderStream(
@@ -1781,6 +2015,48 @@ function createNativeProviderStream(
     },
     childBinding,
   );
+}
+
+function recordPiRegisterToolActivity(
+  state: NativeScenarioState,
+  activity: PiRegisterToolActivity,
+): void {
+  const eventState = activity.phase === "started"
+    ? "running"
+    : activity.phase === "completed"
+      ? "completed"
+      : state.stopRequested || activity.code === "EXTENSION_PACKAGE_STOPPED"
+        ? "cancelled"
+        : "failed";
+  const event = activity.kind === "host_tool"
+    ? {
+        type: "extension_tool_activity" as const,
+        state: eventState,
+        toolCallId: activity.toolCallId,
+        seq: activity.seq,
+        kind: activity.kind,
+        packageId: activity.packageId,
+        name: activity.name,
+        targetTool: activity.targetTool,
+        ...(activity.code === undefined ? {} : { code: activity.code }),
+      }
+    : {
+        type: "extension_tool_activity" as const,
+        state: eventState,
+        toolCallId: activity.toolCallId,
+        seq: activity.seq,
+        kind: activity.kind,
+        packageId: activity.packageId,
+        ...(activity.method === undefined ? {} : { method: activity.method }),
+        ...(activity.origin === undefined ? {} : { origin: activity.origin }),
+        ...(activity.status === undefined ? {} : { status: activity.status }),
+        ...(activity.responseBytes === undefined ? {} : { responseBytes: activity.responseBytes }),
+        ...(activity.durationMillis === undefined ? {} : { durationMillis: activity.durationMillis }),
+        ...(activity.redirects === undefined ? {} : { redirects: activity.redirects }),
+        ...(activity.code === undefined ? {} : { code: activity.code }),
+      };
+  state.events.push(event);
+  state.eventTypes.push(event.type);
 }
 
 function requestNativeTool(
@@ -2003,6 +2279,21 @@ function requireSafeProviderError(value: string): string {
     throw new Error("PI_MOBILE_NATIVE_PROVIDER_ERROR_INVALID");
   }
   return value;
+}
+
+function runCleanupActions(
+  errorCode: string,
+  actions: readonly (readonly [label: string, action: () => unknown])[],
+): void {
+  const errors: string[] = [];
+  for (const [label, action] of actions) {
+    try {
+      action();
+    } catch (error) {
+      errors.push(`${label}:${safeErrorMessage(error)}`);
+    }
+  }
+  if (errors.length > 0) throw new Error(`${errorCode} ${errors.join("|")}`);
 }
 
 function safeErrorMessage(error: unknown): string {

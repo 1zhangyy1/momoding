@@ -31,6 +31,10 @@ const forbidden = [
     "static Node import",
     /(?:(?<![A-Za-z0-9_$])require\s*\(\s*|from\s+|import\s+)[\"']node:/,
   ],
+  ["dynamic eval", /(?<![A-Za-z0-9_$])eval\s*\(/],
+  ["dynamic Function constructor", /\bnew\s+Function\s*\(/],
+  ["jiti runtime loader", /\bjiti\b/i],
+  ["npm runtime loader", /\bnpm\s+(?:install|exec|run)\b/i],
   ["source map reference", /sourceMappingURL=/],
   [
     "BigInt literal unsupported by Zipline QuickJS",
@@ -57,4 +61,6 @@ if (failures.length > 0) {
 }
 
 console.log(`Verified Pi ${manifest.piVersion} bundle ${actualHash}`);
-console.log("No embedded secret, absolute user path, static Node import, or source map");
+console.log(
+  "No embedded secret, absolute user path, dynamic runtime loader, static Node import, or source map",
+);

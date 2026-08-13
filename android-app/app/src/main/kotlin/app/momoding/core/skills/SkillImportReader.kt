@@ -9,7 +9,6 @@ import java.io.InputStream
 import java.nio.ByteBuffer
 import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
-import java.security.MessageDigest
 
 data class SkillImportDocument(
     val content: String,
@@ -133,7 +132,3 @@ internal fun decodeStrictUtf8(bytes: ByteArray): String = try {
 } catch (_: CharacterCodingException) {
     throw SkillImportException("SKILL_DOCUMENT_UTF8_INVALID")
 }
-
-private fun ByteArray.sha256(): String = MessageDigest.getInstance("SHA-256")
-    .digest(this)
-    .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }

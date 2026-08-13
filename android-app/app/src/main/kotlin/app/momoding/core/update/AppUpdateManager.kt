@@ -54,7 +54,7 @@ class AppUpdateManager internal constructor(
                     available?.let(AppUpdateUiState::Available)
                         ?: AppUpdateUiState.UpToDate(currentVersionName)
                 }.getOrElse { error ->
-                    AppUpdateUiState.Failed(error.userFacingMessage())
+                    AppUpdateUiState.Failed(error.checkUserFacingMessage())
                 }
             }
         }
@@ -78,14 +78,23 @@ class AppUpdateManager internal constructor(
         }.onSuccess {
             _state.value = AppUpdateUiState.Available(release)
         }.onFailure { error ->
-            _state.value = AppUpdateUiState.Failed(error.userFacingMessage(), release)
+            _state.value = AppUpdateUiState.Failed(error.downloadUserFacingMessage(), release)
         }
     }
 
-    private fun Throwable.userFacingMessage(): String = when (this) {
+    private fun Throwable.checkUserFacingMessage(): String = when (this) {
         is java.net.UnknownHostException -> "Couldn’t reach GitHub. Check your connection and try again."
         is java.net.SocketTimeoutException -> "The update check timed out. Try again."
         else -> message?.take(180)?.ifBlank { null } ?: "Couldn’t check for updates."
+    }
+
+    private fun Throwable.downloadUserFacingMessage(): String = when (this) {
+        is java.net.SocketTimeoutException ->
+            "Download timed out. Tap Retry; saved progress will be reused."
+        is java.io.IOException ->
+            "Download interrupted. Tap Retry; saved progress will be reused."
+        else -> message?.take(180)?.ifBlank { null } ?:
+            "Couldn’t download the update. Tap Retry to continue."
     }
 
     companion object {

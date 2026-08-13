@@ -5,6 +5,38 @@ All notable public changes will be documented here. The project follows
 
 ## Unreleased
 
+## 0.1.0-alpha.5 - 2026-08-13
+
+### Added
+
+- Installable Skill packages with bounded on-demand resources and task-scoped enablement.
+- A reviewed mobile Pi Extension profile for declarative tools and asynchronous `registerTool`
+  packages, including a deterministic source packer and compatibility diagnosis.
+- Task-scoped Connector support and isolated Extension Workers with bounded Android Host Tool and
+  HTTPS delegation.
+- Compact Extension Tool Activity entries for running, completed, failed, and cancelled Host work.
+- A unified `Skills & extensions` settings experience with one Add entry, plain-language access
+  review, clear on/off states, credential setup, and recovery actions.
+- Resumable in-app APK downloads that retain checksum-bound partial progress after interruptions.
+
+### Changed
+
+- Extension tools now reconcile with the current package set across ordinary tasks, Plan Mode,
+  Goal Mode, process restore, package updates, disablement, and removal.
+- Package updates remain disabled until the user reviews changed capabilities, Host Tools, HTTP
+  origins, methods, and credential slots.
+- Update failures now offer an explicit Retry action and reuse saved download progress when it is
+  still valid for the same release.
+
+### Security
+
+- Extension code runs in a non-exported Android isolated process without direct network access;
+  every Host call is re-authorized against the current package digest and declaration.
+- Extension HTTP credentials remain in the Android Keystore-backed Vault and are injected only by
+  the bounded native HTTPS client; secrets are not returned to the Worker.
+- Stop, timeout, package revocation, and late-result paths fail closed without bypassing Android's
+  permission, approval, or side-effect policy.
+
 ## 0.1.0-alpha.4 - 2026-08-07
 
 ### Fixed

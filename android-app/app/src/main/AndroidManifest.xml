@@ -66,6 +66,13 @@
             android:theme="@style/Theme.Momoding.MediaConsent" />
 
         <activity
+            android:name=".core.connector.ConnectorRedirectActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <activity
             android:name=".feature.share.ShareReceiverActivity"
             android:excludeFromRecents="true"
             android:exported="true"
@@ -123,6 +130,13 @@
             android:name=".core.accessibility.ScreenCaptureSessionService"
             android:exported="false"
             android:foregroundServiceType="mediaProjection"
+            android:stopWithTask="true" />
+
+        <service
+            android:name=".core.extensions.PiExtensionWorkerService"
+            android:exported="false"
+            android:isolatedProcess="true"
+            android:process=":extension_worker"
             android:stopWithTask="true" />
 
         <provider
