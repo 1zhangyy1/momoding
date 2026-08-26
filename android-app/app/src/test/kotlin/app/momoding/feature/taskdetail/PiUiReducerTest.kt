@@ -17,6 +17,241 @@ import java.security.MessageDigest
 
 class PiUiReducerTest {
     @Test
+    fun `empty settled assistant response asks for retry instead of showing unsupported activity`() {
+        val output = PiUiReducer().reduce(
+            snapshot(
+                messages = listOf(
+                    TaskDetailMessageRecord(
+                        stableItemId = "empty-assistant",
+                        ordinal = 0,
+                        kind = "pi-message",
+                        rawPayload =
+                            """{"role":"assistant","content":[],"stopReason":"stop","timestamp":1}""",
+                    ),
+                ),
+                windowEnd = 1,
+            ),
+        )
+
+        val error = output.timeline.settledItems.single() as TimelineItem.Error
+        assertEquals("Momoding returned no response. Try again.", error.message)
+        assertTrue(output.timeline.settledItems.none { it is TimelineItem.UnsupportedActivity })
+    }
+
+    @Test
+    fun `new empty response Provider error keeps the same retry message after restore`() {
+        val output = PiUiReducer().reduce(
+            snapshot(
+                messages = listOf(
+                    TaskDetailMessageRecord(
+                        stableItemId = "empty-assistant-error",
+                        ordinal = 0,
+                        kind = "pi-message",
+                        rawPayload =
+                            """{"role":"assistant","content":[],"stopReason":"error","errorMessage":"The model returned no response. Try again.","timestamp":1}""",
+                    ),
+                ),
+                windowEnd = 1,
+                runState = "FAILED",
+                isStreaming = false,
+            ),
+        )
+
+        val error = output.timeline.settledItems.single() as TimelineItem.Error
+        assertEquals("Momoding returned no response. Try again.", error.message)
+        assertEquals(TaskDetailRunState.FAILED, output.runState)
+        assertEquals("PROVIDER_OTHER", output.failure?.kind?.name)
+        assertEquals("RETRY", output.failure?.recovery?.name)
+    }
+
+    @Test
+    fun `exact resend after retryable failure keeps durable user truth with compact presentation`() {
+        val attachmentId = "11111111-1111-4111-8111-111111111111"
+        val output = PiUiReducer().reduce(
+            snapshot(
+                messages = listOf(
+                    userMessage("original", 0, "Check the weather", listOf(attachmentId)),
+                    assistantOutcome(
+                        "offline",
+                        1,
+                        stopReason = "error",
+                        errorMessage = "No internet connection",
+                    ),
+                    userMessage("retry", 2, "Check the weather", listOf(attachmentId)),
+                ),
+                windowEnd = 3,
+            ),
+        )
+
+        val users = output.timeline.settledItems.filterIsInstance<TimelineItem.UserMessage>()
+        assertEquals(2, users.size)
+        assertFalse(users[0].retried)
+        assertTrue(users[1].retried)
+        assertEquals("snapshot:retry:user", users[1].stableKey)
+        assertEquals("Check the weather", users[1].text)
+        assertEquals(listOf(attachmentId), users[1].attachmentIds)
+        assertEquals(
+            "Check the weather",
+            TaskDetailUiState(taskId = TASK_ID, timeline = output.timeline).retryOriginalText,
+        )
+        assertEquals(
+            listOf("No internet connection. Check your connection and try again."),
+            output.timeline.settledItems.filterIsInstance<TimelineItem.Error>().map { it.message },
+        )
+    }
+
+    @Test
+    fun `consecutive exact retries remain stable across cold replay`() {
+        val retrySnapshot = snapshot(
+            messages = listOf(
+                userMessage("attempt-1", 0, "Try once more"),
+                assistantOutcome("failure-1", 1, "error", "OpenRouter request timed out"),
+                userMessage("attempt-2", 2, "Try once more"),
+                assistantOutcome("failure-2", 3, "error", "OpenRouter rate limit reached"),
+                userMessage("attempt-3", 4, "Try once more"),
+            ),
+            windowEnd = 5,
+        )
+        val reducer = PiUiReducer()
+
+        val first = reducer.reduce(retrySnapshot)
+        val replayed = PiUiReducer().reduce(retrySnapshot)
+
+        assertEquals(
+            listOf(false, true, true),
+            first.timeline.settledItems.filterIsInstance<TimelineItem.UserMessage>().map { it.retried },
+        )
+        assertEquals(first.timeline.settledItems, replayed.timeline.settledItems)
+    }
+
+    @Test
+    fun `ordinary repeat edited retry attachment change and nonretryable failure stay full messages`() {
+        fun retryFlags(messages: List<TaskDetailMessageRecord>) =
+            PiUiReducer().reduce(snapshot(messages = messages, windowEnd = messages.size.toLong()))
+                .timeline.settledItems.filterIsInstance<TimelineItem.UserMessage>().map { it.retried }
+
+        assertEquals(
+            listOf(false, false),
+            retryFlags(
+                listOf(
+                    userMessage("success-original", 0, "Repeat me"),
+                    assistantOutcome("success", 1, "stop"),
+                    userMessage("success-repeat", 2, "Repeat me"),
+                ),
+            ),
+        )
+        assertEquals(
+            listOf(false, false),
+            retryFlags(
+                listOf(
+                    userMessage("edit-original", 0, "Original"),
+                    assistantOutcome("edit-failure", 1, "error", "OpenRouter request timed out"),
+                    userMessage("edited", 2, "Edited"),
+                ),
+            ),
+        )
+        assertEquals(
+            listOf(false, false),
+            retryFlags(
+                listOf(
+                    userMessage(
+                        "attachment-original",
+                        0,
+                        "Inspect",
+                        listOf("11111111-1111-4111-8111-111111111111"),
+                    ),
+                    assistantOutcome("attachment-failure", 1, "error", "No internet connection"),
+                    userMessage(
+                        "attachment-change",
+                        2,
+                        "Inspect",
+                        listOf("22222222-2222-4222-8222-222222222222"),
+                    ),
+                ),
+            ),
+        )
+        assertEquals(
+            listOf(false, false),
+            retryFlags(
+                listOf(
+                    userMessage("auth-original", 0, "Try again"),
+                    assistantOutcome("auth-failure", 1, "error", "OpenRouter API key is invalid"),
+                    userMessage("auth-repeat", 2, "Try again"),
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun `retry identity uses complete raw text instead of redacted or truncated presentation`() {
+        fun retryFlags(first: String, second: String) = PiUiReducer().reduce(
+            snapshot(
+                messages = listOf(
+                    userMessage("identity-original", 0, first),
+                    assistantOutcome("identity-failure", 1, "error", "OpenRouter request timed out"),
+                    userMessage("identity-edited", 2, second),
+                ),
+                windowEnd = 3,
+            ),
+        ).timeline.settledItems.filterIsInstance<TimelineItem.UserMessage>().map { it.retried }
+
+        assertEquals(
+            listOf(false, false),
+            retryFlags(
+                "Inspect /storage/emulated/0/Download/first.txt",
+                "Inspect /storage/emulated/0/Download/second.txt",
+            ),
+        )
+        val sharedPrefix = "x".repeat(32_768)
+        assertEquals(
+            listOf(false, false),
+            retryFlags("${sharedPrefix}a", "${sharedPrefix}b"),
+        )
+    }
+
+    @Test
+    fun `malformed user and later assistant terminal clear prior retry candidate`() {
+        val afterMalformedUser = PiUiReducer().reduce(
+            snapshot(
+                messages = listOf(
+                    userMessage("malformed-original", 0, "Retry me"),
+                    assistantOutcome("malformed-failure", 1, "error", "OpenRouter request timed out"),
+                    TaskDetailMessageRecord(
+                        stableItemId = "malformed-user",
+                        ordinal = 2,
+                        kind = "pi-message",
+                        rawPayload = """{"role":"user","content":[]}""",
+                    ),
+                    userMessage("malformed-repeat", 3, "Retry me"),
+                ),
+                windowEnd = 4,
+            ),
+        )
+        assertEquals(
+            listOf(false, false),
+            afterMalformedUser.timeline.settledItems.filterIsInstance<TimelineItem.UserMessage>()
+                .map { it.retried },
+        )
+
+        val afterLengthTerminal = PiUiReducer().reduce(
+            snapshot(
+                messages = listOf(
+                    userMessage("length-original", 0, "Retry me"),
+                    assistantOutcome("length-failure", 1, "error", "OpenRouter request timed out"),
+                    assistantOutcome("length-terminal", 2, "length"),
+                    userMessage("length-repeat", 3, "Retry me"),
+                ),
+                windowEnd = 4,
+            ),
+        )
+        assertEquals(
+            listOf(false, false),
+            afterLengthTerminal.timeline.settledItems.filterIsInstance<TimelineItem.UserMessage>()
+                .map { it.retried },
+        )
+    }
+
+    @Test
     fun `generated image tool result projects a durable task artifact`() {
         val attachmentId = "77777777-7777-4777-8777-777777777777"
         val output = PiUiReducer().reduce(
@@ -595,6 +830,49 @@ class PiUiReducerTest {
     }
 
     @Test
+    fun `provider web completion cannot duplicate the active assistant timeline key`() {
+        val reducer = PiUiReducer()
+        val beforeSettle = snapshot(
+            rawEvents = listOf(
+                event(
+                    1,
+                    """{"type":"provider_web_activity","state":"running","requestId":"provider-1","searchRequests":1,"sources":[]}""",
+                ),
+                event(
+                    2,
+                    """{"type":"message_update","assistantMessageEvent":{"type":"text_start","partial":{"role":"assistant","timestamp":7,"content":[{"type":"text","text":"Open"}]}}}""",
+                ),
+                event(
+                    3,
+                    """{"type":"provider_web_activity","state":"completed","requestId":"provider-1","searchRequests":1,"sources":[{"url":"https://example.com/latest","title":"Latest","domain":"example.com"}]}""",
+                ),
+                event(
+                    4,
+                    """{"type":"message_update","assistantMessageEvent":{"type":"text_end","partial":{"role":"assistant","timestamp":7,"content":[{"type":"text","text":"OpenAI update"}]}}}""",
+                ),
+            ),
+            throughSequence = 4,
+        )
+
+        val streaming = reducer.reduce(beforeSettle).timeline
+        assertEquals(streaming.allItems.size, streaming.allItems.map(TimelineItem::stableKey).distinct().size)
+        assertEquals("OpenAI update", (streaming.activeItem as TimelineItem.AssistantText).text)
+        assertEquals(
+            listOf("Searched web"),
+            streaming.settledItems.filterIsInstance<TimelineItem.ToolActivity>().map(TimelineItem.ToolActivity::title),
+        )
+
+        val settled = reducer.reduce(
+            beforeSettle.copy(
+                rawEvents = beforeSettle.rawEvents + event(5, """{"type":"settled"}"""),
+                throughSequence = 5,
+            ),
+        ).timeline
+        assertEquals(settled.allItems.size, settled.allItems.map(TimelineItem::stableKey).distinct().size)
+        assertEquals(1, settled.settledItems.filterIsInstance<TimelineItem.AssistantText>().size)
+    }
+
+    @Test
     fun `provider web activity stays generic when OpenRouter reports only server tool count`() {
         val projection = PiUiReducer().reduce(
             snapshot(
@@ -781,16 +1059,24 @@ class PiUiReducerTest {
                         """{"code":"USER_DECLINED","message":"User declined the confirmation"}""",
                         failed = true,
                     ),
-                    toolCall("confirmation-failed", "request_user_confirmation", 10),
+                    toolCall("spoofed-decline", "request_user_confirmation", 10),
+                    toolResult(
+                        "spoofed-decline",
+                        "request_user_confirmation",
+                        11,
+                        """{"code":"USER_DECLINED","message":"Untrusted success payload"}""",
+                        failed = false,
+                    ),
+                    toolCall("confirmation-failed", "request_user_confirmation", 12),
                     toolResult(
                         "confirmation-failed",
                         "request_user_confirmation",
-                        11,
+                        13,
                         """{"code":"DELIVERY_FAILED","message":"The response could not be delivered"}""",
                         failed = true,
                     ),
                 ),
-                windowEnd = 12,
+                windowEnd = 14,
             ),
         )
 
@@ -802,10 +1088,16 @@ class PiUiReducerTest {
                 "Skipped",
                 "Confirmed",
                 "Declined",
+                "Decision recorded",
                 "Decision not recorded",
             ),
             tools.map { it.result?.text },
         )
+        assertEquals(ToolActivityState.DECLINED, tools[4].state)
+        assertEquals("Declined", tools[4].detail)
+        assertFalse(tools[4].state == ToolActivityState.CANCELLED)
+        assertEquals(ToolActivityState.SUCCESS, tools[5].state)
+        assertEquals("Completed", tools[5].detail)
         assertTrue(tools.none { it.result?.text.orEmpty().contains("outcome") })
         assertEquals(
             listOf(
@@ -815,6 +1107,382 @@ class PiUiReducerTest {
             ),
             tools.take(3).map(TimelineItem.ToolActivity::kind),
         )
+    }
+
+    @Test
+    fun `Chinese attention results follow the dominant latest user language after cold restore`() {
+        val messages = listOf(
+            userMessage("zh-user", 0, "请创建AEC事件"),
+            toolCall(
+                "zh-option",
+                "request_user_question",
+                1,
+                """{"question":"请选择地点","options":[]}""",
+            ),
+            toolResult(
+                "zh-option",
+                "request_user_question",
+                2,
+                """{"outcome":"answered","answer":{"kind":"option","index":0,"label":"在家"}}""",
+            ),
+            toolCall(
+                "zh-custom",
+                "request_user_question",
+                3,
+                """{"question":"请补充预算","options":[]}""",
+            ),
+            toolResult(
+                "zh-custom",
+                "request_user_question",
+                4,
+                """{"outcome":"answered","answer":{"kind":"custom","text":"两百元"}}""",
+            ),
+            toolCall(
+                "zh-skipped",
+                "request_user_question",
+                5,
+                """{"question":"请选择时间","options":[]}""",
+            ),
+            toolResult("zh-skipped", "request_user_question", 6, """{"outcome":"skipped"}"""),
+            toolCall(
+                "zh-confirmed",
+                "request_user_confirmation",
+                7,
+                """{"summary":"Confirm?"}""",
+            ),
+            toolResult(
+                "zh-confirmed",
+                "request_user_confirmation",
+                8,
+                """{"outcome":"confirmed"}""",
+            ),
+            toolCall(
+                "zh-declined",
+                "request_user_confirmation",
+                9,
+                """{"summary":"Confirm?"}""",
+            ),
+            toolResult(
+                "zh-declined",
+                "request_user_confirmation",
+                10,
+                """{"code":"USER_DECLINED","message":"User declined"}""",
+                failed = true,
+            ),
+        )
+        val snapshot = snapshot(messages = messages, windowEnd = messages.size.toLong())
+        val first = PiUiReducer().reduce(snapshot)
+        val replayed = PiUiReducer().reduce(snapshot)
+        val expected = listOf("你选择了：在家", "你回答了：两百元", "已跳过", "已批准", "已拒绝")
+
+        assertEquals(
+            expected,
+            first.timeline.settledItems.filterIsInstance<TimelineItem.ToolActivity>()
+                .map { it.result?.text },
+        )
+        assertEquals(first.timeline.settledItems, replayed.timeline.settledItems)
+    }
+
+    @Test
+    fun `live and cold attention terminal language stay identical`() {
+        val user = userMessage("zh-live-user", 0, "请继续AEC流程")
+        val liveEvents = listOf(
+            event(1, """{"type":"agent_start"}"""),
+            event(
+                2,
+                """{"type":"tool_execution_start","toolCallId":"live-skip","toolName":"request_user_question","args":{"question":"请选择时间","options":[]}}""",
+            ),
+            event(
+                3,
+                toolEndEvent(
+                    "live-skip",
+                    "request_user_question",
+                    """{"outcome":"skipped"}""",
+                    false,
+                ),
+            ),
+            event(
+                4,
+                """{"type":"tool_execution_start","toolCallId":"live-decline","toolName":"request_user_confirmation","args":{"summary":"Confirm?"}}""",
+            ),
+            event(
+                5,
+                toolEndEvent(
+                    "live-decline",
+                    "request_user_confirmation",
+                    """{"code":"USER_DECLINED","message":"User declined"}""",
+                    true,
+                ),
+            ),
+        )
+        val liveSnapshot = snapshot(
+            messages = listOf(user),
+            windowEnd = 1,
+            rawEvents = liveEvents,
+            throughSequence = 5,
+        )
+        val liveReducer = PiUiReducer()
+        val live = liveReducer.reduce(liveSnapshot)
+        val replayedLive = liveReducer.reduce(liveSnapshot)
+        val coldMessages = listOf(
+            user,
+            toolCall(
+                "live-skip",
+                "request_user_question",
+                1,
+                """{"question":"请选择时间","options":[]}""",
+            ),
+            toolResult("live-skip", "request_user_question", 2, """{"outcome":"skipped"}"""),
+            toolCall(
+                "live-decline",
+                "request_user_confirmation",
+                3,
+                """{"summary":"Confirm?"}""",
+            ),
+            toolResult(
+                "live-decline",
+                "request_user_confirmation",
+                4,
+                """{"code":"USER_DECLINED","message":"User declined"}""",
+                failed = true,
+            ),
+        )
+        val cold = PiUiReducer().reduce(
+            snapshot(messages = coldMessages, windowEnd = coldMessages.size.toLong()),
+        )
+        val expected = listOf("已跳过", "已拒绝")
+
+        assertEquals(
+            expected,
+            live.timeline.settledItems.filterIsInstance<TimelineItem.ToolActivity>()
+                .map { it.result?.text },
+        )
+        assertEquals(live.timeline.settledItems, replayedLive.timeline.settledItems)
+        assertEquals(
+            expected,
+            cold.timeline.settledItems.filterIsInstance<TimelineItem.ToolActivity>()
+                .map { it.result?.text },
+        )
+    }
+
+    @Test
+    fun `exact capability recovery hides only the recovered failure after cold projection`() {
+        val arguments = """{"action":"list_events","start":"2026-08-25","end":"2026-08-26"}"""
+        val output = PiUiReducer().reduce(
+            snapshot(
+                messages = listOf(
+                    userMessage("calendar-user", 0, "Show tomorrow's events"),
+                    toolCall("calendar-failed", "device_calendar", 1, arguments),
+                    toolResult(
+                        "calendar-failed",
+                        "device_calendar",
+                        2,
+                        capabilityFailure("list_events", "calendar", "read"),
+                        failed = true,
+                    ),
+                    toolCall(
+                        "calendar-permission",
+                        "device_capability_request",
+                        3,
+                        """{"capability":"calendar","requiredAccess":"read","purpose":"List the requested events"}""",
+                    ),
+                    toolResult(
+                        "calendar-permission",
+                        "device_capability_request",
+                        4,
+                        """{"capability":"calendar","requiredAccess":"read","availability":"ready","ready":true,"requested":true,"message":"Ready"}""",
+                    ),
+                    toolCall("calendar-retry", "device_calendar", 5, arguments),
+                    toolResult(
+                        "calendar-retry",
+                        "device_calendar",
+                        6,
+                        """{"ok":true,"action":"list_events","data":{"items":[]},"verification":{"status":"observed"}}""",
+                    ),
+                ),
+                windowEnd = 7,
+            ),
+        )
+
+        val tools = output.timeline.settledItems.filterIsInstance<TimelineItem.ToolActivity>()
+        assertEquals(listOf("calendar-permission", "calendar-retry"), tools.map { it.toolCallId })
+        assertEquals(listOf(ToolActivityState.SUCCESS, ToolActivityState.SUCCESS), tools.map { it.state })
+        assertEquals("Enabled Android access", tools.first().title)
+        assertEquals("Calendar access is ready", tools.first().result?.text)
+    }
+
+    @Test
+    fun `declined tools never retain success tense titles`() {
+        val output = PiUiReducer().reduce(
+            snapshot(
+                messages = listOf(
+                    toolCall("files", "device_files_commit_changes", 0),
+                    toolResult(
+                        "files",
+                        "device_files_commit_changes",
+                        1,
+                        """{"code":"USER_DECLINED","message":"User declined file changes"}""",
+                        failed = true,
+                    ),
+                    toolCall("ui", "device_ui_action", 2),
+                    toolResult(
+                        "ui",
+                        "device_ui_action",
+                        3,
+                        """{"code":"USER_DECLINED","message":"User declined the interface action"}""",
+                        failed = true,
+                    ),
+                    toolCall("media", "device_media_list", 4),
+                    toolResult(
+                        "media",
+                        "device_media_list",
+                        5,
+                        """{"code":"USER_DECLINED","message":"User declined photo access"}""",
+                        failed = true,
+                    ),
+                ),
+                windowEnd = 6,
+            ),
+        )
+
+        val tools = output.timeline.settledItems.filterIsInstance<TimelineItem.ToolActivity>()
+        assertEquals(
+            listOf("File changes declined", "Interface action declined", "Photo access request declined"),
+            tools.map { it.title },
+        )
+        assertTrue(tools.all { it.state == ToolActivityState.DECLINED })
+        assertTrue(tools.all { it.detail == "Declined" })
+        assertTrue(tools.none { it.state == ToolActivityState.CANCELLED })
+        assertTrue(tools.none { it.state == ToolActivityState.FAILURE })
+    }
+
+    @Test
+    fun `capability recovery does not hide same tool with different arguments`() {
+        val output = PiUiReducer().reduce(
+            snapshot(
+                messages = listOf(
+                    userMessage("calendar-user", 0, "Show events"),
+                    toolCall(
+                        "calendar-failed",
+                        "device_calendar",
+                        1,
+                        """{"action":"list_events","start":"2026-08-25","end":"2026-08-26"}""",
+                    ),
+                    toolResult(
+                        "calendar-failed",
+                        "device_calendar",
+                        2,
+                        capabilityFailure("list_events", "calendar", "read"),
+                        failed = true,
+                    ),
+                    toolCall(
+                        "calendar-permission",
+                        "device_capability_request",
+                        3,
+                        """{"capability":"calendar","requiredAccess":"read","purpose":"List events"}""",
+                    ),
+                    toolResult(
+                        "calendar-permission",
+                        "device_capability_request",
+                        4,
+                        """{"capability":"calendar","requiredAccess":"read","ready":true,"requested":true,"message":"Ready"}""",
+                    ),
+                    toolCall(
+                        "calendar-different-retry",
+                        "device_calendar",
+                        5,
+                        """{"action":"list_events","start":"2026-08-26","end":"2026-08-27"}""",
+                    ),
+                    toolResult(
+                        "calendar-different-retry",
+                        "device_calendar",
+                        6,
+                        """{"ok":true,"action":"list_events","data":{"items":[]},"verification":{"status":"observed"}}""",
+                    ),
+                ),
+                windowEnd = 7,
+            ),
+        )
+
+        val tools = output.timeline.settledItems.filterIsInstance<TimelineItem.ToolActivity>()
+        assertEquals(
+            listOf("calendar-failed", "calendar-permission", "calendar-different-retry"),
+            tools.map { it.toolCallId },
+        )
+        assertEquals(ToolActivityState.FAILURE, tools.first().state)
+    }
+
+    @Test
+    fun `live exact capability recovery preserves audit steps`() {
+        val arguments = """{"action":"list_events","start":"2026-08-25","end":"2026-08-26"}"""
+        val events = listOf(
+            event(1, """{"type":"agent_start"}"""),
+            event(2, """{"type":"tool_execution_start","toolCallId":"calendar-failed","toolName":"device_calendar","args":$arguments}"""),
+            event(3, toolEndEvent("calendar-failed", "device_calendar", capabilityFailure("list_events", "calendar", "read"), true)),
+            event(4, """{"type":"tool_execution_start","toolCallId":"calendar-permission","toolName":"device_capability_request","args":{"capability":"calendar","requiredAccess":"read","purpose":"List events"}}"""),
+            event(5, toolEndEvent("calendar-permission", "device_capability_request", """{"capability":"calendar","requiredAccess":"read","ready":true,"requested":true,"message":"Ready"}""", false)),
+            event(6, """{"type":"tool_execution_start","toolCallId":"calendar-retry","toolName":"device_calendar","args":$arguments}"""),
+            event(7, toolEndEvent("calendar-retry", "device_calendar", """{"ok":true,"action":"list_events","data":{"items":[]},"verification":{"status":"observed"}}""", false)),
+        )
+        val live = PiUiReducer().reduce(snapshot(rawEvents = events, throughSequence = 7))
+        val tools = live.timeline.settledItems.filterIsInstance<TimelineItem.ToolActivity>()
+
+        assertEquals(listOf("calendar-permission", "calendar-retry"), tools.map { it.toolCallId })
+        assertEquals(listOf(ToolActivityState.SUCCESS, ToolActivityState.SUCCESS), tools.map { it.state })
+    }
+
+    @Test
+    fun `trusted control starts a new run and cannot recover an earlier failure`() {
+        val arguments = """{"action":"list_events","start":"2026-08-25","end":"2026-08-26"}"""
+        val digest = "0".repeat(64)
+        val output = PiUiReducer().reduce(
+            snapshot(
+                messages = listOf(
+                    userMessage("calendar-user", 0, "Show events"),
+                    toolCall("calendar-failed", "device_calendar", 1, arguments),
+                    toolResult(
+                        "calendar-failed",
+                        "device_calendar",
+                        2,
+                        capabilityFailure("list_events", "calendar", "read"),
+                        failed = true,
+                    ),
+                    toolCall(
+                        "calendar-permission",
+                        "device_capability_request",
+                        3,
+                        """{"capability":"calendar","requiredAccess":"read","purpose":"List events"}""",
+                    ),
+                    toolResult(
+                        "calendar-permission",
+                        "device_capability_request",
+                        4,
+                        """{"capability":"calendar","requiredAccess":"read","ready":true}""",
+                    ),
+                    TaskDetailMessageRecord(
+                        "implement-trigger",
+                        5,
+                        "pi-message",
+                        """{"role":"phoneLocalControl","kind":"implement_plan","controlId":"control-1","planDigest":"$digest"}""",
+                    ),
+                    toolCall("calendar-retry", "device_calendar", 6, arguments),
+                    toolResult(
+                        "calendar-retry",
+                        "device_calendar",
+                        7,
+                        """{"ok":true,"action":"list_events","data":{"items":[]},"verification":{"status":"observed"}}""",
+                    ),
+                ),
+                windowEnd = 8,
+            ),
+        )
+
+        val tools = output.timeline.settledItems.filterIsInstance<TimelineItem.ToolActivity>()
+        assertEquals(
+            listOf("calendar-failed", "calendar-permission", "calendar-retry"),
+            tools.map { it.toolCallId },
+        )
+        assertEquals(ToolActivityState.FAILURE, tools.first().state)
     }
 
     @Test
@@ -835,6 +1503,26 @@ class PiUiReducerTest {
         assertEquals("calendar-create", output.attention?.callId)
         assertEquals(TaskAttentionKind.CONFIRMATION, output.attention?.kind)
         assertEquals("Calendar access needs approval", output.attention?.label)
+    }
+
+    @Test
+    fun `media mutation attention remains a first-class confirmation in the task`() {
+        val output = PiUiReducer().reduce(
+            snapshot(
+                pendingAttention = listOf(
+                    TaskDetailAttentionRecord(
+                        callId = "media-trash",
+                        toolName = "device_media",
+                        responseState = AttentionResponseState.PENDING,
+                        receivedAtMillis = 1L,
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals("media-trash", output.attention?.callId)
+        assertEquals(TaskAttentionKind.CONFIRMATION, output.attention?.kind)
+        assertEquals("Photo change needs approval", output.attention?.label)
     }
 
     @Test
@@ -1184,6 +1872,535 @@ class PiUiReducerTest {
         assertEquals("Command completed", terminal.title)
         assertTrue(requireNotNull(terminal.result).text.contains("\"exitCode\": 0"))
         assertTrue(requireNotNull(terminal.result).text.contains("BUILD SUCCESSFUL"))
+    }
+
+    @Test
+    fun `project result with ok false cannot render as a completed command`() {
+        val output = PiUiReducer().reduce(
+            snapshot(
+                messages = listOf(
+                    toolCall("missing-python", "run_command", 0),
+                    toolResult(
+                        "missing-python",
+                        "run_command",
+                        1,
+                        """{"ok":false,"kind":"terminal","stderr":"python3: not found","exitCode":127,"errorCode":"PROJECT_COMMAND_FAILED"}""",
+                        failed = false,
+                    ),
+                ),
+                windowEnd = 2,
+            ),
+        )
+
+        val command = output.timeline.settledItems.single() as TimelineItem.ToolActivity
+        assertEquals(ToolActivityState.FAILURE, command.state)
+        assertEquals("Command failed", command.title)
+    }
+
+    @Test
+    fun `user-stopped project command restores as stopped without unsupported activity`() {
+        val output = PiUiReducer().reduce(
+            snapshot(
+                messages = listOf(
+                    TaskDetailMessageRecord(
+                        stableItemId = "user-stop",
+                        ordinal = 0,
+                        kind = "pi-message",
+                        rawPayload = """{"role":"user","content":[{"type":"text","text":"Stop it"}]}""",
+                    ),
+                    toolCall("stopped-command", "run_command", 1),
+                    toolResult(
+                        "stopped-command",
+                        "run_command",
+                        2,
+                        "Operation aborted",
+                        failed = true,
+                    ),
+                    TaskDetailMessageRecord(
+                        stableItemId = "assistant-aborted",
+                        ordinal = 3,
+                        kind = "pi-message",
+                        rawPayload =
+                            """{"role":"assistant","content":[],"stopReason":"aborted","errorMessage":"Operation aborted"}""",
+                    ),
+                ),
+                windowEnd = 4,
+                runState = "SETTLED",
+                isStreaming = false,
+            ),
+        )
+
+        val command = output.timeline.settledItems
+            .filterIsInstance<TimelineItem.ToolActivity>()
+            .single()
+        assertEquals(ToolActivityState.CANCELLED, command.state)
+        assertEquals("Command stopped", command.title)
+        assertEquals("Stopped", command.detail)
+        assertFalse(output.timeline.settledItems.any { it is TimelineItem.UnsupportedActivity })
+    }
+
+    @Test
+    fun `provider-before-output stop restores as one neutral stopped status`() {
+        val output = PiUiReducer().reduce(
+            snapshot(
+                messages = listOf(
+                    TaskDetailMessageRecord(
+                        stableItemId = "user-provider-stop",
+                        ordinal = 0,
+                        kind = "pi-message",
+                        rawPayload =
+                            """{"role":"user","content":[{"type":"text","text":"Search and stop"}]}""",
+                    ),
+                    TaskDetailMessageRecord(
+                        stableItemId = "assistant-provider-stop",
+                        ordinal = 1,
+                        kind = "pi-message",
+                        rawPayload =
+                            """{"role":"assistant","content":[],"stopReason":"aborted","errorMessage":"Operation aborted"}""",
+                    ),
+                ),
+                windowEnd = 2,
+                runState = "SETTLED",
+                isStreaming = false,
+            ),
+        )
+
+        assertEquals(
+            listOf("Stopped"),
+            output.timeline.settledItems.filterIsInstance<TimelineItem.RunStatus>()
+                .map(TimelineItem.RunStatus::label),
+        )
+        assertFalse(output.timeline.settledItems.any { it is TimelineItem.UnsupportedActivity })
+        assertFalse(output.timeline.settledItems.any { it is TimelineItem.Error })
+    }
+
+    @Test
+    fun `live provider-before-output stop appears only after settled and replays once`() {
+        val reducer = PiUiReducer()
+        val user = TaskDetailMessageRecord(
+            stableItemId = "user-live-provider-stop",
+            ordinal = 0,
+            kind = "pi-message",
+            rawPayload =
+                """{"role":"user","content":[{"type":"text","text":"Search and stop live"}]}""",
+        )
+        val beforeSettled = reducer.reduce(
+            snapshot(
+                messages = listOf(user),
+                rawEvents = listOf(
+                    event(1, """{"type":"agent_start"}"""),
+                    event(2, """{"type":"abort"}"""),
+                ),
+                throughSequence = 2,
+                windowEnd = 1,
+                runState = "RUNNING",
+                isStreaming = true,
+            ),
+        )
+        assertTrue(beforeSettled.timeline.settledItems.none { it is TimelineItem.RunStatus })
+
+        val settledSnapshot = snapshot(
+            messages = listOf(user),
+            rawEvents = listOf(
+                event(1, """{"type":"agent_start"}"""),
+                event(2, """{"type":"abort"}"""),
+                event(3, """{"type":"agent_settled"}"""),
+            ),
+            throughSequence = 3,
+            windowEnd = 1,
+            runState = "SETTLED",
+            isStreaming = false,
+        )
+        val settled = reducer.reduce(settledSnapshot)
+        val replayed = reducer.reduce(settledSnapshot)
+
+        assertEquals(1, settled.timeline.settledItems.count { it is TimelineItem.RunStatus })
+        assertEquals(1, replayed.timeline.settledItems.count { it is TimelineItem.RunStatus })
+        assertEquals(
+            "Stopped",
+            replayed.timeline.settledItems.filterIsInstance<TimelineItem.RunStatus>().single().label,
+        )
+    }
+
+    @Test
+    fun `late cancelled web activity replaces generic stopped status`() {
+        val reducer = PiUiReducer()
+        val lateCancelledSnapshot = snapshot(
+                messages = listOf(
+                    TaskDetailMessageRecord(
+                        stableItemId = "user-late-web-stop",
+                        ordinal = 0,
+                        kind = "pi-message",
+                        rawPayload =
+                            """{"role":"user","content":[{"type":"text","text":"Stop web"}]}""",
+                    ),
+                ),
+                rawEvents = listOf(
+                    event(1, """{"type":"agent_start"}"""),
+                    event(2, """{"type":"abort"}"""),
+                    event(3, """{"type":"agent_settled"}"""),
+                    event(
+                        4,
+                        """{"type":"provider_web_activity","state":"cancelled","requestId":"provider-1","searchRequests":1,"sources":[]}""",
+                    ),
+                ),
+                throughSequence = 4,
+                windowEnd = 1,
+                runState = "SETTLED",
+                isStreaming = false,
+        )
+        val output = reducer.reduce(lateCancelledSnapshot)
+        val replayed = reducer.reduce(lateCancelledSnapshot)
+
+        assertTrue(output.timeline.settledItems.none { it is TimelineItem.RunStatus })
+        val web = output.timeline.settledItems.filterIsInstance<TimelineItem.ToolActivity>().single()
+        assertEquals(ToolActivityKind.WEB_ACCESS, web.kind)
+        assertEquals(ToolActivityState.CANCELLED, web.state)
+        assertEquals("Web access stopped", web.title)
+        assertEquals(TaskDetailRunState.SETTLED, output.runState)
+        assertEquals(TaskDetailRunState.SETTLED, replayed.runState)
+        assertEquals(null, output.failure)
+    }
+
+    @Test
+    fun `late cancelled command replaces generic stopped status`() {
+        val reducer = PiUiReducer()
+        val lateCancelledSnapshot = snapshot(
+                messages = listOf(
+                    TaskDetailMessageRecord(
+                        stableItemId = "user-late-command-stop",
+                        ordinal = 0,
+                        kind = "pi-message",
+                        rawPayload =
+                            """{"role":"user","content":[{"type":"text","text":"Stop command"}]}""",
+                    ),
+                ),
+                rawEvents = listOf(
+                    event(1, """{"type":"agent_start"}"""),
+                    event(2, """{"type":"abort"}"""),
+                    event(3, """{"type":"agent_settled"}"""),
+                    event(
+                        4,
+                        """{"type":"tool_execution_end","toolCallId":"late-command","toolName":"run_command","result":{"content":[{"type":"text","text":"Operation aborted"}],"details":{}},"isError":true}""",
+                    ),
+                ),
+                throughSequence = 4,
+                windowEnd = 1,
+                runState = "SETTLED",
+                isStreaming = false,
+        )
+        val output = reducer.reduce(lateCancelledSnapshot)
+        val replayed = reducer.reduce(lateCancelledSnapshot)
+
+        assertTrue(output.timeline.settledItems.none { it is TimelineItem.RunStatus })
+        assertEquals(
+            ToolActivityState.CANCELLED,
+            output.timeline.settledItems.filterIsInstance<TimelineItem.ToolActivity>().single().state,
+        )
+        assertEquals(TaskDetailRunState.SETTLED, output.runState)
+        assertEquals(TaskDetailRunState.SETTLED, replayed.runState)
+        assertEquals(null, output.failure)
+    }
+
+    @Test
+    fun `late cancelled extension activity replaces stopped without reopening run`() {
+        val reducer = PiUiReducer()
+        val lateCancelledSnapshot = snapshot(
+            messages = listOf(
+                TaskDetailMessageRecord(
+                    stableItemId = "user-late-extension-stop",
+                    ordinal = 0,
+                    kind = "pi-message",
+                    rawPayload =
+                        """{"role":"user","content":[{"type":"text","text":"Stop extension"}]}""",
+                ),
+            ),
+            rawEvents = listOf(
+                event(1, """{"type":"agent_start"}"""),
+                event(2, """{"type":"abort"}"""),
+                event(3, """{"type":"agent_settled"}"""),
+                event(
+                    4,
+                    """{"type":"extension_tool_activity","state":"cancelled","toolCallId":"outer-stop","seq":1,"kind":"host_tool","packageId":"fixtures.host-call","name":"calendar","targetTool":"device_calendar","code":"EXTENSION_PACKAGE_STOPPED"}""",
+                ),
+            ),
+            throughSequence = 4,
+            windowEnd = 1,
+            runState = "SETTLED",
+            isStreaming = false,
+        )
+
+        val output = reducer.reduce(lateCancelledSnapshot)
+        val replayed = reducer.reduce(lateCancelledSnapshot)
+
+        assertTrue(output.timeline.settledItems.none { it is TimelineItem.RunStatus })
+        assertEquals(
+            ToolActivityState.CANCELLED,
+            output.timeline.settledItems.filterIsInstance<TimelineItem.ToolActivity>().single().state,
+        )
+        assertEquals(TaskDetailRunState.SETTLED, output.runState)
+        assertEquals(TaskDetailRunState.SETTLED, replayed.runState)
+        assertEquals(null, output.failure)
+    }
+
+    @Test
+    fun `partial assistant and ordinary provider failure never gain stopped status`() {
+        val partial = PiUiReducer().reduce(
+            snapshot(
+                messages = listOf(
+                    TaskDetailMessageRecord(
+                        stableItemId = "user-partial-stop",
+                        ordinal = 0,
+                        kind = "pi-message",
+                        rawPayload =
+                            """{"role":"user","content":[{"type":"text","text":"Start answering"}]}""",
+                    ),
+                ),
+                rawEvents = listOf(
+                    event(1, """{"type":"agent_start"}"""),
+                    event(
+                        2,
+                        """{"type":"message_update","message":{"role":"assistant","content":[{"type":"text","text":"Partial answer"}],"timestamp":1}}""",
+                    ),
+                    event(3, """{"type":"abort"}"""),
+                    event(4, """{"type":"agent_settled"}"""),
+                ),
+                throughSequence = 4,
+                windowEnd = 1,
+                runState = "SETTLED",
+                isStreaming = false,
+            ),
+        )
+        assertTrue(partial.timeline.settledItems.any { it is TimelineItem.AssistantText })
+        assertTrue(partial.timeline.settledItems.none { it is TimelineItem.RunStatus })
+
+        val failed = PiUiReducer().reduce(
+            snapshot(
+                messages = listOf(
+                    TaskDetailMessageRecord(
+                        stableItemId = "user-provider-error",
+                        ordinal = 0,
+                        kind = "pi-message",
+                        rawPayload =
+                            """{"role":"user","content":[{"type":"text","text":"Fail normally"}]}""",
+                    ),
+                    TaskDetailMessageRecord(
+                        stableItemId = "assistant-provider-error",
+                        ordinal = 1,
+                        kind = "pi-message",
+                        rawPayload =
+                            """{"role":"assistant","content":[],"stopReason":"error","errorMessage":"OpenRouter request timed out"}""",
+                    ),
+                ),
+                windowEnd = 2,
+                runState = "FAILED",
+                isStreaming = false,
+            ),
+        )
+        assertTrue(failed.timeline.settledItems.none { it is TimelineItem.RunStatus })
+    }
+
+    @Test
+    fun `previous turn cancellation does not suppress a new empty stopped turn`() {
+        val output = PiUiReducer().reduce(
+            snapshot(
+                messages = listOf(
+                    TaskDetailMessageRecord(
+                        stableItemId = "user-old-stop",
+                        ordinal = 0,
+                        kind = "pi-message",
+                        rawPayload =
+                            """{"role":"user","content":[{"type":"text","text":"Old turn"}]}""",
+                    ),
+                    toolCall("old-stopped-command", "run_command", 1),
+                    toolResult(
+                        "old-stopped-command",
+                        "run_command",
+                        2,
+                        """{"ok":false,"kind":"terminal","stopped":true}""",
+                        failed = true,
+                    ),
+                    TaskDetailMessageRecord(
+                        stableItemId = "user-new-stop",
+                        ordinal = 3,
+                        kind = "pi-message",
+                        rawPayload =
+                            """{"role":"user","content":[{"type":"text","text":"New turn"}]}""",
+                    ),
+                ),
+                rawEvents = listOf(
+                    event(1, """{"type":"agent_start"}"""),
+                    event(2, """{"type":"abort"}"""),
+                    event(3, """{"type":"agent_settled"}"""),
+                ),
+                throughSequence = 3,
+                windowEnd = 4,
+                runState = "SETTLED",
+                isStreaming = false,
+            ),
+        )
+
+        assertEquals(
+            listOf("Stopped"),
+            output.timeline.settledItems.filterIsInstance<TimelineItem.RunStatus>()
+                .map(TimelineItem.RunStatus::label),
+        )
+        assertEquals(
+            ToolActivityState.CANCELLED,
+            output.timeline.settledItems.filterIsInstance<TimelineItem.ToolActivity>().single().state,
+        )
+    }
+
+    @Test
+    fun `later cancelled turn never removes an earlier generic stopped truth`() {
+        val output = PiUiReducer().reduce(
+            snapshot(
+                messages = listOf(
+                    TaskDetailMessageRecord(
+                        stableItemId = "user-first-empty-stop",
+                        ordinal = 0,
+                        kind = "pi-message",
+                        rawPayload =
+                            """{"role":"user","content":[{"type":"text","text":"First stop"}]}""",
+                    ),
+                    TaskDetailMessageRecord(
+                        stableItemId = "assistant-first-empty-stop",
+                        ordinal = 1,
+                        kind = "pi-message",
+                        rawPayload =
+                            """{"role":"assistant","content":[],"stopReason":"aborted","errorMessage":"Operation aborted"}""",
+                    ),
+                    TaskDetailMessageRecord(
+                        stableItemId = "user-second-tool-stop",
+                        ordinal = 2,
+                        kind = "pi-message",
+                        rawPayload =
+                            """{"role":"user","content":[{"type":"text","text":"Second stop"}]}""",
+                    ),
+                    toolCall("second-stopped-command", "run_command", 3),
+                    toolResult(
+                        "second-stopped-command",
+                        "run_command",
+                        4,
+                        """{"ok":false,"kind":"terminal","stopped":true}""",
+                        failed = true,
+                    ),
+                    TaskDetailMessageRecord(
+                        stableItemId = "assistant-second-tool-stop",
+                        ordinal = 5,
+                        kind = "pi-message",
+                        rawPayload =
+                            """{"role":"assistant","content":[],"stopReason":"aborted","errorMessage":"Operation aborted"}""",
+                    ),
+                ),
+                windowEnd = 6,
+                runState = "SETTLED",
+                isStreaming = false,
+            ),
+        )
+
+        assertEquals(
+            listOf("Stopped"),
+            output.timeline.settledItems.filterIsInstance<TimelineItem.RunStatus>()
+                .map(TimelineItem.RunStatus::label),
+        )
+        assertEquals(
+            ToolActivityState.CANCELLED,
+            output.timeline.settledItems.filterIsInstance<TimelineItem.ToolActivity>().single().state,
+        )
+    }
+
+    @Test
+    fun `structured stopped project result uses stopped title and detail`() {
+        val output = PiUiReducer().reduce(
+            snapshot(
+                messages = listOf(
+                    toolCall("structured-stop", "run_command", 0),
+                    toolResult(
+                        "structured-stop",
+                        "run_command",
+                        1,
+                        """{"ok":false,"kind":"terminal","stopped":true,"errorCode":"PROJECT_COMMAND_STOPPED"}""",
+                        failed = true,
+                    ),
+                ),
+                windowEnd = 2,
+                runState = "SETTLED",
+                isStreaming = false,
+            ),
+        )
+
+        val command = output.timeline.settledItems.single() as TimelineItem.ToolActivity
+        assertEquals(ToolActivityState.CANCELLED, command.state)
+        assertEquals("Command stopped", command.title)
+        assertEquals("Stopped", command.detail)
+    }
+
+    @Test
+    fun `aborted assistant cannot reclassify an earlier turn project failure`() {
+        val output = PiUiReducer().reduce(
+            snapshot(
+                messages = listOf(
+                    TaskDetailMessageRecord(
+                        stableItemId = "user-first",
+                        ordinal = 0,
+                        kind = "pi-message",
+                        rawPayload = """{"role":"user","content":[{"type":"text","text":"First turn"}]}""",
+                    ),
+                    toolCall("old-failure", "run_command", 1),
+                    toolResult("old-failure", "run_command", 2, "Operation aborted", failed = true),
+                    TaskDetailMessageRecord(
+                        stableItemId = "user-second",
+                        ordinal = 3,
+                        kind = "pi-message",
+                        rawPayload = """{"role":"user","content":[{"type":"text","text":"Second turn"}]}""",
+                    ),
+                    TaskDetailMessageRecord(
+                        stableItemId = "assistant-second-aborted",
+                        ordinal = 4,
+                        kind = "pi-message",
+                        rawPayload =
+                            """{"role":"assistant","content":[],"stopReason":"aborted","errorMessage":"Operation aborted"}""",
+                    ),
+                ),
+                windowEnd = 5,
+                runState = "SETTLED",
+                isStreaming = false,
+            ),
+        )
+
+        val oldFailure = output.timeline.settledItems
+            .filterIsInstance<TimelineItem.ToolActivity>()
+            .single()
+        assertEquals(ToolActivityState.FAILURE, oldFailure.state)
+        assertEquals("Command failed", oldFailure.title)
+        assertFalse(output.timeline.settledItems.any { it is TimelineItem.UnsupportedActivity })
+    }
+
+    @Test
+    fun `live abort reclassifies an aborted project result as stopped`() {
+        val output = PiUiReducer().reduce(
+            snapshot(
+                rawEvents = listOf(
+                    event(
+                        1,
+                        """{"type":"tool_execution_start","toolCallId":"live-stop","toolName":"run_command","args":{}}""",
+                    ),
+                    event(
+                        2,
+                        """{"type":"tool_execution_end","toolCallId":"live-stop","toolName":"run_command","result":{"content":[{"type":"text","text":"Operation aborted"}],"details":{}} ,"isError":true}""",
+                    ),
+                    event(3, """{"type":"abort"}"""),
+                ),
+                throughSequence = 3,
+                runState = "SETTLED",
+                isStreaming = false,
+            ),
+        )
+
+        val command = output.timeline.settledItems.single() as TimelineItem.ToolActivity
+        assertEquals(ToolActivityState.CANCELLED, command.state)
+        assertEquals("Command stopped", command.title)
     }
 
     @Test
@@ -1561,16 +2778,63 @@ class PiUiReducerTest {
         eventJson = json,
     )
 
+    private fun userMessage(
+        stableItemId: String,
+        ordinal: Long,
+        text: String,
+        attachmentIds: List<String> = emptyList(),
+    ): TaskDetailMessageRecord {
+        val content = buildString {
+            append("[{\"type\":\"text\",\"text\":")
+            append(JsonPrimitive(text))
+            append('}')
+            attachmentIds.forEach { attachmentId ->
+                append(",{")
+                append("\"type\":\"image\",\"data\":")
+                append(JsonPrimitive("attachment:$attachmentId"))
+                append(",\"mimeType\":\"image/jpeg\"}")
+            }
+            append(']')
+        }
+        return TaskDetailMessageRecord(
+            stableItemId = stableItemId,
+            ordinal = ordinal,
+            kind = "pi-message",
+            rawPayload = """{"role":"user","content":$content}""",
+        )
+    }
+
+    private fun assistantOutcome(
+        stableItemId: String,
+        ordinal: Long,
+        stopReason: String,
+        errorMessage: String? = null,
+    ) = TaskDetailMessageRecord(
+        stableItemId = stableItemId,
+        ordinal = ordinal,
+        kind = "pi-message",
+        rawPayload = buildString {
+            append("{\"role\":\"assistant\",\"content\":[],\"stopReason\":")
+            append(JsonPrimitive(stopReason))
+            errorMessage?.let {
+                append(",\"errorMessage\":")
+                append(JsonPrimitive(it))
+            }
+            append('}')
+        },
+    )
+
     private fun toolCall(
         callId: String,
         toolName: String,
         ordinal: Long,
+        arguments: String = "{}",
     ) = TaskDetailMessageRecord(
         stableItemId = "call-$callId",
         ordinal = ordinal,
         kind = "pi-message",
         rawPayload =
-            """{"role":"assistant","content":[{"type":"toolCall","id":"$callId","name":"$toolName","arguments":{}}]}""",
+            """{"role":"assistant","content":[{"type":"toolCall","id":"$callId","name":"$toolName","arguments":$arguments}]}""",
     )
 
     private fun toolResult(
@@ -1586,6 +2850,19 @@ class PiUiReducerTest {
         rawPayload =
             """{"role":"toolResult","toolCallId":"$callId","toolName":"$toolName","content":[{"type":"text","text":${JsonPrimitive(text)}}],"isError":$failed}""",
     )
+
+    private fun capabilityFailure(
+        action: String,
+        capability: String,
+        requiredAccess: String,
+    ) = """{"ok":false,"action":"$action","error":{"code":"CAPABILITY_NOT_READY","message":"Permission required","retryable":true,"resolution":{"kind":"request_capability","capability":"$capability","requiredAccess":"$requiredAccess"}}}"""
+
+    private fun toolEndEvent(
+        callId: String,
+        toolName: String,
+        text: String,
+        failed: Boolean,
+    ) = """{"type":"tool_execution_end","toolCallId":"$callId","toolName":"$toolName","result":{"content":[{"type":"text","text":${JsonPrimitive(text)}}],"details":{}},"isError":$failed}"""
 
     private fun snapshot(
         messages: List<TaskDetailMessageRecord> = emptyList(),

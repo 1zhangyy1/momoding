@@ -4,12 +4,15 @@ import app.momoding.core.data.TaskDetailEventRecord
 import app.momoding.core.data.TaskDetailSnapshot
 import app.momoding.core.data.AttentionResponseState
 import app.momoding.core.data.TaskFailure
+import app.momoding.core.data.TaskFailureRecovery
 import app.momoding.core.data.TaskAttentionKind
 import app.momoding.core.data.classifyTaskFailure
 import app.momoding.core.extensions.ExtensionToolActivityContract
 import app.momoding.core.extensions.ExtensionToolActivityEvent
 import app.momoding.core.extensions.ExtensionToolActivityKind
 import app.momoding.core.extensions.ExtensionToolActivityState
+import app.momoding.feature.attention.AttentionInteractionLanguage
+import app.momoding.feature.attention.attentionInteractionLanguage
 import java.security.MessageDigest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -42,8 +45,15 @@ class PiUiReducer {
     private var transientRunState: TaskDetailRunState? = null
     private var eventQueue: List<QueueItemUiModel>? = null
     private var liveRegionStartIndex: Int? = null
+    private var abortObserved = false
+    private var currentRunSettledStart = 0
+    private var durableRunState = TaskDetailRunState.UNKNOWN
+    private val capabilityRecovery = CapabilityRecoveryProjection()
+    private var latestUserInteractionText: String? = null
+    private val attentionInteractionLanguages = linkedMapOf<String, AttentionInteractionLanguage>()
 
     fun reduce(snapshot: TaskDetailSnapshot): PiUiProjection {
+        durableRunState = mapRunState(snapshot.runState, snapshot.isStreaming)
         val nextSnapshotIdentity = buildString {
             append(snapshot.snapshotVersion).append(':')
             append(snapshot.windowStart).append(':').append(snapshot.windowEndExclusive).append(':')
@@ -56,6 +66,8 @@ class PiUiReducer {
             appliedEvents.clear()
             transientRunState = null
             eventQueue = null
+            abortObserved = false
+            currentRunSettledStart = settledItems.size
             snapshotIdentity = nextSnapshotIdentity
         }
 
@@ -73,7 +85,7 @@ class PiUiReducer {
             snapshot.activeStopFence -> TaskDetailRunState.STOPPING
             transientRunState != null -> requireNotNull(transientRunState)
             snapshot.recoveryState == "RECONCILING_DEVICE_CALLS" -> TaskDetailRunState.RECOVERING
-            else -> mapRunState(snapshot.runState, snapshot.isStreaming)
+            else -> durableRunState
         }
         return PiUiProjection(
             runState = run,
@@ -87,6 +99,7 @@ class PiUiReducer {
                         "request_user_question" -> TaskAttentionKind.QUESTION
                         "request_user_confirmation" -> TaskAttentionKind.CONFIRMATION
                         "device_media_list" -> TaskAttentionKind.CONFIRMATION
+                        "device_media" -> TaskAttentionKind.CONFIRMATION
                         "device_calendar" -> TaskAttentionKind.CONFIRMATION
                         "device_contacts" -> TaskAttentionKind.CONFIRMATION
                         "device_location" -> TaskAttentionKind.CONFIRMATION
@@ -102,6 +115,7 @@ class PiUiReducer {
                             "request_user_question" -> "Momoding asked a question"
                             "request_user_confirmation" -> "An action needs confirmation"
                             "device_media_list" -> "Photo metadata access needs approval"
+                            "device_media" -> "Photo change needs approval"
                             "device_calendar" -> "Calendar access needs approval"
                             "device_contacts" -> "Contacts access needs approval"
                             "device_location" -> "Current location access needs approval"
@@ -162,9 +176,17 @@ class PiUiReducer {
             return
         }
         when (event.string("type")) {
-            "agent_start" -> transientRunState = TaskDetailRunState.RUNNING
+            "agent_start" -> {
+                capabilityRecovery.resetTurn()
+                abortObserved = false
+                currentRunSettledStart = settledItems.size
+                transientRunState = TaskDetailRunState.RUNNING
+            }
             "agent_settled", "settled" -> {
                 settleActive()
+                appendStoppedStatusIfCurrentTurnEmpty(
+                    "event:${record.streamId}:${record.sequence}:stopped",
+                )
                 transientRunState = TaskDetailRunState.SETTLED
             }
             "message_update" -> applyMessageUpdate(record, event)
@@ -174,6 +196,15 @@ class PiUiReducer {
             "extension_tool_activity" -> applyExtensionToolActivity(record, event)
             "provider_web_search", "provider_web_activity" -> applyProviderWebActivity(record, event)
             "queue_update" -> eventQueue = parseQueueEvent(event)
+            "abort" -> {
+                abortObserved = true
+                reclassifyLatestAbortedProjectTool()
+                if (transientRunState == TaskDetailRunState.SETTLED) {
+                    appendStoppedStatusIfCurrentTurnEmpty(
+                        "event:${record.streamId}:${record.sequence}:stopped",
+                    )
+                }
+            }
             "compaction_start" -> {
                 activeItem = TimelineItem.RunStatus("event:${record.streamId}:${record.sequence}", "Compacting task history")
                 transientRunState = TaskDetailRunState.COMPACTING
@@ -209,24 +240,33 @@ class PiUiReducer {
         val message = event["message"] as? JsonObject
             ?: assistantEvent?.get("partial") as? JsonObject
             ?: return
-        val prior = activeItem as? TimelineItem.AssistantText
+        val activeAssistant = activeItem as? TimelineItem.AssistantText
         val timestamp = message.primitive("timestamp")?.contentOrNull
         val key = timestamp
             ?.let { "assistant:${record.streamId}:$it" }
-            ?: prior?.stableKey
+            ?: activeAssistant?.stableKey
             ?: "assistant:${record.streamId}:${record.sequence}"
-        val settledPrior = settledItems
-            .asReversed()
-            .firstOrNull { it is TimelineItem.AssistantText && it.stableKey == key }
-            as? TimelineItem.AssistantText
-        val messagePrior = prior?.takeIf { it.stableKey == key } ?: settledPrior
+        if (activeItem != null && activeItem?.stableKey != key) {
+            settleActive()
+        }
+        var prior = (activeItem as? TimelineItem.AssistantText)
+            ?.takeIf { it.stableKey == key }
+        if (prior == null) {
+            val settledIndex = settledItems.indexOfLast {
+                it is TimelineItem.AssistantText && it.stableKey == key
+            }
+            if (settledIndex >= 0) {
+                prior = settledItems[settledIndex] as TimelineItem.AssistantText
+                settledItems = settledItems.toMutableList().also { it.removeAt(settledIndex) }
+            }
+        }
         val delta = assistantEvent
             ?.takeIf { it.string("type") == "text_delta" }
             ?.primitive("delta")
             ?.contentOrNull
         val partialText = extractContentText(message["content"], setOf("text"))
-        val text = if (messagePrior != null && delta != null) {
-            val appended = messagePrior.text + delta
+        val text = if (prior?.stableKey == key && delta != null) {
+            val appended = prior.text + delta
             // Pi may publish text_start and the first text_delta with the same partial.
             // The partial is authoritative when the delta cannot advance the current prefix.
             partialText.takeIf { it.isNotBlank() && it != appended } ?: appended
@@ -234,17 +274,7 @@ class PiUiReducer {
             partialText
         }
         if (text.isBlank()) return
-        val next = TimelineItem.AssistantText(key, sanitizeText(text), partial = true)
-        if (prior?.stableKey == key) {
-            activeItem = next
-        } else {
-            // Provider-owned activities may arrive in the middle of one Assistant message.
-            // Settle that activity, then reopen the accumulated message after it instead of
-            // rendering the same stable key in both the settled and active sections.
-            settleActive()
-            removeSettledItem(key)
-            activeItem = next
-        }
+        activeItem = TimelineItem.AssistantText(key, sanitizeText(text), partial = true)
         transientRunState = TaskDetailRunState.RUNNING
     }
 
@@ -252,12 +282,15 @@ class PiUiReducer {
         settleActive()
         val callId = event.nonBlankString("toolCallId")
         val toolName = event.nonBlankString("toolName")
-        if (callId == null || toolName == null || event["args"] !is JsonObject) {
+        val arguments = event["args"] as? JsonObject
+        if (callId == null || toolName == null || arguments == null) {
             settledItems = settledItems + TimelineItem.UnsupportedActivity(
                 "event:${record.streamId}:${record.sequence}:unsupported-tool-start",
             )
             return
         }
+        capabilityRecovery.recordStart(callId, toolName, arguments)
+        recordAttentionInteractionLanguage(callId, toolName, arguments)
         activeItem = toolItem(callId, toolName, ToolActivityState.RUNNING, "Working")
         transientRunState = TaskDetailRunState.RUNNING
     }
@@ -293,20 +326,30 @@ class PiUiReducer {
             transientRunState = TaskDetailRunState.RUNNING
             return
         }
+        val terminalState = projectToolState(toolName, failed, result, abortObserved)
         val terminal = toolItem(
             callId,
             toolName,
-            if (failed) ToolActivityState.FAILURE else ToolActivityState.SUCCESS,
-            if (failed) "Failed" else "Completed",
+            terminalState,
+            terminalDetail(terminalState),
             result,
         )
+        attentionInteractionLanguages.remove(callId)
         if (activeItem is TimelineItem.ToolActivity && (activeItem as TimelineItem.ToolActivity).toolCallId == callId) {
             activeItem = terminal
             settleActive()
         } else {
             replaceOrAppendTool(terminal)
         }
-        transientRunState = TaskDetailRunState.RUNNING
+        val replacedStopped = terminalState == ToolActivityState.CANCELLED &&
+            removeGenericStoppedForLatestTurn()
+        capabilityRecovery.observeTerminal(
+            callId = callId,
+            toolName = toolName,
+            state = terminalState,
+            payload = toolPayload(result),
+        )?.let(::removeRecoveredFailure)
+        preserveSettledOrMarkRunning(replacedStopped)
     }
 
     private fun applyToolUpdate(record: TaskDetailEventRecord, event: JsonObject) {
@@ -347,6 +390,37 @@ class PiUiReducer {
         record: TaskDetailEventRecord,
         event: JsonObject,
     ) {
+        val item = providerWebActivityItem(event)
+        if (item == null) {
+            settledItems = settledItems + TimelineItem.UnsupportedActivity(
+                "event:${record.streamId}:${record.sequence}:unsupported-provider-search",
+            )
+            return
+        }
+        val state = item.state
+        if (activeItem is TimelineItem.ToolActivity && activeItem?.stableKey == item.stableKey) {
+            activeItem = item
+        } else {
+            settleActive()
+            replaceOrAppendTool(item)
+            if (state == ToolActivityState.RUNNING) {
+                val existing = settledItems.indexOfLast { it.stableKey == item.stableKey }
+                if (existing >= 0) {
+                    settledItems = settledItems.toMutableList().also { it.removeAt(existing) }
+                }
+                activeItem = item
+            }
+        }
+        if (state != ToolActivityState.RUNNING) settleActive()
+        val replacedStopped = state == ToolActivityState.CANCELLED &&
+            removeGenericStoppedForLatestTurn()
+        preserveSettledOrMarkRunning(replacedStopped)
+    }
+
+    private fun providerWebActivityItem(
+        event: JsonObject,
+        assistantAnchor: String? = null,
+    ): TimelineItem.ToolActivity? {
         val requestId = event.nonBlankString("requestId")
             ?.takeIf { PROVIDER_REQUEST_ID.matches(it) }
         val state = when (event.string("state")) {
@@ -367,10 +441,7 @@ class PiUiReducer {
             fetches?.let { it !in 0..MAX_PROVIDER_FETCH_REQUESTS } == true ||
             event["sources"] !is JsonArray
         ) {
-            settledItems = settledItems + TimelineItem.UnsupportedActivity(
-                "event:${record.streamId}:${record.sequence}:unsupported-provider-search",
-            )
-            return
+            return null
         }
         val detail = buildList {
             requests?.takeIf { it > 0 }?.let {
@@ -396,13 +467,18 @@ class PiUiReducer {
             (webRequests ?: 0) > 0 -> WebActivity.GENERIC
             else -> WebActivity.SEARCH
         }
-        val item = TimelineItem.ToolActivity(
-            stableKey = "provider-web:$requestId",
-            toolCallId = "provider-web:$requestId",
+        val responseId = event.nonBlankString("responseId")
+            ?.takeIf { it.length <= MAX_PROVIDER_RESPONSE_ID_CHARS }
+        val identity = assistantAnchor ?: responseId?.let { "response:$it" } ?: "request:$requestId"
+        val activityKey = "provider-web:${sha256("$identity\u0000$requestId").take(24)}"
+        return TimelineItem.ToolActivity(
+            stableKey = activityKey,
+            toolCallId = activityKey,
             title = when (state) {
                 ToolActivityState.RUNNING -> activity.runningTitle
                 ToolActivityState.SUCCESS -> activity.completedTitle
                 ToolActivityState.FAILURE -> "Web access failed"
+                ToolActivityState.DECLINED -> "Web access declined"
                 ToolActivityState.CANCELLED -> "Web access stopped"
                 ToolActivityState.UNSUPPORTED -> "Web access unavailable"
             },
@@ -414,21 +490,6 @@ class PiUiReducer {
             },
             expanded = false,
         )
-        if (activeItem is TimelineItem.ToolActivity && activeItem?.stableKey == item.stableKey) {
-            activeItem = item
-        } else {
-            settleActive()
-            replaceOrAppendTool(item)
-            if (state == ToolActivityState.RUNNING) {
-                val existing = settledItems.indexOfLast { it.stableKey == item.stableKey }
-                if (existing >= 0) {
-                    settledItems = settledItems.toMutableList().also { it.removeAt(existing) }
-                }
-                activeItem = item
-            }
-        }
-        if (state != ToolActivityState.RUNNING) settleActive()
-        transientRunState = TaskDetailRunState.RUNNING
     }
 
     private fun applyExtensionToolActivity(
@@ -455,7 +516,9 @@ class PiUiReducer {
             }
         }
         if (item.state != ToolActivityState.RUNNING) settleActive()
-        transientRunState = TaskDetailRunState.RUNNING
+        val replacedStopped = item.state == ToolActivityState.CANCELLED &&
+            removeGenericStoppedForLatestTurn()
+        preserveSettledOrMarkRunning(replacedStopped)
     }
 
     private fun parseExtensionToolActivity(event: JsonObject): TimelineItem.ToolActivity? {
@@ -484,6 +547,7 @@ class PiUiReducer {
                 ToolActivityState.RUNNING -> copy.running
                 ToolActivityState.SUCCESS -> copy.completed
                 ToolActivityState.FAILURE -> "${copy.subject} failed"
+                ToolActivityState.DECLINED -> "${copy.subject} declined"
                 ToolActivityState.CANCELLED -> "${copy.subject} stopped"
                 ToolActivityState.UNSUPPORTED -> "Extension activity unavailable"
             },
@@ -523,6 +587,7 @@ class PiUiReducer {
                 ToolActivityState.RUNNING -> "Calling web service"
                 ToolActivityState.SUCCESS -> "Called web service"
                 ToolActivityState.FAILURE -> "Web request failed"
+                ToolActivityState.DECLINED -> "Web request declined"
                 ToolActivityState.CANCELLED -> "Web request stopped"
                 ToolActivityState.UNSUPPORTED -> "Web activity unavailable"
             },
@@ -599,19 +664,63 @@ class PiUiReducer {
 
     private fun settleActive() {
         val active = activeItem ?: return
-        val existing = settledItems.indexOfLast { it.stableKey == active.stableKey }
-        settledItems = if (existing < 0) {
-            settledItems + active
-        } else {
-            settledItems.toMutableList().also { it[existing] = active }
-        }
+        settledItems = settledItems + active
         activeItem = null
     }
 
-    private fun removeSettledItem(stableKey: String) {
-        if (settledItems.none { it.stableKey == stableKey }) return
-        settledItems = settledItems.filterNot { it.stableKey == stableKey }
+    private fun appendStoppedStatusIfCurrentTurnEmpty(stableKey: String) {
+        if (!abortObserved) return
+        val turnStart = settledItems.indexOfLast { it is TimelineItem.UserMessage }
+        if (turnStart < 0 || activeItem != null || settledItems.size != turnStart + 1) return
+        settledItems = settledItems + TimelineItem.RunStatus(stableKey, STOPPED_STATUS_LABEL)
     }
+
+    private fun removeGenericStoppedForLatestTurn(): Boolean {
+        val turnStart = settledItems.indexOfLast { it is TimelineItem.UserMessage }
+        if (turnStart < 0) return false
+        val priorSize = settledItems.size
+        settledItems = settledItems.filterIndexed { index, item ->
+            index <= turnStart || !item.isGenericStoppedStatus()
+        }
+        return settledItems.size != priorSize
+    }
+
+    private fun preserveSettledOrMarkRunning(replacedStopped: Boolean) {
+        val alreadySettled = transientRunState == TaskDetailRunState.SETTLED ||
+            (transientRunState == null && durableRunState == TaskDetailRunState.SETTLED)
+        if (!(replacedStopped && alreadySettled)) {
+            transientRunState = TaskDetailRunState.RUNNING
+        }
+    }
+
+    private fun appendSnapshotStoppedStatusIfCurrentTurnEmpty(
+        output: MutableList<TimelineItem>,
+        stableKey: String,
+    ) {
+        val turnStart = output.indexOfLast { it is TimelineItem.UserMessage }
+        if (turnStart < 0 || output.size != turnStart + 1) return
+        output += TimelineItem.RunStatus(stableKey, STOPPED_STATUS_LABEL)
+    }
+
+    private fun removeSnapshotGenericStoppedIfCancelledCurrentTurn(
+        output: MutableList<TimelineItem>,
+    ) {
+        val turnStart = output.indexOfLast { it is TimelineItem.UserMessage }
+        if (turnStart < 0) return
+        val hasCancelledActivity = output.indices.any { index ->
+            index > turnStart &&
+                (output[index] as? TimelineItem.ToolActivity)?.state == ToolActivityState.CANCELLED
+        }
+        if (!hasCancelledActivity) return
+        for (index in output.lastIndex downTo turnStart + 1) {
+            if (output[index].isGenericStoppedStatus()) output.removeAt(index)
+        }
+    }
+
+    private fun TimelineItem.isGenericStoppedStatus(): Boolean =
+        this is TimelineItem.RunStatus &&
+            label == STOPPED_STATUS_LABEL &&
+            stableKey.endsWith(":stopped")
 
     private fun replaceOrAppendTool(tool: TimelineItem.ToolActivity) {
         val index = settledItems.indexOfFirst {
@@ -646,7 +755,12 @@ class PiUiReducer {
     }
 
     private fun projectSnapshotMessages(snapshot: TaskDetailSnapshot): List<TimelineItem> {
+        capabilityRecovery.resetTurn()
+        attentionInteractionLanguages.clear()
+        latestUserInteractionText = null
         val output = mutableListOf<TimelineItem>()
+        var latestUserTurn: UserTurnSignature? = null
+        var latestUserTurnRetryable = false
         snapshot.messages.forEach { row ->
             val message = parseObject(row.rawPayload)
             if (message == null) {
@@ -657,45 +771,64 @@ class PiUiReducer {
             val role = message.string("role")
             when (role) {
                 "user" -> {
+                    capabilityRecovery.resetTurn()
                     val text = extractContentText(message["content"], setOf("text"))
+                    latestUserInteractionText = text.takeIf(String::isNotBlank)
                     val attachmentIds = extractAttachmentReferences(message["content"])
+                    val wasRetryable = latestUserTurnRetryable
+                    latestUserTurnRetryable = false
                     if (text.isNotBlank() || attachmentIds.isNotEmpty()) {
+                        val signature = UserTurnSignature(
+                            text = text,
+                            attachmentIds = attachmentIds,
+                        )
                         output += TimelineItem.UserMessage(
                             stableKey = "snapshot:${row.stableItemId}:user",
                             text = sanitizeText(text),
                             attachmentIds = attachmentIds,
+                            retried = wasRetryable && latestUserTurn == signature,
                         )
+                        latestUserTurn = signature
+                    } else {
+                        latestUserTurn = null
                     }
                 }
-                "phoneLocalControl" -> when (message.string("kind")) {
-                    "implement_plan" -> if (
-                        message.nonBlankString("controlId") != null &&
-                        message.string("planDigest")?.matches(SHA256) == true
-                    ) {
-                        output += TimelineItem.RunStatus(
-                            "snapshot:${row.stableItemId}:implement-plan",
-                            "Implementing approved plan",
-                        )
-                    } else {
-                        output += TimelineItem.UnsupportedActivity("snapshot:${row.stableItemId}")
-                    }
-                    "goal_continuation" -> {
-                        val turnIndex = message.primitive("turnIndex")?.intOrNull
-                        val valid = message.nonBlankString("controlId") != null &&
-                            message.string("goalId")?.matches(GOAL_ID) == true &&
-                            message.primitive("generation")?.intOrNull?.let { it > 0 } == true &&
-                            turnIndex != null && turnIndex in 0..10_000 &&
-                            message.string("trigger") in setOf("start", "continue", "resume")
-                        output += if (valid) {
-                            TimelineItem.RunStatus(
-                                "snapshot:${row.stableItemId}:goal-continuation",
-                                if (turnIndex == 0) "Starting goal" else "Continuing goal · turn $turnIndex",
+                "phoneLocalControl" -> {
+                    capabilityRecovery.resetTurn()
+                    when (message.string("kind")) {
+                        "implement_plan" -> if (
+                            message.nonBlankString("controlId") != null &&
+                            message.string("planDigest")?.matches(SHA256) == true
+                        ) {
+                            output += TimelineItem.RunStatus(
+                                "snapshot:${row.stableItemId}:implement-plan",
+                                "Implementing approved plan",
                             )
                         } else {
-                            TimelineItem.UnsupportedActivity("snapshot:${row.stableItemId}")
+                            output += TimelineItem.UnsupportedActivity("snapshot:${row.stableItemId}")
                         }
+                        "goal_continuation" -> {
+                            val turnIndex = message.primitive("turnIndex")?.intOrNull
+                            val valid = message.nonBlankString("controlId") != null &&
+                                message.string("goalId")?.matches(GOAL_ID) == true &&
+                                message.primitive("generation")?.intOrNull?.let { it > 0 } == true &&
+                                turnIndex != null && turnIndex in 0..10_000 &&
+                                message.string("trigger") in setOf("start", "continue", "resume")
+                            output += if (valid) {
+                                TimelineItem.RunStatus(
+                                    "snapshot:${row.stableItemId}:goal-continuation",
+                                    if (turnIndex == 0) {
+                                        "Starting goal"
+                                    } else {
+                                        "Continuing goal · turn $turnIndex"
+                                    },
+                                )
+                            } else {
+                                TimelineItem.UnsupportedActivity("snapshot:${row.stableItemId}")
+                            }
+                        }
+                        else -> output += TimelineItem.UnsupportedActivity("snapshot:${row.stableItemId}")
                     }
-                    else -> output += TimelineItem.UnsupportedActivity("snapshot:${row.stableItemId}")
                 }
                 "phoneLocalExtensionActivity" -> {
                     val event = message["event"] as? JsonObject
@@ -711,16 +844,68 @@ class PiUiReducer {
                         if (existing < 0) output += item else output[existing] = item
                     }
                 }
+                "phoneLocalProviderWebActivity" -> {
+                    val event = message["event"] as? JsonObject
+                    val assistantAnchor = message.nonBlankString("assistantAnchor")
+                    val item = event?.let { providerWebActivityItem(it, assistantAnchor) }
+                    if (
+                        message.keys != PROVIDER_WEB_ACTIVITY_MESSAGE_KEYS ||
+                        assistantAnchor == null ||
+                        item == null ||
+                        item.state == ToolActivityState.RUNNING
+                    ) {
+                        output += TimelineItem.UnsupportedActivity("snapshot:${row.stableItemId}")
+                    } else {
+                        val existing = output.indexOfFirst { it.stableKey == item.stableKey }
+                        if (existing < 0) output += item else output[existing] = item
+                    }
+                }
                 "assistant" -> projectAssistantMessage(row.stableItemId, message, output)
                 "toolResult" -> projectToolResult(row.stableItemId, message, output)
                 else -> output += TimelineItem.UnsupportedActivity("snapshot:${row.stableItemId}")
             }
-            if (role in setOf("user", "assistant") && output.size == before) {
+            if (role == "assistant") {
+                latestUserTurnRetryable = message.string("stopReason") == "error" &&
+                    latestUserTurn != null &&
+                    classifyTaskFailure(message.string("errorMessage")).recovery ==
+                    TaskFailureRecovery.RETRY
+            }
+            if (role == "assistant" && message.string("stopReason") == "aborted") {
+                reclassifyLatestAbortedProjectTool(output)
+                if ((message["content"] as? JsonArray)?.isEmpty() == true) {
+                    appendSnapshotStoppedStatusIfCurrentTurnEmpty(
+                        output = output,
+                        stableKey = "snapshot:${row.stableItemId}:stopped",
+                    )
+                }
+            }
+            removeSnapshotGenericStoppedIfCancelledCurrentTurn(output)
+            if (
+                role == "assistant" &&
+                output.size == before &&
+                (message["content"] as? JsonArray)?.isEmpty() == true &&
+                message.string("stopReason") in EMPTY_RESPONSE_STOP_REASONS
+            ) {
+                output += TimelineItem.Error(
+                    stableKey = "snapshot:${row.stableItemId}:empty-response",
+                    message = EMPTY_RESPONSE_MESSAGE,
+                )
+            }
+            if (
+                role in setOf("user", "assistant") &&
+                output.size == before &&
+                !(role == "assistant" && message.string("stopReason") == "aborted")
+            ) {
                 output += TimelineItem.UnsupportedActivity("snapshot:${row.stableItemId}:unsupported")
             }
         }
         return output
     }
+
+    private data class UserTurnSignature(
+        val text: String,
+        val attachmentIds: List<String>,
+    )
 
     private fun projectAssistantMessage(
         messageId: String,
@@ -751,9 +936,12 @@ class PiUiReducer {
                 "toolCall" -> {
                     val callId = item.nonBlankString("id")
                     val toolName = item.nonBlankString("name")
-                    if (callId == null || toolName == null || item["arguments"] !is JsonObject) {
+                    val arguments = item["arguments"] as? JsonObject
+                    if (callId == null || toolName == null || arguments == null) {
                         output += TimelineItem.UnsupportedActivity("snapshot:$messageId:content:$index")
                     } else {
+                        capabilityRecovery.recordStart(callId, toolName, arguments)
+                        recordAttentionInteractionLanguage(callId, toolName, arguments)
                         output += toolItem(callId, toolName, ToolActivityState.RUNNING, "Waiting for result")
                     }
                 }
@@ -797,15 +985,27 @@ class PiUiReducer {
             if (existing >= 0) output[existing] = replacement else output += replacement
             return
         }
+        val terminalState = projectToolState(toolName, failed, message)
         val terminal = toolItem(
             callId,
             toolName,
-            if (failed) ToolActivityState.FAILURE else ToolActivityState.SUCCESS,
-            if (failed) "Failed" else "Completed",
+            terminalState,
+            terminalDetail(terminalState),
             message,
         )
+        attentionInteractionLanguages.remove(callId)
         val existing = output.indexOfFirst { it is TimelineItem.ToolActivity && it.toolCallId == callId }
         if (existing >= 0) output[existing] = terminal else output += terminal
+        capabilityRecovery.observeTerminal(
+            callId = callId,
+            toolName = toolName,
+            state = terminalState,
+            payload = toolPayload(message),
+        )?.let { recoveredCallId ->
+            output.removeAll { item ->
+                item is TimelineItem.ToolActivity && item.toolCallId == recoveredCallId
+            }
+        }
     }
 
     private fun isSupportedToolResultContent(content: JsonElement?): Boolean {
@@ -820,6 +1020,112 @@ class PiUiReducer {
         }
     }
 
+    private fun projectToolState(
+        toolName: String,
+        declaredFailed: Boolean,
+        result: JsonObject,
+        taskAbortObserved: Boolean = false,
+    ): ToolActivityState {
+        if (declaredFailed && toolErrorCode(result) == "USER_DECLINED") {
+            return ToolActivityState.DECLINED
+        }
+        if (toolName !in PROJECT_RESULT_TOOLS) {
+            return if (declaredFailed) ToolActivityState.FAILURE else ToolActivityState.SUCCESS
+        }
+        val structured = projectToolResult(result)
+        if (structured?.strictBoolean("stopped") == true) return ToolActivityState.CANCELLED
+        if (taskAbortObserved && isOperationAbortedResult(result)) {
+            return ToolActivityState.CANCELLED
+        }
+        return if (declaredFailed || structured?.strictBoolean("ok") == false) {
+            ToolActivityState.FAILURE
+        } else {
+            ToolActivityState.SUCCESS
+        }
+    }
+
+    private fun projectToolResult(result: JsonObject): JsonObject? =
+        (result["details"] as? JsonObject)
+            ?: extractContentText(result["content"], setOf("text"))
+                .trim()
+                .let(::parseObject)
+
+    private fun toolPayload(result: JsonObject): JsonObject? =
+        extractContentText(result["content"], setOf("text"))
+            .trim()
+            .let(::parseObject)
+
+    private fun toolErrorCode(result: JsonObject): String? {
+        val payload = toolPayload(result)
+        return payload?.string("code")
+            ?: (payload?.get("error") as? JsonObject)?.string("code")
+            ?: (result["details"] as? JsonObject)?.string("failureCode")
+    }
+
+    private fun removeRecoveredFailure(callId: String) {
+        settledItems = settledItems.filterNot { item ->
+            item is TimelineItem.ToolActivity && item.toolCallId == callId
+        }
+    }
+
+    private fun terminalDetail(state: ToolActivityState): String = when (state) {
+        ToolActivityState.SUCCESS -> "Completed"
+        ToolActivityState.DECLINED -> "Declined"
+        ToolActivityState.CANCELLED -> "Stopped"
+        else -> "Failed"
+    }
+
+    private fun isOperationAbortedResult(result: JsonObject): Boolean =
+        extractContentText(result["content"], setOf("text")).trim() == OPERATION_ABORTED
+
+    private fun reclassifyLatestAbortedProjectTool() {
+        val active = activeItem as? TimelineItem.ToolActivity
+        if (active != null) {
+            activeItem = active.asStoppedIfOperationAborted()
+        }
+        val index = settledItems.indices.lastOrNull { index ->
+            index >= currentRunSettledStart &&
+                (settledItems[index] as? TimelineItem.ToolActivity)
+                    ?.isFailedOperationAborted() == true
+        } ?: -1
+        if (index >= 0) {
+            settledItems = settledItems.toMutableList().also { items ->
+                items[index] = (items[index] as TimelineItem.ToolActivity)
+                    .asStoppedIfOperationAborted()
+            }
+        }
+    }
+
+    private fun reclassifyLatestAbortedProjectTool(output: MutableList<TimelineItem>) {
+        val turnStart = output.indexOfLast { it is TimelineItem.UserMessage }
+        if (turnStart < 0) return
+        val index = output.indices.lastOrNull { index ->
+            index > turnStart &&
+                (output[index] as? TimelineItem.ToolActivity)
+                    ?.isFailedOperationAborted() == true
+        } ?: -1
+        if (index >= 0) {
+            output[index] = (output[index] as TimelineItem.ToolActivity)
+                .asStoppedIfOperationAborted()
+        }
+    }
+
+    private fun TimelineItem.ToolActivity.isFailedOperationAborted(): Boolean =
+        state == ToolActivityState.FAILURE &&
+            kind in setOf(ToolActivityKind.TERMINAL, ToolActivityKind.TEST) &&
+            result?.text?.trim() == OPERATION_ABORTED
+
+    private fun TimelineItem.ToolActivity.asStoppedIfOperationAborted(): TimelineItem.ToolActivity =
+        if (!isFailedOperationAborted()) {
+            this
+        } else {
+            copy(
+                title = if (kind == ToolActivityKind.TEST) "Tests stopped" else "Command stopped",
+                detail = "Stopped",
+                state = ToolActivityState.CANCELLED,
+            )
+        }
+
     private fun extractAttachmentReferences(content: JsonElement?): List<String> {
         val array = content as? JsonArray ?: return emptyList()
         return array.mapNotNull { element ->
@@ -827,6 +1133,25 @@ class PiUiReducer {
             if (item.string("type") !in setOf("image", "file")) return@mapNotNull null
             item.string("data")?.let(ATTACHMENT_REFERENCE::matchEntire)?.groupValues?.get(1)
         }
+    }
+
+    private fun recordAttentionInteractionLanguage(
+        callId: String,
+        toolName: String,
+        arguments: JsonObject,
+    ) {
+        val promptFallback = when (toolName) {
+            "request_user_question" -> arguments.nonBlankString("question")
+            "request_user_confirmation" -> arguments.nonBlankString("summary")
+            else -> null
+        } ?: return
+        if (attentionInteractionLanguages.size >= MAX_ATTENTION_LANGUAGE_BINDINGS) {
+            attentionInteractionLanguages.remove(attentionInteractionLanguages.keys.first())
+        }
+        attentionInteractionLanguages[callId] = attentionInteractionLanguage(
+            latestUserText = latestUserInteractionText,
+            promptFallback = promptFallback,
+        )
     }
 
     private fun toolItem(
@@ -847,6 +1172,15 @@ class PiUiReducer {
         }
         val kind = toolKind(toolName)
         val title = when {
+            state == ToolActivityState.DECLINED -> declinedToolTitle(toolName)
+            toolName == "device_capability_request" && state == ToolActivityState.RUNNING ->
+                "Requesting Android access"
+            toolName == "device_capability_request" && state == ToolActivityState.SUCCESS ->
+                "Enabled Android access"
+            toolName == "device_capability_request" && state == ToolActivityState.DECLINED ->
+                "Android access request declined"
+            toolName == "device_capability_request" && state == ToolActivityState.FAILURE ->
+                "Android access not enabled"
             toolName == "device_calendar" ->
                 calendarToolTitle(state, resultContainer)
             toolName == "device_contacts" ->
@@ -864,9 +1198,11 @@ class PiUiReducer {
             kind == ToolActivityKind.TEST && state == ToolActivityState.RUNNING -> "Running tests"
             kind == ToolActivityKind.TEST && state == ToolActivityState.SUCCESS -> "Tests passed"
             kind == ToolActivityKind.TEST && state == ToolActivityState.FAILURE -> "Tests failed"
+            kind == ToolActivityKind.TEST && state == ToolActivityState.CANCELLED -> "Tests stopped"
             kind == ToolActivityKind.TERMINAL && state == ToolActivityState.RUNNING -> "Running command"
             kind == ToolActivityKind.TERMINAL && state == ToolActivityState.SUCCESS -> "Command completed"
             kind == ToolActivityKind.TERMINAL && state == ToolActivityState.FAILURE -> "Command failed"
+            kind == ToolActivityKind.TERMINAL && state == ToolActivityState.CANCELLED -> "Command stopped"
             else -> when (toolName) {
                 "request_user_question" -> "Asked a question"
                 "request_user_confirmation" -> "Requested confirmation"
@@ -886,7 +1222,7 @@ class PiUiReducer {
                 else -> toolName.replace('_', ' ').replaceFirstChar(Char::uppercase)
             }
         }
-        val result = resultContainer?.let { toolResult(toolName, state, it) }
+        val result = resultContainer?.let { toolResult(callId, toolName, state, it) }
         val action = if (state == ToolActivityState.SUCCESS) {
             when (toolName) {
                 "device_files_prepare_changes" -> ToolActivityAction.REVIEW_CHANGES
@@ -907,6 +1243,23 @@ class PiUiReducer {
             action = action,
             expanded = result?.images?.isNotEmpty() == true,
         )
+    }
+
+    private fun declinedToolTitle(toolName: String): String = when (toolName) {
+        "request_user_confirmation" -> "Confirmation declined"
+        "device_capability_request" -> "Android access request declined"
+        "device_calendar" -> "Calendar action declined"
+        "device_contacts" -> "Contacts request declined"
+        "device_location" -> "Location request declined"
+        "device_clipboard" -> "Clipboard request declined"
+        "device_notification" -> "Notification request declined"
+        "device_media_list" -> "Photo access request declined"
+        "device_media" -> "Photo change declined"
+        "device_screen_capture" -> "Screen capture declined"
+        "device_ui_action" -> "Interface action declined"
+        "device_files_list", "device_files_read" -> "File access request declined"
+        "device_files_prepare_changes", "device_files_commit_changes" -> "File changes declined"
+        else -> "Action declined"
     }
 
     private fun replaceToolWithPlan(plan: TimelineItem.Plan) {
@@ -1000,6 +1353,7 @@ class PiUiReducer {
     }
 
     private fun toolResult(
+        callId: String,
         toolName: String,
         state: ToolActivityState,
         container: JsonObject,
@@ -1017,7 +1371,13 @@ class PiUiReducer {
         )
             .distinct()
             .take(MAX_TOOL_IMAGES)
-        val presented = attentionResultText(toolName, state, text) ?: prettyStructuredText(text)
+        val presented = attentionResultText(
+            toolName = toolName,
+            state = state,
+            text = text,
+            language = attentionInteractionLanguages[callId]
+                ?: attentionInteractionLanguage(latestUserInteractionText, null),
+        ) ?: prettyStructuredText(text)
         val sanitized = sanitizeText(presented)
         if (sanitized.isBlank() && sources.isEmpty() && imageAttachmentIds.isEmpty()) return null
         return ToolResultUiModel(
@@ -1048,6 +1408,7 @@ class PiUiReducer {
         toolName: String,
         state: ToolActivityState,
         text: String,
+        language: AttentionInteractionLanguage,
     ): String? = when (toolName) {
         "request_user_question" -> {
             val result = parseObject(text.trim())
@@ -1055,24 +1416,53 @@ class PiUiReducer {
                 "answered" -> {
                     val answer = result["answer"] as? JsonObject
                     when (answer?.string("kind")) {
-                        "option" -> answer.nonBlankString("label")?.let { "You chose $it" }
-                        "custom" -> answer.nonBlankString("text")?.let { "You answered: $it" }
+                        "option" -> answer.nonBlankString("label")?.let {
+                            if (language == AttentionInteractionLanguage.ZH_CN) {
+                                "你选择了：$it"
+                            } else {
+                                "You chose $it"
+                            }
+                        }
+                        "custom" -> answer.nonBlankString("text")?.let {
+                            if (language == AttentionInteractionLanguage.ZH_CN) {
+                                "你回答了：$it"
+                            } else {
+                                "You answered: $it"
+                            }
+                        }
                         else -> null
-                    } ?: "Answer recorded"
+                    } ?: if (language == AttentionInteractionLanguage.ZH_CN) {
+                        "回答已记录"
+                    } else {
+                        "Answer recorded"
+                    }
                 }
-                "skipped" -> "Skipped"
-                else -> if (state == ToolActivityState.FAILURE) "Answer not recorded" else "Answer recorded"
+                "skipped" -> if (language == AttentionInteractionLanguage.ZH_CN) "已跳过" else "Skipped"
+                else -> if (state == ToolActivityState.FAILURE) {
+                    if (language == AttentionInteractionLanguage.ZH_CN) "回答未记录" else "Answer not recorded"
+                } else {
+                    if (language == AttentionInteractionLanguage.ZH_CN) "回答已记录" else "Answer recorded"
+                }
             }
         }
         "request_user_confirmation" -> {
             val result = parseObject(text.trim())
             when {
-                result?.string("outcome") == "confirmed" -> "Confirmed"
-                result?.string("code") == "USER_DECLINED" -> "Declined"
-                state == ToolActivityState.FAILURE -> "Decision not recorded"
-                else -> "Decision recorded"
+                result?.string("outcome") == "confirmed" ->
+                    if (language == AttentionInteractionLanguage.ZH_CN) "已批准" else "Confirmed"
+                state == ToolActivityState.DECLINED &&
+                    result?.string("code") == "USER_DECLINED" ->
+                    if (language == AttentionInteractionLanguage.ZH_CN) "已拒绝" else "Declined"
+                state == ToolActivityState.FAILURE ->
+                    if (language == AttentionInteractionLanguage.ZH_CN) "决定未记录" else "Decision not recorded"
+                else -> if (language == AttentionInteractionLanguage.ZH_CN) {
+                    "决定已记录"
+                } else {
+                    "Decision recorded"
+                }
             }
         }
+        "device_capability_request" -> capabilityRequestResultText(state, text)
         "device_calendar" -> calendarResultText(state, text)
         "device_contacts" -> contactsResultText(state, text)
         "device_location" -> locationResultText(state, text)
@@ -1080,6 +1470,38 @@ class PiUiReducer {
         "device_notification" -> notificationResultText(state, text)
         "image_generate" -> imageGenerationResultText(state, text)
         else -> null
+    }
+
+    private fun capabilityRequestResultText(
+        state: ToolActivityState,
+        text: String,
+    ): String {
+        val result = parseObject(text.trim())
+            ?: return if (state == ToolActivityState.SUCCESS) {
+                "Android access is ready"
+            } else {
+                "Android access was not enabled"
+            }
+        val capability = when (result.string("capability")) {
+            "calendar" -> "Calendar"
+            "contacts" -> "Contacts"
+            "location" -> "Location"
+            "notifications" -> "Notification"
+            "photo_library" -> "Photo library"
+            else -> "Android"
+        }
+        return if (state == ToolActivityState.SUCCESS && result.strictBoolean("ready") == true) {
+            "$capability access is ready"
+        } else {
+            when (result.string("code")) {
+                "DEVICE_CAPABILITY_DENIED" -> "$capability access was not enabled"
+                "DEVICE_CAPABILITY_TIMEOUT" -> "$capability access setup timed out"
+                "DEVICE_CAPABILITY_UNAVAILABLE" -> "$capability access is unavailable"
+                else -> result.nonBlankString("message")
+                    ?.let(::sanitizeText)
+                    ?: "$capability access was not enabled"
+            }
+        }
     }
 
     private fun imageGenerationResultText(
@@ -1101,6 +1523,7 @@ class PiUiReducer {
         resultContainer: JsonObject?,
     ): String {
         if (state == ToolActivityState.RUNNING) return "Managing Momoding notifications"
+        if (state == ToolActivityState.DECLINED) return "Notification request declined"
         if (state == ToolActivityState.CANCELLED) return "Notification request cancelled"
         if (state == ToolActivityState.FAILURE) return "Notification request failed"
         if (state == ToolActivityState.UNSUPPORTED) return "Notifications unavailable"
@@ -1169,6 +1592,7 @@ class PiUiReducer {
         resultContainer: JsonObject?,
     ): String {
         if (state == ToolActivityState.RUNNING) return "Using Android Clipboard"
+        if (state == ToolActivityState.DECLINED) return "Clipboard request declined"
         if (state == ToolActivityState.CANCELLED) return "Clipboard request cancelled"
         if (state == ToolActivityState.FAILURE) return "Clipboard request failed"
         if (state == ToolActivityState.UNSUPPORTED) return "Clipboard unavailable"
@@ -1225,6 +1649,7 @@ class PiUiReducer {
         ToolActivityState.RUNNING -> "Getting current location"
         ToolActivityState.SUCCESS -> "Checked current location"
         ToolActivityState.FAILURE -> "Location unavailable"
+        ToolActivityState.DECLINED -> "Location request declined"
         ToolActivityState.CANCELLED -> "Location request cancelled"
         ToolActivityState.UNSUPPORTED -> "Location unavailable"
     }
@@ -1271,6 +1696,7 @@ class PiUiReducer {
         resultContainer: JsonObject?,
     ): String {
         if (state == ToolActivityState.RUNNING) return "Using Android Contacts"
+        if (state == ToolActivityState.DECLINED) return "Contacts request declined"
         if (state == ToolActivityState.CANCELLED) return "Contacts lookup cancelled"
         if (state == ToolActivityState.FAILURE) return "Contacts lookup failed"
         if (state == ToolActivityState.UNSUPPORTED) return "Contacts unavailable"
@@ -1303,6 +1729,7 @@ class PiUiReducer {
             val code = (result["error"] as? JsonObject)?.string("code")
             return when (code) {
                 "CAPABILITY_NOT_READY" -> "Contacts access is not enabled"
+                "USER_DECLINED" -> "Contacts request declined"
                 "STALE_HANDLE" -> "Contact selection expired; search again"
                 "NOT_FOUND" -> "Contact no longer exists"
                 "READ_ONLY" -> "This contact cannot be changed"
@@ -1353,6 +1780,7 @@ class PiUiReducer {
         resultContainer: JsonObject?,
     ): String {
         if (state == ToolActivityState.RUNNING) return "Using Android Calendar"
+        if (state == ToolActivityState.DECLINED) return "Calendar action declined"
         if (state == ToolActivityState.CANCELLED) return "Calendar action cancelled"
         if (state == ToolActivityState.FAILURE) return "Calendar action failed"
         if (state == ToolActivityState.UNSUPPORTED) return "Calendar unavailable"
@@ -1617,6 +2045,10 @@ class PiUiReducer {
     private fun JsonObject.primitive(key: String): JsonPrimitive? = this[key] as? JsonPrimitive
 
     private companion object {
+        const val OPERATION_ABORTED = "Operation aborted"
+        const val STOPPED_STATUS_LABEL = "Stopped"
+        const val EMPTY_RESPONSE_MESSAGE = "Momoding returned no response. Try again."
+        val EMPTY_RESPONSE_STOP_REASONS = setOf("stop", "length", "toolUse")
         val strictJson = Json { ignoreUnknownKeys = false; isLenient = false; coerceInputValues = false }
         val prettyJson = Json { prettyPrint = true }
         val CONTENT_URI = Regex("content://[^\\s]+", RegexOption.IGNORE_CASE)
@@ -1628,6 +2060,7 @@ class PiUiReducer {
             "device_files_commit_changes",
         )
         val TERMINAL_TOOL_NAMES = setOf("terminal", "shell", "bash", "exec", "run_command")
+        val PROJECT_RESULT_TOOLS = setOf("run_command", "run_tests")
         const val TASK_PLAN_UPDATE_TOOL_NAME = "task_plan_update"
         val SHA256 = Regex("^[0-9a-f]{64}$")
         val GOAL_ID = Regex("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
@@ -1636,15 +2069,18 @@ class PiUiReducer {
         )
         const val MAX_TOOL_SOURCES = 12
         const val MAX_TOOL_IMAGES = 1
+        const val MAX_ATTENTION_LANGUAGE_BINDINGS = 32
         const val MAX_PROVIDER_SEARCH_SOURCES = 15
         const val MAX_PROVIDER_SEARCH_REQUESTS = 3
         const val MAX_PROVIDER_FETCH_REQUESTS = 3
+        const val MAX_PROVIDER_RESPONSE_ID_CHARS = 256
         const val MAX_PROVIDER_WEB_REQUESTS = 5
         const val MAX_PROVIDER_SOURCE_URL_CHARS = 2_048
         const val MAX_PROVIDER_SOURCE_TITLE_CHARS = 240
         val PROVIDER_REQUEST_ID = Regex("^provider-[1-9][0-9]{0,8}$")
         val WEB_URL = Regex("^https?://[^\\s]+$", RegexOption.IGNORE_CASE)
         val EXTENSION_ACTIVITY_MESSAGE_KEYS = setOf("role", "event")
+        val PROVIDER_WEB_ACTIVITY_MESSAGE_KEYS = setOf("role", "assistantAnchor", "event")
         val EXTENSION_HOST_TOOL_COPY = mapOf(
             "device_capabilities_get" to ExtensionHostToolCopy(
                 "Checking mobile capabilities", "Checked mobile capabilities", "Mobile capability check",

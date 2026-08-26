@@ -2423,16 +2423,18 @@ private fun TaskDetailRouteContent(
         ),
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val activeQuestion = state.attention?.takeIf { it.kind == TaskAttentionKind.QUESTION }
-    val questionViewModel = activeQuestion?.let { question ->
+    val activeComposerAttention = state.attention?.takeIf {
+        it.kind == TaskAttentionKind.QUESTION || it.kind == TaskAttentionKind.CONFIRMATION
+    }
+    val attentionComposerViewModel = activeComposerAttention?.let { attention ->
         viewModel<AttentionViewModel>(
-            key = "task-question-${route.taskId}-${question.callId}",
+            key = "task-attention-composer-${route.taskId}-${attention.callId}",
             factory = container.attentionViewModelFactory(
-                AttentionIdentity(route.taskId, question.callId),
+                AttentionIdentity(route.taskId, attention.callId),
             ),
         )
     }
-    val questionState = questionViewModel?.state?.collectAsStateWithLifecycle()?.value
+    val attentionComposerState = attentionComposerViewModel?.state?.collectAsStateWithLifecycle()?.value
     LaunchedEffect(attentionReturn?.effectId, route.taskId) {
         val effect = attentionReturn ?: return@LaunchedEffect
         if (effect.taskId != route.taskId || effect.callId.isBlank()) return@LaunchedEffect
@@ -2444,12 +2446,12 @@ private fun TaskDetailRouteContent(
         onAttentionReturnConsumed()
     }
     LaunchedEffect(viewModel) { viewModel.oneShots.collect(onOneShot) }
-    LaunchedEffect(questionViewModel) {
-        questionViewModel?.oneShots?.collect { effect ->
+    LaunchedEffect(attentionComposerViewModel) {
+        attentionComposerViewModel?.oneShots?.collect { effect ->
             if (effect is AttentionOneShot.ReturnToTask) {
                 viewModel.acceptAttentionReturn(
                     effectId = effect.effectId,
-                    callId = activeQuestion?.callId ?: return@collect,
+                    callId = activeComposerAttention.callId,
                     unavailable = effect.reason == AttentionReturnReason.UNAVAILABLE,
                 )
             }
@@ -2458,8 +2460,8 @@ private fun TaskDetailRouteContent(
     TaskDetailScreen(
         state = state,
         onAction = viewModel::dispatch,
-        questionState = questionState,
-        onQuestionIntent = { intent -> questionViewModel?.dispatch(intent) },
+        attentionComposerState = attentionComposerState,
+        onAttentionComposerIntent = { intent -> attentionComposerViewModel?.dispatch(intent) },
         restoreFocusKey = restoreFocusKey,
         onFocusRestored = onFocusRestored,
         onOpenNavigation = onOpenNavigation,

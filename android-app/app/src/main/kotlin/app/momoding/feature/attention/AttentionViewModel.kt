@@ -54,6 +54,8 @@ class AttentionViewModel internal constructor(
     private var draftBarrierFailure: AttentionTransientNotice? = null
     private var expiryJob: Job? = null
     private var sourceObserved = false
+    private var terminalDecisionInFlight = false
+    private var terminalDecisionAccepted = false
 
     constructor(
         taskId: String,
@@ -268,15 +270,21 @@ class AttentionViewModel internal constructor(
         if (!draftBarrierIsClear()) return unlockTerminal()
         val before = readExactActionable() ?: return unlockTerminal()
         if (before.callId != decision.callId) return unlockTerminal()
+        terminalDecisionAccepted = false
+        terminalDecisionInFlight = true
         try {
             submitDecision(decision)
+            terminalDecisionAccepted = true
+            terminalDecisionInFlight = false
             notice = null
             val after = repository.current(identity.taskId, identity.callId)
             acceptSource(after)
             if (!after.hasDurableTerminal()) unlockTerminal()
         } catch (cancelled: CancellationException) {
+            terminalDecisionInFlight = false
             throw cancelled
         } catch (_: Exception) {
+            terminalDecisionInFlight = false
             val after = repository.currentOrCorrupt(identity)
             acceptSource(after)
             if (!after.hasDurableTerminal()) {
@@ -435,8 +443,14 @@ class AttentionViewModel internal constructor(
                 else -> Unit
             }
         }
-        if (current is AttentionUiState.Unavailable ||
-            current is AttentionUiState.Corrupt ||
+        if (current is AttentionUiState.Unavailable) {
+            when {
+                terminalDecisionInFlight -> Unit
+                terminalDecisionAccepted -> emitReturn(AttentionReturnReason.COMPLETED)
+                else -> emitReturn(AttentionReturnReason.UNAVAILABLE)
+            }
+        }
+        if (current is AttentionUiState.Corrupt ||
             current is AttentionUiState.FailedClosedHidden
         ) {
             emitReturn(AttentionReturnReason.UNAVAILABLE)

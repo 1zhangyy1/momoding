@@ -85,6 +85,20 @@ class CalendarToolRequestParserTest {
     }
 
     @Test
+    fun `list events accepts omitted optional filters as an unfiltered first page`() {
+        val request = parse(buildJsonObject {
+            put("action", "list_events")
+            put("purpose", "Read tomorrow afternoon")
+            put("start", "2026-08-25T12:00:00+08:00")
+            put("end", "2026-08-25T18:00:00+08:00")
+        }) as CalendarToolRequest.ListEvents
+
+        assertEquals(null, request.calendarHandle)
+        assertEquals(null, request.query)
+        assertEquals(null, request.cursor)
+    }
+
+    @Test
     fun `update distinguishes omitted nullable fields from an explicit clear`() {
         val request = parse(buildJsonObject {
             put("action", "update_event")

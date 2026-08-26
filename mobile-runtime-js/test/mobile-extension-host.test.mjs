@@ -122,10 +122,10 @@ test("MobileExtensionHost is static, deterministic, composable, and fail-closed"
 
 test("empty production ExtensionHost preserves the frozen ordinary, plan, and goal tool baselines", async () => {
   const ordinary = await captureInitialRequest({ taskId: "pxp1-ordinary" });
-  assertToolBaseline(ordinary.request, ORDINARY_TOOL_NAMES, 28_612);
+  assertToolBaseline(ordinary.request, ORDINARY_TOOL_NAMES, 32_176);
 
   const plan = await captureInitialRequest({ taskId: "pxp1-plan", planMode: true });
-  assertToolBaseline(plan.request, PLAN_TOOL_NAMES, 7_105);
+  assertToolBaseline(plan.request, PLAN_TOOL_NAMES, 7_374);
 
   const context = await bootRuntime();
   JSON.parse(call(
@@ -151,7 +151,7 @@ test("empty production ExtensionHost preserves the frozen ordinary, plan, and go
   assertToolBaseline(
     goal,
     [...ORDINARY_TOOL_NAMES, "task_goal_progress", "task_goal_complete"],
-    29_444,
+    33_008,
   );
   finishTextRequest(context, goal, "Checkpoint remains active.");
   await waitForTerminal(context);

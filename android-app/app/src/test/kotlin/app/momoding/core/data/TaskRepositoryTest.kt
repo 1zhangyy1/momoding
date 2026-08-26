@@ -126,6 +126,41 @@ class TaskRepositoryTest {
     }
 
     @Test
+    fun `media mutation is a first class confirmation in the task list`() = runBlocking {
+        database.momodingDao().upsertTask(task(NEWER_TASK_ID, 200, readState = "READ"))
+        ledger.acceptRequest(
+            AttentionRequestRecord(
+                callId = MEDIA_CALL_ID,
+                taskId = NEWER_TASK_ID,
+                piToolCallId = "pi-$MEDIA_CALL_ID",
+                deviceId = DEVICE_ID,
+                toolName = "device_media",
+                arguments = buildJsonObject {
+                    put("approvalKind", "mutation")
+                    put("action", "set_trashed")
+                    put("requestDigest", "6".repeat(64))
+                    put("planDigest", "7".repeat(64))
+                    put("summary", "Move this photo to Android trash?")
+                    put("details", "Android will ask for confirmation and verify the result.")
+                },
+                sideEffect = true,
+                operationId = MEDIA_OPERATION_ID,
+                expiresAt = EXPIRES_AT,
+                capabilityVersion = 1,
+            ),
+            AttentionAcceptanceScope(NEWER_TASK_ID, DEVICE_ID, 1, "task-$NEWER_TASK_ID"),
+        )
+
+        val row = TaskRepository(database, Dispatchers.Unconfined)
+            .observeTaskRows()
+            .first()
+            .single()
+        assertEquals(TaskAttentionKind.CONFIRMATION, row.attentionKind)
+        assertEquals(MEDIA_CALL_ID, row.primaryAttentionCallId)
+        assertEquals("device_media", row.primaryAttentionToolName)
+    }
+
+    @Test
     fun `typed responding state remains through Host proof and exits only after Pi proof`() =
         runBlocking {
             database.momodingDao().upsertTask(task(NEWER_TASK_ID, 200, readState = "READ"))
@@ -467,6 +502,8 @@ class TaskRepositoryTest {
         const val NEWER_PENDING_CALL_ID = "22222222-2222-4222-8222-222222222222"
         const val OLDER_CONFIRM_CALL_ID = "22222222-2222-4222-8222-222222222223"
         const val PHANTOM_HOST_CALL_ID = "22222222-2222-4222-8222-222222222224"
+        const val MEDIA_CALL_ID = "22222222-2222-4222-8222-222222222225"
+        const val MEDIA_OPERATION_ID = "44444444-4444-4444-8444-444444444445"
         const val DEVICE_ID = "android-p2-7-device"
         const val EXPIRES_AT = "2030-01-01T00:00:00.000Z"
     }

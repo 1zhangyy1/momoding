@@ -239,7 +239,7 @@ fun AttentionScreen(
     embeddedInBottomSheet: Boolean = false,
 ) {
     when (state) {
-        is AttentionUiState.Loading -> AttentionLoading(modifier)
+        is AttentionUiState.Loading -> AttentionLoading(modifier, embeddedInBottomSheet)
         is AttentionUiState.Unavailable,
         is AttentionUiState.Corrupt,
         is AttentionUiState.FailedClosedHidden,
@@ -259,10 +259,21 @@ fun AttentionScreen(
 }
 
 @Composable
-private fun AttentionLoading(modifier: Modifier) {
+private fun AttentionLoading(
+    modifier: Modifier,
+    embeddedInBottomSheet: Boolean,
+) {
+    val stableSheetHeight = attentionSheetMaxHeight()
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .then(
+                if (embeddedInBottomSheet) {
+                    Modifier.heightIn(min = stableSheetHeight)
+                } else {
+                    Modifier
+                },
+            )
             .padding(horizontal = 24.dp, vertical = 24.dp)
             .testTag("attention-loading"),
         verticalAlignment = Alignment.CenterVertically,
@@ -290,10 +301,7 @@ private fun AttentionVisibleScreen(
     val copy = state.stateCopy()
     val dismissIntent = state.closeIntent()
     val titleFocus = remember(state.identity.stableKey) { FocusRequester() }
-    val density = LocalDensity.current
-    val maxSheetHeight = with(density) {
-        LocalWindowInfo.current.containerSize.height.toDp() - 44.dp
-    }.coerceAtLeast(280.dp)
+    val maxSheetHeight = attentionSheetMaxHeight()
     LaunchedEffect(state.identity.stableKey) {
         withFrameNanos { }
         titleFocus.requestFocus()
@@ -392,6 +400,11 @@ private fun AttentionVisibleScreen(
         },
     )
 }
+
+@Composable
+private fun attentionSheetMaxHeight() = with(LocalDensity.current) {
+    LocalWindowInfo.current.containerSize.height.toDp() - 44.dp
+}.coerceAtLeast(280.dp)
 
 @Composable
 private fun AttentionHeader(
@@ -680,6 +693,7 @@ internal fun AttentionOptionRow(
     selected: Boolean,
     enabled: Boolean,
     onClick: () -> Unit,
+    recommendedLabel: String = "Recommended",
 ) {
     val colors = LocalMomodingStatusColors.current
     val shape = RoundedCornerShape(12.dp)
@@ -738,7 +752,7 @@ internal fun AttentionOptionRow(
                 )
                 if (option.recommended) {
                     Text(
-                        text = "Recommended",
+                        text = recommendedLabel,
                         style = MaterialTheme.typography.labelSmall,
                         color = colors.success,
                         modifier = Modifier
@@ -771,6 +785,7 @@ internal fun AttentionCustomAnswer(
     validation: AttentionValidationCode?,
     onIntent: (AttentionIntent) -> Unit,
     compact: Boolean = false,
+    label: String? = null,
 ) {
     val focusManager = LocalFocusManager.current
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
@@ -821,7 +836,7 @@ internal fun AttentionCustomAnswer(
                 if (errorCopy != null) error(errorCopy)
             }
             .testTag("attention-custom-answer"),
-        label = { Text(if (compact) "Something else" else "Write another answer") },
+        label = { Text(label ?: if (compact) "Something else" else "Write another answer") },
         supportingText = errorCopy?.let { copy ->
             {
                 Text(

@@ -35,7 +35,7 @@ enum class TaskComposerMode { PROMPT, STEER, FOLLOW_UP, BLOCKED }
 
 enum class RunningComposerMode { STEER, FOLLOW_UP }
 
-enum class ToolActivityState { RUNNING, SUCCESS, FAILURE, CANCELLED, UNSUPPORTED }
+enum class ToolActivityState { RUNNING, SUCCESS, FAILURE, DECLINED, CANCELLED, UNSUPPORTED }
 
 enum class ToolActivityKind { GENERIC, WEB_ACCESS, MOBILE_FILE, TEST, TERMINAL, USER_INPUT }
 
@@ -146,6 +146,7 @@ sealed interface TimelineItem {
         override val stableKey: String,
         val text: String,
         val attachmentIds: List<String> = emptyList(),
+        val retried: Boolean = false,
     ) : TimelineItem
 
     data class AssistantText(

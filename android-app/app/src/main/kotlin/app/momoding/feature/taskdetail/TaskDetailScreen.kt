@@ -40,6 +40,7 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Autorenew
+import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.ContentCopy
@@ -121,6 +122,7 @@ import app.momoding.feature.attention.AttentionIdentity
 import app.momoding.feature.attention.AttentionIntent
 import app.momoding.feature.attention.AttentionUiState
 import app.momoding.feature.attention.QuestionComposerDock
+import app.momoding.feature.attention.ConfirmationComposerDock
 import app.momoding.ui.components.MomodingBannerTone
 import app.momoding.core.attachments.MAX_DRAFT_ATTACHMENTS
 import app.momoding.core.attachments.AttachmentKind
@@ -148,8 +150,8 @@ fun TaskDetailScreen(
     state: TaskDetailUiState,
     onAction: (TaskDetailAction) -> Unit,
     interactionPolicy: TaskDetailInteractionPolicy = TaskDetailInteractionPolicy.All,
-    questionState: AttentionUiState? = null,
-    onQuestionIntent: (AttentionIntent) -> Unit = {},
+    attentionComposerState: AttentionUiState? = null,
+    onAttentionComposerIntent: (AttentionIntent) -> Unit = {},
     restoreFocusKey: String? = null,
     onFocusRestored: () -> Unit = {},
     onOpenNavigation: (() -> Unit)? = null,
@@ -247,18 +249,34 @@ fun TaskDetailScreen(
                     .onFocusChanged { attentionFocused = it.isFocused }
                     .focusable(),
             )
-            val activeQuestion = state.attention?.takeIf { it.kind == TaskAttentionKind.QUESTION }
-            if (activeQuestion != null) {
-                QuestionComposerDock(
-                    state = questionState ?: AttentionUiState.Loading(
-                        AttentionIdentity(state.taskId, activeQuestion.callId),
-                    ),
-                    onIntent = onQuestionIntent,
-                    modifier = Modifier
-                        .focusRequester(attentionFocusRequester)
-                        .onFocusChanged { attentionFocused = it.isFocused }
-                        .focusable(),
+            val activeInlineAttention = state.attention?.takeIf { it.kind.isInlineComposerKind() }
+            if (activeInlineAttention != null) {
+                val composerState = attentionComposerState ?: AttentionUiState.Loading(
+                    AttentionIdentity(state.taskId, activeInlineAttention.callId),
                 )
+                val latestUserText = state.timeline.allItems
+                    .filterIsInstance<TimelineItem.UserMessage>()
+                    .lastOrNull()
+                    ?.text
+                val composerModifier = Modifier
+                    .focusRequester(attentionFocusRequester)
+                    .onFocusChanged { attentionFocused = it.isFocused }
+                    .focusable()
+                when (activeInlineAttention.kind) {
+                    TaskAttentionKind.QUESTION -> QuestionComposerDock(
+                        state = composerState,
+                        onIntent = onAttentionComposerIntent,
+                        latestUserText = latestUserText,
+                        modifier = composerModifier,
+                    )
+                    TaskAttentionKind.CONFIRMATION -> ConfirmationComposerDock(
+                        state = composerState,
+                        onIntent = onAttentionComposerIntent,
+                        latestUserText = latestUserText,
+                        modifier = composerModifier,
+                    )
+                    else -> Unit
+                }
             } else {
                 TaskComposerDock(
                     state = state,
@@ -338,11 +356,11 @@ private fun TaskTimeline(
         ?: state.timeline.settledItems.size
     val beforeLiveStatus = state.timeline.settledItems.subList(0, liveStatusIndex)
         .withoutProviderRecoveryError(state)
-        .withoutPendingQuestion(state.attention)
+        .withoutPendingInlineAttention(state.attention)
     val afterLiveStatus = state.timeline.settledItems.subList(
         liveStatusIndex,
         state.timeline.settledItems.size,
-    ).withoutProviderRecoveryError(state).withoutPendingQuestion(state.attention)
+    ).withoutProviderRecoveryError(state).withoutPendingInlineAttention(state.attention)
     val contentVersion = remember(
         state.timeline,
         state.queue,
@@ -508,7 +526,7 @@ private fun TaskTimeline(
             }
             state.timeline.activeItem
                 ?.takeUnless { state.failureRecoveryAvailable && it.stableKey == state.latestError?.stableKey }
-                ?.takeUnless { it.isPendingQuestion(state.attention) }
+                ?.takeUnless { it.isPendingInlineAttention(state.attention) }
                 ?.let { active ->
                 item(key = active.stableKey) {
                     TimelineItemView(
@@ -524,7 +542,7 @@ private fun TaskTimeline(
             }
             if (
                 state.attention != null &&
-                state.attention.kind != TaskAttentionKind.QUESTION &&
+                !state.attention.kind.isInlineComposerKind() &&
                 !state.timeline.containsAttentionCall(state.attention.callId)
             ) {
                 item(key = "attention-fallback:${state.attention.callId}") {
@@ -587,14 +605,17 @@ private fun List<TimelineItem>.withoutProviderRecoveryError(state: TaskDetailUiS
     return filterNot { it.stableKey == hiddenErrorKey }
 }
 
-private fun List<TimelineItem>.withoutPendingQuestion(
+private fun List<TimelineItem>.withoutPendingInlineAttention(
     attention: TaskAttentionUiModel?,
-): List<TimelineItem> = filterNot { it.isPendingQuestion(attention) }
+): List<TimelineItem> = filterNot { it.isPendingInlineAttention(attention) }
 
-private fun TimelineItem.isPendingQuestion(attention: TaskAttentionUiModel?): Boolean =
-    attention?.kind == TaskAttentionKind.QUESTION &&
+private fun TimelineItem.isPendingInlineAttention(attention: TaskAttentionUiModel?): Boolean =
+    attention?.kind?.isInlineComposerKind() == true &&
         this is TimelineItem.ToolActivity &&
         toolCallId == attention.callId
+
+private fun TaskAttentionKind.isInlineComposerKind(): Boolean =
+    this == TaskAttentionKind.QUESTION || this == TaskAttentionKind.CONFIRMATION
 
 private fun androidx.compose.foundation.lazy.LazyListScope.providerRecoveryBanner(
     state: TaskDetailUiState,
@@ -797,17 +818,21 @@ private fun TimelineItemView(
     modifier: Modifier,
 ) {
     when (item) {
-        is TimelineItem.UserMessage -> UserMessage(item)
+        is TimelineItem.UserMessage -> if (item.retried) {
+            StatusRow("Retried original request")
+        } else {
+            UserMessage(item)
+        }
         is TimelineItem.AssistantText -> AssistantMessage(item, active)
         is TimelineItem.ThinkingSummary -> ThinkingMessage(item)
         is TimelineItem.ToolActivity -> when {
-            attention?.callId == item.toolCallId && attention.kind == TaskAttentionKind.QUESTION -> Unit
+            attention?.callId == item.toolCallId && attention.kind.isInlineComposerKind() -> Unit
             item.kind == ToolActivityKind.USER_INPUT && item.state == ToolActivityState.RUNNING -> Unit
             item.kind == ToolActivityKind.USER_INPUT -> StatusRow(
                 label = item.result?.text ?: "Question answered",
                 danger = item.state == ToolActivityState.FAILURE,
             )
-            attention?.callId == item.toolCallId && attention.kind != TaskAttentionKind.QUESTION ->
+            attention?.callId == item.toolCallId && !attention.kind.isInlineComposerKind() ->
                 AttentionCard(attention, onAction, policy, modifier)
             else -> ToolActivity(item, onAction, policy)
         }
@@ -1307,6 +1332,7 @@ private fun ToolActivity(
         item.state == ToolActivityState.RUNNING -> MomodingIcons.Retry
         item.state == ToolActivityState.SUCCESS -> Icons.Outlined.CheckCircle
         item.state == ToolActivityState.FAILURE -> Icons.Outlined.ErrorOutline
+        item.state == ToolActivityState.DECLINED -> Icons.Outlined.Block
         item.state == ToolActivityState.CANCELLED -> MomodingFilledIcons.Stop
         else -> MomodingIcons.Warning
     }
@@ -1316,7 +1342,10 @@ private fun ToolActivity(
         ToolActivityState.RUNNING -> brand.deep
         ToolActivityState.SUCCESS -> statusColors.success
         ToolActivityState.FAILURE -> statusColors.danger
-        ToolActivityState.CANCELLED, ToolActivityState.UNSUPPORTED -> statusColors.warning
+        ToolActivityState.DECLINED,
+        ToolActivityState.CANCELLED,
+        ToolActivityState.UNSUPPORTED,
+        -> statusColors.warning
     }
     val canOpen = expandable && policy.allows(TaskDetailInteraction.OPEN_TOOL)
     val summary = buildAnnotatedString {

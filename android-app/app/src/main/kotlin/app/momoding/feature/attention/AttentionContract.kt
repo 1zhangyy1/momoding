@@ -4,6 +4,7 @@ import app.momoding.core.data.AttentionDeliveryState
 import app.momoding.core.data.AttentionDraft
 import app.momoding.core.data.AttentionLedgerState
 import app.momoding.core.data.AttentionPrompt
+import app.momoding.core.data.AttentionConfirmationPresentation
 import app.momoding.core.data.AttentionRecord
 import app.momoding.core.data.AttentionRecordState
 import app.momoding.core.data.AttentionResponseState
@@ -79,6 +80,8 @@ sealed interface AttentionUiState {
         override val identity: AttentionIdentity,
         val state: AttentionVisibleState,
         val prompt: AttentionPrompt?,
+        val promptLanguageHint: AttentionInteractionLanguage? = null,
+        val confirmationPresentation: AttentionConfirmationPresentation? = null,
         val draft: AttentionDraft?,
         val actions: AttentionActionPolicy,
         val blockingReason: AttentionBlockingReason? = null,
@@ -204,6 +207,8 @@ class AttentionReducer {
             identity = identity,
             state = visible,
             prompt = record.prompt.takeIf { showRequest },
+            promptLanguageHint = attentionPromptLanguageHint(record.prompt),
+            confirmationPresentation = record.confirmationPresentation,
             draft = record.draft.takeIf { showRequest },
             actions = actionsFor(visible, record, connection, notice),
             blockingReason = AttentionBlockingReason.TASK_STOPPING.takeIf {

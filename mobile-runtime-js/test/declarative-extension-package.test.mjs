@@ -15,6 +15,9 @@ test("schema v2 package runs through the native isolated Worker transport in the
   const extensionPackage = piRegisterToolPackageSnapshot();
   startTask(context, "extension-pi-register-tool", [extensionPackage]);
   const first = await nextProviderRequest(context);
+  const systemPrompt = first.messages.find((message) => message.role === "system")?.content;
+  assert.match(systemPrompt, /Extension packages=1/);
+  assert.match(systemPrompt, /Connector tools=not configured/);
   const tool = first.tools.find((candidate) => candidate.function.name === "fixture_echo");
   assert.deepEqual(tool.function.parameters, extensionPackage.tools[0].parameters);
 

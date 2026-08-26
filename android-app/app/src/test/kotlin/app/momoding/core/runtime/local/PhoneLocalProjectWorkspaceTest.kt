@@ -8,6 +8,7 @@ import androidx.test.core.app.ApplicationProvider
 import app.momoding.core.data.AuthorizedFolderEntity
 import app.momoding.core.data.MomodingDatabase
 import app.momoding.core.data.DraftEntity
+import app.momoding.core.data.RoomAttentionLedger
 import app.momoding.core.data.TaskEntity
 import app.momoding.core.files.AuthorizedFileMutation
 import app.momoding.core.files.AuthorizedFolderStore
@@ -106,6 +107,19 @@ class PhoneLocalProjectWorkspaceTest {
     fun tearDown() {
         database.close()
         root.deleteRecursively()
+    }
+
+    @Test
+    fun `workspace mode reports current task binding without importing or mutating`() = runBlocking {
+        val manager = manager()
+        assertEquals(PhoneLocalWorkspaceMode.AUTHORIZED_PROJECT, manager.taskWorkspaceMode(TASK_ID))
+        assertFalse(File(root, "workspaces/$TASK_ID").exists())
+        assertFalse(File(root, "manifests/$TASK_ID.json").exists())
+
+        clearSelectedGrant()
+        assertEquals(PhoneLocalWorkspaceMode.PRIVATE_SCRATCH, manager.taskWorkspaceMode(TASK_ID))
+        assertFalse(File(root, "workspaces/$TASK_ID").exists())
+        assertFalse(File(root, "manifests/$TASK_ID.json").exists())
     }
 
     @Test
@@ -519,6 +533,39 @@ class PhoneLocalProjectWorkspaceTest {
             result.getValue("errorCode").jsonPrimitive.content,
         )
         assertFalse(executor.stopTask(TASK_ID))
+    }
+
+    @Test
+    fun `project bridge reports a nonzero command as a Pi Tool failure`() = runBlocking {
+        val bridge = PhoneLocalAttentionBridge(
+            ledger = RoomAttentionLedger(database),
+            projectTools = object : PhoneLocalProjectToolHandler {
+                override fun handles(toolName: String): Boolean = toolName == "run_command"
+
+                override suspend fun execute(
+                    taskId: String,
+                    request: PiNativeToolRequest,
+                ) = buildJsonObject {
+                    put("ok", false)
+                    put("kind", "terminal")
+                    put("exitCode", 127)
+                    put("errorCode", "PROJECT_COMMAND_FAILED")
+                }
+
+                override suspend fun stopTask(taskId: String): Boolean = false
+            },
+            ioDispatcher = Dispatchers.Unconfined,
+        )
+
+        val result = requireNotNull(
+            bridge.handleNativeRequest(
+                TASK_ID,
+                projectRequest("run_command", "missing-command"),
+            ),
+        )
+
+        assertTrue(result.isError)
+        assertFalse(result.contentPayload.getValue("ok").jsonPrimitive.content.toBoolean())
     }
 
     @Test

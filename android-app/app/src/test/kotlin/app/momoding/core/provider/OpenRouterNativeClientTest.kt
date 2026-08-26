@@ -92,6 +92,50 @@ class OpenRouterNativeClientTest {
     }
 
     @Test
+    fun offlineChatFailsBeforeHttpDispatchWithSafeRetryableMessage() {
+        val offlineClient = OpenRouterNativeClient(
+            endpoint = server.url("/api/v1"),
+            baseClient = OkHttpClient(),
+            networkAvailability = ProviderNetworkAvailability { ProviderNetworkState.OFFLINE },
+        )
+
+        val failure = assertThrows(OpenRouterRequestException::class.java) {
+            runBlocking { offlineClient.stream(credential(), request()) {} }
+        }
+
+        assertEquals("offline", failure.errorType)
+        assertEquals(OpenRouterFailurePhase.NETWORK, failure.phase)
+        assertEquals("No internet connection", failure.safeTaskMessage())
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun availableAndUnknownChatStatesStillDispatchNormally() = runBlocking {
+        repeat(2) {
+            server.enqueue(
+                sseResponse(
+                    """
+                    data: {"id":"gen-network","choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}
+
+                    data: [DONE]
+
+                    """.trimIndent(),
+                ),
+            )
+        }
+
+        listOf(ProviderNetworkState.AVAILABLE, ProviderNetworkState.UNKNOWN).forEach { state ->
+            OpenRouterNativeClient(
+                endpoint = server.url("/api/v1"),
+                baseClient = OkHttpClient(),
+                networkAvailability = ProviderNetworkAvailability { state },
+            ).stream(credential(), request()) {}
+        }
+
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
     fun combinesPiFunctionToolsWithBoundedOpenRouterWebAccess() = runBlocking {
         server.enqueue(
             sseResponse(

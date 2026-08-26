@@ -173,7 +173,11 @@ class PhoneLocalAttentionBridge(
                 "PI_MOBILE_PROJECT_TOOL_EXECUTOR_MISSING"
             }
             require(handler.handles(request.toolName)) { "PI_MOBILE_NATIVE_TOOL_NOT_ALLOWED" }
-            PiNativeAndroidToolResult(handler.execute(taskId, request))
+            val payload = handler.execute(taskId, request)
+            PiNativeAndroidToolResult(
+                contentPayload = payload,
+                isError = payload["ok"]?.jsonPrimitive?.contentOrNull != "true",
+            )
         }
         ATTACHMENT_NATIVE_KIND -> withContext(ioDispatcher) {
             val handler = requireNotNull(attachmentTools) {

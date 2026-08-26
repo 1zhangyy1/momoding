@@ -80,6 +80,8 @@ class PhoneLocalLocationToolExecutorTest {
         assertEquals("satellite", data.getValue("providerCategory").jsonPrimitive.content)
         assertEquals("true", result.details?.get("liveOnly")?.jsonPrimitive?.content)
         assertEquals("location", result.details?.get("dataClass")?.jsonPrimitive?.content)
+        assertTrue(result.contentPayload.toString().contains("\"accuracyMeters\":1000"))
+        assertFalse(result.contentPayload.toString().contains("\"accuracyMeters\":1000.0"))
         assertEquals(
             sha256(result.contentPayload.toString()),
             result.details?.get("contentSha256")?.jsonPrimitive?.content,
@@ -90,6 +92,40 @@ class PhoneLocalLocationToolExecutorTest {
                 ?.get("status")?.jsonPrimitive?.content,
         )
         assertFalse(result.contentPayload.toString().contains("Estimate my current area"))
+    }
+
+    @Test
+    fun `precise result uses Pi canonical plain decimals for small coordinates`() = runTest {
+        val capturedAt = Instant.parse("2026-07-29T04:00:00Z")
+        val executor = executor(
+            availability = CapabilityAvailability.READY,
+            acquisition = LocationAcquisition.Available(
+                LocationReading(
+                    latitude = 0.00001,
+                    longitude = -0.00001,
+                    accuracyMeters = 3.25f,
+                    capturedAt = capturedAt,
+                    providerCategory = LocationProviderCategory.SATELLITE,
+                ),
+            ),
+            now = { capturedAt.plusSeconds(2) },
+            scope = backgroundScope,
+        )
+
+        val result = executor.execute(
+            TASK_ID,
+            request(arguments("precise", "Use the synthetic tiny coordinates")),
+        )
+
+        assertFalse(result.isError)
+        val serialized = result.contentPayload.toString()
+        assertTrue(serialized.contains("\"latitude\":0.00001"))
+        assertTrue(serialized.contains("\"longitude\":-0.00001"))
+        assertFalse(serialized.contains("E-5"))
+        assertEquals(
+            sha256(serialized),
+            result.details?.get("contentSha256")?.jsonPrimitive?.content,
+        )
     }
 
     @Test

@@ -229,6 +229,30 @@ val phoneLocalLinuxRuntimeBuilder =
 val phoneLocalProotPatch =
     rootProject.layout.projectDirectory.file("../third_party/patches/proot-5.1.107.86-android-ndk.patch")
 val phoneLocalLinuxRuntimeRoot = layout.buildDirectory.dir("generated/phone-local-linux-runtime")
+val pxp7fArtifactSource = repositoryRoot.resolve(
+    "docs/validation/phone-local/pxp-7e-install-compatibility-20260811/artifacts",
+)
+val pxp7fTestAssets = layout.buildDirectory.dir("generated/pxp7f-extension-assets")
+
+val preparePxp7fExtensionAssets by tasks.registering(Sync::class) {
+    from(pxp7fArtifactSource) {
+        rename { name ->
+            if (name == ".momoding-mobile-artifact.json") {
+                "__momoding-mobile-artifact.json"
+            } else {
+                name
+            }
+        }
+    }
+    into(pxp7fTestAssets)
+}
+
+tasks.matching {
+    it.name == "mergeDebugAndroidTestAssets" ||
+        (it.name.contains("Debug") && it.name.contains("lint", ignoreCase = true))
+}.configureEach {
+    dependsOn(preparePxp7fExtensionAssets)
+}
 
 val generateP2FixtureProjection by tasks.registering(Exec::class) {
     inputs.files(p2FixtureSource, p2FixtureGenerator, p2FixtureLibrary)

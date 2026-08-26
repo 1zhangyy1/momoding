@@ -28,6 +28,28 @@ class TaskFailureTest {
     }
 
     @Test
+    fun `empty model response is a precise retryable Provider failure`() {
+        val failure = classifyTaskFailure("The model returned no response. Try again.")
+
+        assertEquals(TaskFailureKind.PROVIDER_OTHER, failure.kind)
+        assertEquals(TaskFailureRecovery.RETRY, failure.recovery)
+        assertEquals("Momoding returned no response. Try again.", failure.message)
+        assertEquals("Provider request failed — open for details", failure.homeDetail)
+    }
+
+    @Test
+    fun `offline request is a precise retryable Provider failure`() {
+        val failure = classifyTaskFailure("No internet connection")
+
+        assertEquals(TaskFailureKind.PROVIDER_UNAVAILABLE, failure.kind)
+        assertEquals(TaskFailureRecovery.RETRY, failure.recovery)
+        assertEquals(
+            "No internet connection. Check your connection and try again.",
+            failure.message,
+        )
+    }
+
+    @Test
     fun `latest Pi assistant error becomes the durable task failure`() {
         val messages = listOf(
             Json.parseToJsonElement(

@@ -121,6 +121,7 @@ private fun TaskListRowEntity.toTaskListRow(
             primaryToolName == "request_user_question" -> TaskAttentionKind.QUESTION
             primaryToolName == "request_user_confirmation" -> TaskAttentionKind.CONFIRMATION
             primaryToolName == "device_media_list" -> TaskAttentionKind.CONFIRMATION
+            primaryToolName == "device_media" -> TaskAttentionKind.CONFIRMATION
             primaryToolName == "device_calendar" -> TaskAttentionKind.CONFIRMATION
             primaryToolName == "device_contacts" -> TaskAttentionKind.CONFIRMATION
             primaryToolName == "device_clipboard" -> TaskAttentionKind.CONFIRMATION

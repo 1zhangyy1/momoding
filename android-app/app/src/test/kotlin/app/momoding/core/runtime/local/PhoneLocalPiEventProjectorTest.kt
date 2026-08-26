@@ -15,6 +15,7 @@ import app.momoding.feature.taskdetail.PiUiReducer
 import app.momoding.feature.taskdetail.TaskDetailRunState
 import app.momoding.feature.taskdetail.TimelineItem
 import app.momoding.feature.taskdetail.ToolActivityState
+import app.momoding.feature.taskdetail.ToolActivityKind
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
@@ -290,6 +291,129 @@ class PhoneLocalPiEventProjectorTest {
             },
         )
     }
+
+    @Test
+    fun `Provider web activity survives snapshot rewrite and drops with its assistant anchor`() =
+        runTest {
+            val projector = PhoneLocalPiEventProjector(database)
+            projector.createTask(
+                taskId = TASK_ID,
+                title = "Search the web",
+                piSessionId = SESSION_ID,
+                streamId = STREAM_ID,
+                initialPrompt = "Find the latest release.",
+            )
+            val session = webSessionSnapshot()
+            val completed = providerWebActivity("completed")
+            projector.replaceWithSessionSnapshot(
+                taskId = TASK_ID,
+                piSessionId = SESSION_ID,
+                streamId = STREAM_ID,
+                snapshot = session,
+                runState = TaskRunState.COMPLETED,
+                providerWebActivities = listOf(
+                    providerWebActivity("running"),
+                    completed,
+                    buildJsonObject {
+                        completed.forEach { (key, value) -> put(key, value) }
+                        put("content", "untrusted page body must not persist")
+                    },
+                ),
+            )
+
+            val settled = TaskDetailRepository(database).observe(TASK_ID).filterNotNull().first()
+            assertEquals(
+                listOf("user", "phoneLocalProviderWebActivity", "assistant"),
+                settled.messages.map { row ->
+                    Json.parseToJsonElement(row.rawPayload).jsonObject["role"]
+                        ?.jsonPrimitive
+                        ?.content
+                },
+            )
+            val web = PiUiReducer().reduce(settled).timeline.settledItems
+                .filterIsInstance<TimelineItem.ToolActivity>()
+                .single { it.kind == ToolActivityKind.WEB_ACCESS }
+            assertEquals("Searched web", web.title)
+            assertEquals(ToolActivityState.SUCCESS, web.state)
+            assertTrue(settled.messages.none { it.rawPayload.contains("untrusted page body") })
+
+            projector.appendPendingPrompt(
+                taskId = TASK_ID,
+                piSessionId = SESSION_ID,
+                streamId = STREAM_ID,
+                priorEntries = session.entries,
+                prompt = "Summarize it.",
+            )
+            val nextPrompt = TaskDetailRepository(database).observe(TASK_ID).filterNotNull().first()
+            assertEquals(
+                1,
+                nextPrompt.messages.count { row ->
+                    Json.parseToJsonElement(row.rawPayload).jsonObject["role"]
+                        ?.jsonPrimitive
+                        ?.content == "phoneLocalProviderWebActivity"
+                },
+            )
+
+            val rebuiltSession = PiNativeTaskSessionSnapshot(
+                taskId = TASK_ID,
+                turnCount = 2,
+                entries = buildJsonArray {
+                    add(messageEntry(userMessage("Find the latest release.")))
+                    add(messageEntry(assistantMessage("Latest release found.", "generation-web")))
+                    add(messageEntry(userMessage("Search again after restart."), "-2"))
+                    add(messageEntry(assistantMessage("A second result.", "generation-web-2"), "-2"))
+                },
+            )
+            projector.replaceWithSessionSnapshot(
+                taskId = TASK_ID,
+                piSessionId = SESSION_ID,
+                streamId = STREAM_ID,
+                snapshot = rebuiltSession,
+                runState = TaskRunState.COMPLETED,
+                providerWebActivities = listOf(
+                    providerWebActivity("completed", responseId = "generation-web-2"),
+                ),
+            )
+            val afterRebuildSearch = TaskDetailRepository(database)
+                .observe(TASK_ID)
+                .filterNotNull()
+                .first()
+            assertEquals(
+                2,
+                afterRebuildSearch.messages.count { row ->
+                    Json.parseToJsonElement(row.rawPayload).jsonObject["role"]
+                        ?.jsonPrimitive
+                        ?.content == "phoneLocalProviderWebActivity"
+                },
+            )
+            assertEquals(
+                2,
+                PiUiReducer().reduce(afterRebuildSearch).timeline.settledItems
+                    .filterIsInstance<TimelineItem.ToolActivity>()
+                    .count { it.kind == ToolActivityKind.WEB_ACCESS },
+            )
+
+            projector.replaceWithSessionSnapshot(
+                taskId = TASK_ID,
+                piSessionId = SESSION_ID,
+                streamId = STREAM_ID,
+                snapshot = PiNativeTaskSessionSnapshot(
+                    taskId = TASK_ID,
+                    turnCount = 1,
+                    entries = buildJsonArray {
+                        add(messageEntry(userMessage("Find the latest release.")))
+                        add(messageEntry(assistantMessage("Compacted summary.")))
+                    },
+                ),
+                runState = TaskRunState.COMPLETED,
+            )
+            val compacted = TaskDetailRepository(database).observe(TASK_ID).filterNotNull().first()
+            assertTrue(compacted.messages.none { row ->
+                Json.parseToJsonElement(row.rawPayload).jsonObject["role"]
+                    ?.jsonPrimitive
+                    ?.content == "phoneLocalProviderWebActivity"
+            })
+        }
 
     @Test
     fun `startup marks an unresumable local run interrupted instead of leaving a false running row`() =
@@ -628,12 +752,15 @@ class PhoneLocalPiEventProjectorTest {
             assertTrue(detail.messages.none { it.rawPayload.contains("momoding:text-attachments") })
         }
 
-    private fun messageEntry(message: kotlinx.serialization.json.JsonObject) = buildJsonObject {
+    private fun messageEntry(
+        message: kotlinx.serialization.json.JsonObject,
+        idSuffix: String = "",
+    ) = buildJsonObject {
         val role = requireNotNull(message["role"]?.jsonPrimitive?.content)
         put("type", "message")
-        put("id", "entry-$role")
+        put("id", "entry-$role$idSuffix")
         if (role == "assistant") {
-            put("parentId", "entry-user")
+            put("parentId", "entry-user$idSuffix")
         }
         put("timestamp", "2026-07-20T00:00:00.000Z")
         put("message", message)
@@ -645,11 +772,39 @@ class PhoneLocalPiEventProjectorTest {
         put("timestamp", 1)
     }
 
-    private fun assistantMessage(text: String) = buildJsonObject {
+    private fun assistantMessage(text: String, responseId: String? = null) = buildJsonObject {
         put("role", "assistant")
         put("content", textContent(text))
+        responseId?.let { put("responseId", it) }
         put("timestamp", 2)
     }
+
+    private fun providerWebActivity(
+        state: String,
+        responseId: String = "generation-web",
+    ) = buildJsonObject {
+        put("type", "provider_web_activity")
+        put("state", state)
+        put("requestId", "provider-1")
+        put("responseId", responseId)
+        put("searchRequests", 1)
+        put("sources", buildJsonArray {
+            add(buildJsonObject {
+                put("url", "https://example.com/latest")
+                put("title", "Latest release")
+                put("domain", "example.com")
+            })
+        })
+    }
+
+    private fun webSessionSnapshot() = PiNativeTaskSessionSnapshot(
+        taskId = TASK_ID,
+        turnCount = 1,
+        entries = buildJsonArray {
+            add(messageEntry(userMessage("Find the latest release.")))
+            add(messageEntry(assistantMessage("Latest release found.", "generation-web")))
+        },
+    )
 
     private fun providerErrorMessage(errorMessage: String) = buildJsonObject {
         put("role", "assistant")

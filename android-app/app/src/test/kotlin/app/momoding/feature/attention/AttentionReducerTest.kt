@@ -1,6 +1,7 @@
 package app.momoding.feature.attention
 
 import app.momoding.core.data.AttentionDeliveryState
+import app.momoding.core.data.AttentionConfirmationPresentation
 import app.momoding.core.data.AttentionDraft
 import app.momoding.core.data.AttentionLedgerState
 import app.momoding.core.data.AttentionPrompt
@@ -177,6 +178,7 @@ class AttentionReducerTest {
         assertEquals(AttentionActionPolicy(), responding.actions)
         assertNull(responding.prompt)
         assertNull(responding.draft)
+        assertEquals(AttentionInteractionLanguage.ENGLISH, responding.promptLanguageHint)
 
         val resolved = project(
             finalRecord(AttentionResponseState.RESOLVED, AttentionTerminalKind.SUCCEEDED),
@@ -191,6 +193,60 @@ class AttentionReducerTest {
         assertFalse(stopFenced.actions.canSubmitAnswer)
         assertFalse(stopFenced.actions.canSkip)
         assertTrue(stopFenced.actions.canDismiss)
+    }
+
+    @Test
+    fun `prompt language hint survives responding projection and cold reconstruction`() {
+        val responding = record(
+            prompt = AttentionPrompt.Question("请选择一个方案", emptyList()),
+            ledger = AttentionLedgerState.TERMINAL,
+            delivery = AttentionDeliveryState.READY_TO_SEND,
+            response = AttentionResponseState.RESPONDING,
+            terminal = AttentionTerminalKind.SUCCEEDED,
+        )
+
+        val firstProjection = project(responding) as AttentionUiState.Visible
+        val reconstructedProjection = AttentionReducer().reduce(
+            identity,
+            AttentionRecordState.Available(responding),
+            AttentionConnectionState.Ready,
+            NOW,
+        ) as AttentionUiState.Visible
+
+        assertNull(firstProjection.prompt)
+        assertEquals(AttentionInteractionLanguage.ZH_CN, firstProjection.promptLanguageHint)
+        assertEquals(firstProjection.promptLanguageHint, reconstructedProjection.promptLanguageHint)
+    }
+
+    @Test
+    fun `trusted confirmation presentation survives responding and cold reconstruction`() {
+        val responding = record(
+            prompt = confirmation(),
+            ledger = AttentionLedgerState.TERMINAL,
+            delivery = AttentionDeliveryState.READY_TO_SEND,
+            response = AttentionResponseState.RESPONDING,
+            terminal = AttentionTerminalKind.SUCCEEDED,
+            confirmationPresentation =
+                AttentionConfirmationPresentation.ANDROID_CALENDAR_LIST_EVENTS,
+        )
+
+        val firstProjection = project(responding) as AttentionUiState.Visible
+        val reconstructedProjection = AttentionReducer().reduce(
+            identity,
+            AttentionRecordState.Available(responding),
+            AttentionConnectionState.Ready,
+            NOW,
+        ) as AttentionUiState.Visible
+
+        assertNull(firstProjection.prompt)
+        assertEquals(
+            AttentionConfirmationPresentation.ANDROID_CALENDAR_LIST_EVENTS,
+            firstProjection.confirmationPresentation,
+        )
+        assertEquals(
+            firstProjection.confirmationPresentation,
+            reconstructedProjection.confirmationPresentation,
+        )
     }
 
     @Test
@@ -433,6 +489,7 @@ class AttentionReducerTest {
         draft: AttentionDraft = draft(),
         expiresAt: Long = FUTURE,
         activeStopFence: Boolean = false,
+        confirmationPresentation: AttentionConfirmationPresentation? = null,
     ) = AttentionRecord(
         taskId = TASK_ID,
         callId = CALL_ID,
@@ -446,6 +503,7 @@ class AttentionReducerTest {
         receivedAtMillis = 1L,
         dismissed = false,
         activeStopFence = activeStopFence,
+        confirmationPresentation = confirmationPresentation,
     )
 
     private fun draft(

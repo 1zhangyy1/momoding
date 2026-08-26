@@ -84,6 +84,16 @@ enum class OpenRouterFailurePhase {
     NETWORK,
 }
 
+internal enum class ProviderNetworkState {
+    OFFLINE,
+    AVAILABLE,
+    UNKNOWN,
+}
+
+internal fun interface ProviderNetworkAvailability {
+    fun currentState(): ProviderNetworkState
+}
+
 class OpenRouterRequestException(
     val statusCode: Int?,
     val errorType: String?,
@@ -106,10 +116,18 @@ class OpenRouterRequestException(
 class OpenRouterNativeClient internal constructor(
     private val endpoint: HttpUrl,
     baseClient: OkHttpClient,
+    private val networkAvailability: ProviderNetworkAvailability =
+        ProviderNetworkAvailability { ProviderNetworkState.UNKNOWN },
 ) {
     constructor() : this(
         endpoint = ProviderProfilePolicy.OPENROUTER_BASE_URL.toHttpUrl(),
         baseClient = OkHttpClient(),
+    )
+
+    internal constructor(networkAvailability: ProviderNetworkAvailability) : this(
+        endpoint = ProviderProfilePolicy.OPENROUTER_BASE_URL.toHttpUrl(),
+        baseClient = OkHttpClient(),
+        networkAvailability = networkAvailability,
     )
 
     private val json = Json {
@@ -133,6 +151,7 @@ class OpenRouterNativeClient internal constructor(
     ): OpenRouterStreamResult {
         ProviderProfilePolicy.validate(credential)
         validateRequest(credential.profile, request)
+        requireChatNetworkAvailable()
         val requestBody = buildRequestBody(request)
         val httpRequest = Request.Builder()
             .url(chatCompletionsUrl())
@@ -143,6 +162,19 @@ class OpenRouterNativeClient internal constructor(
             .build()
         val call = client.newCall(httpRequest)
         return awaitStream(call, onChunk)
+    }
+
+    private fun requireChatNetworkAvailable() {
+        val state = runCatching(networkAvailability::currentState)
+            .getOrDefault(ProviderNetworkState.UNKNOWN)
+        if (state != ProviderNetworkState.OFFLINE) return
+        throw OpenRouterRequestException(
+            statusCode = null,
+            errorType = "offline",
+            retryAfterSeconds = null,
+            phase = OpenRouterFailurePhase.NETWORK,
+            safeMessage = NO_INTERNET_MESSAGE,
+        )
     }
 
     suspend fun listModels(apiKey: String?): List<OpenRouterModelSummary> {
@@ -632,6 +664,7 @@ private fun safeOpenRouterFailureMessage(
             "OpenRouter model was not found"
         normalizedType.contains("rate") || normalizedType.contains("quota") ->
             "OpenRouter rate limit reached"
+        normalizedType == "offline" -> NO_INTERNET_MESSAGE
         normalizedType.contains("timeout") -> "OpenRouter request timed out"
         normalizedType.contains("network") -> "OpenRouter network request failed"
         normalizedType.contains("overload") ||
@@ -644,7 +677,10 @@ private fun safeOpenRouterFailureMessage(
 }
 
 private val SAFE_NETWORK_MESSAGES = setOf(
+    NO_INTERNET_MESSAGE,
     "OpenRouter request timed out",
     "OpenRouter network request failed",
     "OpenRouter returned an invalid stream",
 )
+
+private const val NO_INTERNET_MESSAGE = "No internet connection"

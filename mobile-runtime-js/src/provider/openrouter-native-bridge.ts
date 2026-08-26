@@ -67,6 +67,7 @@ export interface ProviderWebActivityEvent {
   type: "provider_web_activity";
   state: "running" | "completed" | "failed" | "cancelled";
   requestId: string;
+  responseId?: string;
   searchRequests?: number;
   fetchRequests?: number;
   webRequests?: number;
@@ -217,7 +218,7 @@ export function pushOpenRouterChunk(
   requestId: string,
   chunk: unknown,
   updateTerminal: () => void,
-): void {
+): boolean {
   const pending = requirePendingProvider(state, requestId);
   try {
     applyOpenRouterChunk(pending, chunk);
@@ -230,6 +231,7 @@ export function pushOpenRouterChunk(
       updateTerminal,
     );
   }
+  return state.pendingProviders.has(requestId);
 }
 
 export function completeOpenRouterRequest(
@@ -253,6 +255,16 @@ export function completeOpenRouterRequest(
     return;
   }
   finishBlocks(pending);
+  if (pending.output.content.length === 0) {
+    failPendingProvider(
+      state,
+      pending,
+      "The model returned no response. Try again.",
+      false,
+      updateTerminal,
+    );
+    return;
+  }
   emitWebActivityTerminal(pending, "completed");
   pending.finished = true;
   clearProviderAbort(pending);
@@ -637,6 +649,9 @@ function webActivityEvent(
     type: "provider_web_activity",
     state,
     requestId: pending.request.id,
+    ...(pending.output.responseId === undefined
+      ? {}
+      : { responseId: pending.output.responseId }),
     ...(pending.webRequests === null
       ? {}
       : { webRequests: pending.webRequests }),

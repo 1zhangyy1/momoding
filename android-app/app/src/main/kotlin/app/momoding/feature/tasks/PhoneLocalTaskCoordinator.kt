@@ -404,14 +404,9 @@ class PhoneLocalTaskCoordinator(
                 throw cancelled
             } catch (error: Throwable) {
                 Log.e(LOG_TAG, "Phone-local task creation failed: ${error.message}", error)
-                creationProgressFor(draftId).value = TaskCreationProgress.Failed(
-                    stage = TaskCreationStage.CREATE,
-                    code = WireErrorCode.RECOVERY_REQUIRED,
-                    retryable = error !is SkillCommandRejected,
-                    safeMessage = skillCommandFailureMessage(
-                        journal.draft(draftId)?.text,
-                        error,
-                    ),
+                creationProgressFor(draftId).value = phoneLocalTaskCreationFailure(
+                    text = journal.draft(draftId)?.text,
+                    error = error,
                 )
             } finally {
                 creationJobs.remove(draftId)
@@ -852,6 +847,12 @@ class PhoneLocalTaskCoordinator(
                 extensionActivities = terminal.events.filter { event ->
                     (event["type"] as? JsonPrimitive)?.contentOrNull == "extension_tool_activity"
                 },
+                providerWebActivities = terminal.events.filter { event ->
+                    (event["type"] as? JsonPrimitive)?.contentOrNull in setOf(
+                        "provider_web_search",
+                        "provider_web_activity",
+                    )
+                },
             )
             attachmentRepository?.reconcileTaskImages(
                 taskId,
@@ -877,10 +878,11 @@ class PhoneLocalTaskCoordinator(
             runCatching {
                 projector.markRunState(taskId, TaskRunState.FAILED, isStreaming = false)
             }
-            synchronized(stateLock) {
-                if (sessionTaskId == taskId) sessionTaskId = null
-            }
-            throw error
+            // A failed projection or post-run persistence step may leave Pi's settled engine open.
+            // Release both the coordinator claim and that exact runtime session before another
+            // task starts; merely clearing sessionTaskId poisons the next start with
+            // PI_MOBILE_TASK_SESSION_ALREADY_OPEN.
+            abandonSessionClaim(taskId)
         } finally {
             eventPersister.cancel()
             pendingStops.remove(taskId)
@@ -1489,6 +1491,27 @@ private fun skillCommandFailureMessage(text: String?, error: Throwable): String?
             "Wait for the current on-device turn to settle before invoking Skill '${command.name}'."
         else -> "Skill '${command.name}' could not be prepared safely. The command was not sent."
     }
+}
+
+internal fun phoneLocalTaskCreationFailure(
+    text: String?,
+    error: Throwable,
+): TaskCreationProgress.Failed {
+    val errorCode = error.message.orEmpty()
+    val sessionBusy = error is IllegalStateException && errorCode in setOf(
+        "PI_MOBILE_ANOTHER_TASK_IS_RUNNING",
+        "PI_MOBILE_TASK_SESSION_BUSY",
+    )
+    return TaskCreationProgress.Failed(
+        stage = TaskCreationStage.CREATE,
+        code = if (sessionBusy) WireErrorCode.SESSION_BUSY else WireErrorCode.RECOVERY_REQUIRED,
+        retryable = error !is SkillCommandRejected,
+        safeMessage = skillCommandFailureMessage(text, error) ?: if (sessionBusy) {
+            "Another on-device task is still running or waiting for you. Finish or stop it, then retry."
+        } else {
+            null
+        },
+    )
 }
 
 private fun attachmentReferences(entries: JsonArray): Set<String> {

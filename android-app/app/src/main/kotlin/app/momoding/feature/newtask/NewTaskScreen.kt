@@ -143,7 +143,12 @@ fun NewTaskScreen(
             ) {
                 if (state.sendError != null) {
                     item {
-                        SendErrorBanner(state.sendRetryable, onAction, interactionPolicy)
+                        SendErrorBanner(
+                            message = state.sendError,
+                            retryable = state.sendRetryable,
+                            onAction = onAction,
+                            policy = interactionPolicy,
+                        )
                     }
                 }
                 if (state.sendError == null && state.connection != NewTaskConnectionState.READY) {
@@ -869,6 +874,7 @@ private fun MobileFolderChoice(
 
 @Composable
 private fun SendErrorBanner(
+    message: String,
     retryable: Boolean,
     onAction: (NewTaskAction) -> Unit,
     policy: NewTaskInteractionPolicy,
@@ -877,7 +883,7 @@ private fun SendErrorBanner(
     val canRetry = retryable && policy.allows(NewTaskInteraction.RETRY_SEND)
     MomodingStatusBanner(
         title = "Couldn’t start the task",
-        body = "Your draft is saved on this phone.",
+        body = "$message Your draft is saved on this phone.",
         icon = Icons.Outlined.WarningAmber,
         iconColor = colors.danger,
         containerColor = colors.dangerContainer,

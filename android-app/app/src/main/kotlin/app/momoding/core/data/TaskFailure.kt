@@ -102,6 +102,11 @@ internal fun classifyTaskFailure(errorMessage: String?): TaskFailure = when (err
         "OpenRouter request timed out. Try again.",
         TaskFailureRecovery.RETRY,
     )
+    "No internet connection" -> TaskFailure(
+        TaskFailureKind.PROVIDER_UNAVAILABLE,
+        "No internet connection. Check your connection and try again.",
+        TaskFailureRecovery.RETRY,
+    )
     "OpenRouter provider is unavailable",
     "OpenRouter network request failed",
     -> TaskFailure(
@@ -116,6 +121,11 @@ internal fun classifyTaskFailure(errorMessage: String?): TaskFailure = when (err
     -> TaskFailure(
         TaskFailureKind.PROVIDER_OTHER,
         "The Provider could not complete this response.",
+        TaskFailureRecovery.RETRY,
+    )
+    "The model returned no response. Try again." -> TaskFailure(
+        TaskFailureKind.PROVIDER_OTHER,
+        "Momoding returned no response. Try again.",
         TaskFailureRecovery.RETRY,
     )
     null, "" -> unknownTaskFailure()

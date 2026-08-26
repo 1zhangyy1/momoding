@@ -443,7 +443,7 @@ function calendarToolParameters(): Record<string, unknown> {
           maxLength: 160,
           pattern: "^calendar-page-[A-Za-z0-9_-]+$",
         }),
-      }, ["start", "end", "calendarHandle", "query", "cursor"]),
+      }, ["start", "end"]),
       branch("get_event", { eventHandle }, ["eventHandle"]),
       branch("create_event", {
         title,

@@ -86,9 +86,10 @@ import {
 import { createNativePiRegisterToolTransport } from "./extensions/pi-register-tool-native-transport.js";
 import { sha256 } from "./sha256.js";
 import {
-  GOAL_MODE_SYSTEM_PROMPT,
-  MOMODING_TASK_SYSTEM_PROMPT,
-  PLAN_MODE_SYSTEM_PROMPT,
+  buildMomodingTaskSystemPrompt,
+  defaultMomodingTaskEnvironment,
+  requireMomodingTaskEnvironmentSnapshot,
+  type MomodingTaskEnvironmentSnapshot,
 } from "./system-prompts.js";
 import {
   SKILL_INVOCATION_CONTROL_ENTRY_TYPE,
@@ -232,6 +233,7 @@ interface NativeScenarioState
   resourceUpdateCount: number;
   extensionSetDigest: string;
   extensionSetTrusted: boolean;
+  taskEnvironment: MomodingTaskEnvironmentSnapshot;
   childAgents: PiChildAgentManager | null;
   childEventOutbox: PiChildEventEnvelope[];
   childEventAckHighWater: Map<string, number>;
@@ -327,6 +329,9 @@ export function startNativeOpenRouterTaskSession(
   imageGenerationEnabled = false,
   connectorToolSnapshot: ConnectorToolSnapshot | null = null,
   extensionPackages: ExtensionPackageSnapshot[] = [],
+  taskEnvironment: MomodingTaskEnvironmentSnapshot = defaultMomodingTaskEnvironment(
+    imageGenerationEnabled,
+  ),
 ): Record<string, unknown> {
   requireTaskId(taskId);
   const images = requireRuntimeImageInputs(imageInputs);
@@ -351,6 +356,7 @@ export function startNativeOpenRouterTaskSession(
     "openrouter",
     connectorToolSnapshot,
     requireExtensionPackageSnapshots(extensionPackages),
+    requireMomodingTaskEnvironmentSnapshot(taskEnvironment),
   );
 }
 
@@ -365,6 +371,7 @@ export function startNativeCodexTaskSession(
   textAttachmentInputs: PiRuntimeTextAttachmentInput[] = [],
   connectorToolSnapshot: ConnectorToolSnapshot | null = null,
   extensionPackages: ExtensionPackageSnapshot[] = [],
+  taskEnvironment: MomodingTaskEnvironmentSnapshot = defaultMomodingTaskEnvironment(),
 ): Record<string, unknown> {
   requireTaskId(taskId);
   const textAttachments = requireRuntimeTextAttachmentInputs(textAttachmentInputs);
@@ -388,6 +395,7 @@ export function startNativeCodexTaskSession(
     "codex",
     connectorToolSnapshot,
     requireExtensionPackageSnapshots(extensionPackages),
+    requireMomodingTaskEnvironmentSnapshot(taskEnvironment),
   );
 }
 
@@ -401,6 +409,7 @@ export function startNativeCodexTaskSkillSession(
   skillResources: PiMobileSkillResource[] = [],
   connectorToolSnapshot: ConnectorToolSnapshot | null = null,
   extensionPackages: ExtensionPackageSnapshot[] = [],
+  taskEnvironment: MomodingTaskEnvironmentSnapshot = defaultMomodingTaskEnvironment(),
 ): Record<string, unknown> {
   requireTaskId(taskId);
   requireSessionId(sessionId);
@@ -423,6 +432,7 @@ export function startNativeCodexTaskSkillSession(
     "codex",
     connectorToolSnapshot,
     requireExtensionPackageSnapshots(extensionPackages),
+    requireMomodingTaskEnvironmentSnapshot(taskEnvironment),
   );
   return invokeNativeOpenRouterTaskSkill(skillName, additionalInstructions);
 }
@@ -438,6 +448,9 @@ export function startNativeOpenRouterTaskSkillSession(
   imageGenerationEnabled = false,
   connectorToolSnapshot: ConnectorToolSnapshot | null = null,
   extensionPackages: ExtensionPackageSnapshot[] = [],
+  taskEnvironment: MomodingTaskEnvironmentSnapshot = defaultMomodingTaskEnvironment(
+    imageGenerationEnabled,
+  ),
 ): Record<string, unknown> {
   requireTaskId(taskId);
   requireSessionId(sessionId);
@@ -460,6 +473,7 @@ export function startNativeOpenRouterTaskSkillSession(
     "openrouter",
     connectorToolSnapshot,
     requireExtensionPackageSnapshots(extensionPackages),
+    requireMomodingTaskEnvironmentSnapshot(taskEnvironment),
   );
   return invokeNativeOpenRouterTaskSkill(skillName, additionalInstructions);
 }
@@ -476,6 +490,9 @@ export function restoreNativeOpenRouterTaskSession(
   imageGenerationEnabled = false,
   connectorToolSnapshot: ConnectorToolSnapshot | null = null,
   extensionPackages: ExtensionPackageSnapshot[] = [],
+  taskEnvironment: MomodingTaskEnvironmentSnapshot = defaultMomodingTaskEnvironment(
+    imageGenerationEnabled,
+  ),
 ): Record<string, unknown> {
   requireTaskId(taskId);
   requireSessionId(sessionId);
@@ -502,6 +519,7 @@ export function restoreNativeOpenRouterTaskSession(
     "openrouter",
     connectorToolSnapshot,
     requireExtensionPackageSnapshots(extensionPackages),
+    requireMomodingTaskEnvironmentSnapshot(taskEnvironment),
   );
 }
 
@@ -515,6 +533,7 @@ export function restoreNativeCodexTaskSession(
   skillResources: PiMobileSkillResource[] = [],
   connectorToolSnapshot: ConnectorToolSnapshot | null = null,
   extensionPackages: ExtensionPackageSnapshot[] = [],
+  taskEnvironment: MomodingTaskEnvironmentSnapshot = defaultMomodingTaskEnvironment(),
 ): Record<string, unknown> {
   requireTaskId(taskId);
   requireSessionId(sessionId);
@@ -540,6 +559,7 @@ export function restoreNativeCodexTaskSession(
     "codex",
     connectorToolSnapshot,
     requireExtensionPackageSnapshots(extensionPackages),
+    requireMomodingTaskEnvironmentSnapshot(taskEnvironment),
   );
 }
 
@@ -561,6 +581,23 @@ export function continueNativeOpenRouterTaskPrompt(
   resetTaskRun(state);
   registerRuntimeImages(state, images);
   queueHarnessPrompt(state, prompt, toPiImages(images), textAttachments);
+  return nativeOpenRouterScenarioStatus();
+}
+
+export function setNativeOpenRouterTaskEnvironment(
+  taskEnvironment: MomodingTaskEnvironmentSnapshot,
+): Record<string, unknown> {
+  const state = requireSettledNativeTaskSession();
+  const next = requireMomodingTaskEnvironmentSnapshot(taskEnvironment);
+  if (
+    next.workspaceKind !== state.taskEnvironment.workspaceKind ||
+    next.webSearchEnabled !== state.taskEnvironment.webSearchEnabled ||
+    next.webFetchEnabled !== state.taskEnvironment.webFetchEnabled ||
+    next.imageGenerationEnabled !== state.taskEnvironment.imageGenerationEnabled
+  ) {
+    throw new Error("PI_MOBILE_TASK_ENVIRONMENT_REFRESH_MISMATCH");
+  }
+  state.taskEnvironment = next;
   return nativeOpenRouterScenarioStatus();
 }
 
@@ -792,6 +829,9 @@ function startNativeOpenRouterRun(
   providerKind: NativeProviderKind = "openrouter",
   connectorToolSnapshot: ConnectorToolSnapshot | null = null,
   extensionPackages: ExtensionPackageSnapshot[] = [],
+  taskEnvironment: MomodingTaskEnvironmentSnapshot = defaultMomodingTaskEnvironment(
+    imageGenerationEnabled,
+  ),
 ): Record<string, unknown> {
   if (nativeScenarioState !== null && !nativeScenarioState.terminal) {
     throw new Error("PI_MOBILE_NATIVE_PROVIDER_SCENARIO_ALREADY_RUNNING");
@@ -800,6 +840,20 @@ function startNativeOpenRouterRun(
   requireModelId(modelId, providerKind);
   const normalizedConnectorSnapshot = requireConnectorToolSnapshot(connectorToolSnapshot);
   const normalizedExtensionPackages = requireExtensionPackageSnapshots(extensionPackages);
+  const normalizedTaskEnvironment = requireMomodingTaskEnvironmentSnapshot(taskEnvironment);
+  if (normalizedTaskEnvironment.imageGenerationEnabled !== imageGenerationEnabled) {
+    throw new Error("PI_MOBILE_TASK_ENVIRONMENT_IMAGE_TOOL_MISMATCH");
+  }
+  if (
+    providerKind === "codex" &&
+    (
+      normalizedTaskEnvironment.webSearchEnabled ||
+      normalizedTaskEnvironment.webFetchEnabled ||
+      normalizedTaskEnvironment.imageGenerationEnabled
+    )
+  ) {
+    throw new Error("PI_MOBILE_TASK_ENVIRONMENT_PROVIDER_MISMATCH");
+  }
   if (normalizedConnectorSnapshot !== null && taskId === null) {
     throw new Error("PI_MOBILE_CONNECTOR_TASK_MISSING");
   }
@@ -1011,11 +1065,17 @@ function startNativeOpenRouterRun(
       resources: { skills: toPiSkills(normalizedSkillResources) },
       systemPrompt: kind === "prompt"
         ? ({ resources }) => {
-            const base = state.planMode
-              ? `${MOMODING_TASK_SYSTEM_PROMPT} ${PLAN_MODE_SYSTEM_PROMPT}`
-              : state.goal?.state === "active"
-                ? `${MOMODING_TASK_SYSTEM_PROMPT} ${GOAL_MODE_SYSTEM_PROMPT} Active goal: ${state.goal.instruction}`
-                : MOMODING_TASK_SYSTEM_PROMPT;
+            const base = buildMomodingTaskSystemPrompt({
+              environment: state.taskEnvironment,
+              providerKind,
+              skillCount: resources.skills?.length ?? 0,
+              extensionCount: normalizedExtensionPackages.length,
+              connectorEnabled: normalizedConnectorSnapshot !== null,
+              planMode: state.planMode,
+              activeGoalInstruction: state.goal?.state === "active"
+                ? state.goal.instruction
+                : undefined,
+            });
             const skillIndex = formatSkillsForSystemPrompt(resources.skills ?? []);
             return skillIndex.length === 0
               ? base
@@ -1112,6 +1172,7 @@ function startNativeOpenRouterRun(
     resourceUpdateCount: 0,
     extensionSetDigest: extensionPackageSetDigest(normalizedExtensionPackages),
     extensionSetTrusted: true,
+    taskEnvironment: normalizedTaskEnvironment,
     childAgents,
     childEventOutbox,
     childEventAckHighWater: new Map<string, number>(),
@@ -1796,10 +1857,28 @@ export function pushNativeProviderChunk(
   requestId: string,
   chunk: unknown,
 ): Record<string, unknown> {
+  return pushNativeProviderChunkOutcome(requestId, chunk).status;
+}
+
+export function pushNativeProviderChunkOutcome(
+  requestId: string,
+  chunk: unknown,
+): { requestActive: boolean; status: Record<string, unknown> } {
   const state = requireNativeScenario();
+  let requestActive = true;
   if (state.providerKind === "codex") pushCodexEvent(state, requestId, chunk);
-  else pushOpenRouterChunk(state, requestId, chunk, () => updateTerminal(state));
-  return nativeOpenRouterScenarioStatus();
+  else {
+    requestActive = pushOpenRouterChunk(
+      state,
+      requestId,
+      chunk,
+      () => updateTerminal(state),
+    );
+  }
+  return {
+    requestActive,
+    status: nativeOpenRouterScenarioStatus(),
+  };
 }
 
 export function completeNativeProviderRequest(

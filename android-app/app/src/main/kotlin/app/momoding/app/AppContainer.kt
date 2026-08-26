@@ -29,13 +29,14 @@ import app.momoding.core.media.MediaHandleRegistry
 import app.momoding.core.media.PhoneLocalMediaToolExecutor
 import app.momoding.core.media.PhotoLibraryScopeProvider
 import app.momoding.core.policy.TaskApprovalMode
-import app.momoding.core.provider.OpenRouterNativeClient
+import app.momoding.core.provider.AndroidProviderNetworkAvailability
 import app.momoding.core.provider.ActiveChatProviderStore
 import app.momoding.core.provider.CodexNativeClient
 import app.momoding.core.provider.CodexOAuthCredentialManager
 import app.momoding.core.provider.CodexOAuthProtocol
 import app.momoding.core.provider.CodexOAuthVault
 import app.momoding.core.provider.OpenRouterImageGenerationGateway
+import app.momoding.core.provider.OpenRouterNativeClient
 import app.momoding.core.provider.ProviderCredentialVault
 import app.momoding.core.provider.ProviderSelectionStore
 import app.momoding.core.runtime.local.PhoneLocalPiEventProjector
@@ -172,7 +173,9 @@ class AppContainer(application: Application) {
     val providerCredentialVault = ProviderCredentialVault.create(application)
     val providerSelectionStore = ProviderSelectionStore.create(application)
     val activeChatProviderStore = ActiveChatProviderStore.create(application)
-    val openRouterClient = OpenRouterNativeClient()
+    val openRouterClient = OpenRouterNativeClient(
+        AndroidProviderNetworkAvailability(application),
+    )
     val openRouterImageGateway = OpenRouterImageGenerationGateway()
     val codexOAuthGateway = CodexOAuthProtocol()
     val codexCredentialManager = CodexOAuthCredentialManager(
@@ -314,9 +317,12 @@ class AppContainer(application: Application) {
     val phoneLocalPiRuntime = PhoneLocalPiOpenRouterRuntime(
         application,
         phoneLocalAttentionBridge,
+        credentialVault = providerCredentialVault,
+        client = openRouterClient,
         selectionStore = providerSelectionStore,
         activeChatProviderStore = activeChatProviderStore,
         codexClient = codexNativeClient,
+        workspaceModeForTask = phoneLocalProjectWorkspace::taskWorkspaceMode,
     ) { events, snapshots ->
         phoneLocalChildAgentRepository.persistRuntimeUpdate(events, snapshots)
     }

@@ -62,7 +62,7 @@ object CalendarToolRequestParser {
         arguments: JsonObject,
         purpose: String,
     ): CalendarToolRequest.ListEvents {
-        arguments.requireExactKeys(
+        arguments.requireAllowedKeys(
             "action",
             "purpose",
             "start",
@@ -79,9 +79,9 @@ object CalendarToolRequestParser {
             purpose = purpose,
             start = start,
             end = end,
-            calendarHandle = arguments.nullableHandle("calendarHandle", CALENDAR_HANDLE),
-            query = arguments.nullableString("query", MAX_QUERY_CHARS),
-            cursor = arguments.nullableString("cursor", 160)?.also {
+            calendarHandle = arguments.optionalNullableHandle("calendarHandle", CALENDAR_HANDLE),
+            query = arguments.optionalNullableString("query", MAX_QUERY_CHARS),
+            cursor = arguments.optionalNullableString("cursor", 160)?.also {
                 if (!PAGE_CURSOR.matches(it)) invalid()
             },
         )
@@ -170,6 +170,9 @@ object CalendarToolRequestParser {
         return requiredString(name, maximum)
     }
 
+    private fun JsonObject.optionalNullableString(name: String, maximum: Int): String? =
+        if (name in this) nullableString(name, maximum) else null
+
     private fun JsonObject.requiredObject(name: String): JsonObject =
         this[name] as? JsonObject ?: invalid()
 
@@ -210,6 +213,11 @@ object CalendarToolRequestParser {
 
     private fun JsonObject.nullableHandle(name: String, pattern: Regex): String? =
         nullableString(name, 160)?.also {
+            if (!pattern.matches(it)) invalid()
+        }
+
+    private fun JsonObject.optionalNullableHandle(name: String, pattern: Regex): String? =
+        optionalNullableString(name, 160)?.also {
             if (!pattern.matches(it)) invalid()
         }
 

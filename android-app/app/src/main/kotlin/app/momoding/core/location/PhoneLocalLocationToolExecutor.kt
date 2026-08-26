@@ -22,6 +22,8 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.JsonUnquotedLiteral
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
@@ -201,15 +203,15 @@ class PhoneLocalLocationToolExecutor(
                 "data",
                 buildJsonObject {
                     put("precision", request.precision.wireValue)
-                    put("latitude", raw.latitude.roundTo(decimals))
-                    put("longitude", raw.longitude.roundTo(decimals))
+                    put("latitude", raw.latitude.roundTo(decimals).asCanonicalJsonNumber())
+                    put("longitude", raw.longitude.roundTo(decimals).asCanonicalJsonNumber())
                     put(
                         "accuracyMeters",
                         if (request.precision == LocationCapabilityAccess.APPROXIMATE) {
                             raw.accuracyMeters.coerceAtLeast(APPROXIMATE_ACCURACY_FLOOR_METERS)
                         } else {
                             raw.accuracyMeters
-                        }.roundTo(1),
+                        }.roundTo(1).asCanonicalJsonNumber(),
                     )
                     put("capturedAt", raw.capturedAt.toString())
                     put("ageMillis", ageMillis)
@@ -287,6 +289,16 @@ class PhoneLocalLocationToolExecutor(
 
     private fun Float.roundTo(decimals: Int): Double =
         toDouble().roundTo(decimals)
+
+    /** Matches JSON.stringify's finite-number spelling so the cross-runtime digest stays exact. */
+    private fun Double.asCanonicalJsonNumber(): JsonPrimitive {
+        require(isFinite()) { "Location number must be finite" }
+        // Location values have already been rounded to at most five decimal places. Keeping that
+        // bounded value in plain decimal avoids JVM exponent spellings such as `1.0E-5`, which
+        // JSON.parse + JSON.stringify canonicalizes to `0.00001` in the Pi runtime.
+        val canonical = BigDecimal.valueOf(this).stripTrailingZeros().toPlainString()
+        return JsonUnquotedLiteral(if (canonical == "-0") "0" else canonical)
+    }
 
     private fun sha256(value: String): String = MessageDigest.getInstance("SHA-256")
         .digest(value.toByteArray(Charsets.UTF_8))

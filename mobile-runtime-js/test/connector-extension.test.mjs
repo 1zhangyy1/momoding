@@ -16,6 +16,9 @@ test("task-scoped direct Connector tool reaches the typed Android mailbox", asyn
   startTask(context, "connector-direct", snapshot);
 
   const request = await nextProviderRequest(context);
+  const systemPrompt = request.messages.find((message) => message.role === "system")?.content;
+  assert.match(systemPrompt, /Extension packages=0/);
+  assert.match(systemPrompt, /Connector tools=available/);
   const connectorTools = request.tools.filter((tool) =>
     tool.function.name.startsWith("linear__") || tool.function.name === "connector"
   );

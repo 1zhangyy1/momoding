@@ -28,6 +28,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 
@@ -119,15 +120,17 @@ class PhoneLocalPiEventProjector(
         attachmentIds: List<String> = emptyList(),
         textAttachments: List<PiRuntimeTextAttachmentInput> = emptyList(),
     ) {
+        val messages = sessionMessages(taskId, priorEntries) +
+            userMessage(prompt, attachmentIds, textAttachments)
         val activities = durableExtensionActivities(taskId, emptyList())
+        val webActivities = durableProviderWebActivities(taskId, emptyList(), messages)
         replaceSnapshot(
             taskId = taskId,
             piSessionId = piSessionId,
             streamId = streamId,
-            messages = weaveExtensionActivities(
-                sessionMessages(taskId, priorEntries) +
-                    userMessage(prompt, attachmentIds, textAttachments),
-                activities,
+            messages = weaveProviderWebActivities(
+                weaveExtensionActivities(messages, activities),
+                webActivities,
             ),
             runState = TaskRunState.STARTING,
             isStreaming = true,
@@ -141,16 +144,25 @@ class PhoneLocalPiEventProjector(
         snapshot: PiNativeTaskSessionSnapshot,
         runState: TaskRunState,
         extensionActivities: List<JsonObject> = emptyList(),
+        providerWebActivities: List<JsonObject> = emptyList(),
     ) {
         check(snapshot.taskId == taskId) { "PI_MOBILE_SESSION_SNAPSHOT_TASK_MISMATCH" }
         database.runInTransaction {
             val messages = sessionMessages(taskId, snapshot.entries)
             val durableActivities = durableExtensionActivities(taskId, extensionActivities)
+            val durableWebActivities = durableProviderWebActivities(
+                taskId,
+                providerWebActivities,
+                messages,
+            )
             replaceSnapshot(
                 taskId = taskId,
                 piSessionId = piSessionId,
                 streamId = streamId,
-                messages = weaveExtensionActivities(messages, durableActivities),
+                messages = weaveProviderWebActivities(
+                    weaveExtensionActivities(messages, durableActivities),
+                    durableWebActivities,
+                ),
                 runState = runState,
                 isStreaming = false,
             )
@@ -434,6 +446,166 @@ class PhoneLocalPiEventProjector(
         put("event", activity)
     }
 
+    private fun durableProviderWebActivities(
+        taskId: String,
+        newEvents: List<JsonObject>,
+        messages: List<JsonElement>,
+    ): List<ProviderWebActivityRecord> {
+        val prior = store.read(taskId)?.messages.orEmpty().mapNotNull { message ->
+            val wrapper = message as? JsonObject ?: return@mapNotNull null
+            if (
+                wrapper.keys != PROVIDER_WEB_ACTIVITY_MESSAGE_KEYS ||
+                wrapper.stringValue("role") != PROVIDER_WEB_ACTIVITY_ROLE
+            ) {
+                return@mapNotNull null
+            }
+            val event = wrapper["event"] as? JsonObject ?: return@mapNotNull null
+            val anchor = wrapper.stringValue("assistantAnchor") ?: return@mapNotNull null
+            providerWebActivityRecord(event, anchor)
+        }
+        val fallbackAnchor = messages.asReversed().firstNotNullOfOrNull(::assistantAnchor)
+        val latest = linkedMapOf<String, ProviderWebActivityRecord>()
+        (prior + newEvents.mapNotNull { event ->
+            val anchor = event.stringValue("responseId")
+                ?.takeIf(String::isNotBlank)
+                ?.let { "response:$it" }
+                ?: fallbackAnchor
+                ?: return@mapNotNull null
+            providerWebActivityRecord(event, anchor)
+        }).forEach { record ->
+            latest[record.identity] = record
+        }
+        return latest.values.toList()
+    }
+
+    private fun providerWebActivityRecord(
+        event: JsonObject,
+        assistantAnchor: String,
+    ): ProviderWebActivityRecord? {
+        if (event.toString().toByteArray().size > MAX_PROVIDER_WEB_ACTIVITY_BYTES) return null
+        val sanitized = sanitizeProviderWebActivity(event) ?: return null
+        val requestId = sanitized.stringValue("requestId")
+            ?.takeIf(PROVIDER_REQUEST_ID::matches)
+            ?: return null
+        if (!ASSISTANT_ANCHOR.matches(assistantAnchor)) return null
+        return ProviderWebActivityRecord(requestId, assistantAnchor, sanitized)
+    }
+
+    private fun sanitizeProviderWebActivity(event: JsonObject): JsonObject? {
+        if (!PROVIDER_WEB_ACTIVITY_EVENT_KEYS.containsAll(event.keys)) return null
+        val type = event.stringValue("type")?.takeIf { it in PROVIDER_WEB_ACTIVITY_TYPES }
+            ?: return null
+        val state = event.stringValue("state")?.takeIf { it in PROVIDER_WEB_TERMINAL_STATES }
+            ?: return null
+        val requestId = event.stringValue("requestId")?.takeIf(PROVIDER_REQUEST_ID::matches)
+            ?: return null
+        val responseId = event.stringValue("responseId")
+            ?.takeIf { it.length in 1..MAX_PROVIDER_RESPONSE_ID_CHARS }
+            ?: if ("responseId" in event) return null else null
+        val childName = event.stringValue("childName")
+            ?.takeIf { it.length in 1..MAX_PROVIDER_CHILD_NAME_CHARS }
+            ?: if ("childName" in event) return null else null
+        fun count(name: String, maximum: Int): Int? {
+            val element = event[name] ?: return null
+            return (element as? JsonPrimitive)
+                ?.takeUnless(JsonPrimitive::isString)
+                ?.intOrNull
+                ?.takeIf { it in 0..maximum }
+                ?: Int.MIN_VALUE
+        }
+        val webRequests = count("webRequests", MAX_PROVIDER_WEB_REQUESTS)
+        val searchRequests = count("searchRequests", MAX_PROVIDER_SEARCH_REQUESTS)
+        val fetchRequests = count("fetchRequests", MAX_PROVIDER_FETCH_REQUESTS)
+        if (listOf(webRequests, searchRequests, fetchRequests).any { it == Int.MIN_VALUE }) return null
+        val sources = event["sources"] as? JsonArray ?: return null
+        if (sources.size > MAX_PROVIDER_WEB_SOURCES) return null
+        val sanitizedSources = buildJsonArray {
+            sources.forEach { source ->
+                val value = source as? JsonObject ?: return null
+                if (!PROVIDER_WEB_SOURCE_KEYS.containsAll(value.keys)) return null
+                val url = value.stringValue("url")
+                    ?.takeIf { it.length <= MAX_PROVIDER_SOURCE_URL_CHARS && WEB_URL.matches(it) }
+                    ?: return null
+                val title = value.stringValue("title")
+                    ?.takeIf { it.length in 1..MAX_PROVIDER_SOURCE_TITLE_CHARS }
+                    ?: return null
+                val domain = value.stringValue("domain")
+                    ?.takeIf { it.length in 1..MAX_PROVIDER_SOURCE_DOMAIN_CHARS }
+                    ?: return null
+                val start = value["startIndex"]?.let { element ->
+                    (element as? JsonPrimitive)
+                        ?.takeUnless(JsonPrimitive::isString)
+                        ?.intOrNull
+                        ?.takeIf { it >= 0 }
+                        ?: return null
+                }
+                val end = value["endIndex"]?.let { element ->
+                    (element as? JsonPrimitive)
+                        ?.takeUnless(JsonPrimitive::isString)
+                        ?.intOrNull
+                        ?.takeIf { it >= 0 }
+                        ?: return null
+                }
+                if (start != null && end != null && end < start) return null
+                add(buildJsonObject {
+                    put("url", url)
+                    put("title", title)
+                    put("domain", domain)
+                    start?.let { put("startIndex", it) }
+                    end?.let { put("endIndex", it) }
+                })
+            }
+        }
+        return buildJsonObject {
+            put("type", type)
+            put("state", state)
+            put("requestId", requestId)
+            responseId?.let { put("responseId", it) }
+            webRequests?.let { put("webRequests", it) }
+            searchRequests?.let { put("searchRequests", it) }
+            fetchRequests?.let { put("fetchRequests", it) }
+            put("sources", sanitizedSources)
+            childName?.let { put("childName", it) }
+        }
+    }
+
+    private fun weaveProviderWebActivities(
+        messages: List<JsonElement>,
+        activities: List<ProviderWebActivityRecord>,
+    ): List<JsonElement> {
+        if (activities.isEmpty()) return messages
+        val byAnchor = activities.groupBy(ProviderWebActivityRecord::assistantAnchor).toMutableMap()
+        return buildList {
+            messages.forEach { message ->
+                assistantAnchor(message)?.let { anchor ->
+                    byAnchor.remove(anchor).orEmpty().forEach { activity ->
+                        add(providerWebActivityMessage(activity))
+                    }
+                }
+                add(message)
+            }
+        }
+    }
+
+    private fun assistantAnchor(message: JsonElement): String? {
+        val objectValue = message as? JsonObject ?: return null
+        if (objectValue.stringValue("role") != "assistant") return null
+        objectValue.stringValue("responseId")
+            ?.takeIf(String::isNotBlank)
+            ?.let { return "response:$it" }
+        val timestamp = (objectValue["timestamp"] as? JsonPrimitive)?.contentOrNull
+            ?.takeIf(String::isNotBlank)
+            ?: return null
+        return "timestamp:$timestamp"
+    }
+
+    private fun providerWebActivityMessage(activity: ProviderWebActivityRecord): JsonObject =
+        buildJsonObject {
+            put("role", PROVIDER_WEB_ACTIVITY_ROLE)
+            put("assistantAnchor", activity.assistantAnchor)
+            put("event", activity.event)
+        }
+
     private fun JsonObject.stringValue(key: String): String? =
         (this[key] as? JsonPrimitive)?.takeIf(JsonPrimitive::isString)?.contentOrNull
 
@@ -709,7 +881,36 @@ class PhoneLocalPiEventProjector(
         const val SKILL_CONTROL_TYPE = "pi_mobile_skill_invocation"
         const val TEXT_ATTACHMENT_CONTROL_TYPE = "pi_mobile_text_attachments"
         const val EXTENSION_ACTIVITY_ROLE = "phoneLocalExtensionActivity"
+        const val PROVIDER_WEB_ACTIVITY_ROLE = "phoneLocalProviderWebActivity"
         val EXTENSION_ACTIVITY_MESSAGE_KEYS = setOf("role", "event")
+        val PROVIDER_WEB_ACTIVITY_MESSAGE_KEYS = setOf("role", "assistantAnchor", "event")
+        val PROVIDER_WEB_ACTIVITY_EVENT_KEYS = setOf(
+            "type",
+            "state",
+            "requestId",
+            "responseId",
+            "searchRequests",
+            "fetchRequests",
+            "webRequests",
+            "sources",
+            "childName",
+        )
+        val PROVIDER_WEB_SOURCE_KEYS = setOf("url", "title", "domain", "startIndex", "endIndex")
+        val PROVIDER_WEB_ACTIVITY_TYPES = setOf("provider_web_search", "provider_web_activity")
+        val PROVIDER_WEB_TERMINAL_STATES = setOf("completed", "failed", "cancelled")
+        const val MAX_PROVIDER_WEB_ACTIVITY_BYTES = 128 * 1024
+        const val MAX_PROVIDER_WEB_SOURCES = 15
+        const val MAX_PROVIDER_WEB_REQUESTS = 5
+        const val MAX_PROVIDER_SEARCH_REQUESTS = 3
+        const val MAX_PROVIDER_FETCH_REQUESTS = 3
+        const val MAX_PROVIDER_RESPONSE_ID_CHARS = 256
+        const val MAX_PROVIDER_CHILD_NAME_CHARS = 128
+        const val MAX_PROVIDER_SOURCE_URL_CHARS = 2_048
+        const val MAX_PROVIDER_SOURCE_TITLE_CHARS = 240
+        const val MAX_PROVIDER_SOURCE_DOMAIN_CHARS = 253
+        val PROVIDER_REQUEST_ID = Regex("^provider-[1-9][0-9]{0,8}$")
+        val ASSISTANT_ANCHOR = Regex("^(?:response|timestamp):.{1,256}$")
+        val WEB_URL = Regex("^https?://[^\\s]+$", RegexOption.IGNORE_CASE)
         val SHA256 = Regex("^[0-9a-f]{64}$")
         val GOAL_ID = Regex("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
         val SKILL_NAME = Regex("^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -742,6 +943,14 @@ class PhoneLocalPiEventProjector(
         val name: String,
         val additionalInstructions: String?,
     )
+
+    private data class ProviderWebActivityRecord(
+        val requestId: String,
+        val assistantAnchor: String,
+        val event: JsonObject,
+    ) {
+        val identity: String = "$assistantAnchor\u0000$requestId"
+    }
 
     private data class TextAttachmentControl(
         val id: String,

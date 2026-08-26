@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -302,6 +303,140 @@ class AttentionRepositoryTest {
     }
 
     @Test
+    fun `confirmation presentation trusts only exact Android tool action and approval kind`() {
+        val cases = listOf(
+            Triple(
+                "device_calendar",
+                "list_calendars" to "read",
+                AttentionConfirmationPresentation.ANDROID_CALENDAR_LIST_CALENDARS,
+            ),
+            Triple(
+                "device_calendar",
+                "list_events" to "read",
+                AttentionConfirmationPresentation.ANDROID_CALENDAR_LIST_EVENTS,
+            ),
+            Triple(
+                "device_calendar",
+                "create_event" to "mutation",
+                AttentionConfirmationPresentation.ANDROID_CALENDAR_CREATE_EVENT,
+            ),
+            Triple(
+                "device_clipboard",
+                "get" to "read",
+                AttentionConfirmationPresentation.ANDROID_CLIPBOARD_GET,
+            ),
+            Triple(
+                "device_clipboard",
+                "set" to "mutation",
+                AttentionConfirmationPresentation.ANDROID_CLIPBOARD_SET,
+            ),
+            Triple(
+                "device_clipboard",
+                "clear" to "mutation",
+                AttentionConfirmationPresentation.ANDROID_CLIPBOARD_CLEAR,
+            ),
+        )
+        cases.forEach { (toolName, identity, expected) ->
+            val arguments = buildJsonObject {
+                put("action", identity.first)
+                put("approvalKind", identity.second)
+                put("summary", "Same model-visible wording")
+                put("details", "Same model-visible details")
+            }
+            assertEquals(expected, trustedConfirmationPresentation(toolName, arguments))
+            assertEquals(
+                null,
+                trustedConfirmationPresentation(
+                    toolName,
+                    buildJsonObject {
+                        put("action", identity.first)
+                        put("approvalKind", "unknown")
+                    },
+                ),
+            )
+        }
+        val sameWordingFromModel = buildJsonObject {
+            put("action", "set")
+            put("approvalKind", "mutation")
+            put("summary", "Copy text to Android clipboard?")
+        }
+        assertEquals(
+            null,
+            trustedConfirmationPresentation("request_user_confirmation", sameWordingFromModel),
+        )
+        assertEquals(
+            null,
+            trustedConfirmationPresentation(
+                "device_calendar",
+                buildJsonObject {
+                    put("action", "get_event")
+                    put("approvalKind", "read")
+                },
+            ),
+        )
+    }
+
+    @Test
+    fun `repository carries trusted Android presentation but not model confirmation wording`() =
+        runTest {
+            val summary = "Allow Momoding to read the requested calendar events?"
+            val details = "Returns at most 10 event summaries for this Tool call."
+            ledger.acceptRequest(
+                AttentionRequestRecord(
+                    callId = CALENDAR_PRESENTATION_CALL_ID,
+                    taskId = TASK_ID,
+                    piToolCallId = "pi-$CALENDAR_PRESENTATION_CALL_ID",
+                    deviceId = DEVICE_ID,
+                    toolName = "device_calendar",
+                    arguments = buildJsonObject {
+                        put("approvalKind", "read")
+                        put("action", "list_events")
+                        put("summary", summary)
+                        put("details", details)
+                    },
+                    sideEffect = false,
+                    operationId = null,
+                    expiresAt = "2030-01-01T00:00:00.000Z",
+                    capabilityVersion = 1,
+                ),
+                scope(),
+            )
+            ledger.acceptRequest(
+                AttentionRequestRecord(
+                    callId = MODEL_CONFIRMATION_CALL_ID,
+                    taskId = TASK_ID,
+                    piToolCallId = "pi-$MODEL_CONFIRMATION_CALL_ID",
+                    deviceId = DEVICE_ID,
+                    toolName = "request_user_confirmation",
+                    arguments = buildJsonObject {
+                        put("summary", summary)
+                        put("details", details)
+                    },
+                    sideEffect = false,
+                    operationId = null,
+                    expiresAt = "2030-01-01T00:00:00.000Z",
+                    capabilityVersion = 1,
+                ),
+                scope(),
+            )
+
+            val androidRecord = (
+                repository.current(TASK_ID, CALENDAR_PRESENTATION_CALL_ID) as
+                    AttentionRecordState.Available
+            ).record
+            val modelRecord = (
+                repository.current(TASK_ID, MODEL_CONFIRMATION_CALL_ID) as
+                    AttentionRecordState.Available
+            ).record
+            assertEquals(
+                AttentionConfirmationPresentation.ANDROID_CALENDAR_LIST_EVENTS,
+                androidRecord.confirmationPresentation,
+            )
+            assertEquals(null, modelRecord.confirmationPresentation)
+            assertEquals(androidRecord.prompt, modelRecord.prompt)
+        }
+
+    @Test
     fun `ui action becomes an ordinary confirmation without exposing node internals`() = runTest {
         ledger.acceptRequest(
             AttentionRequestRecord(
@@ -327,6 +462,100 @@ class AttentionRepositoryTest {
         val prompt = record.record.prompt as AttentionPrompt.Confirmation
         assertEquals("Allow Momoding to click the selected control?", prompt.summary)
         assertFalse(prompt.details.orEmpty().contains(UI_SNAPSHOT_ID))
+    }
+
+    @Test
+    fun `media mutation becomes an ordinary confirmation without exposing digests`() = runTest {
+        val requestDigest = "6".repeat(64)
+        val planDigest = "7".repeat(64)
+        ledger.acceptRequest(
+            AttentionRequestRecord(
+                callId = MEDIA_CALL_ID,
+                taskId = TASK_ID,
+                piToolCallId = "pi-$MEDIA_CALL_ID",
+                deviceId = DEVICE_ID,
+                toolName = "device_media",
+                arguments = buildJsonObject {
+                    put("approvalKind", "mutation")
+                    put("action", "set_trashed")
+                    put("requestDigest", requestDigest)
+                    put("planDigest", planDigest)
+                    put("summary", "Move this photo to Android trash?")
+                    put(
+                        "details",
+                        "Android will show its own confirmation and Momoding will verify the trash state.",
+                    )
+                },
+                sideEffect = true,
+                operationId = MEDIA_OPERATION_ID,
+                expiresAt = "2030-01-01T00:00:00.000Z",
+                capabilityVersion = 1,
+            ),
+            scope(),
+        )
+
+        val record = repository.current(TASK_ID, MEDIA_CALL_ID) as AttentionRecordState.Available
+        val prompt = record.record.prompt as AttentionPrompt.Confirmation
+        assertEquals("Move this photo to Android trash?", prompt.summary)
+        assertEquals(
+            "Android will show its own confirmation and Momoding will verify the trash state.",
+            prompt.details,
+        )
+        assertFalse(prompt.toString().contains(requestDigest))
+        assertFalse(prompt.toString().contains(planDigest))
+    }
+
+    @Test
+    fun `location and notification requests become exact ordinary confirmations`() = runTest {
+        val cases = listOf(
+            Triple(
+                LOCATION_CALL_ID,
+                "device_location",
+                buildJsonObject {
+                    put("approvalKind", "read")
+                    put("action", "get_current")
+                    put("precision", "approximate")
+                    put("summary", "Allow Momoding to read your current location?")
+                    put(
+                        "details",
+                        "Returns one minimized approximate location to this Tool call, then expires it from task history.",
+                    )
+                },
+            ),
+            Triple(
+                NOTIFICATION_CALL_ID,
+                "device_notification",
+                buildJsonObject {
+                    put("approvalKind", "open_settings")
+                    put("action", "open_settings")
+                    put("summary", "Open Android notification settings?")
+                    put("details", "Opens the fixed system settings page for Momoding notifications.")
+                },
+            ),
+        )
+
+        cases.forEach { (callId, toolName, arguments) ->
+            ledger.acceptRequest(
+                AttentionRequestRecord(
+                    callId = callId,
+                    taskId = TASK_ID,
+                    piToolCallId = "pi-$callId",
+                    deviceId = DEVICE_ID,
+                    toolName = toolName,
+                    arguments = arguments,
+                    sideEffect = false,
+                    operationId = null,
+                    expiresAt = "2030-01-01T00:00:00.000Z",
+                    capabilityVersion = 1,
+                ),
+                scope(),
+            )
+
+            val record = repository.current(TASK_ID, callId) as AttentionRecordState.Available
+            val prompt = record.record.prompt as AttentionPrompt.Confirmation
+            assertEquals(arguments.getValue("summary").jsonPrimitive.content, prompt.summary)
+            assertEquals(arguments.getValue("details").jsonPrimitive.content, prompt.details)
+        }
     }
 
     private fun acceptQuestion(callId: String = CALL_ID) {
@@ -421,5 +650,11 @@ class AttentionRepositoryTest {
         const val UI_CALL_ID = "99999999-9999-4999-8999-999999999999"
         const val UI_OPERATION_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
         const val UI_SNAPSHOT_ID = "ui-11111111111111111111111111111111"
+        const val MEDIA_CALL_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+        const val MEDIA_OPERATION_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+        const val LOCATION_CALL_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+        const val NOTIFICATION_CALL_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        const val CALENDAR_PRESENTATION_CALL_ID = "ffffffff-ffff-4fff-8fff-ffffffffffff"
+        const val MODEL_CONFIRMATION_CALL_ID = "12121212-1212-4212-8212-121212121212"
     }
 }

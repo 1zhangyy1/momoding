@@ -70,6 +70,16 @@ sealed interface AttentionPrompt {
     }
 }
 
+/** Trusted, presentation-only Android confirmation classes derived from a durable operation. */
+enum class AttentionConfirmationPresentation {
+    ANDROID_CALENDAR_LIST_CALENDARS,
+    ANDROID_CALENDAR_LIST_EVENTS,
+    ANDROID_CALENDAR_CREATE_EVENT,
+    ANDROID_CLIPBOARD_GET,
+    ANDROID_CLIPBOARD_SET,
+    ANDROID_CLIPBOARD_CLEAR,
+}
+
 data class ContentReadDocument(
     val alias: String,
     val displayName: String,
@@ -103,6 +113,7 @@ data class AttentionRecord(
     val receivedAtMillis: Long,
     val dismissed: Boolean,
     val activeStopFence: Boolean = false,
+    val confirmationPresentation: AttentionConfirmationPresentation? = null,
 )
 
 enum class AttentionTerminalKind {
@@ -274,7 +285,10 @@ class AttentionRepository(
         attention: PendingAttentionEntity,
         activeStopFence: Boolean,
     ): AttentionRecord {
-        val prompt = parsePrompt(operation.toolName, operation.argumentsCanonicalJson)
+        val arguments = STRICT_JSON.parseToJsonElement(
+            operation.argumentsCanonicalJson,
+        ) as JsonObject
+        val prompt = parsePrompt(operation.toolName, arguments)
         if (prompt is AttentionPrompt.Confirmation) {
             require(attention.selectedOptionIndex == null)
             require(attention.customAnswer.isEmpty())
@@ -302,11 +316,14 @@ class AttentionRepository(
             receivedAtMillis = operation.receivedAtMillis,
             dismissed = attention.dismissedAtMillis != null,
             activeStopFence = activeStopFence,
+            confirmationPresentation = trustedConfirmationPresentation(
+                toolName = operation.toolName,
+                arguments = arguments,
+            ),
         )
     }
 
-    private fun parsePrompt(toolName: String, argumentsCanonicalJson: String): AttentionPrompt {
-        val value = STRICT_JSON.parseToJsonElement(argumentsCanonicalJson) as JsonObject
+    private fun parsePrompt(toolName: String, value: JsonObject): AttentionPrompt {
         return when (toolName) {
             "request_user_question" -> AttentionPrompt.Question(
                 question = value.getValue("question").jsonPrimitive.content,
@@ -346,6 +363,10 @@ class AttentionRepository(
                     append(" recent photos; no image bytes, names, paths, location, or EXIF data.")
                 },
             )
+            "device_media" -> AttentionPrompt.Confirmation(
+                summary = value.getValue("summary").jsonPrimitive.content,
+                details = value.getValue("details").jsonPrimitive.content,
+            )
             "device_calendar" -> AttentionPrompt.Confirmation(
                 summary = value.getValue("summary").jsonPrimitive.content,
                 details = value.getValue("details").jsonPrimitive.content,
@@ -354,7 +375,15 @@ class AttentionRepository(
                 summary = value.getValue("summary").jsonPrimitive.content,
                 details = value.getValue("details").jsonPrimitive.content,
             )
+            "device_location" -> AttentionPrompt.Confirmation(
+                summary = value.getValue("summary").jsonPrimitive.content,
+                details = value.getValue("details").jsonPrimitive.content,
+            )
             "device_clipboard" -> AttentionPrompt.Confirmation(
+                summary = value.getValue("summary").jsonPrimitive.content,
+                details = value.getValue("details").jsonPrimitive.content,
+            )
+            "device_notification" -> AttentionPrompt.Confirmation(
                 summary = value.getValue("summary").jsonPrimitive.content,
                 details = value.getValue("details").jsonPrimitive.content,
             )
@@ -398,5 +427,34 @@ class AttentionRepository(
             coerceInputValues = false
             explicitNulls = true
         }
+    }
+}
+
+internal fun trustedConfirmationPresentation(
+    toolName: String,
+    arguments: JsonObject,
+): AttentionConfirmationPresentation? {
+    val action = arguments["action"]?.jsonPrimitive?.contentOrNull
+    val approvalKind = arguments["approvalKind"]?.jsonPrimitive?.contentOrNull
+    return when {
+        toolName == "device_calendar" &&
+            action == "list_calendars" && approvalKind == "read" ->
+            AttentionConfirmationPresentation.ANDROID_CALENDAR_LIST_CALENDARS
+        toolName == "device_calendar" &&
+            action == "list_events" && approvalKind == "read" ->
+            AttentionConfirmationPresentation.ANDROID_CALENDAR_LIST_EVENTS
+        toolName == "device_calendar" &&
+            action == "create_event" && approvalKind == "mutation" ->
+            AttentionConfirmationPresentation.ANDROID_CALENDAR_CREATE_EVENT
+        toolName == "device_clipboard" &&
+            action == "get" && approvalKind == "read" ->
+            AttentionConfirmationPresentation.ANDROID_CLIPBOARD_GET
+        toolName == "device_clipboard" &&
+            action == "set" && approvalKind == "mutation" ->
+            AttentionConfirmationPresentation.ANDROID_CLIPBOARD_SET
+        toolName == "device_clipboard" &&
+            action == "clear" && approvalKind == "mutation" ->
+            AttentionConfirmationPresentation.ANDROID_CLIPBOARD_CLEAR
+        else -> null
     }
 }

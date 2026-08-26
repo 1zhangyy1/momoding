@@ -232,7 +232,7 @@ private data class ApprovalModePresentation(
 private fun TaskApprovalMode.presentation(): ApprovalModePresentation = when (this) {
     TaskApprovalMode.REQUEST_APPROVAL -> ApprovalModePresentation(
         label = "Request approval",
-        description = "Ask before writing files, controlling apps, sending, or other risky actions.",
+        description = "Ask before Android actions such as changing device data, controlling apps, or sending. App-private workspace work runs directly.",
     )
     TaskApprovalMode.AUTO_APPROVE -> ApprovalModePresentation(
         label = "Approve for me",

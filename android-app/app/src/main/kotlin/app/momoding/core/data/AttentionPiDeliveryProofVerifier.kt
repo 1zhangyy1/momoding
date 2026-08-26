@@ -62,6 +62,17 @@ internal object AttentionPiDeliveryProofVerifier {
         "operationId",
         "approvalOrigin",
     )
+    private val liveLocationDetailKeys = setOf(
+        "liveOnly",
+        "dataClass",
+        "contentSha256",
+        "precision",
+    )
+    private val liveClipboardDetailKeys = setOf(
+        "liveOnly",
+        "dataClass",
+        "contentSha256",
+    )
     private val notificationMutationDetailKeys = coreDetailKeys + setOf(
         "operationId",
         "approvalOrigin",
@@ -95,6 +106,8 @@ internal object AttentionPiDeliveryProofVerifier {
         UI_ACTION_TOOL,
     )
     private val fileApprovalTools = setOf(CONTENT_READ_TOOL, FILE_COMMIT_TOOL)
+    private val liveTextTools = setOf(LOCATION_TOOL, CLIPBOARD_TOOL)
+    private val liveTextDataClasses = setOf("location", "clipboard")
 
     fun verify(
         projection: DurableTaskProjection,
@@ -138,6 +151,25 @@ internal object AttentionPiDeliveryProofVerifier {
 
         val verified = linkedMapOf<String, VerifiedAttentionPiDeliveryProof>()
         candidates.forEach { candidate ->
+            val details = candidate.details as? JsonObject
+            // Auto-approve and Full access reads intentionally have no Attention operation. The
+            // durable boundary must still reject raw or malformed live-only personal data before
+            // attempting to resolve an optional approval record.
+            val candidateToolName = candidate.toolName.stringOrNull()
+            val candidateDataClass = details?.stringOrNull("dataClass")
+            if (
+                details?.get("liveOnly") != null &&
+                (
+                    candidateToolName in liveTextTools ||
+                        candidateDataClass in liveTextDataClasses
+                    )
+            ) {
+                validateLiveOnlyRead(
+                    candidate = candidate,
+                    toolName = candidate.toolName.requiredString("toolName"),
+                    details = details,
+                )
+            }
             val operation = resolveTarget(
                 projection.taskId,
                 candidate,
@@ -229,6 +261,12 @@ internal object AttentionPiDeliveryProofVerifier {
         // Generic Host recovery messages for file approvals do not carry the exact scoped result
         // contract. They remain observation-only until a normal Pi ToolResult proves delivery.
         if (recovery != null && operation.toolName in fileApprovalTools) return null
+        if (details["liveOnly"] != null) {
+            if (operation.sideEffect || operation.operationId != null) {
+                corrupt("Live-only Pi observation targets a side effect")
+            }
+            return null
+        }
         val expectedDetailKeys = when {
             recovery != null -> recoveryDetailKeys
             operation.toolName == CONTENT_READ_TOOL -> contentReadDetailKeys
@@ -362,6 +400,69 @@ internal object AttentionPiDeliveryProofVerifier {
             corrupt("Exact Pi delivery proof content conflicts")
         }
         return VerifiedAttentionPiDeliveryProof(operation.callId, semanticHash)
+    }
+
+    /**
+     * Location and clipboard reads are intentionally available to one Provider turn only. Pi
+     * replaces their text with a digest-bound placeholder before emitting a durable event. That
+     * event is observation-only: it must never be mistaken for an exact terminal-delivery proof.
+     */
+    private fun validateLiveOnlyRead(
+        candidate: Candidate,
+        toolName: String,
+        details: JsonObject,
+    ) {
+        val expectedKeys = when (toolName) {
+            LOCATION_TOOL -> liveLocationDetailKeys
+            CLIPBOARD_TOOL -> liveClipboardDetailKeys
+            else -> corrupt("Live-only Pi observation targets an unsupported tool")
+        }
+        if (details.keys != expectedKeys) {
+            corrupt("Live-only Pi observation detail fields differ")
+        }
+        if (details.getValue("liveOnly").requiredBoolean("details.liveOnly") != true) {
+            corrupt("Live-only Pi observation marker is invalid")
+        }
+        val dataClass = details.getValue("dataClass").requiredString("details.dataClass")
+        val expectedDataClass = if (toolName == LOCATION_TOOL) "location" else "clipboard"
+        if (dataClass != expectedDataClass) {
+            corrupt("Live-only Pi observation data class conflicts")
+        }
+        val contentSha256 = details.getValue("contentSha256")
+            .requiredString("details.contentSha256")
+        if (!sha256Pattern.matches(contentSha256)) {
+            corrupt("Live-only Pi observation digest is invalid")
+        }
+        val precision = if (toolName == LOCATION_TOOL) {
+            details.getValue("precision").requiredString("details.precision").also { value ->
+                if (value !in setOf("approximate", "precise")) {
+                    corrupt("Live-only Pi observation precision is invalid")
+                }
+            }
+        } else {
+            null
+        }
+        if (candidate.isError.requiredBoolean("isError")) {
+            corrupt("Live-only Pi observation cannot be an error")
+        }
+        val content = candidate.content as? JsonArray
+            ?: corrupt("${candidate.source} live-only content is not an array")
+        if (content.size != 1) {
+            corrupt("${candidate.source} live-only observation must contain one placeholder")
+        }
+        val item = content.single() as? JsonObject
+            ?: corrupt("${candidate.source} live-only placeholder is not an object")
+        if (item.keys != setOf("type", "text") || item.stringOrNull("type") != "text") {
+            corrupt("${candidate.source} live-only placeholder fields differ")
+        }
+        val expectedPlaceholder = if (toolName == LOCATION_TOOL) {
+            "[live Android location expired sha256=$contentSha256 precision=$precision]"
+        } else {
+            "[live Android clipboard expired sha256=$contentSha256]"
+        }
+        if (item.getValue("text").requiredString("content.text") != expectedPlaceholder) {
+            corrupt("${candidate.source} live-only placeholder conflicts")
+        }
     }
 
     private fun parseUniqueTextPayload(value: JsonElement?, source: String): JsonElement {

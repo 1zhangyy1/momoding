@@ -775,18 +775,9 @@ function consumeLiveToolTexts(
 
 function liveTextExpiredText(descriptor: LiveToolTextDescriptor): string {
   if (descriptor.dataClass === "clipboard") {
-    return [
-      "[live Android clipboard expired",
-      `sha256=${descriptor.contentSha256}`,
-      "]",
-    ].join(" ");
+    return `[live Android clipboard expired sha256=${descriptor.contentSha256}]`;
   }
-  return [
-    "[live Android location expired",
-    `sha256=${descriptor.contentSha256}`,
-    `precision=${descriptor.precision}`,
-    "]",
-  ].join(" ");
+  return `[live Android location expired sha256=${descriptor.contentSha256} precision=${descriptor.precision}]`;
 }
 
 function expireLiveToolImages(

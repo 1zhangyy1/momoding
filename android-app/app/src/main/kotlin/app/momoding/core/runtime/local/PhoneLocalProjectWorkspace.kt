@@ -95,6 +95,17 @@ class PhoneLocalProjectWorkspace internal constructor(
         ),
     )
 
+    /** Returns the current Task workspace shape without importing or mutating either workspace. */
+    suspend fun taskWorkspaceMode(taskId: String): PhoneLocalWorkspaceMode =
+        withContext(Dispatchers.IO) {
+            requireUuid(taskId, "taskId")
+            if (database.momodingDao().draftForTask(taskId)?.selectedGrantId == null) {
+                PhoneLocalWorkspaceMode.PRIVATE_SCRATCH
+            } else {
+                PhoneLocalWorkspaceMode.AUTHORIZED_PROJECT
+            }
+        }
+
     suspend fun prepareTaskWorkspace(taskId: String): PhoneLocalWorkspaceMode =
         withContext(Dispatchers.IO) {
             requireUuid(taskId, "taskId")

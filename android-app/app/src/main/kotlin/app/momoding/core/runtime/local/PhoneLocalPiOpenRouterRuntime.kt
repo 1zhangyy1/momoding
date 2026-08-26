@@ -34,6 +34,7 @@ import app.momoding.core.skills.SkillDocumentParseResult
 import app.momoding.core.skills.requireValidSkillResource
 import app.momoding.core.skills.skillResourceSetDigest
 import java.security.MessageDigest
+import java.time.ZonedDateTime
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.Executors
 import kotlinx.coroutines.CancellationException
@@ -80,21 +81,30 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
     private val capabilityProbe: OpenRouterCapabilityProbe = OpenRouterCapabilityProbe(client),
     private val activeChatProviderStore: ActiveChatProviderStore? = null,
     private val codexClient: CodexNativeClient? = null,
+    private val workspaceModeForTask: suspend (String) -> PhoneLocalWorkspaceMode = {
+        PhoneLocalWorkspaceMode.PRIVATE_SCRATCH
+    },
+    private val nowProvider: () -> ZonedDateTime = ZonedDateTime::now,
 ) : AutoCloseable, PhoneLocalSkillParser {
     constructor(
         context: Context,
         attentionBridge: PhoneLocalAttentionBridge? = null,
+        credentialVault: ProviderCredentialVault = ProviderCredentialVault.create(context),
+        client: OpenRouterNativeClient = OpenRouterNativeClient(),
         selectionStore: ProviderSelectionStore = ProviderSelectionStore.create(context),
         activeChatProviderStore: ActiveChatProviderStore = ActiveChatProviderStore.create(context),
         codexClient: CodexNativeClient? = null,
+        workspaceModeForTask: suspend (String) -> PhoneLocalWorkspaceMode = {
+            PhoneLocalWorkspaceMode.PRIVATE_SCRATCH
+        },
         childUpdateSink: (
             List<PiChildAgentEventEnvelope>,
             List<PiChildAgentSnapshot>,
         ) -> Unit = ::missingChildPersistenceSink,
     ) : this(
         context = context,
-        credentialVault = ProviderCredentialVault.create(context),
-        client = OpenRouterNativeClient(),
+        credentialVault = credentialVault,
+        client = client,
         ownerDispatcher = Executors.newSingleThreadExecutor { runnable ->
             Thread(runnable, "phone-local-pi-openrouter")
         }.asCoroutineDispatcher(),
@@ -104,6 +114,7 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
         selectionStore = selectionStore,
         activeChatProviderStore = activeChatProviderStore,
         codexClient = codexClient,
+        workspaceModeForTask = workspaceModeForTask,
     )
 
     private val appContext = context.applicationContext
@@ -321,6 +332,7 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
         }
         val provider = loadActiveProvider()
         val imageGenerationEnabled = imageGenerationEnabled(provider)
+        val taskEnvironment = taskEnvironmentSnapshot(taskId, provider, imageGenerationEnabled)
         if (images.isNotEmpty()) requireImageInputCapability(provider)
         if (textAttachments.isNotEmpty()) requireToolCapability(provider)
         val activeEngine = PhoneLocalPiEngine(appContext.assets, ownerDispatcher)
@@ -367,6 +379,7 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
                     imageGenerationEnabled = imageGenerationEnabled,
                     connectorToolSnapshot = approvedConnectorSnapshot,
                     extensionPackages = extensionPackages.packages,
+                    taskEnvironment = taskEnvironment,
                 )
                 is RuntimeChatProvider.Codex -> activeEngine.startNativeCodexTaskSession(
                     taskId = taskId,
@@ -378,6 +391,7 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
                     textAttachments = textAttachments,
                     connectorToolSnapshot = approvedConnectorSnapshot,
                     extensionPackages = extensionPackages.packages,
+                    taskEnvironment = taskEnvironment,
                 )
             }
             pumpUntilTerminal(initial, activePump, onStatus).also { terminal ->
@@ -414,6 +428,7 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
         }
         val provider = loadActiveProvider()
         val imageGenerationEnabled = imageGenerationEnabled(provider)
+        val taskEnvironment = taskEnvironmentSnapshot(taskId, provider, imageGenerationEnabled)
         val activeEngine = PhoneLocalPiEngine(appContext.assets, ownerDispatcher)
         val activePump = NativeProviderRequestPump(
             engine = activeEngine,
@@ -454,6 +469,7 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
                     skillResources = skillResources.resources,
                     imageGenerationEnabled = imageGenerationEnabled,
                     extensionPackages = extensionPackages.packages,
+                    taskEnvironment = taskEnvironment,
                 )
                 is RuntimeChatProvider.Codex -> activeEngine.startNativeCodexTaskSkillSession(
                     taskId = taskId,
@@ -463,6 +479,7 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
                     modelId = provider.modelId,
                     skillResources = skillResources.resources,
                     extensionPackages = extensionPackages.packages,
+                    taskEnvironment = taskEnvironment,
                 )
             }
             pumpUntilTerminal(initial, activePump, onStatus).also { terminal ->
@@ -521,6 +538,7 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
         lastStatus = null
         openCommandMailbox()
         try {
+            refreshTaskEnvironment(taskId, activeEngine)
             val initial = activeEngine.implementNativeOpenRouterTaskPlan(planDigest)
             pumpUntilTerminal(initial, activePump, onStatus)
         } catch (error: Throwable) {
@@ -620,6 +638,7 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
         lastStatus = null
         openCommandMailbox()
         try {
+            refreshTaskEnvironment(taskId, activeEngine)
             pumpUntilTerminal(start(activeEngine), activePump, onStatus)
         } catch (error: Throwable) {
             if (isGoalControlRejection(error)) {
@@ -653,6 +672,7 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
         lastStatus = null
         openCommandMailbox()
         try {
+            refreshTaskEnvironment(taskId, activeEngine)
             val initial = activeEngine.continueNativeOpenRouterTaskPrompt(prompt, images, textAttachments)
             pumpUntilTerminal(initial, activePump, onStatus)
         } catch (error: Throwable) {
@@ -732,6 +752,7 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
         lastStatus = null
         openCommandMailbox()
         try {
+            refreshTaskEnvironment(taskId, activeEngine)
             val initial = activeEngine.invokeNativeOpenRouterTaskSkill(
                 skillName = skillName,
                 additionalInstructions = additionalInstructions,
@@ -772,6 +793,7 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
         }
         val provider = loadProviderForSnapshot(snapshot.entries)
         val imageGenerationEnabled = imageGenerationEnabled(provider)
+        val taskEnvironment = taskEnvironmentSnapshot(taskId, provider, imageGenerationEnabled)
         if (images.isNotEmpty()) requireImageInputCapability(provider)
         if (requiresTools) requireToolCapability(provider)
         val activeEngine = PhoneLocalPiEngine(appContext.assets, ownerDispatcher)
@@ -817,6 +839,7 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
                         imageGenerationEnabled = imageGenerationEnabled,
                         connectorToolSnapshot = approvedConnectorSnapshot,
                         extensionPackages = extensionPackages.packages,
+                        taskEnvironment = taskEnvironment,
                     )
                 is RuntimeChatProvider.Codex -> activeEngine.restoreNativeCodexTaskSession(
                     taskId = taskId,
@@ -827,6 +850,7 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
                     skillResources = skillResources.resources,
                     connectorToolSnapshot = approvedConnectorSnapshot,
                     extensionPackages = extensionPackages.packages,
+                    taskEnvironment = taskEnvironment,
                 )
             }
             check(
@@ -1093,6 +1117,40 @@ class PhoneLocalPiOpenRouterRuntime internal constructor(
             selection.imageGenerationEnabled && selection.imageModelId != null
         }
         is RuntimeChatProvider.Codex -> false
+    }
+
+    private suspend fun taskEnvironmentSnapshot(
+        taskId: String,
+        provider: RuntimeChatProvider,
+        imageGenerationEnabled: Boolean,
+    ): PiAgentEnvironmentSnapshot {
+        val webSearchEnabled = provider is RuntimeChatProvider.OpenRouter &&
+            webSearchConfiguration(provider.credential) != null
+        val webFetchEnabled = provider is RuntimeChatProvider.OpenRouter &&
+            webFetchConfiguration(provider.credential) != null
+        return PiAgentEnvironmentSnapshot.create(
+            workspaceMode = workspaceModeForTask(taskId),
+            webSearchEnabled = webSearchEnabled,
+            webFetchEnabled = webFetchEnabled,
+            imageGenerationEnabled = imageGenerationEnabled,
+            now = nowProvider(),
+        )
+    }
+
+    private suspend fun refreshTaskEnvironment(
+        taskId: String,
+        activeEngine: PhoneLocalPiEngine,
+    ) {
+        val provider = requireNotNull(activeTaskProvider) {
+            "PI_MOBILE_TASK_PROVIDER_MISSING"
+        }
+        activeEngine.setNativeOpenRouterTaskEnvironment(
+            taskEnvironmentSnapshot(
+                taskId = taskId,
+                provider = provider,
+                imageGenerationEnabled = imageGenerationEnabled(provider),
+            ),
+        )
     }
 
     private fun checkOpen() {
@@ -1471,7 +1529,14 @@ internal class NativeProviderRequestPump(
             if (event.requestId in cancelledRequestIds) continue
             when (event) {
                 is NetworkEvent.Chunk -> {
-                    engine.pushNativeProviderChunk(event.requestId, event.value)
+                    val outcome = engine.pushNativeProviderChunkOutcome(
+                        event.requestId,
+                        event.value,
+                    )
+                    if (!outcome.requestActive) {
+                        jobs.remove(event.requestId)?.cancelAndJoin()
+                        networkEvents.removeIf { queued -> queued.requestId == event.requestId }
+                    }
                 }
                 is NetworkEvent.Completed -> {
                     jobs.remove(event.requestId)

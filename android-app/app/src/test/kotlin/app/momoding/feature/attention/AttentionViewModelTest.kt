@@ -514,6 +514,29 @@ class AttentionViewModelTest {
     }
 
     @Test
+    fun `accepted decision followed directly by missing exits as completed`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val source = FakeAttentionDataSource(record())
+        val viewModel = viewModel(source) {
+            source.publish(AttentionRecordState.Missing)
+        }
+        runCurrent()
+
+        viewModel.dispatch(AttentionIntent.Skip)
+        runCurrent()
+
+        assertTrue(viewModel.state.value is AttentionUiState.Unavailable)
+        assertEquals(
+            AttentionOneShot.ReturnToTask(
+                effectId = "$TASK_ID:$CALL_ID:route-exit",
+                reason = AttentionReturnReason.COMPLETED,
+            ),
+            viewModel.oneShots.first(),
+        )
+        assertEquals(null, withTimeoutOrNull(1) { viewModel.oneShots.first() })
+    }
+
+    @Test
     fun `restored completion waits for one explicit user return`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val source = FakeAttentionDataSource(resolvedRecord())

@@ -514,6 +514,170 @@ class RoomAttentionPiDeliveryProofTest {
     }
 
     @Test
+    fun `live Location observation accepts only the digest placeholder and never claims delivery`() {
+        val callId = callId(91)
+        ledger.acceptRequest(
+            request(
+                callId,
+                "device_location",
+                buildJsonObject {
+                    put("approvalKind", "read")
+                    put("action", "get_current")
+                    put("precision", "approximate")
+                    put("summary", "Allow Momoding to read your current location?")
+                    put("details", "Returns one minimized approximate location to this Tool call.")
+                },
+            ),
+            scope(),
+        )
+        val digest = "7".repeat(64)
+        val placeholder =
+            "[live Android location expired sha256=$digest precision=approximate]"
+        val before = requireNotNull(ledger.record(callId))
+        val exact = liveOnlyObservationFrame(
+            callId = callId,
+            toolName = "device_location",
+            details = buildJsonObject {
+                put("liveOnly", true)
+                put("dataClass", "location")
+                put("contentSha256", digest)
+                put("precision", "approximate")
+            },
+            placeholder = placeholder,
+        )
+
+        val unredacted = liveOnlyObservationFrame(
+            callId = callId,
+            toolName = "device_location",
+            details = buildJsonObject {
+                put("liveOnly", true)
+                put("dataClass", "location")
+                put("contentSha256", digest)
+                put("precision", "approximate")
+            },
+            placeholder = "{\"ok\":true,\"data\":{\"latitude\":39.9}}",
+        )
+        val rejected = receive(unredacted, "location-live-unredacted")
+        assertTrue(rejected.single() is ReceiverFailure)
+        assertTrue(rejected.none { it is AckReady })
+        assertEquals(0L, requireNotNull(store.read(TASK_ID)).throughSequence)
+
+        val accepted = receive(exact, "location-live-placeholder")
+        assertTrue(accepted.last() is AckReady)
+        assertEquals(1L, requireNotNull(store.read(TASK_ID)).throughSequence)
+        val record = requireNotNull(ledger.record(callId))
+        assertEquals(before, record)
+        assertFalse(record.operation.deliveryState == AttentionDeliveryState.PI_DELIVERED.name)
+        assertTrue(requireNotNull(store.read(TASK_ID)).rawEvents.getValue(1).event.toString()
+            .contains(placeholder))
+    }
+
+    @Test
+    fun `live Location observation is validated without an Attention operation`() {
+        val callId = callId(92)
+        val digest = "8".repeat(64)
+        val details = buildJsonObject {
+            put("liveOnly", true)
+            put("dataClass", "location")
+            put("contentSha256", digest)
+            put("precision", "precise")
+        }
+        val placeholder = "[live Android location expired sha256=$digest precision=precise]"
+
+        val raw = receive(
+            liveOnlyObservationFrame(
+                callId,
+                "device_location",
+                details,
+                "{\"ok\":true,\"data\":{\"latitude\":0.00001}}",
+            ),
+            "auto-location-live-unredacted",
+        )
+        assertTrue(raw.single() is ReceiverFailure)
+        assertEquals(0L, requireNotNull(store.read(TASK_ID)).throughSequence)
+
+        val malformed = receive(
+            liveOnlyObservationFrame(
+                callId,
+                "device_location",
+                buildJsonObject {
+                    details.forEach { (key, value) -> put(key, value) }
+                    put("raw", true)
+                },
+                placeholder,
+            ),
+            "auto-location-live-malformed",
+        )
+        assertTrue(malformed.single() is ReceiverFailure)
+        assertEquals(0L, requireNotNull(store.read(TASK_ID)).throughSequence)
+
+        val exact = receive(
+            liveOnlyObservationFrame(callId, "device_location", details, placeholder),
+            "auto-location-live-placeholder",
+        )
+        assertTrue(exact.last() is AckReady)
+        assertEquals(1L, requireNotNull(store.read(TASK_ID)).throughSequence)
+        assertNull(database.momodingDao().deviceOperation(callId))
+    }
+
+    @Test
+    fun `live screen capture observation stays outside the live text verifier`() {
+        val details = buildJsonObject {
+            put("ok", true)
+            put("liveOnly", true)
+            put("source", "media_projection")
+            put("contentSha256", "9".repeat(64))
+            put("width", 1080)
+            put("height", 2400)
+            put("mimeType", "image/png")
+        }
+        val frame = buildJsonObject {
+            put("protocolVersion", 1)
+            put("kind", "pi.event")
+            put("taskId", TASK_ID)
+            put("piSessionId", PI_SESSION_ID)
+            put("piVersion", "0.80.6")
+            put("streamId", STREAM_ID)
+            put("sequence", 1)
+            put("emittedAt", "2026-07-17T02:00:00.000Z")
+            put(
+                "event",
+                buildJsonObject {
+                    put("type", "tool_execution_end")
+                    put("toolCallId", "pi-screen-1")
+                    put("toolName", "device_screen_capture")
+                    put(
+                        "result",
+                        buildJsonObject {
+                            put(
+                                "content",
+                                buildJsonArray {
+                                    add(buildJsonObject {
+                                        put("type", "text")
+                                        put("text", details.toString())
+                                    })
+                                    add(buildJsonObject {
+                                        put("type", "image")
+                                        put("data", "AA==")
+                                        put("mimeType", "image/png")
+                                    })
+                                },
+                            )
+                            put("details", details)
+                        },
+                    )
+                    put("isError", false)
+                },
+            )
+        }.toString().encodeToByteArray()
+
+        val actions = receive(frame, "live-screen-capture")
+
+        assertTrue(actions.last() is AckReady)
+        assertEquals(1L, requireNotNull(store.read(TASK_ID)).throughSequence)
+    }
+
+    @Test
     fun `exact file commit Pi proof resolves local review and clears task attention`() {
         val callId = callId(97)
         val resultPayload = fileCommitResultPayload()
@@ -1201,6 +1365,46 @@ class RoomAttentionPiDeliveryProofTest {
             put("event", event)
         }.toString().encodeToByteArray()
     }
+
+    private fun liveOnlyObservationFrame(
+        callId: String,
+        toolName: String,
+        details: JsonObject,
+        placeholder: String,
+    ): ByteArray = buildJsonObject {
+        put("protocolVersion", 1)
+        put("kind", "pi.event")
+        put("taskId", TASK_ID)
+        put("piSessionId", PI_SESSION_ID)
+        put("piVersion", "0.80.6")
+        put("streamId", STREAM_ID)
+        put("sequence", 1)
+        put("emittedAt", "2026-07-17T02:00:00.000Z")
+        put(
+            "event",
+            buildJsonObject {
+                put("type", "tool_execution_end")
+                put("toolCallId", "pi-$callId")
+                put("toolName", toolName)
+                put(
+                    "result",
+                    buildJsonObject {
+                        put(
+                            "content",
+                            buildJsonArray {
+                                add(buildJsonObject {
+                                    put("type", "text")
+                                    put("text", placeholder)
+                                })
+                            },
+                        )
+                        put("details", details)
+                    },
+                )
+                put("isError", false)
+            },
+        )
+    }.toString().encodeToByteArray()
 
     private fun toolResultMessage(
         callId: String,
