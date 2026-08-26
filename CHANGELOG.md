@@ -5,6 +5,37 @@ All notable public changes will be documented here. The project follows
 
 ## Unreleased
 
+## 0.1.0-alpha.6 - 2026-08-26
+
+### Added
+
+- An authoritative Android task-environment snapshot for local time, time zone, workspace,
+  Provider, Skills, and the currently available Tool surface without a routine capability probe.
+- Fast offline detection for OpenRouter chat requests with a clear retryable failure instead of
+  waiting for the normal network timeout when Android is definitely offline.
+
+### Changed
+
+- Momoding now follows the user's latest language more consistently across answers, Ask User,
+  approval decisions, permission recovery, and refusal explanations.
+- Android-generated approval prompts use compact localized presentation while retaining the exact
+  event, schedule, calendar, and clipboard-length facts needed for an informed decision.
+- Task timelines now present exact capability recovery, retries, pre-output stops, declined actions,
+  and empty model responses with compact state-aware rows instead of contradictory failure cards.
+- The mobile Agent prompt now favors the narrow task-specific Tool, avoids routine
+  `device_capabilities_get` calls, and hands protected actions directly to Android's existing
+  approval surface.
+
+### Security
+
+- Capability recovery and declined-action projection require exact Tool, action, capability,
+  argument, and failure provenance; malformed or mismatched outcomes remain visible and fail closed.
+- Clipboard and location text remain live-only for the current Provider turn, with only bounded
+  digest placeholders entering durable task state.
+- This release adds no Android permissions and does not change the three approval modes' authority;
+  Android still owns OS permissions, protected side effects, verification, Stop, and late-result
+  fencing.
+
 ## 0.1.0-alpha.5 - 2026-08-13
 
 ### Added
