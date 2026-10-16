@@ -6047,6 +6047,7 @@ class ChatViewModel(
         if (isDraft) {
             ChatViewModelStore.rename(sessionId, session.id)
             app.momoding.home.MainChat.onPromoted(context, sessionId, session.id) // momoding: pin the main chat
+            app.momoding.chat.SessionAddenda.rebind(sessionId, session.id) // momoding: turn-limited prompt addenda follow the id
             // Bring every disk/shell resource that was opened with the draft
             // id over to the real id *before* agent tools start running against
             // the persisted session — otherwise the first tool call (e.g.
@@ -9016,6 +9017,7 @@ class ChatViewModel(
                     // its prefilled calls: they run as this loop's first turn.
                     prefill = queued.flatMap { it.prefill },
                 )
+                momodingAfterTurn() // momoding: queued prompts complete turns too
             } catch (e: CancellationException) {
                 Log.d(TAG, "Agent loop (queued-drain) cancelled")
                 // Cancel mid-drain: cancelStream() will check _promptQueue
@@ -9274,6 +9276,7 @@ class ChatViewModel(
                 bodyPartsJson = pasted?.partsJson,
             )
             val persistedUser = chatRepository.appendMessage(activeSessionId, "user", userPartsJson)
+            app.momoding.chat.RoutineWakes.claim(activeSessionId, persistedUser.id) // momoding: a routine's prompt is marked as such on its row
 
             val userMsg = ChatMessage(
                 id = persistedUser.id,
@@ -9424,6 +9427,7 @@ class ChatViewModel(
                             prefill = prefill,
                         )
                         AppLogger.info(TAG_STREAM, "send runAgentLoop RETURN normal")
+                        momodingAfterTurn() // momoding
                         // Drain any prompts the user queued while this loop was running.
                         // Skipped on cancel: cancelled job won't reach here.
                         drainQueuedPrompts(provider, systemPrompt, fallbackProviders, activeFallbackStrategy)
@@ -9782,6 +9786,7 @@ class ChatViewModel(
                             fallbackStrategy = activeFallbackStrategy,
                         )
                         AppLogger.info(TAG_STREAM, "retryLast runAgentLoop RETURN normal")
+                        momodingAfterTurn() // momoding
                         drainQueuedPrompts(provider, systemPrompt, fallbackProviders, activeFallbackStrategy)
                         AppLogger.info(TAG_STREAM, "retryLast drainQueuedPrompts RETURN")
                     } catch (e: CancellationException) {
@@ -15341,7 +15346,15 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
             // momoding: the ladder for apps without an API and whether the screen is usable now —
             // it changes with the switch and the permissions, so it stays below the cached prefix
             append("\n\n").append(app.momoding.hands.Hands.promptParagraph(context))
+            // momoding: turn-limited addenda for this session (a routine's turn, …)
+            app.momoding.chat.SessionAddenda.forPrompt(realSessionId.ifEmpty { sessionId })
+                ?.let { append("\n\n").append(it) }
         }
+    }
+
+    /** momoding: after every completed turn — the turn budget of prompt addenda counts down. */
+    private fun momodingAfterTurn() {
+        app.momoding.chat.SessionAddenda.onTurnFinished(realSessionId.ifEmpty { sessionId })
     }
 
     // ─── Legacy tool execution methods (kept for compatibility) ───────────
@@ -16862,6 +16875,7 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
                             fallbackStrategy = activeFallbackStrategy,
                         )
                         AppLogger.info(TAG_STREAM, "resume runAgentLoop RETURN normal")
+                        momodingAfterTurn() // momoding
                         drainQueuedPrompts(provider, systemPrompt, fallbackProviders, activeFallbackStrategy)
                         AppLogger.info(TAG_STREAM, "resume drainQueuedPrompts RETURN")
                     } catch (e: CancellationException) {

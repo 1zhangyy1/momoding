@@ -1,5 +1,6 @@
 package com.openminis.app.scheduled
 
+import app.momoding.chat.RoutineWakes // momoding (a local `app` shadows the package root here)
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -222,6 +223,9 @@ object ScheduledAgentRunner {
                 timeoutMs = RUN_TIMEOUT_MS,
             )
         } else {
+            // momoding: the row this sends is the routine's, not the person's: the chat draws it as
+            // a quiet line and the model is told so for this one turn (RoutineWakes)
+            RoutineWakes.arm(app, sessionId, task.label)
             HeadlessChatRunner.prompt(
                 context = app,
                 sessionId = sessionId,
@@ -243,7 +247,7 @@ object ScheduledAgentRunner {
             responseText = "Error: ${t.message}",
             timedOut = false,
         )
-    }
+    }.also { if (it.status == "Error") RoutineWakes.disarm(sessionId) } // momoding: a prompt that never went out leaves no mark
 
     private suspend fun resolveSessionId(app: MinisApp, task: ScheduledTask): String? {
         return when (val mode = task.targetMode) {

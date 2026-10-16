@@ -4403,6 +4403,8 @@ fun ChatScreen(
                         ) {
                         when (item) {
                             is FlatChatItem.UserBubble -> {
+                                // momoding: a row a routine sent is one quiet line, not a bubble in the person's voice
+                                app.momoding.ui.chat.RoutineWakeRow(item.message.id.substringBefore('#')) {
                                 // User bubbles intentionally don't register
                                 // MinisTextKit shards — long-press on a user
                                 // bubble shows its own action menu (Copy /
@@ -4486,6 +4488,7 @@ fun ChatScreen(
                                     }
                                 },
                             )
+                            } // momoding: close RoutineWakeRow
                             } // close UserBubble SideEffect + UserMessageBubble block
                             is FlatChatItem.AssistantHeader -> AssistantHeader()
                             is FlatChatItem.AssistantText -> BoundsTrackedBlock(
