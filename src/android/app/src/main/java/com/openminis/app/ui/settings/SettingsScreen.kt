@@ -29,6 +29,7 @@ import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Extension
+import androidx.compose.material.icons.outlined.TouchApp // momoding
 import androidx.compose.material.icons.outlined.Feedback
 import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.Folder
@@ -82,6 +83,7 @@ fun SettingsScreen(
     onBackupClick: () -> Unit = {},
     onEnvVarsClick: () -> Unit = {},
     onSkillsClick: () -> Unit = {},
+    onHandsClick: () -> Unit = {}, // momoding: operating the phone's screen
     onTerminalClick: () -> Unit = {},
     onMemoryClick: () -> Unit = {},
     /** [T-p2-agent-settings] Settings › Agents (delegation on/off), below Memory. */
@@ -210,6 +212,14 @@ fun SettingsScreen(
                     title = stringResource(R.string.settings_skills),
                     subtitle = stringResource(R.string.settings_skills_subtitle),
                     onClick = onSkillsClick,
+                )
+                // momoding: the phone's screen as a hand — off by default
+                SettingsItem(
+                    icon = Icons.Outlined.TouchApp,
+                    iconColor = Color(0xFF2E7A12),
+                    title = stringResource(R.string.mo_hands_title),
+                    subtitle = stringResource(if (app.momoding.hands.Hands.enabled(LocalContext.current)) R.string.mo_hands_on else R.string.mo_hands_off),
+                    onClick = onHandsClick,
                 )
                 // [T-soul-md] Between Skills and Memory, as on iOS.
                 SettingsItem(

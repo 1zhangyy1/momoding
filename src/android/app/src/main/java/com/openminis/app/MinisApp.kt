@@ -726,6 +726,9 @@ class MinisApp : Application(), ImageLoaderFactory {
             )
         }
 
+        // momoding: momoding-hands — the phone's screen as a hand (screenshot → screen model → gesture)
+        NativeOffloadServer.register("momoding-hands", app.momoding.hands.HandsOffloadHandler(this))
+
         NativeOffloadServer.start(RootfsManager.getInstance(this).rootfsDir)
 
         // Initialize session activity tracker for foreground service management

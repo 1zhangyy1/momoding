@@ -576,6 +576,7 @@ fun AppNavigation(
                 onBackupClick = { navController.safeNavigate(Routes.BACKUP) },
                 onEnvVarsClick = { navController.safeNavigate(Routes.ENV_VARS) },
                 onSkillsClick = { navController.safeNavigate(Routes.SKILLS) },
+                onHandsClick = { navController.safeNavigate(app.momoding.ui.hands.ROUTE_HANDS) }, // momoding
                 onTerminalClick = { navController.safeNavigate(Routes.terminal()) },
                 onMemoryClick = { navController.safeNavigate(Routes.MEMORY) },
                 onAgentsClick = { navController.safeNavigate(Routes.AGENTS) },
@@ -1211,6 +1212,13 @@ fun AppNavigation(
             }
         }
 
+        // momoding: the phone's screen as a hand — the switch, what it needs, the screen model
+        composable(app.momoding.ui.hands.ROUTE_HANDS) {
+            app.momoding.ui.hands.HandsScreen(
+                onBack = { navController.safePopBackStack() },
+                onOpenProviders = { navController.safeNavigate(Routes.PROVIDER_LIST) },
+            )
+        }
         composable(Routes.SKILLS) {
             if (skillRepository != null) {
                 SkillsManagementScreen(

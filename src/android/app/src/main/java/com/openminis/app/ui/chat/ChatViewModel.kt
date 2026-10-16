@@ -15338,6 +15338,9 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
             append("- Current date: ").append(dateStr).append(" (").append(tzId).append(")\n")
             append("- Device language: ").append(lang).append("\n")
             append("- minis-model-use models available: ").append(modelUseCount)
+            // momoding: the ladder for apps without an API and whether the screen is usable now —
+            // it changes with the switch and the permissions, so it stays below the cached prefix
+            append("\n\n").append(app.momoding.hands.Hands.promptParagraph(context))
         }
     }
 
