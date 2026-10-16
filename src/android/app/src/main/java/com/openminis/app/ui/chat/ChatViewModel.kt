@@ -6046,6 +6046,7 @@ class ChatViewModel(
         // sessionId so re-entering the session reuses the same instance.
         if (isDraft) {
             ChatViewModelStore.rename(sessionId, session.id)
+            app.momoding.home.MainChat.onPromoted(context, sessionId, session.id) // momoding: pin the main chat
             // Bring every disk/shell resource that was opened with the draft
             // id over to the real id *before* agent tools start running against
             // the persisted session — otherwise the first tool call (e.g.

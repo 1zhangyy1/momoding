@@ -365,7 +365,6 @@ fun AppNavigation(
             com.openminis.app.crash.CrashFrequencyDetector.shouldForceHomeOnLaunch(context) ||
             com.openminis.app.diagnostics.LaunchCycleBeacon.shouldForceHomeOnLaunch()
         ) 3 else rawMode
-        val autoThresholdMs = 15L * 60 * 1000
         // [T-android-first-launch-lands-home] Read once, before the mode
         // branches: "is this device set up at all?" is the question that
         // outranks the launch preference.
@@ -388,54 +387,14 @@ fun AppNavigation(
                 "hasPendingShare=$hasPendingShare hasAnySession=$hasAnySession " +
                 "hasAnyProvider=$hasAnyProvider",
         )
+        // momoding: one Bot, one conversation. The app always opens the main chat, except on a
+        // device with nothing set up yet (Home shows the onboarding steps) and after a crash or
+        // hang loop (upstream's safety landing on Home, mode 3, is kept for those).
+        val crashSafeHome = mode == 3 && rawMode != 3
         val target: String? = when {
-            // T185: if a system share is buffered and the configured launch
-            // mode would leave us on the session list (mode 3 = Home), the
-            // ChatScreen consumer never mounts and the buffer expires —
-            // exactly the symptom from the bug report. Force a new draft
-            // chat so the share lands in a composer.
-            hasPendingShare && mode == 3 -> Routes.chat("__new__${java.util.UUID.randomUUID()}")
-            // [T-android-first-launch-lands-home] Nothing configured AND no
-            // history: land on Home whatever the mode says. Mode 2 ("always a
-            // new chat") is a real preference, but on a device with no provider
-            // it opens a composer that cannot send — and hides the onboarding
-            // steps that explain why. Once the user has either a session or a
-            // provider, their preference is honoured again.
             !hasAnySession && !hasAnyProvider -> null
-            mode == 1 -> chatRepository.dao.listSessions().firstOrNull { !it.isChild }?.let { Routes.chat(it.id) }
-            mode == 2 -> Routes.chat("__new__${java.util.UUID.randomUUID()}")
-            mode == 3 -> null
-            else -> {
-                // [T-android-first-launch-lands-home] No history → Home, not a
-                // fresh draft. Auto mode is the DEFAULT, and it used to fall
-                // through to a new chat here: a device with providers but no
-                // sessions yet opened straight into an empty composer instead
-                // of the list. "Resume what I was doing" has nothing to resume
-                // when nothing was ever done.
-                // [T-child-session-leak] "Resume what I was doing" must never
-                // land in a hidden agent child session.
-                val latest = chatRepository.dao.listSessions().firstOrNull { !it.isChild }
-                    ?: return@LaunchedEffect
-                val fresh = System.currentTimeMillis() - latest.updatedAt < autoThresholdMs
-                // [XSessionDiag] Hypothesis 1: auto mode silently RESUMES the most
-                // recently updated session, so a restored backup whose updatedAt is
-                // the iPhone's own timestamp can look "fresh" and be presented as
-                // the landing chat — the user believes they are in a new chat.
-                // Logs the exact inputs to the freshness test and where it navigated.
-                // Runs once per cold start; no measurable cost.
-                run {
-                    val now = System.currentTimeMillis()
-                    com.openminis.app.logging.AppLogger.info(
-                        "XSessionDiag",
-                        "[XSessionDiag] launch/auto: candidate=${latest.id.take(8)} " +
-                            "title=${latest.title?.take(24)} " +
-                            "updatedAt=${latest.updatedAt} now=$now " +
-                            "ageMs=${now - latest.updatedAt} thresholdMs=$autoThresholdMs " +
-                            "fresh=$fresh -> ${if (fresh) "RESUME_EXISTING" else "NEW_DRAFT"}",
-                    )
-                }
-                if (fresh) Routes.chat(latest.id) else Routes.chat("__new__${java.util.UUID.randomUUID()}")
-            }
+            crashSafeHome -> null
+            else -> Routes.chat(app.momoding.home.MainChat.resolve(context, chatRepository))
         }
         if (target != null) {
             // T314: navigate directly without the safeNavigate guard.
