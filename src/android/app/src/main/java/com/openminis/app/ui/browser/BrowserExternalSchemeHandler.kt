@@ -168,6 +168,12 @@ object BrowserExternalSchemeHandler {
         if (uri == null) return false
         val scheme = uri.scheme?.lowercase() ?: return false
         if (scheme in INTERNAL_SCHEMES) return false
+        // momoding: a link of the app's own the person tapped goes to MainActivity by name,
+        // never out through the system (another app may register the scheme)
+        if (origin == Origin.USER_INITIATED && app.momoding.deeplink.OwnScheme.isOwn(scheme)) {
+            runCatching { context.startActivity(app.momoding.deeplink.OwnScheme.intent(context, uri)) }
+            return true
+        }
 
         return when (route(scheme, origin)) {
             Route.PARSE_URI -> handleIntentScheme(context, uri.toString())

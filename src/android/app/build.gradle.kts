@@ -33,7 +33,7 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.openminis.app"
+        applicationId = "app.momoding" // momoding: own id; the Kotlin namespace stays com.openminis.app to keep upstream merges small
         minSdk = 26
         targetSdk = 35
         versionCode = 28
@@ -78,6 +78,9 @@ android {
     buildTypes {
         getByName("debug") {
             buildConfigField("boolean", "DEV_TOOLS", "true")
+            // momoding: debug builds install as app.momoding.dev, beside a release (or an older
+            // Momoding build) that holds app.momoding with another signing key
+            applicationIdSuffix = ".dev"
         }
         // `perf`: the debug variant minus android:debuggable. ART refuses to
         // AOT-compile a debuggable app (`cmd package compile -m speed`

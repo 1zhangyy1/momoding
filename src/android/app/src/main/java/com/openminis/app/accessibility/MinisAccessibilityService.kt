@@ -29,7 +29,8 @@ class MinisAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val TAG = "MinisA11y"
-        const val SERVICE_ID = "com.openminis.app/.accessibility.MinisAccessibilityService"
+        // momoding: the component lives in package app.momoding while the class keeps upstream's namespace
+        val SERVICE_ID = "${com.openminis.app.BuildConfig.APPLICATION_ID}/com.openminis.app.accessibility.MinisAccessibilityService"
         private const val EVENT_RING_CAP = 1024
 
         @Volatile

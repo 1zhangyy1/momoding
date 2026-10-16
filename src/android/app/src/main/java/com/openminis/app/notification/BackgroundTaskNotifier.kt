@@ -129,14 +129,13 @@ class BackgroundTaskNotifier(
         }
 
         val deepLink = Uri.parse("minis://session/$sessionId")
-        val launchIntent = Intent(Intent.ACTION_VIEW, deepLink).apply {
-            // FLAG_ACTIVITY_NEW_TASK because we're posting from a
-            // background scope without an Activity context.
-            // FLAG_ACTIVITY_CLEAR_TOP so MainActivity (singleTask) reuses
-            // the existing instance and routes the deep-link via
-            // onNewIntent rather than spawning a duplicate.
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        }
+        // momoding: to MainActivity by name (the manifest registers `momoding`, not `minis`).
+        // FLAG_ACTIVITY_NEW_TASK because we're posting from a background scope without an
+        // Activity context; FLAG_ACTIVITY_CLEAR_TOP so MainActivity (singleTask) reuses the
+        // existing instance and routes the deep-link via onNewIntent.
+        val launchIntent = app.momoding.deeplink.OwnScheme.intent(
+            context, deepLink, Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP,
+        )
         val pendingIntent = PendingIntent.getActivity(
             context,
             sessionId.hashCode(),

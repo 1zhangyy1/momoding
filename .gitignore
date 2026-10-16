@@ -146,3 +146,6 @@ deps/lame-3.100/**/.deps/
 # not a vendored binary — same treatment as the iOS Rclone.xcframework it is
 # built alongside (deps/build_rclone_ios.sh).
 src/android/app/libs/rclone.aar
+
+# momoding: local build-time values, copied from the .example
+src/android/app/provider-customization.properties

@@ -98,7 +98,8 @@ sealed class DeepLinkAction {
 
 object DeepLinkHandler {
     fun parse(uri: Uri?): DeepLinkAction {
-        if (uri == null || uri.scheme != "minis") return DeepLinkAction.Unknown
+        // momoding: the system knows the app as `momoding://`, the app itself says `minis://`
+        if (uri == null || !app.momoding.deeplink.OwnScheme.isOwn(uri.scheme)) return DeepLinkAction.Unknown
         val host = uri.host ?: return DeepLinkAction.Unknown
         val path = uri.path.orEmpty()
 

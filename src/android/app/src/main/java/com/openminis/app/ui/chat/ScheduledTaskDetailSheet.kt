@@ -654,9 +654,7 @@ private fun copy(context: Context, text: String) {
 
 /** Same deep link the completion notification uses. */
 private fun openSession(context: Context, sessionId: String) {
-    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("minis://session/$sessionId")).apply {
-        setPackage(context.packageName)
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    }
+    // momoding: to MainActivity by name (the manifest registers `momoding`, not `minis`)
+    val intent = app.momoding.deeplink.OwnScheme.intent(context, Uri.parse("minis://session/$sessionId"))
     runCatching { context.startActivity(intent) }
 }

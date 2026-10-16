@@ -1527,11 +1527,9 @@ private fun VoiceEngineUnavailableNotice(
             Spacer(modifier = Modifier.width(8.dp))
             NoticeActionButton(stringResource(R.string.voice_panel_no_engine_open_providers)) {
                 runCatching {
+                    // momoding: to MainActivity by name (the manifest registers `momoding`, not `minis`)
                     ctx.startActivity(
-                        android.content.Intent(
-                            android.content.Intent.ACTION_VIEW,
-                            android.net.Uri.parse("minis://settings/providers"),
-                        ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                        app.momoding.deeplink.OwnScheme.intent(ctx, android.net.Uri.parse("minis://settings/providers")),
                     )
                 }
             }

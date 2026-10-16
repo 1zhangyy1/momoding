@@ -229,7 +229,8 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="minis" />
+                <!-- momoding: registered as `momoding` so OpenMinis on the same phone never shares links -->
+                <data android:scheme="momoding" />
             </intent-filter>
         </activity>
 

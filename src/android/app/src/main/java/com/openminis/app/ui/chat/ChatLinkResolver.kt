@@ -39,7 +39,7 @@ object ChatLinkResolver {
 
         // 1. minis:// deep links — only branch out when the URL maps to a known action,
         //    otherwise fall through to sandbox-path handling.
-        if (scheme == "minis") {
+        if (app.momoding.deeplink.OwnScheme.isOwn(scheme)) { // momoding: `momoding://` reads the same as `minis://`
             val action = DeepLinkHandler.parse(uri)
             if (action !is DeepLinkAction.Unknown) {
                 return ChatLinkAction.DeepLink(action)
@@ -235,10 +235,8 @@ object ChatLinkResolver {
 
     /** Fire a system intent so MainActivity's BROWSABLE filter picks the deep link up. */
     fun dispatchDeepLink(context: Context, originalUrl: String) {
-        val intent = Intent(Intent.ACTION_VIEW, originalUrl.toUri()).apply {
-            setPackage(context.packageName)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
+        // momoding: to MainActivity by name; the manifest registers `momoding`, not `minis`
+        val intent = app.momoding.deeplink.OwnScheme.intent(context, originalUrl.toUri())
         runCatching { context.startActivity(intent) }
     }
 }

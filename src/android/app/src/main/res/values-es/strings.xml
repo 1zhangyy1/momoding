@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Minis</string>
+    <string name="app_name">Momoding</string>
     <string name="new_chat">Nuevo chat</string>
     <string name="settings">Ajustes</string>
     <string name="providers">Proveedores</string>

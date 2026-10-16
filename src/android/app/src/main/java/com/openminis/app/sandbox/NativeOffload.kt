@@ -1,6 +1,8 @@
 package com.openminis.app.sandbox
 
 import android.net.LocalServerSocket
+import app.momoding.sandbox.OffloadSocketName // momoding: per-app socket name
+import com.openminis.app.BuildConfig // momoding: per-app socket name
 import android.net.LocalSocket
 import android.util.Log
 import java.io.DataInputStream
@@ -52,7 +54,8 @@ fun interface NativeOffloadHandler {
 
 object NativeOffloadServer {
     private const val TAG = "NativeOffloadServer"
-    private const val SOCKET_NAME = "native-offload"
+    // momoding: not upstream's bare name, so Momoding and OpenMinis can run side by side
+    private val SOCKET_NAME = OffloadSocketName.forApp(BuildConfig.APPLICATION_ID)
     private const val MAGIC_REQ = 0x46464F4E  // 'N' 'O' 'F' 'F' little-endian
     private const val MAGIC_RSP = 0x52464F4E  // 'N' 'O' 'F' 'R'
     private const val VERSION = 1
@@ -72,7 +75,9 @@ object NativeOffloadServer {
     /** Run the opportunistic sweep every N replies, not on every single one. */
     private const val SWEEP_EVERY_N_REPLIES = 50L
 
-    const val socketName: String = SOCKET_NAME
+    // momoding: the name proot is told is the one actually bound (may be the per-process fallback)
+    @Volatile private var boundName: String = SOCKET_NAME
+    val socketName: String get() = boundName
 
     private val handlers = ConcurrentHashMap<String, NativeOffloadHandler>()
     private val counter = AtomicLong(0)
@@ -114,7 +119,7 @@ object NativeOffloadServer {
         acceptThread = thread(name = "native-offload-accept", isDaemon = true) {
             runAcceptLoop(s)
         }
-        Log.i(TAG, "listening on abstract socket '$SOCKET_NAME' " +
+        Log.i(TAG, "listening on abstract socket '$boundName' " + // momoding: the bound name
             "handlers=${handlers.keys.sorted()} tmpDir=${rootfsTmpDir?.absolutePath}")
 
         // [T-android-offload-tmp-leak] Sweep reply files orphaned by earlier
@@ -184,6 +189,17 @@ object NativeOffloadServer {
             } catch (e: java.io.IOException) {
                 Log.w(TAG, "bind attempt ${attempt + 1}/${delays.size} failed: ${e.message}")
             }
+        }
+        // momoding: our own name is still held (a previous process not reaped yet); bind a
+        // per-process name and tell proot that one instead of failing at startup
+        val fallback = OffloadSocketName.forProcess(BuildConfig.APPLICATION_ID, android.os.Process.myPid())
+        try {
+            val s = LocalServerSocket(fallback)
+            boundName = fallback
+            Log.w(TAG, "'$SOCKET_NAME' is still held; listening on '$fallback' instead")
+            return s
+        } catch (e: java.io.IOException) {
+            Log.w(TAG, "fallback bind '$fallback' failed: ${e.message}")
         }
         return null
     }

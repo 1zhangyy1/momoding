@@ -447,9 +447,8 @@ object ScheduledAgentRunner {
         preview: String,
     ) {
         val deepLink = Uri.parse("minis://session/$sessionId")
-        val openIntent = Intent(Intent.ACTION_VIEW, deepLink).apply {
-            setPackage(context.packageName)
-        }
+        // momoding: to MainActivity by name (the manifest registers `momoding`, not `minis`)
+        val openIntent = app.momoding.deeplink.OwnScheme.intent(context, deepLink, flags = 0)
         val notificationId = task.id.hashCode() and 0x7FFFFFFF
         val contentPi = PendingIntent.getActivity(
             context,

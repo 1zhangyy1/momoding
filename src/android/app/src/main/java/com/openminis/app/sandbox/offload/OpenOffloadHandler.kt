@@ -54,6 +54,9 @@ class OpenOffloadHandler(private val context: Context) : NativeOffloadHandler {
                     // intent, so let the system-wide chooser apply.
                     selector = null
                 }
+            } else if (app.momoding.deeplink.OwnScheme.isOwn(Uri.parse(url).scheme)) {
+                // momoding: the app's own links go to MainActivity by name
+                app.momoding.deeplink.OwnScheme.intent(context, Uri.parse(url))
             } else {
                 Intent(Intent.ACTION_VIEW, Uri.parse(url))
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
