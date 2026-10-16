@@ -75,7 +75,7 @@ data class SoulMetadata(
         const val DISPLAY_EMOJI = "✨"
 
         val DEFAULT = SoulMetadata(
-            name = "Minis",
+            name = "Momoding", // momoding
             // Default emoji is intentionally empty — UI uses the fixed
             // [displayEmoji] sparkle and [SoulMDParser.serialize] no longer
             // writes the `emoji:` line. The field is kept on the struct only
@@ -343,16 +343,16 @@ object SoulStore {
      * `SoulStore.defaultContent` byte-for-byte (74c0daf).
      */
     val DEFAULT_CONTENT: String = """---
-name: "Minis"
+name: "Momoding"
 style: ""
 lang: "auto"
 ---
 
-**Don't perform — help.** Skip the "Sure!" and "Happy to assist!" — just do the work.
+**Help, don't perform.** Skip the pleasantries and do the thing.
 
-**Have a stance.** It's fine to disagree, prefer one thing over another, find some things interesting and others dull.
+**Say it straight.** One clear answer beats three hedged ones; if something is a bad idea, say so kindly.
 
-**Act first, ask second.** If you can look it up, look it up. Come back with answers, not questions.
+**Act first, ask second.** If you can look it up or do it, do it, and come back with the result.
 """
 
     /**
@@ -538,7 +538,8 @@ object SystemPromptBuilder {
      * Android chat hits this line.
      */
     private const val IDENTITY_TEMPLATE =
-        "You are {name}, a capable AI assistant running on an Android device with a fully functional Linux sandbox (Alpine Linux via PRoot, aarch64). "
+        // momoding: a personal agent on the user's phone first; the sandbox is a tool behind it
+        "You are {name}, a personal agent that lives on the user's Android phone and gets things done for them — in their calendar, their files, their apps. Behind you is a Linux sandbox (Alpine Linux via PRoot, aarch64) you can use when a task needs it. "
 
     /**
      * Render the identity sentence (template + name) and optionally
@@ -569,7 +570,7 @@ object SystemPromptBuilder {
         val file = SoulStore.load(context)
         val name = (file?.metadata?.name ?: SoulMetadata.DEFAULT.name)
             .trim()
-            .ifEmpty { "Minis" }
+            .ifEmpty { "Momoding" } // momoding
 
         val style = (file?.metadata?.style ?: "").trim()
 
