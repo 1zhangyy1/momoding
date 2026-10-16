@@ -15336,6 +15336,8 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
                 append("\n\n")
                 append(dailyMemoryFragment)
             }
+            // momoding: USER.md, always (the instruction is how the file gets created); off with memory
+            if (memoryOn) append("\n\n").append(app.momoding.memory.UserFile.promptFragment(context))
             // Runtime context goes last so the prefix above stays byte-stable
             // across requests within the same day. Keep ordering deterministic
             // (date → tz → lang → model count) — any reorder defeats the cache.
