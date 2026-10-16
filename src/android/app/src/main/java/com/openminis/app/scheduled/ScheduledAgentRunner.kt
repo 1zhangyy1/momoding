@@ -1,6 +1,7 @@
 package com.openminis.app.scheduled
 
 import app.momoding.chat.NotifyDecision
+import app.momoding.chat.RoutineAttention
 import app.momoding.chat.RoutineWakes // momoding (a local `app` shadows the package root here)
 import android.app.PendingIntent
 import android.content.Context
@@ -133,6 +134,8 @@ object ScheduledAgentRunner {
             val decision = NotifyDecision.decide(result.responseText, failed = !ok)
             ScheduledTaskManager(app).markFired(task.id, sessionId, decision.body, ok = ok, firedAt = firedAt)
             if (decision.notify) postCompletionNotification(app, task, sessionId, decision.body)
+            // momoding: a routine nobody reads pauses itself (replaces the notice above when it does)
+            if (scheduledFire) RoutineAttention.afterScheduledFire(app, task, sessionId, app.isAppForeground())
             // [T-android-scheduled-triggers] Tasks waiting on this one run
             // once its whole schedule is over.
             if (scheduledFire) ScheduledCompletionTriggers.onScheduledRunFinished(app, task.id, result.responseText)
@@ -152,6 +155,8 @@ object ScheduledAgentRunner {
             val decision = NotifyDecision.decide(result.responseText, failed = !ok)
             ScheduledTaskManager(app).markFired(task.id, sessionId, decision.body, ok = ok, firedAt = firedAt)
             if (decision.notify) postCompletionNotification(app, task, sessionId, decision.body)
+            // momoding: a routine nobody reads pauses itself (replaces the notice above when it does)
+            if (scheduledFire) RoutineAttention.afterScheduledFire(app, task, sessionId, app.isAppForeground())
             // [T-android-scheduled-triggers] Tasks waiting on this one run
             // once its whole schedule is over.
             if (scheduledFire) ScheduledCompletionTriggers.onScheduledRunFinished(app, task.id, result.responseText)

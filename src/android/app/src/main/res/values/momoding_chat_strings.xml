@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="mo_routine_wake_caption">Routine · %1$s · %2$s</string>
+    <string name="mo_routine_paused_title">Paused: %1$s</string>
+    <string name="mo_routine_paused_body">Its last %2$d results went unread, so it stopped to save usage. Tell me to resume anytime.</string>
 </resources>

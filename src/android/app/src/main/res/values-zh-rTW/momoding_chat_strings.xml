@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="mo_routine_wake_caption">例程 · %1$s · %2$s</string>
+    <string name="mo_routine_paused_title">已暫停：%1$s</string>
+    <string name="mo_routine_paused_body">最近 %2$d 次結果都沒人看，先停下來省點用量。想繼續，跟我說一聲。</string>
 </resources>

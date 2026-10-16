@@ -534,6 +534,8 @@ class MinisApp : Application(), ImageLoaderFactory {
             object : androidx.lifecycle.DefaultLifecycleObserver {
                 override fun onStart(owner: androidx.lifecycle.LifecycleOwner) {
                     skillRepository.requestReload("foreground")
+                    // momoding: the person is here; routines' results count as seen
+                    app.momoding.chat.RoutineAttention.onSeen(this@MinisApp)
                 }
             }
         )
