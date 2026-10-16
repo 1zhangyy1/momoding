@@ -152,10 +152,8 @@ private fun RiskApprovalCard(request: RiskRequest) {
                 shape = CircleShape,
                 colors = ButtonDefaults.buttonColors(containerColor = Tones.action, contentColor = Color.White),
             ) { Text(stringResource(R.string.mo_risk_allow_once), fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
-            if (request.canSession) {
-                Spacer(Modifier.height(8.dp))
-                GreyPill(stringResource(R.string.mo_risk_allow_session)) { RiskGate.decide(request.id, RiskDecision.ALLOW_SESSION) }
-            }
+            // momoding: three choices like Grok Bot (once / always / deny); "this chat" is dropped —
+            // with one main conversation it means "always" in practice and only adds a decision.
             if (request.canAlways) {
                 val target = RiskText.targetLabel(context, request) ?: ""
                 val remembered = stringResource(R.string.mo_risk_remembered_toast)

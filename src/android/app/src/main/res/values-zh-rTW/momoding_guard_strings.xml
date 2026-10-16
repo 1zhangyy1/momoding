@@ -21,8 +21,8 @@
     <string name="mo_risk_desc_device">「%1$s」是你帳號下的另一台裝置，想在這支手機上 %2$s。具體內容見下方。選「始終」後，那台裝置以後在這裡做這類事不再詢問；可在「權限」裡收回。</string>
     <string name="mo_risk_desc_on_computer">在電腦「%1$s」上，不是在這台手機上。</string>
     <string name="mo_risk_desc_screen">%1$s 想在 %3$s 裡點「%2$s」。</string>
-    <string name="mo_risk_desc_shell_destructive">%1$s 想運行一條會刪除 %2$s 裡文件的命令。</string>
-    <string name="mo_risk_desc_shell_destructive_generic">%1$s 想運行一條會刪除文件的命令。</string>
+    <string name="mo_risk_desc_shell_destructive">%1$s 想運行一條會刪除或改動你%2$s裡內容的命令。</string>
+    <string name="mo_risk_desc_shell_destructive_generic">%1$s 想運行一條會刪除或改動內容的命令。</string>
     <string name="mo_risk_desc_shell_money">%1$s 想運行一條像是在 %2$s 付款的命令。</string>
     <string name="mo_risk_desc_shell_money_generic">%1$s 想運行一條像是付款的命令。</string>
     <string name="mo_risk_desc_shell_outbound">%1$s 想運行一條會向 %2$s 發送內容的命令。</string>

@@ -21,8 +21,8 @@
     <string name="mo_risk_desc_device">“%1$s”, another device on your account, wants to %2$s on this phone. What exactly is shown below. “Always” lets that device do such things here without asking; take it back under Permissions.</string>
     <string name="mo_risk_desc_on_computer">On the computer “%1$s”, not on this phone.</string>
     <string name="mo_risk_desc_screen">%1$s wants to tap “%2$s” in %3$s.</string>
-    <string name="mo_risk_desc_shell_destructive">%1$s wants to run a command that deletes files in %2$s.</string>
-    <string name="mo_risk_desc_shell_destructive_generic">%1$s wants to run a command that deletes files.</string>
+    <string name="mo_risk_desc_shell_destructive">%1$s wants to run a command that deletes or changes things in your %2$s.</string>
+    <string name="mo_risk_desc_shell_destructive_generic">%1$s wants to run a command that deletes or changes things.</string>
     <string name="mo_risk_desc_shell_money">%1$s wants to run a command that looks like a payment on %2$s.</string>
     <string name="mo_risk_desc_shell_money_generic">%1$s wants to run a command that looks like a payment.</string>
     <string name="mo_risk_desc_shell_outbound">%1$s wants to run a command that sends to %2$s.</string>
