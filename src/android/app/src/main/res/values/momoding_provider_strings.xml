@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mo_add_provider_cn_header">Popular in China</string>
+    <string name="mo_add_provider_cn_footer">Fills in the address for you; paste the API key from the provider\'s console.</string>
+</resources>

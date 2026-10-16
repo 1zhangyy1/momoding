@@ -102,6 +102,8 @@ fun AddProviderScreen(
     var selectedVoiceTemplate by remember {
         mutableStateOf<com.openminis.app.data.model.VoiceProviderTemplate?>(null)
     }
+    // momoding: non-null when entered from a "国内常用" chat template row (same idea as voice templates)
+    var selectedChatTemplate by remember { mutableStateOf<app.momoding.providers.ChatProviderTemplate?>(null) }
 
     // Unified back handler: reuse each step's onBack so predictive-back gesture
     // and the top-bar arrow behave identically (go back to prior step, not exit).
@@ -115,10 +117,11 @@ fun AddProviderScreen(
             AddProviderStep.CONFIGURE -> {
                 // Voice-template entry skipped the credential step entirely —
                 // back returns straight to the type/template list.
-                if (selectedVoiceTemplate != null) {
+                if (selectedVoiceTemplate != null || selectedChatTemplate != null) {
                     step = AddProviderStep.CHOOSE_TYPE
                     selectedType = null
                     selectedVoiceTemplate = null
+                    selectedChatTemplate = null
                 } else {
                     val creds = availableCredentials(selectedType!!)
                     if (creds.size == 1) {
@@ -158,6 +161,12 @@ fun AddProviderScreen(
                 selectedCredential = ProviderCredential.apiKey
                 step = AddProviderStep.CONFIGURE
             },
+            onSelectChatTemplate = { template ->
+                selectedChatTemplate = template
+                selectedType = ProviderType.openAI
+                selectedCredential = ProviderCredential.apiKey
+                step = AddProviderStep.CONFIGURE
+            },
         )
         AddProviderStep.CHOOSE_CREDENTIAL -> ChooseCredentialScreen(
             providerType = selectedType!!,
@@ -172,6 +181,7 @@ fun AddProviderScreen(
             credentialType = selectedCredential!!,
             providerRepository = providerRepository,
             voiceTemplate = selectedVoiceTemplate,
+            chatTemplate = selectedChatTemplate,
             onBack = handleBack,
             onSaved = onSaved,
         )
@@ -251,6 +261,7 @@ private fun ChooseProviderScreen(
     onBack: () -> Unit,
     onSelect: (ProviderType) -> Unit,
     onSelectVoiceTemplate: (com.openminis.app.data.model.VoiceProviderTemplate) -> Unit = {},
+    onSelectChatTemplate: (app.momoding.providers.ChatProviderTemplate) -> Unit = {},
 ) {
     SettingsScaffold(
         title = stringResource(R.string.provider_list_add_provider),
@@ -271,6 +282,25 @@ private fun ChooseProviderScreen(
         // unofficial status, and the disclaimer dialog is the gate that
         // actually matters, since it stands between the user and the first
         // request.
+        // momoding: the services most of our users already have a key for come first, prefilled
+        val chatTemplates = app.momoding.providers.ChatProviderTemplates.all
+        SettingsSection(
+            header = stringResource(R.string.mo_add_provider_cn_header),
+            footer = stringResource(R.string.mo_add_provider_cn_footer),
+        ) {
+            val (icon, iconColor) = providerIcon(ProviderType.openAI)
+            chatTemplates.forEachIndexed { index, template ->
+                SettingsRow(
+                    title = template.name,
+                    subtitle = template.baseURL.removePrefix("https://"),
+                    icon = icon,
+                    iconColor = iconColor,
+                    onClick = { onSelectChatTemplate(template) },
+                    showDivider = index < chatTemplates.size - 1,
+                )
+            }
+        }
+
         val context = LocalContext.current
         val offeredTypes = providerDisplayOrder + ProviderType.githubCopilot
         SettingsSection(
@@ -436,6 +466,7 @@ private fun ConfigureProviderScreen(
     credentialType: ProviderCredential,
     providerRepository: ProviderRepository,
     voiceTemplate: com.openminis.app.data.model.VoiceProviderTemplate? = null,
+    chatTemplate: app.momoding.providers.ChatProviderTemplate? = null, // momoding
     onBack: () -> Unit,
     onSaved: () -> Unit,
 ) {
@@ -443,7 +474,7 @@ private fun ConfigureProviderScreen(
     // A voice template preseeds its vendor name instead of the protocol name.
     val config by providerRepository.config.collectAsState()
     val defaultLabel = remember(config) {
-        val baseName = voiceTemplate?.name ?: providerType.displayName
+        val baseName = voiceTemplate?.name ?: chatTemplate?.name ?: providerType.displayName
         val existingLabels = config.instances.map { it.label }.toSet()
         if (baseName !in existingLabels) baseName
         else {
@@ -471,7 +502,7 @@ private fun ConfigureProviderScreen(
         if (!labelEdited) label = defaultLabel
     }
     var apiKey by remember { mutableStateOf("") }
-    var customBaseURL by remember { mutableStateOf(voiceTemplate?.baseURL ?: "") }
+    var customBaseURL by remember { mutableStateOf(voiceTemplate?.baseURL ?: chatTemplate?.baseURL ?: "") }
 
     SettingsScaffold(
         title = stringResource(R.string.add_provider_configure_provider, providerType.displayName),
@@ -506,7 +537,7 @@ private fun ConfigureProviderScreen(
                 customBaseURL = customBaseURL,
                 onCustomBaseURLChange = { customBaseURL = it },
                 providerRepository = providerRepository,
-                initialAppendV1 = voiceTemplate?.appendV1,
+                initialAppendV1 = voiceTemplate?.appendV1 ?: chatTemplate?.appendV1,
                 onSaved = onSaved,
             )
             ProviderCredential.oauth -> OAuthConfigSection(
