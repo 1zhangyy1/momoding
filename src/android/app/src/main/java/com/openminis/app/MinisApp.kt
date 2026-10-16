@@ -796,6 +796,11 @@ class MinisApp : Application(), ImageLoaderFactory {
         com.openminis.app.config.confirm.ConfigConfirmationGate.cancelNotification = {
             configConfirmNotifier.cancel(it)
         }
+        // momoding: remembered approvals + the approval gate's background notification
+        app.momoding.guard.Grants.init(this)
+        val riskNotifier = app.momoding.guard.RiskApprovalNotifier(this, ::isAppForeground)
+        app.momoding.guard.RiskGate.backgroundNotifier = { riskNotifier.notifyIfBackgrounded(it) }
+        app.momoding.guard.RiskGate.cancelNotification = { riskNotifier.cancel(it) }
 
         // Track foreground state via ActivityLifecycleCallbacks. Counting
         // started/stopped balances out around configuration changes (the
@@ -875,6 +880,7 @@ class MinisApp : Application(), ImageLoaderFactory {
                     // while a config-confirm dialog may still be showing — nudge
                     // them so they can come back before the 120s timeout.
                     com.openminis.app.config.confirm.ConfigConfirmationGate.notifyPending()
+                    app.momoding.guard.RiskGate.notifyPending() // momoding
                 }
             }
             override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}

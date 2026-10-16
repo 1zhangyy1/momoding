@@ -141,6 +141,7 @@ class ChatRepository(internal val dao: ChatDao) {
     suspend fun deleteSessionOnly(id: String) {
         dao.deleteMessages(id)
         dao.deleteSession(id)
+        app.momoding.guard.Grants.clearSession(id) // momoding: "allow for this chat" ends with the chat
     }
 
     // ─── Session groups ("folders") ────────────────────────────────────────

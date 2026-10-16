@@ -106,6 +106,9 @@ fun OffloadPermissionScreen(
             )
         }
 
+        // momoding: the approvals the user chose to remember ("Always allow"), revocable here
+        app.momoding.ui.guard.GrantsSection()
+
         autoCategories.forEach { (category, tools) ->
             SettingsSection(header = stringResource(categoryHeaderRes(category))) {
                 tools.forEachIndexed { idx, tool ->

@@ -7627,6 +7627,7 @@ class ChatViewModel(
     fun clearChat() {
         if (_isStreaming.value) cancelStream()
         val sid = activeSessionId
+        app.momoding.guard.Grants.clearSession(sid) // momoding: "allow for this chat" ends with the chat
         // T-streaming-side-channel: ensure no stale stream delta survives a
         // session wipe; the messages list is about to be cleared, so any
         // pending key would be orphaned.
@@ -14191,6 +14192,17 @@ class ChatViewModel(
                 return ToolExecutionResult("Error: 'command' is required", false, toolTitle = toolTitle)
             }
 
+            // momoding: delete / change / send / pay stop for the user's yes; installs run with a notice
+            var approvalNotice: String? = null
+            when (val gate = app.momoding.guard.RiskGate.checkShell(activeSessionId, command)) {
+                is app.momoding.guard.GateOutcome.Denied -> {
+                    val idx = toolBlocks.indexOfFirst { it.id == toolId }
+                    if (idx >= 0) toolBlocks[idx] = toolBlocks[idx].copy(content = "")
+                    return ToolExecutionResult(gate.message, false, toolTitle = toolTitle)
+                }
+                is app.momoding.guard.GateOutcome.Allowed -> approvalNotice = gate.notice
+            }
+
             // [T-android-overlay-finalize item 1] Removed the
             // shell-specific status hack ("shell: $toolTitle"). Since the
             // dispatch loop (~5003) now surfaces `tool_title` in the overlay
@@ -14354,7 +14366,7 @@ class ChatViewModel(
             val withReminder = result.queueNote?.let { "$withBashReminder\n\n$it" } ?: withBashReminder
 
             ToolExecutionResult(
-                output = withReminder,
+                output = approvalNotice?.let { "$withReminder\n\n$it" } ?: withReminder, // momoding: install / remembered-approval notice
                 success = result.exitCode == 0,
                 toolTitle = toolTitle,
                 timedOut = timedOut,
@@ -15169,8 +15181,10 @@ Memory system (currently DISABLED):
         // place for finding files and searching their contents, and steers the
         // model to rg (not in the default rootfs, hence the install-once step).
         // Mirrors iOS AIChatViewModel.baseSystemPrompt.
-        // momoding: the person-first rules replace upstream's "use shell commands proactively" opener
-        val base = identitySection + app.momoding.prompt.MomodingRules.TEXT + """Available tools:
+        // momoding: the person-first rules and how approvals work replace upstream's
+        // "use shell commands proactively" opener; both are static, inside the cached prefix
+        val base = identitySection + app.momoding.prompt.MomodingRules.TEXT +
+            app.momoding.guard.RiskPolicy.promptParagraph() + "\n\n" + """Available tools:
 - shell_execute: Run any shell command. Each invocation is an isolated process with stdout/stderr captured. Prefer this for most tasks — it is a real Linux environment with persistent filesystem. Common tools (python3, pip, curl, wget, git, ssh, etc.) can be installed via apk add; Python packages via pip install. Use `which <cmd>` to check if a tool is already installed before running apk add — many packages persist across sessions. When you need to wait before checking results (e.g. polling, waiting for a process), use the `delay` parameter instead of `sleep` in the command — delay blocks the agent flow without occupying the shell, so other concurrent tasks can use it during the wait. This avoids resource contention. Execution discipline for long-running or dispatched work: make tool calls immediately instead of describing intentions, and keep working until the task is complete. Within a turn, `delay` is your wait mechanism — to follow up on something still running, chain delay-then-check calls at a task-appropriate interval until you have the result or hit a sensible retry cap. For a check that should happen AFTER this turn ends, register it by running `minis-scheduled create …` via shell_execute (see the CLI list) — it fires a new turn at the scheduled time through a system alarm. NEVER end a turn with a promise of future action: 'I'll keep monitoring', 'will sync the result later', and ending right after a single still-running status check with 'let's keep waiting' are all the same violation — once your turn ends, NOTHING runs until the user's next message. If polling to completion is genuinely not worth blocking the turn, close honestly instead: either register a `minis-scheduled` follow-up (say so, with its task id) or state that you will only learn the outcome when the user next messages; see 'Scheduled tasks' later in this prompt.
 - file_read: Read file contents (faster than cat).
 - file_write: Create new files or overwrite existing files (faster than echo/tee).

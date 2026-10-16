@@ -7715,6 +7715,15 @@ fun ChatScreen(
     // Offload permission dialog
     OffloadPermissionDialog()
 
+    // momoding: "Needs approval" — the conversation dims and the card sits at the bottom of the chat
+    app.momoding.ui.guard.RiskScrim(sessionId = viewModel.activeSessionId)
+    Box(Modifier.fillMaxSize().navigationBarsPadding().imePadding(), contentAlignment = Alignment.BottomCenter) {
+        app.momoding.ui.guard.RiskApprovalHost(
+            sessionId = viewModel.activeSessionId,
+            onOpenSession = { onMoveToSession(it) },
+        )
+    }
+
     // URL preview sheet — shown when a markdown link is tapped
     previewUrl?.let { url ->
         com.openminis.app.ui.components.UrlPreviewSheet(
