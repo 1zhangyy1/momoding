@@ -2361,7 +2361,8 @@ private fun RenderBlock(block: MdBlock) {
             )
         }
 
-        is MdBlock.CodeBlock -> {
+        // momoding: `momoding-*` fences are app protocol (e.g. momoding-notify), not for the eye
+        is MdBlock.CodeBlock -> if (block.language.startsWith("momoding-")) Unit else {
             val clipboardManager = LocalClipboardManager.current
             var copied by remember { mutableStateOf(false) }
             if (copied) {

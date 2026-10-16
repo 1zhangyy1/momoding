@@ -38,6 +38,8 @@ object RoutineWakes {
     private val lock = Any()
     /** Session id → the wake armed there and not yet bound to a row. */
     private val pending = HashMap<String, Wake>()
+    /** Sessions whose latest user row is a routine's (in memory: only the live turn matters). */
+    private val routineTurn = HashSet<String>()
     private val _wakes = MutableStateFlow<Map<String, Wake>>(emptyMap())
     /** Persisted user row id → the routine that sent it. */
     val wakes: StateFlow<Map<String, Wake>> = _wakes
@@ -64,8 +66,10 @@ object RoutineWakes {
 
     /** The chat pipeline persisted user row [messageId] in [sessionId]: it is the armed wake, if one is waiting. */
     fun claim(sessionId: String, messageId: String) {
-        val wake = synchronized(lock) { pending.remove(sessionId) } ?: return
-        if (System.currentTimeMillis() - wake.at > CLAIM_WINDOW_MS) return
+        val wake = synchronized(lock) {
+            pending.remove(sessionId).takeIf { it != null && System.currentTimeMillis() - it.at <= CLAIM_WINDOW_MS }
+                .also { if (it != null) routineTurn.add(sessionId) else routineTurn.remove(sessionId) }
+        } ?: return
         val next = LinkedHashMap(_wakes.value)
         next[messageId] = wake
         while (next.size > KEEP) next.remove(next.keys.first())
@@ -75,13 +79,21 @@ object RoutineWakes {
 
     fun wakeFor(messageId: String): Wake? = _wakes.value[messageId]
 
+    /**
+     * The turn running (or last run) in [sessionId] was started by a routine, not by the person.
+     * The routine runner owns that turn's notification ([NotifyDecision]), so the generic
+     * "task finished" notice skips it.
+     */
+    fun isRoutineTurn(sessionId: String): Boolean = synchronized(lock) { sessionId in routineTurn }
+
     /** What the model is told for this one turn (not shown to the person; English like the rest of the system prompt). */
     private fun framing(wake: Wake): String = buildString {
         appendLine("## This turn is a routine's, not a message the person typed (Momoding)")
         append("The routine \"${wake.label}\" they set up fired at ${wake.time} and sent the next message on their behalf. ")
         append("Do what it asks, then write to them as the one who brings it up: open with the result or the point itself, ")
         append("do not thank them for asking or say \"as requested\", and keep it as short as the task allows. ")
-        append("If something needs their say before you can act, ask plainly.")
+        appendLine("If something needs their say before you can act, ask plainly.")
+        append(NotifyDecision.INSTRUCTION)
     }
 
     private fun load(context: Context): Map<String, Wake> {

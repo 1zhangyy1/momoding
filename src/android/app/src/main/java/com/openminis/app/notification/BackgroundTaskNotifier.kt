@@ -69,6 +69,8 @@ class BackgroundTaskNotifier(
     fun notifyTaskCompleted(sessionId: String, isError: Boolean = false) {
         if (!backgroundSettings.taskNotificationsEnabled.value) return
         if (isAppForeground()) return
+        // momoding: a routine's turn is notified by ScheduledAgentRunner, only when worth it (NotifyDecision)
+        if (app.momoding.chat.RoutineWakes.isRoutineTurn(sessionId)) return
 
         scope.launch {
             try {

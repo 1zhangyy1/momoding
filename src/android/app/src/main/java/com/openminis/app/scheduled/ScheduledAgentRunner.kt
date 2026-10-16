@@ -1,5 +1,6 @@
 package com.openminis.app.scheduled
 
+import app.momoding.chat.NotifyDecision
 import app.momoding.chat.RoutineWakes // momoding (a local `app` shadows the package root here)
 import android.app.PendingIntent
 import android.content.Context
@@ -127,10 +128,11 @@ object ScheduledAgentRunner {
 
         if (waitForCompletion) {
             val result = dispatch(app, task, sessionId, wait = true, firedAt = firedAt)
-            val preview = (result.responseText ?: "").take(200).ifBlank { "(no response)" }
             val ok = result.status != "Error" && result.status != "Timeout" && result.status != "Rejected"
-            ScheduledTaskManager(app).markFired(task.id, sessionId, preview, ok = ok, firedAt = firedAt)
-            postCompletionNotification(app, task, sessionId, preview)
+            // momoding: the routine's reply says whether it is worth a notification (NotifyDecision)
+            val decision = NotifyDecision.decide(result.responseText, failed = !ok)
+            ScheduledTaskManager(app).markFired(task.id, sessionId, decision.body, ok = ok, firedAt = firedAt)
+            if (decision.notify) postCompletionNotification(app, task, sessionId, decision.body)
             // [T-android-scheduled-triggers] Tasks waiting on this one run
             // once its whole schedule is over.
             if (scheduledFire) ScheduledCompletionTriggers.onScheduledRunFinished(app, task.id, result.responseText)
@@ -145,10 +147,11 @@ object ScheduledAgentRunner {
         // can't cancel it because bgScope outlives the screen.
         bgScope.launch {
             val result = dispatch(app, task, sessionId, wait = true, firedAt = firedAt)
-            val preview = (result.responseText ?: "").take(200).ifBlank { "(no response)" }
             val ok = result.status != "Error" && result.status != "Timeout" && result.status != "Rejected"
-            ScheduledTaskManager(app).markFired(task.id, sessionId, preview, ok = ok, firedAt = firedAt)
-            postCompletionNotification(app, task, sessionId, preview)
+            // momoding: the routine's reply says whether it is worth a notification (NotifyDecision)
+            val decision = NotifyDecision.decide(result.responseText, failed = !ok)
+            ScheduledTaskManager(app).markFired(task.id, sessionId, decision.body, ok = ok, firedAt = firedAt)
+            if (decision.notify) postCompletionNotification(app, task, sessionId, decision.body)
             // [T-android-scheduled-triggers] Tasks waiting on this one run
             // once its whole schedule is over.
             if (scheduledFire) ScheduledCompletionTriggers.onScheduledRunFinished(app, task.id, result.responseText)
@@ -460,7 +463,7 @@ object ScheduledAgentRunner {
             openIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val title = "Minis: ${task.label.ifBlank { "Scheduled task" }}"
+        val title = task.label.ifBlank { context.getString(com.openminis.app.R.string.app_name) } // momoding: no "Minis:" prefix
         val notification = NotificationCompat.Builder(context, ScheduledTaskManager.CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_menu_recent_history)
             .setContentTitle(title)
