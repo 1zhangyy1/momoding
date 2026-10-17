@@ -514,9 +514,24 @@ class HandsOperator(private val context: Context) {
         if (node.isPassword) return HANDOFF
         val hint = listOfNotNull(node.hintText?.toString(), node.contentDescription?.toString()).joinToString(" ")
         if (hint.isNotBlank() && TapWords.looksSecret(hint)) return HANDOFF
-        val ok = svc.setNodeText(node, action.text)
+        val ok = svc.setNodeText(node, action.text) || pasteInto(node, action.text) // momoding: paste when SET_TEXT is refused
         return if (ok) "typed “${action.text.take(60)}” into the field." else "the field did not accept text (ACTION_SET_TEXT failed); tap it and try again."
     }
+
+    /**
+     * momoding: some fields refuse ACTION_SET_TEXT (Google Messages' recipient chips, many chat
+     * apps' own inputs) but take a paste. Puts [text] on the clipboard, pastes it into [node] and
+     * checks it landed. The clipboard keeps [text] afterwards.
+     */
+    private fun pasteInto(node: AccessibilityNodeInfo, text: String): Boolean = runCatching {
+        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        cm.setPrimaryClip(android.content.ClipData.newPlainText("momoding", text))
+        Thread.sleep(120)
+        if (!node.performAction(AccessibilityNodeInfo.ACTION_PASTE)) return@runCatching false
+        Thread.sleep(250)
+        node.refresh()
+        node.text?.toString()?.contains(text.take(8)) == true
+    }.getOrDefault(false)
 
     private fun pressEnter(svc: MinisAccessibilityService): String {
         val node = focusedField(svc) ?: return "no text field has the cursor, so there is nothing to submit; tap the search or send button instead."

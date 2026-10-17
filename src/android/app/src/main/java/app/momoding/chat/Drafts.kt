@@ -91,6 +91,21 @@ object Drafts {
         scope.launch { set(app, d.id, send(app, d, text)) }
     }
 
+    private val SMS_APPS = setOf("短信", "简讯", "簡訊", "信息", "sms", "messages", "message", "text")
+    internal fun isSmsToNumber(d: Draft): Boolean =
+        d.app.trim().lowercase() in SMS_APPS && Regex("""^\+?[0-9][0-9 \-]{4,}$""").matches(d.to.trim())
+
+    private fun openSmsPrefilled(context: Context, number: String, text: String): Boolean = runCatching {
+        val i = android.content.Intent(android.content.Intent.ACTION_SENDTO, android.net.Uri.parse("smsto:" + number.replace(" ", "")))
+            .putExtra("sms_body", text).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(i); Thread.sleep(1500); true
+    }.getOrDefault(false)
+
+    internal fun prefilledSmsTask(d: Draft, text: String): String =
+        "The Messages app is open on a new message to ${d.to} with this text already typed: \"$text\". " +
+            "Check the recipient is ${d.to} and the text is exactly that, then tap Send once. " +
+            "If either is wrong or missing, stop and say so. After sending, check the message shows in the chat."
+
     /** Runs the send. Returns the state to show; never throws. */
     private suspend fun send(context: Context, d: Draft, text: String): State = withContext(Dispatchers.IO) {
         if (!Hands.enabled(context) || !Hands.readiness(context).ready) {
@@ -99,10 +114,12 @@ object Drafts {
         if (!Hands.claim()) return@withContext State(Status.FAILED, text, "busy")
         val runSession = "draft-${d.id}"
         Grants.grantSession(RiskClass.OUTBOUND, runSession, label = d.to.ifBlank { d.app })
+        // An SMS to a number opens prefilled through smsto: — the hands only check it and tap Send.
+        val prefilled = isSmsToNumber(d) && openSmsPrefilled(context, d.to, text)
         try {
             val r = HandsOperator(context).run(
                 HandsOperator.Options(
-                    task = task(d, text),
+                    task = if (prefilled) prefilledSmsTask(d, text) else task(d, text),
                     appHint = d.app.ifBlank { null },
                     sessionId = runSession,
                     agentName = Identity.name(context),

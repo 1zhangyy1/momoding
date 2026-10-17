@@ -29,4 +29,11 @@ class DraftsTest {
         assertTrue(t.contains("new words")); assertTrue(!t.contains("old"))
         assertTrue(t.contains("in 微信")); assertTrue(t.contains("to 张阿姨")); assertTrue(t.contains("instead of guessing")); assertTrue(t.contains("start a new message"))
     }
+
+    @Test fun `an sms to a number goes the prefilled way`() {
+        assertTrue(Drafts.isSmsToNumber(Drafts.Draft("+15551234567", "短信", "hi")))
+        assertTrue(!Drafts.isSmsToNumber(Drafts.Draft("张阿姨", "短信", "hi")))
+        assertTrue(!Drafts.isSmsToNumber(Drafts.Draft("+15551234567", "微信", "hi")))
+        assertTrue(Drafts.prefilledSmsTask(Drafts.Draft("+15551234567", "短信", "x"), "new words").contains("new words"))
+    }
 }
