@@ -63,4 +63,15 @@ class MomodingShowStepsTest {
         val all = buildFlatChatItems(msgs, showSteps = true).filterIsInstance<FlatChatItem.AssistantMarkdownBlock>().joinToString { it.rawText }
         assertTrue(all.contains("先看看"))
     }
+
+    @Test fun `a turn with steps ends with 看过程, and opening it shows that turn's steps`() {
+        val folded = buildFlatChatItems(transcript, showSteps = false)
+        val toggle = folded.filterIsInstance<FlatChatItem.MomodingStepsToggle>().single()
+        assertEquals("a2", toggle.messageId)
+        assertTrue(folded.none { it is FlatChatItem.AssistantToolUse })
+        val open = buildFlatChatItems(transcript, showSteps = false, expandedTurns = setOf("a2"))
+        assertEquals(2, open.count { it is FlatChatItem.AssistantToolUse }) // the steps-only message a1 belongs to the same turn
+        assertTrue(open.filterIsInstance<FlatChatItem.MomodingStepsToggle>().single().expanded)
+        assertTrue(buildFlatChatItems(transcript, showSteps = true).none { it is FlatChatItem.MomodingStepsToggle })
+    }
 }

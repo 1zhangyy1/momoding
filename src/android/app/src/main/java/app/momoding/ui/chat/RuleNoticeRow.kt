@@ -36,3 +36,13 @@ fun RuleNoticeRow(labels: List<String>) {
         )
     }
 }
+
+/** "看过程 / 收起" under a finished turn: the steps it took, folded by default (prototype vRes). */
+@Composable
+fun StepsToggle(expanded: Boolean, onToggle: () -> Unit) {
+    Text(
+        stringResource(if (expanded) R.string.mo_steps_hide else R.string.mo_steps_show),
+        fontSize = 12.sp, color = ChatColors.secondaryText,
+        modifier = Modifier.clickable(onClick = onToggle).padding(top = 2.dp, bottom = 6.dp, end = 12.dp),
+    )
+}

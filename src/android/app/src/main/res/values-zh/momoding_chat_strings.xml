@@ -70,4 +70,6 @@
     <string name="mo_settings_more">更多</string>
     <string name="mo_remembered">记住了：%1$s</string>
     <string name="mo_ask_chosen">你选了：%1$s</string>
+    <string name="mo_steps_show">看过程</string>
+    <string name="mo_steps_hide">收起</string>
 </resources>

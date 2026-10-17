@@ -573,6 +573,7 @@ fun ChatScreen(
 ) {
     // momoding: how the work was done (steps, reasoning, the tool bar) is hidden unless Settings says show it
     val momodingShowSteps by app.momoding.ui.chat.ShowSteps.remember()
+    var momodingExpandedTurns by remember(sessionId) { mutableStateOf(emptySet<String>()) } // momoding: open "看过程"
     val momodingRuleHitsAll by app.momoding.guard.RuleHits.hits.collectAsState() // momoding: "approved by your rule" rows
     val context = LocalContext.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -3739,7 +3740,7 @@ fun ChatScreen(
                 // scope. The flatten still runs per token (cheap-ish; ran
                 // before too), but the rebuild stays off the main UI
                 // composable's invalidation list.
-                LaunchedEffect(messages, sessionId, momodingShowSteps, momodingRuleHitsAll) { // momoding: rebuild rows when the switch flips
+                LaunchedEffect(messages, sessionId, momodingShowSteps, momodingRuleHitsAll, momodingExpandedTurns) { // momoding: rebuild rows when the switch flips
                     // [T-android-stream-pipeline-incremental] Frozen/live split.
                     //
                     // `messages` is CONSTANT within this effect (the effect is
@@ -3827,7 +3828,7 @@ fun ChatScreen(
                                     // threw ConcurrentModificationException from
                                     // a later frame's SubList.equals. Copying
                                     // severs the view so it can't comodify.
-                                    buildFlatChatItems(msgs.take(splitIdx), sessionId, showSteps = momodingShowSteps, ruleHits = app.momoding.guard.RuleHits.forSession(momodingRuleHitsAll, sessionId))
+                                    buildFlatChatItems(msgs.take(splitIdx), sessionId, showSteps = momodingShowSteps, ruleHits = app.momoding.guard.RuleHits.forSession(momodingRuleHitsAll, sessionId), expandedTurns = momodingExpandedTurns)
                                 }
                                 val buildMs = (System.nanoTime() - tBuildStart) / 1_000_000
                                 frozenRows = rows
@@ -3903,7 +3904,7 @@ fun ChatScreen(
                             } else {
                                 withContext(Dispatchers.Default) {
                                     val merged = mergeStreamingOverlay(msgs, stream)
-                                    buildFlatChatItems(merged, null, fromIndex = splitIdx, seedKeys = frozenKeys, showSteps = momodingShowSteps, ruleHits = app.momoding.guard.RuleHits.forSession(momodingRuleHitsAll, sessionId))
+                                    buildFlatChatItems(merged, null, fromIndex = splitIdx, seedKeys = frozenKeys, showSteps = momodingShowSteps, ruleHits = app.momoding.guard.RuleHits.forSession(momodingRuleHitsAll, sessionId), expandedTurns = momodingExpandedTurns)
                                 }
                             }
                             flatItems = if (liveRows.isEmpty()) frozenRows else frozenRows + liveRows
@@ -4047,6 +4048,7 @@ fun ChatScreen(
                     is FlatChatItem.AssistantError -> grayedMap[originalMessageId(messageId)] == true
                     is FlatChatItem.AssistantUsage -> grayedMap[originalMessageId(messageId)] == true
                     is FlatChatItem.MomodingRuleNotice -> false
+                    is FlatChatItem.MomodingStepsToggle -> false
                     is FlatChatItem.AssistantLegacyContent -> grayedMap[originalMessageId(messageId)] == true
                 }
                 // SelectionContainer must wrap the WHOLE LazyColumn — placing
@@ -4802,6 +4804,10 @@ fun ChatScreen(
                                 }
                             }
                             is FlatChatItem.MomodingRuleNotice -> app.momoding.ui.chat.RuleNoticeRow(item.labels) // momoding
+                            is FlatChatItem.MomodingStepsToggle -> app.momoding.ui.chat.StepsToggle(item.expanded) { // momoding
+                                val id = item.messageId.substringBefore('#')
+                                momodingExpandedTurns = if (id in momodingExpandedTurns) momodingExpandedTurns - id else momodingExpandedTurns + id
+                            }
                             is FlatChatItem.AssistantError -> InlineErrorBanner(
                                 error = item.error,
                                 display = if (momodingShowSteps) item.error else app.momoding.chat.ErrorWords.plain(context, item.error), // momoding

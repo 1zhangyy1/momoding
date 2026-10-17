@@ -492,6 +492,12 @@ internal sealed class FlatChatItem {
      * assistant turn. Emitted last so the flat path ends a turn exactly the way
      * AssistantMessageView does, keeping the two renderers in step.
      */
+    /** momoding: "看过程 / 收起" under a finished turn that did something (keyed by the turn's last message). */
+    data class MomodingStepsToggle(val messageId: String, val expanded: Boolean) : FlatChatItem() {
+        override val key = "steps:$messageId"
+        override val contentType = "steps"
+    }
+
     /** momoding: "approved by your rule · edit rules" under a reply a standing rule let through. */
     data class MomodingRuleNotice(val messageId: String, val labels: List<String>) : FlatChatItem() {
         override val key = "rule:$messageId"
@@ -646,7 +652,30 @@ internal fun buildFlatChatItems(
     showSteps: Boolean = true,
     // momoding: (time, label) of rule hits in this chat; each shows under the first reply that finished after it
     ruleHits: List<Pair<Long, String>> = emptyList(),
+    // momoding: turns (by their last assistant message id) whose "看过程" is open
+    expandedTurns: Set<String> = emptySet(),
 ): List<FlatChatItem> {
+    // momoding: a turn is the run of assistant messages after a user message; its last message
+    // carries "看过程", and opening it shows the steps of the whole run
+    val showStepsAll = showSteps
+    val turnLast = IntArray(messages.size) { -1 }
+    run {
+        var last = -1
+        for (i in messages.indices.reversed()) {
+            when (messages[i].role) {
+                "assistant" -> { if (last == -1) last = i; turnLast[i] = last }
+                "user" -> last = -1
+            }
+        }
+    }
+    fun turnHasSteps(lastIdx: Int): Boolean {
+        var i = lastIdx
+        while (i >= 0 && turnLast[i] == lastIdx) {
+            if (messages[i].toolBlocks.any { it.kind == "tool_use" }) return true
+            i--
+        }
+        return false
+    }
     // momoding: hits up to here are already placed; a suffix build starts after the prefix's last finished reply
     var ruleCursor = (0 until fromIndex.coerceAtMost(messages.size)).maxOfOrNull { messages[it].completedAt ?: 0L } ?: 0L
     val out = mutableListOf<FlatChatItem>()
@@ -684,6 +713,7 @@ internal fun buildFlatChatItems(
             is FlatChatItem.AssistantError -> item.copy(messageId = "${item.messageId}#$n")
             is FlatChatItem.AssistantUsage -> item.copy(messageId = "${item.messageId}#$n")
             is FlatChatItem.MomodingRuleNotice -> item.copy(messageId = "${item.messageId}#$n")
+            is FlatChatItem.MomodingStepsToggle -> item.copy(messageId = "${item.messageId}#$n")
             is FlatChatItem.AssistantLegacyContent -> FlatChatItem.AssistantLegacyContent(
                 messageId = "${item.messageId}#$n",
                 content = item.content,
@@ -694,6 +724,9 @@ internal fun buildFlatChatItems(
     }
     for (idx in fromIndex until messages.size) {
         val message = messages[idx]
+        // momoding: steps show when shown everywhere, or when this turn's "看过程" is open
+        @Suppress("NAME_SHADOWING")
+        val showSteps = showStepsAll || (turnLast[idx] >= 0 && messages[turnLast[idx]].id in expandedTurns)
         // [T-android-perf-logging] Per-100-message progress breadcrumb.
         // `out.size` is the running row count, so a sudden jump between two
         // progress lines localizes the heavy batch. Only fires on the
@@ -1004,6 +1037,11 @@ internal fun buildFlatChatItems(
             if (!message.isStreaming && showSteps) { // momoding: usage is about the work, not the answer
                 out.add(dedupe(FlatChatItem.AssistantUsage(message.id, u, message.completedAt)))
             }
+        }
+
+        // momoding: "看过程 / 收起" closes a finished turn that did something
+        if (!showStepsAll && message.role == "assistant" && turnLast[idx] == idx && !message.isStreaming && turnHasSteps(idx)) {
+            out.add(dedupe(FlatChatItem.MomodingStepsToggle(message.id, expanded = message.id in expandedTurns)))
         }
     }
     return out
