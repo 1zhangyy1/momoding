@@ -568,6 +568,8 @@ fun ChatScreen(
      *  wired to the edit button on each provider section of the model picker. */
     onEditProviderClick: (instanceId: String) -> Unit = {},
 ) {
+    // momoding: how the work was done (steps, reasoning, the tool bar) is hidden unless Settings says show it
+    val momodingShowSteps by app.momoding.ui.chat.ShowSteps.remember()
     val context = LocalContext.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
@@ -3597,7 +3599,7 @@ fun ChatScreen(
                             tb.toolStatus != null && tb.kind != "thinking" && tb.kind != "info"
                         }
                     }
-                }
+                } && momodingShowSteps // momoding: no bar, no reserve
                 val visualOverlayHeight = 65.dp  // thumbnailHeight in FloatingToolStatusBar
                 // Halve the breathing room above the input bar in both
                 // states — felt too sparse before. The thumbnail's 65dp
@@ -3701,7 +3703,7 @@ fun ChatScreen(
                 // scope. The flatten still runs per token (cheap-ish; ran
                 // before too), but the rebuild stays off the main UI
                 // composable's invalidation list.
-                LaunchedEffect(messages, sessionId) {
+                LaunchedEffect(messages, sessionId, momodingShowSteps) { // momoding: rebuild rows when the switch flips
                     // [T-android-stream-pipeline-incremental] Frozen/live split.
                     //
                     // `messages` is CONSTANT within this effect (the effect is
@@ -3789,7 +3791,7 @@ fun ChatScreen(
                                     // threw ConcurrentModificationException from
                                     // a later frame's SubList.equals. Copying
                                     // severs the view so it can't comodify.
-                                    buildFlatChatItems(msgs.take(splitIdx), sessionId)
+                                    buildFlatChatItems(msgs.take(splitIdx), sessionId, showSteps = momodingShowSteps)
                                 }
                                 val buildMs = (System.nanoTime() - tBuildStart) / 1_000_000
                                 frozenRows = rows
@@ -3865,7 +3867,7 @@ fun ChatScreen(
                             } else {
                                 withContext(Dispatchers.Default) {
                                     val merged = mergeStreamingOverlay(msgs, stream)
-                                    buildFlatChatItems(merged, null, fromIndex = splitIdx, seedKeys = frozenKeys)
+                                    buildFlatChatItems(merged, null, fromIndex = splitIdx, seedKeys = frozenKeys, showSteps = momodingShowSteps)
                                 }
                             }
                             flatItems = if (liveRows.isEmpty()) frozenRows else frozenRows + liveRows
@@ -4934,7 +4936,7 @@ fun ChatScreen(
                 // [T-p2-agent-series] The agent block is just another entry of
                 // the floating tool bar (its background block stays RUNNING);
                 // the standalone capsule is gone.
-                if (lastToolBlocks.isNotEmpty()) {
+                if (momodingShowSteps && lastToolBlocks.isNotEmpty()) { // momoding
                     Box(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
@@ -5002,7 +5004,7 @@ fun ChatScreen(
                 val upFabVisible = messages.isNotEmpty() && !isNearBottom.value
                 val downFabVisible =
                     userScrolledAway && contentOverflows.value && messages.isNotEmpty()
-                val fabBaseDp = if (lastToolBlocks.isNotEmpty()) 80.dp else 8.dp
+                val fabBaseDp = if (momodingShowSteps && lastToolBlocks.isNotEmpty()) 80.dp else 8.dp // momoding
                 val fabStackTopDp = when {
                     upFabVisible -> fabBaseDp + 46.dp + 36.dp
                     downFabVisible -> fabBaseDp + 36.dp
@@ -5105,7 +5107,7 @@ fun ChatScreen(
                 // spacing). Tapping walks BACK one user turn at a time rather
                 // than jumping to the oldest message.
                 if (messages.isNotEmpty() && !isNearBottom.value) {
-                    val upBaseBottom = if (lastToolBlocks.isNotEmpty()) 80.dp else 8.dp
+                    val upBaseBottom = if (momodingShowSteps && lastToolBlocks.isNotEmpty()) 80.dp else 8.dp // momoding
                     androidx.compose.material3.FilledIconButton(
                         onClick = {
                             // [T-android-updown-fab-asymmetry] Arm the same flag a
@@ -5147,7 +5149,7 @@ fun ChatScreen(
                 }
 
                 if (userScrolledAway && contentOverflows.value && messages.isNotEmpty()) {
-                    val fabBottomPadding = if (lastToolBlocks.isNotEmpty()) 80.dp else 8.dp
+                    val fabBottomPadding = if (momodingShowSteps && lastToolBlocks.isNotEmpty()) 80.dp else 8.dp // momoding
                     androidx.compose.material3.FilledIconButton(
                         onClick = {
                             // [T-android-scroll-fab-down-stuck] Clear the

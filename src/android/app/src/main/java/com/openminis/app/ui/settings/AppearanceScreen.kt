@@ -283,6 +283,25 @@ fun AppearanceScreen(
 
     SettingsScaffold(title = stringResource(R.string.appearance_title), onBack = onBack) {
 
+        // momoding: the conversation shows what was said; how it was done is one switch away
+        var showSteps by remember { mutableStateOf(app.momoding.ui.chat.ShowSteps.get(context)) }
+        SettingsSection(
+            header = stringResource(R.string.mo_appearance_section_conversation),
+            footer = stringResource(R.string.mo_appearance_show_steps_footer),
+        ) {
+            SettingsSwitchRow(
+                icon = Icons.Outlined.ChatBubbleOutline,
+                iconColor = tileGreen,
+                title = stringResource(R.string.mo_appearance_show_steps),
+                checked = showSteps,
+                onCheckedChange = {
+                    showSteps = it
+                    app.momoding.ui.chat.ShowSteps.set(context, it)
+                },
+                showDivider = false,
+            )
+        }
+
         // -- Theme --
         // Each row carries its own leading icon + tile colour, mirroring the
         // Provider / Permissions screens. Earlier only the first row had an

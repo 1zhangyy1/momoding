@@ -3,4 +3,7 @@
     <string name="mo_routine_wake_caption">Routine · %1$s · %2$s</string>
     <string name="mo_routine_paused_title">Paused: %1$s</string>
     <string name="mo_routine_paused_body">Its last %2$d results went unread, so it stopped to save usage. Tell me to resume anytime.</string>
+    <string name="mo_appearance_section_conversation">Conversation</string>
+    <string name="mo_appearance_show_steps">Show how the work is done</string>
+    <string name="mo_appearance_show_steps_footer">Steps, reasoning and the live tool bar. Off: the chat shows only what you and Momoding said, and the cards.</string>
 </resources>

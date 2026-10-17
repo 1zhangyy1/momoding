@@ -635,6 +635,9 @@ internal fun buildFlatChatItems(
     // prefix so the defensive key-collision suffixing behaves exactly as a
     // single full build would.
     seedKeys: Set<String> = emptySet(),
+    // momoding: false hides how the work was done (tool steps, reasoning, model-switch notes,
+    // usage) and drops turns that were only steps; see app.momoding.ui.chat.ShowSteps
+    showSteps: Boolean = true,
 ): List<FlatChatItem> {
     val out = mutableListOf<FlatChatItem>()
     val usedKeys = if (seedKeys.isEmpty()) mutableSetOf() else seedKeys.toMutableSet()
@@ -738,6 +741,7 @@ internal fun buildFlatChatItems(
         // the assistant header so each info block stands on its own. Mirrors
         // iOS systemDividerRow / compactDividerRow.
         val isSystem = message.role == "system"
+        if (!showSteps && !isSystem && stepsOnlyTurn(message)) continue // momoding
         val joinedMarkdown = run {
             val parts = message.toolBlocks
                 .filter { it.kind == "text" && it.content.isNotEmpty() }
@@ -758,7 +762,7 @@ internal fun buildFlatChatItems(
         // or the callback card without a second avatar header.
         val prevNonSystem = (idx - 1 downTo 0).asSequence()
             .map { messages[it] }
-            .firstOrNull { it.role != "system" && !com.openminis.app.agent.jobs.AgentCallback.isCallbackText(it.content) }
+            .firstOrNull { it.role != "system" && !com.openminis.app.agent.jobs.AgentCallback.isCallbackText(it.content) && (showSteps || !stepsOnlyTurn(it)) } // momoding: hidden turns do not count
         val isResumeContinuation = prevNonSystem?.role == "assistant"
         if (!isSystem && !isResumeContinuation) {
             out.add(dedupe(FlatChatItem.AssistantHeader(message.id)))
@@ -902,7 +906,7 @@ internal fun buildFlatChatItems(
                         }
                     }
                 }
-                "thinking" -> out.add(dedupe(FlatChatItem.AssistantThinking(
+                "thinking" -> if (showSteps) out.add(dedupe(FlatChatItem.AssistantThinking( // momoding: a step
                     messageId = message.id,
                     block = block,
                     isLast = block.id == lastThinkingId,
@@ -910,11 +914,11 @@ internal fun buildFlatChatItems(
                     messageThinkingLevel = message.thinkingLevel,
                     isLastBlockOverall = block.id == lastBlockId,
                 )))
-                "info" -> out.add(dedupe(FlatChatItem.AssistantInfo(
+                "info" -> if (showSteps) out.add(dedupe(FlatChatItem.AssistantInfo( // momoding: model-switch notes are steps
                     messageId = message.id,
                     block = block,
                 )))
-                else -> out.add(dedupe(FlatChatItem.AssistantToolUse(
+                else -> if (showSteps) out.add(dedupe(FlatChatItem.AssistantToolUse( // momoding: a step
                     messageId = message.id,
                     block = block,
                     allToolBlocks = toolPillBlocks,
@@ -943,9 +947,9 @@ internal fun buildFlatChatItems(
         val hasVisibleContent = message.content.isNotEmpty() || blocks.any {
             when (it.kind) {
                 "info" -> false
-                "thinking" -> message.thinkingLevel?.isEnabled ?: true
+                "thinking" -> showSteps && (message.thinkingLevel?.isEnabled ?: true) // momoding: hidden steps keep the typing dots
                 "text" -> it.content.isNotEmpty()
-                else -> true // tool_use pills render immediately
+                else -> showSteps // tool_use pills render immediately — when steps are shown (momoding)
             }
         }
         if (message.isStreaming && (!hasVisibleContent || message.isAwaitingModelResponse)) {
@@ -973,10 +977,17 @@ internal fun buildFlatChatItems(
         // showing that mid-stream would report a finish time for a turn that has
         // not finished.
         message.tokenUsage?.let { u ->
-            if (!message.isStreaming) {
+            if (!message.isStreaming && showSteps) { // momoding: usage is about the work, not the answer
                 out.add(dedupe(FlatChatItem.AssistantUsage(message.id, u, message.completedAt)))
             }
         }
     }
     return out
 }
+
+/** momoding (from nanoMuse): an assistant turn that is only steps — no words, no error — has nothing to show with steps hidden. */
+private fun stepsOnlyTurn(m: ChatMessage): Boolean =
+    m.role == "assistant" && !m.isStreaming && m.error == null && m.content.isEmpty() &&
+        m.toolBlocks.isNotEmpty() && m.toolBlocks.all {
+            it.kind == "tool_use" || it.kind == "thinking" || it.kind == "info" || (it.kind == "text" && it.content.isEmpty())
+        }
