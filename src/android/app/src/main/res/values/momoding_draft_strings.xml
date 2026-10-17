@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mo_draft_label">Draft</string>
+    <string name="mo_draft_to">To %1$s</string>
+    <string name="mo_draft_to_in">To %1$s · %2$s</string>
+    <string name="mo_draft_send">Send</string>
+    <string name="mo_draft_discard">Discard</string>
+    <string name="mo_draft_edit">Edit</string>
+    <string name="mo_draft_done_edit">Done</string>
+    <string name="mo_draft_sending">Sending…</string>
+    <string name="mo_draft_sent">Sent</string>
+    <string name="mo_draft_discarded">Discarded</string>
+    <string name="mo_draft_failed">Not sent: %1$s</string>
+    <string name="mo_draft_failed_plain">Not sent</string>
+    <string name="mo_draft_failed_hands">turn on Hands in Settings first</string>
+    <string name="mo_draft_failed_busy">the hands are busy; try again shortly</string>
+    <string name="mo_draft_failed_stopped">you stopped it</string>
+    <string name="mo_draft_retry">Try again</string>
+</resources>

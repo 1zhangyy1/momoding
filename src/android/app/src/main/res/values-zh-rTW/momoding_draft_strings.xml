@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mo_draft_label">草稿</string>
+    <string name="mo_draft_to">發給 %1$s</string>
+    <string name="mo_draft_to_in">發給 %1$s · %2$s</string>
+    <string name="mo_draft_send">發送</string>
+    <string name="mo_draft_discard">丟棄</string>
+    <string name="mo_draft_edit">修改</string>
+    <string name="mo_draft_done_edit">改好了</string>
+    <string name="mo_draft_sending">正在發送…</string>
+    <string name="mo_draft_sent">已發送</string>
+    <string name="mo_draft_discarded">已丟棄</string>
+    <string name="mo_draft_failed">沒發出去：%1$s</string>
+    <string name="mo_draft_failed_plain">沒發出去</string>
+    <string name="mo_draft_failed_hands">先在設定裡打開「手」</string>
+    <string name="mo_draft_failed_busy">「手」正在忙，稍後再試</string>
+    <string name="mo_draft_failed_stopped">你停止了</string>
+    <string name="mo_draft_retry">再試一次</string>
+</resources>
