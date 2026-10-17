@@ -109,7 +109,7 @@ object DeepLinkHandler {
             "share" -> DeepLinkAction.OpenShare
             "views" -> when (path) {
                 "/alarm" -> DeepLinkAction.OpenAlarmList
-                "/calendar" -> DeepLinkAction.OpenCalendar(uri.getQueryParameter("at")?.toLongOrNull()) // momoding
+                "/calendar" -> DeepLinkAction.OpenCalendar(app.momoding.tools.AlarmDate.epochMs(uri.getQueryParameter("at"))) // momoding
                 else -> DeepLinkAction.Unknown
             }
             "open_terminal" -> DeepLinkAction.OpenTerminal(

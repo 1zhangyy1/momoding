@@ -81,6 +81,12 @@ class AlarmOffloadHandler(private val context: Context) : NativeOffloadHandler {
                 "android-alarm: invalid time '$timeStr' (expected HH:MM or ISO 8601)\n",
             )
         val label = args.get("label") ?: "Alarm"
+        // momoding: the Clock app takes only a time of day; a one-off alarm rings at the NEXT HH:MM.
+        // An ISO time on a later day used to drop the date silently ("tomorrow 15:00" rang today).
+        app.momoding.tools.AlarmDate.refusal(timeStr, args.get("repeat"))?.let { msg ->
+            val body = JSONObject().put("error", "alarm_needs_calendar").put("message", msg).toString()
+            return NativeOffloadResult(2, OffloadOutput.formatBody(body, args) + "\n")
+        }
         val repeat = args.get("repeat")?.uppercase() ?: "ONCE"
         val mode = runCatching { RepeatMode.valueOf(repeat) }.getOrNull()
             ?: return NativeOffloadResult(

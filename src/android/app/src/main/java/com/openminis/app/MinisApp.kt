@@ -721,7 +721,10 @@ class MinisApp : Application(), ImageLoaderFactory {
         // ship neither the DebugServer nor this handler, so the
         // `/usr/local/bin/minis-debug` stub is also absent (PRootKernel.
         // installHandlerStubs enumerates currently-registered handlers).
-        if (BuildConfig.DEV_TOOLS) {
+        // momoding: not registered — we drive the DebugServer from the host over adb, and an
+        // agent that found this CLI in the sandbox wandered off reading chats and poking Shizuku.
+        // The model should see the same sandbox in a debug build as a user's release build.
+        if (BuildConfig.DEV_TOOLS && false) {
             NativeOffloadServer.register(
                 "minis-debug",
                 com.openminis.app.sandbox.offload.DebugOffloadHandler(this),
