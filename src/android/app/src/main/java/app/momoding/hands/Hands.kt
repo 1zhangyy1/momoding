@@ -152,7 +152,13 @@ object Hands {
     /** True while the hands are working; the settings page and the overlay observer read it. */
     private val _active = MutableStateFlow(false)
     val active: StateFlow<Boolean> = _active.asStateFlow()
-    internal fun setActive(on: Boolean) { _active.value = on }
+    internal fun setActive(on: Boolean) { _active.value = on; if (!on) _progress.value = null }
+
+    /** Where a run is: the app it is in and the step, for the chat's status line. Null when idle. */
+    data class Progress(val app: String?, val step: Int)
+    private val _progress = MutableStateFlow<Progress?>(null)
+    val progress: StateFlow<Progress?> = _progress.asStateFlow()
+    internal fun reportStep(app: String?, step: Int) { _progress.value = Progress(app?.takeIf { it.isNotBlank() }, step) }
 
     /**
      * Takes the hands for a run: true when they were free, false when another run holds them.

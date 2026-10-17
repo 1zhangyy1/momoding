@@ -165,6 +165,8 @@ class HandsOperator(private val context: Context) {
                 steps++
                 KeepAwake.a11yTouched()
                 capsule.working(steps, context.getString(com.openminis.app.R.string.mo_hands_looking))
+                // momoding: the chat's status line ("in Messages · step 2"): the app in front, else the hint
+                Hands.reportStep(svc.foregroundPackage().first?.takeIf { it != context.packageName }?.let { HandsApps.labelOf(context, it) } ?: opts.appHint, steps)
 
                 // ── look ──
                 val shot = screenshot(svc) ?: return finish(Outcome.Failed("could not take a screenshot"), steps, runId, lastScreen, traceDir, log, model.label)

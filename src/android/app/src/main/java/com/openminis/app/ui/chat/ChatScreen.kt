@@ -49,6 +49,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map // momoding
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.flow.collectLatest
@@ -2800,6 +2801,18 @@ fun ChatScreen(
         topBar = {
             TopAppBar(
                 title = {
+                  // momoding: face + name + one status line; the title and model rows only with steps shown
+                  if (!momodingShowSteps) {
+                    val replying by remember(viewModel) {
+                        viewModel.streamingById.map { stream ->
+                            stream.values.any { d -> !d.isAwaitingModelResponse && d.toolBlocks.lastOrNull()?.let { it.kind == "text" && it.content.isNotEmpty() } == true }
+                        }.distinctUntilChanged()
+                    }.collectAsState(initial = false)
+                    val request = remember(messages) { app.momoding.ui.chat.requestBrief(messages.lastOrNull { it.role == "user" }?.content) }
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        app.momoding.ui.chat.MomodingHeader(isStreaming = isStreaming, replying = replying, request = request)
+                    }
+                  } else {
                     // iOS-style centered layout: "Minis" + group row + provider·model row
                     Box(
                         modifier = Modifier.fillMaxWidth(),
@@ -3137,6 +3150,7 @@ fun ChatScreen(
                             }
                         }
                     }
+                  } // momoding
                 },
                 navigationIcon = {
                     // [T-android-tablet-split] See `isTwoPane`.
