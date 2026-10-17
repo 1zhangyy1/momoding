@@ -227,6 +227,12 @@ class DebugRPCHandler(private val context: Context) {
                 handleMinisConfigExec(params)
             }
 
+            // momoding: fresh-install state for walkthroughs (keeps the provider, key and system grants)
+            "momoding.reset" -> {
+                if (!params.optBoolean("confirm", false)) throw RPCException(-32602, "confirm must be true")
+                app.momoding.debug.TestReset.reset(context)
+            }
+
             else -> throw RPCException(-32601, "Method not found: $method. Call 'rpc.discover' to list available methods.")
         }
     }

@@ -956,6 +956,14 @@ object DebugMethodRegistry {
             returns = "{sessionId, deleted}",
             example = ex("sessionId" to "6D0F…", "confirm" to true),
         ),
+        // momoding
+        MethodSpec(
+            name = "momoding.reset",
+            description = "Momoding's own state back to a fresh install's: routines, notes and USER.md, remembered approvals, rule hits, card states. Keeps providers, keys and system grants. Delete chats with chat.session.delete.",
+            params = listOf(ParamSpec("confirm", "bool", required = true, default = false, description = "Must be true.")),
+            returns = "{routines, notes, rules, prefs}",
+            example = ex("confirm" to true),
+        ),
     )
 
     private fun encode(method: MethodSpec): JSONObject {

@@ -62,6 +62,9 @@ object Drafts {
         (if (s.status == Status.SENDING) s.copy(status = Status.FAILED, note = null) else s).also { set(context, id, it, persist = false) }
     }
 
+    /** Debug reset: forget every card's state (the prefs are cleared by the caller). */
+    fun clear() { states.value = emptyMap() }
+
     fun set(context: Context, id: String, s: State, persist: Boolean = true) {
         states.value = states.value + (id to s)
         if (!persist) return

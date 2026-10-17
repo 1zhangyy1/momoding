@@ -39,6 +39,11 @@ object RuleHits {
         }
     }
 
+    fun clear() {
+        _hits.value = emptyList()
+        app?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)?.edit()?.remove(KEY)?.apply()
+    }
+
     /** (time, label) for one chat, oldest first, for the chat's row builder. */
     fun forSession(all: List<Hit>, sessionId: String?): List<Pair<Long, String>> =
         if (sessionId == null) emptyList() else all.filter { it.sessionId == sessionId }.map { it.at to it.label }
