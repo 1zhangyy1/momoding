@@ -4556,7 +4556,9 @@ fun ChatScreen(
                                     )
                                 }
                             }
-                            is FlatChatItem.AssistantMarkdownBlock -> BoundsTrackedBlock(
+                            is FlatChatItem.AssistantMarkdownBlock -> app.momoding.ui.chat.LinkLine.parse(item.rawText)?.let { links ->
+                                app.momoding.ui.chat.LinkButtons(links, onOpen = urlClickHandler) // momoding: a line of links is a row of buttons
+                            } ?: BoundsTrackedBlock(
                                 messageId = item.messageId,
                                 slotKey = "mdblock:${item.parentBlockId}:${item.blockIndex}",
                                 markdown = item.messageMarkdown,

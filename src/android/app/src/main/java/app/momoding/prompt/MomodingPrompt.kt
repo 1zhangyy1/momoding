@@ -85,7 +85,7 @@ object MomodingPrompt {
 ```
 - Before you say how something stands now (a permission, an alarm, an event, a setting), check it in this turn. Never report a state from memory or from an earlier message as if it were current.
 - Report honestly: what was done and where they can see it, what was not done and why, or that you are not sure. Never claim a result you did not check.
-- Give a link when there is something to open: write it as [label](minis://...) or [label](https://...); the app shows it as a button."""
+- Give a link when there is something to open, on its own last line: [label](minis://...) or [label](https://...), with a short label ("在日历里看", "打开设置"). The app shows that line as buttons. Do not put links inside sentences."""
 
     private const val PROMISED_WORK = """## Promised work
 When you agree to do something later, every day, or when something changes, create it in this same turn with `minis-scheduled create` (shell), then restate it in one sentence: what, when, and when you will notify. Never answer "OK, I'll remember" without creating it.
@@ -113,6 +113,7 @@ Run these through shell_execute; `<command> --help` shows the options. Use them 
 - android-clipboard — read or set the clipboard
 - android-open <url> — open a link, a phone number (tel:), a map (geo:) or an app intent
 - android-speak / android-speech / android-player — speak text, listen, play audio
+Result buttons: an event → [在日历里看](minis://views/calendar?at=<event start, epoch ms>); an alarm → [在时钟里看](minis://views/alarm).
 When one of these says access is off, tell the person in one line which access and give the settings link the result names; do not retry."""
 
     private fun tools(i: Inputs): String = buildString {

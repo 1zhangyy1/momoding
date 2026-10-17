@@ -782,6 +782,19 @@ class MainActivity : ComponentActivity() {
                     launchSingleTop = true
                 }
             }
+            is DeepLinkAction.OpenCalendar -> {
+                // momoding: the event's day in the system calendar app
+                val at = action.atMs ?: System.currentTimeMillis()
+                val view = Intent(Intent.ACTION_VIEW, Uri.parse("content://com.android.calendar/time/$at"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                // we (and OpenMinis) also answer calendar links; send it to the calendar app itself
+                packageManager.queryIntentActivities(view, 0).map { it.activityInfo.packageName }
+                    .firstOrNull { it != packageName && !it.startsWith("com.openminis") && !it.startsWith("app.momoding") }
+                    ?.let { view.setPackage(it) }
+                try { startActivity(view) } catch (_: android.content.ActivityNotFoundException) {
+                    AppLogger.warning("DeepLink", "OpenCalendar: no calendar app")
+                }
+            }
             is DeepLinkAction.OpenAlarmList -> {
                 // T297: minis://views/alarm now opens the system Clock app
                 // directly via AlarmClock.ACTION_SHOW_ALARMS — the in-app

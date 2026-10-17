@@ -47,6 +47,8 @@ import com.openminis.app.ui.navigation.Routes
 sealed class DeepLinkAction {
     data object OpenShare : DeepLinkAction()
     data object OpenAlarmList : DeepLinkAction()
+    /** momoding: the system calendar at [atMs] (now when null) — the result button for an event. */
+    data class OpenCalendar(val atMs: Long?) : DeepLinkAction()
     data class OpenTerminal(val initCommand: String?) : DeepLinkAction()
     data class CreateEnvironmentVariable(val key: String, val value: String, val note: String) : DeepLinkAction()
     data object OpenPermissionSettings : DeepLinkAction()
@@ -107,6 +109,7 @@ object DeepLinkHandler {
             "share" -> DeepLinkAction.OpenShare
             "views" -> when (path) {
                 "/alarm" -> DeepLinkAction.OpenAlarmList
+                "/calendar" -> DeepLinkAction.OpenCalendar(uri.getQueryParameter("at")?.toLongOrNull()) // momoding
                 else -> DeepLinkAction.Unknown
             }
             "open_terminal" -> DeepLinkAction.OpenTerminal(
