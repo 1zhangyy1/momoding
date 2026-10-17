@@ -27,6 +27,6 @@ class DraftsTest {
     @Test fun `task carries the edited text and says stop rather than guess`() {
         val t = Drafts.task(Drafts.Draft("张阿姨", "微信", "old"), "new words")
         assertTrue(t.contains("new words")); assertTrue(!t.contains("old"))
-        assertTrue(t.contains("in 微信")); assertTrue(t.contains("to 张阿姨")); assertTrue(t.contains("instead of guessing"))
+        assertTrue(t.contains("in 微信")); assertTrue(t.contains("to 张阿姨")); assertTrue(t.contains("instead of guessing")); assertTrue(t.contains("start a new message"))
     }
 }

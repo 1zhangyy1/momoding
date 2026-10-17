@@ -76,8 +76,9 @@ object Drafts {
         if (d.to.isNotBlank()) append(" to ${d.to}")
         append(". The user has read and approved exactly this text; type it unchanged, then tap Send once:\n")
         append(text)
-        append("\nOpen the chat with that person first and check its title is them. If there is no such chat, or more than one ")
-        append("person matches, stop and say so instead of guessing. After sending, check the message shows in the chat.")
+        append("\nOpen the chat with that recipient and check its title is them; if there is none yet and the recipient is a phone ")
+        append("number or address, start a new message to exactly that. If a name matches no one, or more than one person, stop and ")
+        append("say so instead of guessing. After sending, check the message shows in the chat.")
     }
 
     /** Outlives the card: the hands are in another app while this runs, and the chat may be rebuilt. */
