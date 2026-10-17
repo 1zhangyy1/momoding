@@ -1,5 +1,6 @@
 package com.openminis.app.ui.navigation
 
+import kotlinx.coroutines.launch // momoding
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
@@ -392,6 +393,8 @@ fun AppNavigation(
         // hang loop (upstream's safety landing on Home, mode 3, is kept for those).
         val crashSafeHome = mode == 3 && rawMode != 3
         val target: String? = when {
+            // momoding: a fresh install gets Momoding's three-page first run instead of the setup list
+            app.momoding.onboarding.FirstRun.needed(context, hasAnyProvider) -> app.momoding.onboarding.ROUTE_FIRST_RUN
             !hasAnySession && !hasAnyProvider -> null
             crashSafeHome -> null
             else -> Routes.chat(app.momoding.home.MainChat.resolve(context, chatRepository))
@@ -1470,6 +1473,24 @@ fun AppNavigation(
             LogDetailScreen(
                 fileName = fileName,
                 onBack = { navController.safePopBackStack() },
+            )
+        }
+
+        // momoding: first run (connect a model → meet → notifications), then the main chat
+        composable(app.momoding.onboarding.ROUTE_FIRST_RUN) {
+            val firstRunScope = androidx.compose.runtime.rememberCoroutineScope()
+            app.momoding.onboarding.FirstRunScreen(
+                providerRepository = providerRepository,
+                onAddProvider = { navController.safeNavigate(Routes.ADD_PROVIDER) },
+                onPickModels = { navController.safeNavigate(Routes.ONBOARDING_MODELS) },
+                onDone = {
+                    firstRunScope.launch {
+                        val id = app.momoding.home.MainChat.resolve(context, chatRepository)
+                        navController.navigate(Routes.chat(id)) {
+                            popUpTo(app.momoding.onboarding.ROUTE_FIRST_RUN) { inclusive = true }
+                        }
+                    }
+                },
             )
         }
 

@@ -50,6 +50,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map // momoding
+import androidx.compose.material.icons.outlined.Schedule // momoding
+import androidx.compose.material.icons.outlined.Settings // momoding
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.flow.collectLatest
@@ -3155,7 +3157,9 @@ fun ChatScreen(
                 },
                 navigationIcon = {
                     // [T-android-tablet-split] See `isTwoPane`.
-                    if (!isTwoPane) {
+                    // momoding: the main chat is home — no back to a session list (steps shown: as before)
+                    if (!momodingShowSteps && !isTwoPane) {
+                    } else if (!isTwoPane) {
                         IconButton(onClick = onBack) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                         }
@@ -3232,6 +3236,15 @@ fun ChatScreen(
                     }
                 },
                 actions = {
+                    // momoding: routines and settings, as in the prototype's header
+                    if (!momodingShowSteps) {
+                        IconButton(onClick = { runCatching { context.startActivity(app.momoding.deeplink.OwnScheme.intent(context, android.net.Uri.parse("minis://settings/scheduled"), 0)) } }) {
+                            Icon(Icons.Outlined.Schedule, contentDescription = stringResource(R.string.mo_settings_routines))
+                        }
+                        IconButton(onClick = { runCatching { context.startActivity(app.momoding.deeplink.OwnScheme.intent(context, android.net.Uri.parse("minis://settings"), 0)) } }) {
+                            Icon(Icons.Outlined.Settings, contentDescription = stringResource(R.string.settings_title))
+                        }
+                    }
                     // iOS: "..." circle button → dropdown menu
                     Box {
                         IconButton(onClick = { showChatMenu = true }) {
@@ -4844,6 +4857,10 @@ fun ChatScreen(
                     }
                 }
                 } // AlwaysStretchOverscrollBox
+                // momoding: an empty main chat opens with "What can I do for you?" and examples
+                if (messages.isEmpty() && !isStreaming) {
+                    app.momoding.onboarding.StarterExamples(onPick = { viewModel.sendMessage(it) })
+                }
                 // SelectionDragTracker bridges gesture-published dragIntent
                 // with listState scroll observation — that's what keeps the
                 // selection extending across newly-scrolled-in shards when

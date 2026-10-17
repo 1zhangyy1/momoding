@@ -47,4 +47,24 @@
     <string name="mo_routine_minutes">%1$d 分鐘</string>
     <string name="mo_routine_try_now">試跑一次</string>
     <string name="mo_routine_try_started">已開始，結果會回到對話裡</string>
+    <string name="mo_ob_model_title">先連一個模型</string>
+    <string name="mo_ob_model_body">用你自己的 Key。你的對話只在這台手機和你選的模型之間。</string>
+    <string name="mo_ob_model_vision">在手機上替你點、看螢幕，需要一個能看圖的模型（比如通義、智譜）。可以以後再加。</string>
+    <string name="mo_ob_model_connect">連接服務商</string>
+    <string name="mo_ob_model_pick">選模型</string>
+    <string name="mo_ob_meet_title">我是 %1$s，能在你手機上動手</string>
+    <string name="mo_ob_meet_body">查車票、看訂單、回訊息，我會像你一樣打開 App 去點。</string>
+    <string name="mo_ob_meet_stop">隨時能停</string>
+    <string name="mo_ob_meet_ask">刪除、發訊息、付款，先問你</string>
+    <string name="mo_ob_meet_routine">交給我的事，到點自己做</string>
+    <string name="mo_ob_meet_ok">知道了</string>
+    <string name="mo_ob_notify_title">有事時我通知你？</string>
+    <string name="mo_ob_notify_body">有結果或需要你決定時，我會通知你。</string>
+    <string name="mo_ob_notify_on">開啟通知</string>
+    <string name="mo_ob_notify_later">暫不</string>
+    <string name="mo_ex_title">有什麼事想交給我？</string>
+    <string name="mo_ex_reminder">明天下午 3 點提醒我給王總回電話</string>
+    <string name="mo_ex_routine">每天早上 8 點告訴我今天要注意的事</string>
+    <string name="mo_ex_train">幫我查明天上海到杭州最早的高鐵</string>
+    <string name="mo_ex_reply">發簡訊給張阿姨：房租下週一轉</string>
 </resources>

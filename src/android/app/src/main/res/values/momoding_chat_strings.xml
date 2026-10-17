@@ -47,4 +47,24 @@
     <string name="mo_routine_minutes">%1$d min</string>
     <string name="mo_routine_try_now">Try it now</string>
     <string name="mo_routine_try_started">Started — the result will come to the chat</string>
+    <string name="mo_ob_model_title">Connect a model first</string>
+    <string name="mo_ob_model_body">With your own key. Your conversation stays between this phone and the model you pick.</string>
+    <string name="mo_ob_model_vision">Working on your screen needs a model that can see pictures (Qwen, GLM…). You can add one later.</string>
+    <string name="mo_ob_model_connect">Connect a provider</string>
+    <string name="mo_ob_model_pick">Pick models</string>
+    <string name="mo_ob_meet_title">I\'m %1$s, and I can work on your phone</string>
+    <string name="mo_ob_meet_body">Train tickets, orders, replies — I open the apps and tap, the way you would.</string>
+    <string name="mo_ob_meet_stop">You can stop me at any time</string>
+    <string name="mo_ob_meet_ask">Deleting, sending and paying: I ask you first</string>
+    <string name="mo_ob_meet_routine">Things you hand me get done on time</string>
+    <string name="mo_ob_meet_ok">Got it</string>
+    <string name="mo_ob_notify_title">Can I notify you when something comes up?</string>
+    <string name="mo_ob_notify_body">When there is a result, or something needs your say, I\'ll let you know.</string>
+    <string name="mo_ob_notify_on">Turn on notifications</string>
+    <string name="mo_ob_notify_later">Not now</string>
+    <string name="mo_ex_title">What can I do for you?</string>
+    <string name="mo_ex_reminder">Remind me to call Mr. Wang at 3 pm tomorrow</string>
+    <string name="mo_ex_routine">Every morning at 8, tell me what to watch out for today</string>
+    <string name="mo_ex_train">Find the earliest train from Shanghai to Hangzhou tomorrow</string>
+    <string name="mo_ex_reply">Text Auntie Zhang: rent goes out next Monday</string>
 </resources>
