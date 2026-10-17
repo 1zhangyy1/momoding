@@ -37,4 +37,21 @@ class MomodingShowStepsTest {
         val live = listOf(user("u1", "hi"), ChatMessage(id = "a1", role = "assistant", content = "", toolBlocks = listOf(tool("t1")), isStreaming = true))
         assertTrue(buildFlatChatItems(live, showSteps = false).any { it is FlatChatItem.AssistantTyping })
     }
+
+    @Test fun `a rule hit shows once, under the reply that finished after it`() {
+        val msgs = listOf(
+            user("u1", "删掉那个日程"),
+            ChatMessage(id = "a1", role = "assistant", content = "", toolBlocks = listOf(text("x1", "删好了")), completedAt = 2_000),
+            user("u2", "再删一个"),
+            ChatMessage(id = "a2", role = "assistant", content = "", toolBlocks = listOf(text("x2", "也删了")), completedAt = 4_000),
+        )
+        val hits = listOf(3_000L to "calendar")
+        val rows = buildFlatChatItems(msgs, showSteps = false, ruleHits = hits)
+        val notices = rows.filterIsInstance<FlatChatItem.MomodingRuleNotice>()
+        assertEquals(listOf("a2"), notices.map { it.messageId })
+        assertEquals(listOf("calendar"), notices.single().labels)
+        // the live suffix (from the second turn) must not repeat a hit the prefix placed
+        val early = listOf(1_000L to "calendar")
+        assertTrue(buildFlatChatItems(msgs, fromIndex = 2, ruleHits = early).none { it is FlatChatItem.MomodingRuleNotice })
+    }
 }

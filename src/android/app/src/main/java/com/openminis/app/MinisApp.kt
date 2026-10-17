@@ -803,6 +803,7 @@ class MinisApp : Application(), ImageLoaderFactory {
         }
         // momoding: remembered approvals + the approval gate's background notification
         app.momoding.guard.Grants.init(this)
+        app.momoding.guard.RuleHits.init(this) // momoding: "approved by your rule" rows
         app.momoding.chat.RoutineWakes.init(this) // momoding: which chat rows a routine sent
         val riskNotifier = app.momoding.guard.RiskApprovalNotifier(this, ::isAppForeground)
         app.momoding.guard.RiskGate.backgroundNotifier = { riskNotifier.notifyIfBackgrounded(it) }

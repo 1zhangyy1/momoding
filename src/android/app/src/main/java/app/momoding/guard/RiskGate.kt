@@ -187,6 +187,7 @@ object RiskGate {
         }
         if (assessment.warnings.isEmpty() && Grants.allows(assessment.riskClass, assessment.target, sessionId)) {
             AppLogger.info(TAG, "covered by a grant: ${Grants.key(assessment.riskClass, assessment.target)}")
+            RuleHits.record(sessionId, RiskText.plainTarget(assessment.target)) // momoding: the chat says why nobody was asked
             // A payment that ran on a standing grant is said out loud every time; the person
             // chose that, and the line is how they keep track of it.
             return GateOutcome.Allowed(

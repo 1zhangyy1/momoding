@@ -62,4 +62,11 @@
     <string name="mo_risk_warn_pipe_sh">pipes a download straight into a shell</string>
     <string name="mo_risk_warn_system">shuts down or restarts the system</string>
     <string name="mo_risk_warn_wipes">removes %1$s entirely</string>
+    <string name="mo_rule_notice">Approved by your rule</string>
+    <string name="mo_rule_notice_for">Approved by your rule (%1$s)</string>
+    <string name="mo_rule_notice_edit">Edit rules</string>
+    <string name="mo_risk_target_calendar">calendar</string>
+    <string name="mo_risk_target_contacts">contacts</string>
+    <string name="mo_risk_target_photos">photos</string>
+    <string name="mo_risk_target_notifications">notifications</string>
 </resources>

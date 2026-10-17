@@ -492,6 +492,12 @@ internal sealed class FlatChatItem {
      * assistant turn. Emitted last so the flat path ends a turn exactly the way
      * AssistantMessageView does, keeping the two renderers in step.
      */
+    /** momoding: "approved by your rule · edit rules" under a reply a standing rule let through. */
+    data class MomodingRuleNotice(val messageId: String, val labels: List<String>) : FlatChatItem() {
+        override val key = "rule:$messageId"
+        override val contentType = "rule"
+    }
+
     data class AssistantUsage(
         val messageId: String,
         val usage: ChatTokenUsage,
@@ -638,7 +644,11 @@ internal fun buildFlatChatItems(
     // momoding: false hides how the work was done (tool steps, reasoning, model-switch notes,
     // usage) and drops turns that were only steps; see app.momoding.ui.chat.ShowSteps
     showSteps: Boolean = true,
+    // momoding: (time, label) of rule hits in this chat; each shows under the first reply that finished after it
+    ruleHits: List<Pair<Long, String>> = emptyList(),
 ): List<FlatChatItem> {
+    // momoding: hits up to here are already placed; a suffix build starts after the prefix's last finished reply
+    var ruleCursor = (0 until fromIndex.coerceAtMost(messages.size)).maxOfOrNull { messages[it].completedAt ?: 0L } ?: 0L
     val out = mutableListOf<FlatChatItem>()
     val usedKeys = if (seedKeys.isEmpty()) mutableSetOf() else seedKeys.toMutableSet()
     fun dedupe(item: FlatChatItem): FlatChatItem {
@@ -673,6 +683,7 @@ internal fun buildFlatChatItems(
             is FlatChatItem.AssistantTyping -> item.copy(messageId = "${item.messageId}#$n")
             is FlatChatItem.AssistantError -> item.copy(messageId = "${item.messageId}#$n")
             is FlatChatItem.AssistantUsage -> item.copy(messageId = "${item.messageId}#$n")
+            is FlatChatItem.MomodingRuleNotice -> item.copy(messageId = "${item.messageId}#$n")
             is FlatChatItem.AssistantLegacyContent -> FlatChatItem.AssistantLegacyContent(
                 messageId = "${item.messageId}#$n",
                 content = item.content,
@@ -969,6 +980,16 @@ internal fun buildFlatChatItems(
         // Inline error banner
         message.error?.let {
             out.add(dedupe(FlatChatItem.AssistantError(message.id, it)))
+        }
+
+        // momoding: rule notice, always visible (it explains why nobody was asked)
+        if (ruleHits.isNotEmpty()) {
+            val until = message.completedAt ?: if (message.isStreaming) Long.MAX_VALUE else null
+            if (until != null) {
+                val labels = ruleHits.filter { it.first > ruleCursor && it.first <= until }.map { it.second }.distinct()
+                if (labels.isNotEmpty()) out.add(dedupe(FlatChatItem.MomodingRuleNotice(message.id, labels)))
+                message.completedAt?.let { ruleCursor = it }
+            }
         }
 
         // [T-android-usage-capsule-time] Usage capsule closes the turn. Gated on

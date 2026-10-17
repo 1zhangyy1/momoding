@@ -62,4 +62,11 @@
     <string name="mo_risk_warn_pipe_sh">把下载的内容直接喂给 shell</string>
     <string name="mo_risk_warn_system">会关机或重启</string>
     <string name="mo_risk_warn_wipes">会把 %1$s 整个删掉</string>
+    <string name="mo_rule_notice">已按你的规则自动允许</string>
+    <string name="mo_rule_notice_for">已按你的规则自动允许（%1$s）</string>
+    <string name="mo_rule_notice_edit">编辑规则</string>
+    <string name="mo_risk_target_calendar">日历</string>
+    <string name="mo_risk_target_contacts">通讯录</string>
+    <string name="mo_risk_target_photos">相册</string>
+    <string name="mo_risk_target_notifications">通知</string>
 </resources>
