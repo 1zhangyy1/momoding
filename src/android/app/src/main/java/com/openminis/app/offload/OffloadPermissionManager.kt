@@ -129,6 +129,12 @@ object OffloadPermissionManager {
     /** Timeout for a single system permission dialog round-trip. */
     const val SYSTEM_DIALOG_TIMEOUT_MS: Long = 120_000L
 
+    // momoding: see requestAndroidPermission / requestSettingsGate
+    private const val JUST_DENIED_MS = 15_000L
+    @Volatile private var lastDeniedAt = 0L
+    private fun appInForeground(): Boolean =
+        androidx.lifecycle.ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)
+
     /** Timeout for the "bounce the user to a settings page" flow. */
     const val SETTINGS_GATE_TIMEOUT_MS: Long = 120_000L
 
@@ -154,6 +160,10 @@ object OffloadPermissionManager {
      * elapses.
      */
     suspend fun requestAndroidPermission(permissions: List<String>): AndroidPermissionResult {
+        // momoding: nobody can answer a system dialog while the app is in the background (a
+        // routine at 8:00); it would only pop up later out of context. Report it as not granted
+        // now, and the model says in one line where to switch it on.
+        if (!appInForeground()) return AndroidPermissionResult.DENIED
         val timed = withTimeoutOrNull(SYSTEM_DIALOG_TIMEOUT_MS) {
             suspendCancellableCoroutine<AndroidPermissionResult> { cont ->
                 androidPermissionContinuation = cont
@@ -176,6 +186,7 @@ object OffloadPermissionManager {
 
     /** Called from UI after the system permission dialog returns. */
     fun respondToAndroidPermission(result: AndroidPermissionResult) {
+        if (result == AndroidPermissionResult.DENIED) lastDeniedAt = System.currentTimeMillis() // momoding
         _pendingAndroidPermission.value = null
         androidPermissionContinuation?.resume(result)
         androidPermissionContinuation = null
@@ -239,6 +250,10 @@ object OffloadPermissionManager {
         request: SettingsGateRequest,
         check: () -> Boolean,
     ): AndroidPermissionResult {
+        // momoding: one request, one prompt. Right after the person declined the system dialog,
+        // a second "Open Settings" dialog for the same thing is asking twice; in the background
+        // nobody is there to answer. Gates that are the only way in (notification access) still show.
+        if (!appInForeground() || System.currentTimeMillis() - lastDeniedAt < JUST_DENIED_MS) return AndroidPermissionResult.DENIED
         val decision = suspendCancellableCoroutine<SettingsGateDecision> { cont ->
             settingsGateContinuation = cont
             _pendingSettingsGate.value = request
