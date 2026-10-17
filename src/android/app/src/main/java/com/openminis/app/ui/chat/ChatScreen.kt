@@ -4613,7 +4613,10 @@ fun ChatScreen(
                             }
                             // [T-android-scheduled-task-card] A fired scheduled
                             // task reads as a card, not as a user bubble.
-                            is FlatChatItem.ScheduledTaskCardItem -> ScheduledTaskCard(
+                            is FlatChatItem.ScheduledTaskCardItem -> if (!momodingShowSteps) {
+                                // momoding: a routine's turn is one quiet line, "例行 · name · 08:00" (prototype wake)
+                                app.momoding.ui.chat.RoutineLine(item.marker.label, app.momoding.chat.RoutineWakes.wakeFor(item.message.id.substringBefore('#'))?.time)
+                            } else ScheduledTaskCard(
                                 marker = item.marker,
                                 hostSessionId = sessionId,
                             )

@@ -39,3 +39,16 @@ fun RoutineWakeRow(messageId: String, bubble: @Composable () -> Unit) {
         )
     }
 }
+
+/** A routine's turn as the prototype draws it: one centred line with a clock, "例行 · name · time". */
+@Composable
+fun RoutineLine(label: String, time: String?) {
+    Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), contentAlignment = Alignment.Center) {
+        Text(
+            text = if (time != null) stringResource(R.string.mo_routine_wake_caption, label, time)
+            else stringResource(R.string.mo_routine_wake_caption_no_time, label),
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}

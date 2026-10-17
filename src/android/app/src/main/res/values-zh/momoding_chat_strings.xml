@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="mo_routine_wake_caption">例程 · %1$s · %2$s</string>
+    <string name="mo_routine_wake_caption">🕗 例行 · %1$s · %2$s</string>
     <string name="mo_routine_paused_title">已暂停：%1$s</string>
     <string name="mo_routine_paused_body">最近 %2$d 次结果都没人看，先停下来省点用量。想继续，跟我说一声。</string>
     <string name="mo_appearance_section_conversation">对话</string>
@@ -83,4 +83,5 @@
     <string name="mo_perm_no_msg">不用了，这次先不做。</string>
     <string name="mo_perm_hands">屏幕操作（无障碍和悬浮窗）</string>
     <string name="mo_perm_location">位置</string>
+    <string name="mo_routine_wake_caption_no_time">🕗 例行 · %1$s</string>
 </resources>
