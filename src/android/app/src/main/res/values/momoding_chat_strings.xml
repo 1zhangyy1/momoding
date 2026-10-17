@@ -6,7 +6,7 @@
     <string name="mo_appearance_section_conversation">Conversation</string>
     <string name="mo_appearance_show_steps">Show how the work is done</string>
     <string name="mo_appearance_show_steps_footer">Steps, reasoning and the live tool bar. Off: the chat shows only what you and Momoding said, and the cards.</string>
-    <string name="mo_status_needs_approval">Needs your approval</string>
+    <string name="mo_status_needs_approval">Needs your say</string>
     <string name="mo_status_hands_in">In %1$s · step %2$d</string>
     <string name="mo_status_hands">On the screen · step %1$d</string>
     <string name="mo_status_replying">Writing the reply</string>
@@ -84,4 +84,5 @@
     <string name="mo_perm_hands">the screen (accessibility and drawing over apps)</string>
     <string name="mo_perm_location">location</string>
     <string name="mo_routine_wake_caption_no_time">Routine · %1$s</string>
+    <string name="mo_status_idle">On your phone · ready when you are</string>
 </resources>

@@ -88,7 +88,7 @@ private fun rememberStatusLine(isStreaming: Boolean, replying: Boolean, request:
         isStreaming && !lastToolTitle.isNullOrBlank() -> lastToolTitle!! to false
         isStreaming && !request.isNullOrBlank() -> stringResource(R.string.mo_status_on, request) to false
         isStreaming -> stringResource(R.string.mo_status_working) to false
-        else -> null
+        else -> stringResource(R.string.mo_status_idle) to false // prototype: "在你手机上 · 随时可以交代"
     }
 }
 

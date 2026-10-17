@@ -22,7 +22,7 @@ class MomodingShowStepsTest {
     @Test fun `hidden steps leave the words and one header`() {
         val rows = buildFlatChatItems(transcript, showSteps = false)
         assertTrue(rows.none { it is FlatChatItem.AssistantToolUse || it is FlatChatItem.AssistantThinking || it is FlatChatItem.AssistantInfo })
-        assertEquals(1, rows.count { it is FlatChatItem.AssistantHeader })
+        assertEquals(0, rows.count { it is FlatChatItem.AssistantHeader }) // one Bot, no name over each reply
         assertTrue(rows.any { it is FlatChatItem.AssistantMarkdownBlock && it.rawText.contains("闹钟") })
         assertEquals(1, rows.count { it is FlatChatItem.UserBubble })
     }

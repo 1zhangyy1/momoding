@@ -6,7 +6,7 @@
     <string name="mo_appearance_section_conversation">對話</string>
     <string name="mo_appearance_show_steps">顯示做事過程</string>
     <string name="mo_appearance_show_steps_footer">工具步驟、思考過程和底部的工具條。關閉時對話裡只有你和 Momoding 說的話，以及各種卡片。</string>
-    <string name="mo_status_needs_approval">需要你批准</string>
+    <string name="mo_status_needs_approval">需要你決定</string>
     <string name="mo_status_hands_in">正在%1$s裡 · 第 %2$d 步</string>
     <string name="mo_status_hands">正在操作螢幕 · 第 %1$d 步</string>
     <string name="mo_status_replying">正在寫回覆</string>
@@ -84,4 +84,5 @@
     <string name="mo_perm_hands">螢幕操作（無障礙和懸浮窗）</string>
     <string name="mo_perm_location">位置</string>
     <string name="mo_routine_wake_caption_no_time">🕗 例行 · %1$s</string>
+    <string name="mo_status_idle">在你手機上 · 隨時可以交代</string>
 </resources>

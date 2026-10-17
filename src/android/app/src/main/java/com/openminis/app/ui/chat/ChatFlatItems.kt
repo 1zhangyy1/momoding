@@ -808,7 +808,8 @@ internal fun buildFlatChatItems(
             .map { messages[it] }
             .firstOrNull { it.role != "system" && !com.openminis.app.agent.jobs.AgentCallback.isCallbackText(it.content) && (showSteps || !stepsOnlyTurn(it)) } // momoding: hidden turns do not count
         val isResumeContinuation = prevNonSystem?.role == "assistant"
-        if (!isSystem && !isResumeContinuation) {
+        // momoding: one Bot, one voice — no "✨ Momoding" over each reply unless steps are shown
+        if (!isSystem && !isResumeContinuation && showStepsAll) {
             out.add(dedupe(FlatChatItem.AssistantHeader(message.id)))
         }
 
