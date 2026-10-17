@@ -159,7 +159,7 @@ fun SettingsScreen(
                 SettingsItem(icon = Icons.Outlined.Palette, iconColor = Color(0xFFFF2D55), title = stringResource(R.string.settings_section_appearance),
                     subtitle = stringResource(R.string.mo_settings_appearance_sub), onClick = onAppearanceClick, showDivider = false)
             }
-            SettingsSection(title = stringResource(R.string.mo_settings_advanced)) {
+            SettingsSection(title = stringResource(R.string.mo_settings_more)) {
                 SettingsItem(icon = Icons.Outlined.Handyman, iconColor = Color(0xFF8E8E93), title = stringResource(R.string.mo_settings_advanced),
                     subtitle = stringResource(if (showAdvanced) R.string.mo_settings_advanced_hide else R.string.mo_settings_advanced_sub),
                     onClick = { showAdvanced = !showAdvanced }, showDivider = false)

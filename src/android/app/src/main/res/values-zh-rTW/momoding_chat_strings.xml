@@ -67,4 +67,5 @@
     <string name="mo_ex_routine">每天早上 8 點告訴我今天要注意的事</string>
     <string name="mo_ex_train">幫我查明天上海到杭州最早的高鐵</string>
     <string name="mo_ex_reply">發簡訊給張阿姨：房租下週一轉</string>
+    <string name="mo_settings_more">更多</string>
 </resources>

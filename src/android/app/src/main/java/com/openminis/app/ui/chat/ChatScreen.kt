@@ -3245,6 +3245,8 @@ fun ChatScreen(
                             Icon(Icons.Outlined.Settings, contentDescription = stringResource(R.string.settings_title))
                         }
                     }
+                    // momoding: the overflow menu (terminal, browser, MCP, debug…) is part of "how the work is done"
+                    if (momodingShowSteps) {
                     // iOS: "..." circle button → dropdown menu
                     Box {
                         IconButton(onClick = { showChatMenu = true }) {
@@ -3498,6 +3500,7 @@ fun ChatScreen(
                                 )
                             }
                         }
+                    }
                     }
                 },
                 windowInsets = WindowInsets.statusBars,

@@ -15351,7 +15351,7 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
             // momoding: turn-limited addenda for this session (a routine's turn, …)
             app.momoding.chat.SessionAddenda.forPrompt(realSessionId.ifEmpty { sessionId })
                 ?.let { append("\n\n").append(it) }
-        }
+        }.let(app.momoding.prompt.MomodingRules::rebrand) // momoding: the model never calls itself "Minis"
     }
 
     /** momoding: after every completed turn — the turn budget of prompt addenda counts down. */
