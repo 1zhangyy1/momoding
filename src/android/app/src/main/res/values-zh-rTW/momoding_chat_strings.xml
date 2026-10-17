@@ -33,4 +33,18 @@
     <string name="mo_settings_advanced">進階</string>
     <string name="mo_settings_advanced_sub">工具、技能、儲存、日誌等</string>
     <string name="mo_settings_advanced_hide">收起進階</string>
+    <string name="mo_routines_empty">還沒有例行任務。在對話裡跟我說就行，比如「每天早上 8 點告訴我今天要注意的事」。</string>
+    <string name="mo_routine_every">每 %1$s</string>
+    <string name="mo_routine_once">一次</string>
+    <string name="mo_routine_daily">每天 %1$s 左右</string>
+    <string name="mo_routine_weekdays">工作日 %1$s 左右</string>
+    <string name="mo_routine_custom">部分日子 %1$s 左右</string>
+    <string name="mo_routine_once_at">%1$s 左右一次</string>
+    <string name="mo_routine_auto_paused">沒人看，已暫停</string>
+    <string name="mo_routine_last">上次：%1$s</string>
+    <string name="mo_routine_last_failed">上次沒辦完</string>
+    <string name="mo_routine_hours">%1$d 小時</string>
+    <string name="mo_routine_minutes">%1$d 分鐘</string>
+    <string name="mo_routine_try_now">試跑一次</string>
+    <string name="mo_routine_try_started">已開始，結果會回到對話裡</string>
 </resources>

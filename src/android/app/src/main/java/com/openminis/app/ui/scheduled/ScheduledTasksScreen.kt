@@ -47,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.launch // momoding: try now
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -88,7 +89,7 @@ fun ScheduledTasksScreen(
             TopAppBar(
                 title = {
                     Text(
-                        stringResource(R.string.scheduled_tasks_title),
+                        stringResource(R.string.mo_settings_routines), // momoding: "Routines", as the product calls them
                         fontWeight = FontWeight.Bold,
                         fontSize = 20.sp,
                     )
@@ -103,11 +104,7 @@ fun ScheduledTasksScreen(
                 },
             )
         },
-        floatingActionButton = {
-            FloatingActionButton(onClick = { onEditTask(null) }, shape = CircleShape) {
-                Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.scheduled_task_new))
-            }
-        },
+        // momoding: routines are made in the chat ("every morning at 8…"); the editor stays behind each row's menu
     ) { padding ->
         if (tasks.isEmpty()) {
             EmptyState(padding)
@@ -122,7 +119,7 @@ fun ScheduledTasksScreen(
             items(tasks, key = { it.id }) { task ->
                 ScheduledTaskRow(
                     task = task,
-                    onClick = { onEditTask(task.id) },
+                    onClick = null, // momoding: a tap opens the row's actions
                     onToggle = { vm.setEnabled(task.id, it) },
                     onEdit = { onEditTask(task.id) },
                     onViewRuns = { onViewRuns(task.id) },
@@ -173,7 +170,7 @@ private fun EmptyState(padding: PaddingValues) {
             )
             Spacer(Modifier.height(16.dp))
             Text(
-                stringResource(R.string.scheduled_tasks_empty),
+                stringResource(R.string.mo_routines_empty), // momoding
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
@@ -185,7 +182,7 @@ private fun EmptyState(padding: PaddingValues) {
 @Composable
 private fun ScheduledTaskRow(
     task: ScheduledTask,
-    onClick: () -> Unit,
+    onClick: (() -> Unit)?,
     onToggle: (Boolean) -> Unit,
     onEdit: () -> Unit,
     onViewRuns: () -> Unit,
@@ -197,7 +194,7 @@ private fun ScheduledTaskRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
-                .combinedClickable(onClick = onClick, onLongClick = { menuExpanded = true })
+                .combinedClickable(onClick = onClick ?: { menuExpanded = true }, onLongClick = { menuExpanded = true })
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -234,10 +231,10 @@ private fun ScheduledTaskRow(
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = formatScheduleSummary(task),
+                    text = app.momoding.chat.RoutineText.summary(LocalContext.current, task), // momoding
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
@@ -251,6 +248,20 @@ private fun ScheduledTaskRow(
             expanded = menuExpanded,
             onDismissRequest = { menuExpanded = false },
         ) {
+            // momoding: try it now — the result lands in the chat like a scheduled run
+            val ctx = LocalContext.current
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text(stringResource(R.string.mo_routine_try_now)) },
+                leadingIcon = { Icon(Icons.Outlined.Schedule, contentDescription = null) },
+                onClick = {
+                    menuExpanded = false
+                    val app = ctx.applicationContext
+                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                        com.openminis.app.scheduled.ScheduledAgentRunner.run(app, task, waitForCompletion = false)
+                    }
+                    android.widget.Toast.makeText(ctx, ctx.getString(R.string.mo_routine_try_started), android.widget.Toast.LENGTH_SHORT).show()
+                },
+            )
             androidx.compose.material3.DropdownMenuItem(
                 text = { Text(stringResource(R.string.scheduled_task_menu_edit)) },
                 leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },

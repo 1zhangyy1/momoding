@@ -1,6 +1,7 @@
 package com.openminis.app.ui.scheduled
 
 import android.content.Context
+import app.momoding.chat.RoutineAttention // momoding (a property named `app` shadows the package root here)
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -139,6 +140,7 @@ class ScheduledTasksViewModel(private val appContext: Context) : ViewModel() {
     val runNowState: StateFlow<RunNowState?> = _runNowState.asStateFlow()
 
     fun setEnabled(taskId: String, enabled: Boolean) {
+        RoutineAttention.clearAutoPaused(appContext, taskId) // momoding: the person decided
         viewModelScope.launch(Dispatchers.IO) { manager.setEnabled(taskId, enabled) }
     }
 

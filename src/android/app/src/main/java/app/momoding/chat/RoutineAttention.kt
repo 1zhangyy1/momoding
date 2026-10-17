@@ -21,6 +21,16 @@ object RoutineAttention {
     private const val PREFS = "momoding"
     private const val KEY_SEEN_AT = "routines.lastSeenAt"
     private const val KEY_UNSEEN = "routines.unseen."
+    private const val KEY_AUTO_PAUSED = "routines.autoPaused."
+
+    /** Paused by this, not by the person: the routines list says "nobody was reading it". */
+    fun isAutoPaused(context: Context, taskId: String): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_AUTO_PAUSED + taskId, false)
+
+    /** The person switched it back on (or deleted it). */
+    fun clearAutoPaused(context: Context, taskId: String) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(KEY_AUTO_PAUSED + taskId).apply()
+    }
 
     /** The app came to the foreground: the person can see their routines' results. */
     fun onSeen(context: Context) {
@@ -45,7 +55,7 @@ object RoutineAttention {
         if (!shouldPause(unseen, prefs.getLong(KEY_SEEN_AT, 0L), System.currentTimeMillis())) return false
 
         ScheduledTaskManager(context).setEnabled(task.id, false)
-        prefs.edit().remove(key).apply()
+        prefs.edit().remove(key).putBoolean(KEY_AUTO_PAUSED + task.id, true).apply()
         val label = task.label.ifBlank { context.getString(R.string.app_name) }
         SessionAddenda.add(
             sessionId, "routine-paused-${task.id}",
