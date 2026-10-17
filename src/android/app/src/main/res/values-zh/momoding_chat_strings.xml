@@ -68,4 +68,6 @@
     <string name="mo_ex_train">帮我查明天上海到杭州最早的高铁</string>
     <string name="mo_ex_reply">发短信给张阿姨：房租下周一转</string>
     <string name="mo_settings_more">更多</string>
+    <string name="mo_remembered">记住了：%1$s</string>
+    <string name="mo_ask_chosen">你选了：%1$s</string>
 </resources>

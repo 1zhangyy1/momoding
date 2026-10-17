@@ -54,4 +54,13 @@ class MomodingShowStepsTest {
         val early = listOf(1_000L to "calendar")
         assertTrue(buildFlatChatItems(msgs, fromIndex = 2, ruleHits = early).none { it is FlatChatItem.MomodingRuleNotice })
     }
+
+    @Test fun `narration between steps is hidden, the final words stay`() {
+        val msgs = listOf(user("u1", "后天和李总开个会"),
+            assistant("a1", text("n1", "先看看后天下午有没有冲突："), tool("t1"), text("n2", "后天都空，定在 14:00："), tool("t2"), text("x", "已建好：周一 14:00–15:00，和李总开会")))
+        val words = buildFlatChatItems(msgs, showSteps = false).filterIsInstance<FlatChatItem.AssistantMarkdownBlock>().joinToString { it.rawText }
+        assertTrue(words, words.contains("已建好") && !words.contains("先看看") && !words.contains("定在 14:00："))
+        val all = buildFlatChatItems(msgs, showSteps = true).filterIsInstance<FlatChatItem.AssistantMarkdownBlock>().joinToString { it.rawText }
+        assertTrue(all.contains("先看看"))
+    }
 }

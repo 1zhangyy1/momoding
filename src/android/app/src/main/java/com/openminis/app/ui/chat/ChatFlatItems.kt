@@ -793,10 +793,13 @@ internal fun buildFlatChatItems(
         // retryLast() re-runs the whole turn, so one button is enough.
         val lastCancelledToolId = blocks.lastOrNull { it.kind == "tool_use" && it.toolStatus == ToolBlockStatus.CANCELLED }?.id
 
+        // momoding: with steps hidden, words said between tool calls ("let me check the calendar
+        // first:") are part of the process; only the text after the last step is the reply
+        val lastStepIdx = if (showSteps) -1 else blocks.indexOfLast { it.kind == "tool_use" || it.kind == "thinking" }
         blocks.forEachIndexed { index, block ->
             when (block.kind) {
                 "text" -> {
-                    if (block.content.isNotEmpty()) {
+                    if (block.content.isNotEmpty() && (showSteps || index > lastStepIdx || block.content.contains("```momoding-"))) {
                         val isLastText = index == lastTextIdx
                         // Pattern A: split this text block's content into
                         // independent markdown fragments so each becomes its
@@ -955,11 +958,11 @@ internal fun buildFlatChatItems(
         // A null thinkingLevel snapshot falls back to the chat's CURRENT
         // level in the renderer, which this pure builder can't read — treat
         // it as visible (legacy messages; conservative, old behavior).
-        val hasVisibleContent = message.content.isNotEmpty() || blocks.any {
+        val hasVisibleContent = message.content.isNotEmpty() || blocks.withIndex().any { (idx, it) ->
             when (it.kind) {
                 "info" -> false
                 "thinking" -> showSteps && (message.thinkingLevel?.isEnabled ?: true) // momoding: hidden steps keep the typing dots
-                "text" -> it.content.isNotEmpty()
+                "text" -> it.content.isNotEmpty() && (showSteps || idx > lastStepIdx) // momoding: hidden narration is not content
                 else -> showSteps // tool_use pills render immediately — when steps are shown (momoding)
             }
         }

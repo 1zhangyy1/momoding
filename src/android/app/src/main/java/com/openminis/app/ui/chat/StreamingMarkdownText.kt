@@ -2362,8 +2362,8 @@ private fun RenderBlock(block: MdBlock) {
         }
 
         // momoding: `momoding-*` fences are app protocol (e.g. momoding-notify), not for the eye
-        is MdBlock.CodeBlock -> if (block.language == app.momoding.chat.Drafts.BLOCK) app.momoding.ui.chat.DraftCard(block.code)
-        else if (block.language.startsWith("momoding-")) Unit else {
+        is MdBlock.CodeBlock -> if (block.language.startsWith("momoding-")) app.momoding.ui.chat.MomodingBlock(block.language, block.code)
+        else {
             val clipboardManager = LocalClipboardManager.current
             var copied by remember { mutableStateOf(false) }
             if (copied) {

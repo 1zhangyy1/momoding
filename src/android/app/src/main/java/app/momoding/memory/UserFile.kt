@@ -29,7 +29,11 @@ object UserFile {
         append("their city and timezone, the people and places they mention often, and standing preferences ")
         append("(\"always\", \"never\", \"from now on\"). When they tell you something durable like that, update the file ")
         append("in the same turn with your shell (create it if missing; keep it under $MAX_CHARS characters, one line per fact, ")
-        append("newest wins, date a preference as (YYYY-MM-DD)) and mention it in a few words. ")
+        append("newest wins, date a preference as (YYYY-MM-DD); when a preference changes, replace the old line) and end your reply with ")
+        appendLine("a fenced block the app shows as one quiet line:")
+        appendLine("```momoding-remember")
+        appendLine("{\"text\": \"<what you noted, in a few words>\"}")
+        appendLine("```")
         appendLine("Never write secrets, passwords or codes into it.")
         if (text.isEmpty()) {
             append("It is empty so far: when you learn how they want to be addressed, write that first.")

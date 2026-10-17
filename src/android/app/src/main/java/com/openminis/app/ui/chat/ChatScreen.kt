@@ -594,6 +594,11 @@ fun ChatScreen(
             mcpRepository = mcpRepository,
         ),
     )
+    // momoding: chips and options in the chat (momoding-ask / momoding-next) send through this chat
+    DisposableEffect(viewModel) {
+        app.momoding.ui.chat.MomodingSend.handler = { viewModel.sendMessage(it) }
+        onDispose { app.momoding.ui.chat.MomodingSend.handler = null }
+    }
     // [T-android-larky-longsession-followup] Consume the tail-windowed
     // view instead of the canonical full list. For sessions with ≤300
     // messages this is the SAME reference (zero overhead); for longer

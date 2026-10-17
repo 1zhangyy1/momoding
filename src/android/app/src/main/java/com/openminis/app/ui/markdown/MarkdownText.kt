@@ -111,8 +111,8 @@ private fun BlockContent(
         is MarkdownParser.Block.Heading -> HeadingBlock(block, color)
         is MarkdownParser.Block.Paragraph -> ParagraphBlock(block.content, color, baseStyle, mathSpans)
         // momoding: `momoding-*` fences are app protocol (e.g. momoding-notify), not for the eye
-        is MarkdownParser.Block.CodeBlock -> if (block.language == app.momoding.chat.Drafts.BLOCK) app.momoding.ui.chat.DraftCard(block.code)
-            else if (block.language.startsWith("momoding-")) Unit else CodeBlockView(block)
+        is MarkdownParser.Block.CodeBlock -> if (block.language.startsWith("momoding-")) app.momoding.ui.chat.MomodingBlock(block.language, block.code)
+            else CodeBlockView(block)
         is MarkdownParser.Block.Blockquote -> BlockquoteView(block, color, baseStyle, mathSpans)
         is MarkdownParser.Block.BulletList -> BulletListView(block, color, baseStyle)
         is MarkdownParser.Block.NumberedList -> NumberedListView(block, color, baseStyle)

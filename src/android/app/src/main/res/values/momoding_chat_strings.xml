@@ -68,4 +68,6 @@
     <string name="mo_ex_train">Find the earliest train from Shanghai to Hangzhou tomorrow</string>
     <string name="mo_ex_reply">Text Auntie Zhang: rent goes out next Monday</string>
     <string name="mo_settings_more">More</string>
+    <string name="mo_remembered">Remembered: %1$s</string>
+    <string name="mo_ask_chosen">You chose: %1$s</string>
 </resources>
