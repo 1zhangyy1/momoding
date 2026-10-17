@@ -82,6 +82,7 @@ fun ScheduledTasksScreen(
         factory = ScheduledTasksViewModel.factory(context),
     )
     val tasks by vm.tasks.collectAsState()
+    androidx.compose.runtime.LaunchedEffect(Unit) { app.momoding.chat.RoutinesSeen.markSeen(context) } // momoding: clears the header dot
     var pendingDelete by remember { mutableStateOf<ScheduledTask?>(null) }
 
     Scaffold(

@@ -3244,8 +3244,12 @@ fun ChatScreen(
                 actions = {
                     // momoding: routines and settings, as in the prototype's header
                     if (!momodingShowSteps) {
+                        val routineDot = remember(messages) { app.momoding.chat.RoutinesSeen.hasNew(context) }
                         IconButton(onClick = { runCatching { context.startActivity(app.momoding.deeplink.OwnScheme.intent(context, android.net.Uri.parse("minis://settings/scheduled"), 0)) } }) {
-                            Icon(Icons.Outlined.Schedule, contentDescription = stringResource(R.string.mo_settings_routines))
+                            Box {
+                                Icon(Icons.Outlined.Schedule, contentDescription = stringResource(R.string.mo_settings_routines))
+                                if (routineDot) Box(Modifier.align(Alignment.TopEnd).size(8.dp).background(app.momoding.ui.Tones.action, CircleShape))
+                            }
                         }
                         IconButton(onClick = { runCatching { context.startActivity(app.momoding.deeplink.OwnScheme.intent(context, android.net.Uri.parse("minis://settings"), 0)) } }) {
                             Icon(Icons.Outlined.Settings, contentDescription = stringResource(R.string.settings_title))
