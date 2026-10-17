@@ -587,7 +587,7 @@ internal fun BoundsTrackedBlock(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun InlineErrorBanner(error: String, onRetry: (() -> Unit)? = null) {
+internal fun InlineErrorBanner(error: String, onRetry: (() -> Unit)? = null, display: String = error /* momoding: plain words shown, raw text still copied */) {
     val clipboard = LocalClipboardManager.current
     Row(
         modifier = Modifier
@@ -612,7 +612,7 @@ internal fun InlineErrorBanner(error: String, onRetry: (() -> Unit)? = null) {
         )
         Spacer(modifier = Modifier.width(8.dp))
         Text(
-            text = error,
+            text = display,
             color = Color(0xFFFF3B30),
             fontSize = 12.sp,
             lineHeight = 16.sp,

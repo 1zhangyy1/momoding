@@ -12,4 +12,11 @@
     <string name="mo_status_replying">正在寫回覆</string>
     <string name="mo_status_on">在辦：%1$s</string>
     <string name="mo_status_working">工作中</string>
+    <string name="mo_error_key">模型的 Key 不對或過期了，去設定 → 模型看看。</string>
+    <string name="mo_error_balance">模型帳戶的餘額或額度用完了。</string>
+    <string name="mo_error_rate">模型那邊正忙（被限流了），過一會兒再試。</string>
+    <string name="mo_error_model">這個模型現在用不了，去設定 → 模型換一個。</string>
+    <string name="mo_error_timeout">模型太久沒回應，再試一次。</string>
+    <string name="mo_error_network">連不上網路，檢查一下網路再試。</string>
+    <string name="mo_error_other">出了點問題，這件事沒辦完，再試一次。</string>
 </resources>

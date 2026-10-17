@@ -12,4 +12,11 @@
     <string name="mo_status_replying">正在写回复</string>
     <string name="mo_status_on">在办：%1$s</string>
     <string name="mo_status_working">工作中</string>
+    <string name="mo_error_key">模型的 Key 不对或过期了，去设置 → 模型看看。</string>
+    <string name="mo_error_balance">模型账户的余额或额度用完了。</string>
+    <string name="mo_error_rate">模型那边正忙（被限流了），过一会儿再试。</string>
+    <string name="mo_error_model">这个模型现在用不了，去设置 → 模型换一个。</string>
+    <string name="mo_error_timeout">模型太久没回应，再试一次。</string>
+    <string name="mo_error_network">连不上网络，检查一下网络再试。</string>
+    <string name="mo_error_other">出了点问题，这件事没办完，再试一次。</string>
 </resources>

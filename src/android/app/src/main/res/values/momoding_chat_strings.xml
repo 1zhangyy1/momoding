@@ -12,4 +12,11 @@
     <string name="mo_status_replying">Writing the reply</string>
     <string name="mo_status_on">On: %1$s</string>
     <string name="mo_status_working">Working</string>
+    <string name="mo_error_key">The model key is wrong or expired. Check Settings → Models.</string>
+    <string name="mo_error_balance">The model account is out of balance or quota.</string>
+    <string name="mo_error_rate">The model is busy right now (rate limited). Try again in a moment.</string>
+    <string name="mo_error_model">This model is not available right now. Pick another in Settings → Models.</string>
+    <string name="mo_error_timeout">The model took too long to answer. Try again.</string>
+    <string name="mo_error_network">Could not reach the network. Check the connection and try again.</string>
+    <string name="mo_error_other">Something went wrong and this was not finished. Try again.</string>
 </resources>

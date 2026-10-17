@@ -4778,6 +4778,7 @@ fun ChatScreen(
                             }
                             is FlatChatItem.AssistantError -> InlineErrorBanner(
                                 error = item.error,
+                                display = if (momodingShowSteps) item.error else app.momoding.chat.ErrorWords.plain(context, item.error), // momoding
                                 onRetry = {
                                     coroutineScope.launch { tracedScrollToItem("INLINE-RETRY-LAST", 0, 0) }
                                     safeMutate { viewModel.retryLast() }
