@@ -58,6 +58,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -84,6 +86,7 @@ fun SettingsScreen(
     onEnvVarsClick: () -> Unit = {},
     onSkillsClick: () -> Unit = {},
     onHandsClick: () -> Unit = {}, // momoding: operating the phone's screen
+    onRoutinesClick: () -> Unit = {}, // momoding: the routines list, on the first level
     onTerminalClick: () -> Unit = {},
     onMemoryClick: () -> Unit = {},
     /** [T-p2-agent-settings] Settings › Agents (delegation on/off), below Memory. */
@@ -138,6 +141,30 @@ fun SettingsScreen(
                 .padding(padding)
                 .verticalScroll(rememberScrollState()),
         ) {
+            // momoding: the first level is what a person needs; the rest is under Advanced
+            var showAdvanced by rememberSaveable { mutableStateOf(false) }
+            SettingsSection(title = stringResource(R.string.app_name)) {
+                SettingsItem(icon = Icons.Outlined.Lock, iconColor = Color(0xFF34C759), title = stringResource(R.string.mo_settings_models),
+                    subtitle = stringResource(R.string.mo_settings_models_sub), onClick = onProvidersClick)
+                SettingsItem(icon = Icons.Outlined.TouchApp, iconColor = Color(0xFF2E7A12), title = stringResource(R.string.mo_hands_title),
+                    subtitle = stringResource(if (app.momoding.hands.Hands.enabled(context)) R.string.mo_hands_on else R.string.mo_hands_off), onClick = onHandsClick)
+                SettingsItem(icon = Icons.Outlined.Shield, iconColor = Color(0xFF007AFF), title = stringResource(R.string.mo_settings_rules),
+                    subtitle = stringResource(R.string.mo_settings_rules_sub), onClick = onPermissionsClick)
+                SettingsItem(icon = Icons.Outlined.BatteryFull, iconColor = Color(0xFFFF9500), title = stringResource(R.string.mo_settings_background),
+                    subtitle = stringResource(R.string.mo_settings_background_sub), onClick = onBackgroundClick)
+                SettingsItem(icon = Icons.Outlined.Schedule, iconColor = Color(0xFF5856D6), title = stringResource(R.string.mo_settings_routines),
+                    subtitle = stringResource(R.string.mo_settings_routines_sub), onClick = onRoutinesClick)
+                SettingsItem(icon = Icons.Outlined.AutoAwesome, iconColor = Color(0xFFAF52DE), title = stringResource(R.string.mo_settings_about_bot),
+                    subtitle = stringResource(R.string.mo_settings_about_bot_sub), onClick = onSoulClick)
+                SettingsItem(icon = Icons.Outlined.Palette, iconColor = Color(0xFFFF2D55), title = stringResource(R.string.settings_section_appearance),
+                    subtitle = stringResource(R.string.mo_settings_appearance_sub), onClick = onAppearanceClick, showDivider = false)
+            }
+            SettingsSection(title = stringResource(R.string.mo_settings_advanced)) {
+                SettingsItem(icon = Icons.Outlined.Handyman, iconColor = Color(0xFF8E8E93), title = stringResource(R.string.mo_settings_advanced),
+                    subtitle = stringResource(if (showAdvanced) R.string.mo_settings_advanced_hide else R.string.mo_settings_advanced_sub),
+                    onClick = { showAdvanced = !showAdvanced }, showDivider = false)
+            }
+            if (showAdvanced) {
             // -- LLM Providers --
             SettingsSection(
                 title = stringResource(R.string.settings_section_llm_providers),
@@ -214,13 +241,6 @@ fun SettingsScreen(
                     onClick = onSkillsClick,
                 )
                 // momoding: the phone's screen as a hand — off by default
-                SettingsItem(
-                    icon = Icons.Outlined.TouchApp,
-                    iconColor = Color(0xFF2E7A12),
-                    title = stringResource(R.string.mo_hands_title),
-                    subtitle = stringResource(if (app.momoding.hands.Hands.enabled(LocalContext.current)) R.string.mo_hands_on else R.string.mo_hands_off),
-                    onClick = onHandsClick,
-                )
                 // [T-soul-md] Between Skills and Memory, as on iOS.
                 SettingsItem(
                     icon = Icons.Outlined.AutoAwesome,
@@ -355,6 +375,8 @@ fun SettingsScreen(
                     showDivider = false,
                 )
             }
+
+            } // momoding: end of Advanced
 
             Spacer(Modifier.height(24.dp))
         }

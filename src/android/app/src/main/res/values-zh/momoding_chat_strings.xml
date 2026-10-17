@@ -19,4 +19,18 @@
     <string name="mo_error_timeout">模型太久没回应，再试一次。</string>
     <string name="mo_error_network">连不上网络，检查一下网络再试。</string>
     <string name="mo_error_other">出了点问题，这件事没办完，再试一次。</string>
+    <string name="mo_settings_models">模型</string>
+    <string name="mo_settings_models_sub">连接服务商、选择模型</string>
+    <string name="mo_settings_rules">规则和权限</string>
+    <string name="mo_settings_rules_sub">记住的批准、手机数据的访问</string>
+    <string name="mo_settings_background">后台运行与通知</string>
+    <string name="mo_settings_background_sub">在后台保持运行；什么时候通知你</string>
+    <string name="mo_settings_routines">例行任务</string>
+    <string name="mo_settings_routines_sub">到点自动做的事</string>
+    <string name="mo_settings_about_bot">关于 Momoding</string>
+    <string name="mo_settings_about_bot_sub">名字、形象、它怎么为你做事</string>
+    <string name="mo_settings_appearance_sub">显示做事过程、主题</string>
+    <string name="mo_settings_advanced">高级</string>
+    <string name="mo_settings_advanced_sub">工具、技能、存储、日志等</string>
+    <string name="mo_settings_advanced_hide">收起高级</string>
 </resources>

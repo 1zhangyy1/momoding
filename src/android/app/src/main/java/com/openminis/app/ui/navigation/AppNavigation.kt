@@ -577,6 +577,7 @@ fun AppNavigation(
                 onEnvVarsClick = { navController.safeNavigate(Routes.ENV_VARS) },
                 onSkillsClick = { navController.safeNavigate(Routes.SKILLS) },
                 onHandsClick = { navController.safeNavigate(app.momoding.ui.hands.ROUTE_HANDS) }, // momoding
+                onRoutinesClick = { navController.safeNavigate(Routes.SCHEDULED_TASKS) }, // momoding
                 onTerminalClick = { navController.safeNavigate(Routes.terminal()) },
                 onMemoryClick = { navController.safeNavigate(Routes.MEMORY) },
                 onAgentsClick = { navController.safeNavigate(Routes.AGENTS) },

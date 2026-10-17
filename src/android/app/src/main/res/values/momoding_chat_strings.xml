@@ -19,4 +19,18 @@
     <string name="mo_error_timeout">The model took too long to answer. Try again.</string>
     <string name="mo_error_network">Could not reach the network. Check the connection and try again.</string>
     <string name="mo_error_other">Something went wrong and this was not finished. Try again.</string>
+    <string name="mo_settings_models">Models</string>
+    <string name="mo_settings_models_sub">Connect a provider and pick models</string>
+    <string name="mo_settings_rules">Rules and permissions</string>
+    <string name="mo_settings_rules_sub">Remembered approvals and access to your phone\'s data</string>
+    <string name="mo_settings_background">Background and notifications</string>
+    <string name="mo_settings_background_sub">Keep running in the background; when to notify you</string>
+    <string name="mo_settings_routines">Routines</string>
+    <string name="mo_settings_routines_sub">Things done on a schedule</string>
+    <string name="mo_settings_about_bot">About Momoding</string>
+    <string name="mo_settings_about_bot_sub">Name, look, and how it works for you</string>
+    <string name="mo_settings_appearance_sub">Show how the work is done, theme</string>
+    <string name="mo_settings_advanced">Advanced</string>
+    <string name="mo_settings_advanced_sub">Tools, skills, storage, logs and more</string>
+    <string name="mo_settings_advanced_hide">Hide advanced</string>
 </resources>
