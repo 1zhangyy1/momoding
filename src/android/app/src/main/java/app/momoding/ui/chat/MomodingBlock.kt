@@ -53,7 +53,8 @@ fun MomodingBlock(language: String, code: String) {
         Drafts.BLOCK -> DraftCard(code)
         "momoding-ask" -> if (json != null) AskCard(json, code)
         "momoding-next" -> if (json != null) NextSteps(json)
-        "momoding-remember" -> json?.optString("text")?.takeIf { it.isNotBlank() }?.let { QuietLine(stringResource(R.string.mo_remembered, it)) }
+        "momoding-remember" -> json?.optString("text")?.replace(Regex("""^\s*(记下了|记住了|已记住|Remembered|Noted)[:：,，\s]*"""), "")
+            ?.takeIf { it.isNotBlank() }?.let { QuietLine(stringResource(R.string.mo_remembered, it)) }
         "momoding-permission" -> if (json != null) PermissionCard(json, code)
         else -> Unit
     }

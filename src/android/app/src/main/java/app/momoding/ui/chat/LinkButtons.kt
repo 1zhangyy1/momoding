@@ -25,6 +25,24 @@ object LinkLine {
     private val LINK = Regex("""(?<!!)\[([^\]\n]+)\]\(([^)\s]+)\)""")
     private val FILLER = Regex("""[\s·•|、,，;；\-–—]*""")
 
+    /**
+     * A finished reply's paragraphs are merged into one block, so the links line arrives glued to
+     * the text above it: split off the trailing lines that are only links. Null when there are none.
+     */
+    fun splitTrailing(raw: String): Pair<String, List<Pair<String, String>>>? {
+        val lines = raw.trimEnd().lines()
+        var i = lines.size
+        val links = mutableListOf<Pair<String, String>>()
+        while (i > 0) {
+            val l = lines[i - 1]
+            if (l.isBlank()) { i--; continue }
+            val found = parse(l) ?: break
+            links.addAll(0, found); i--
+        }
+        if (links.isEmpty()) return null
+        return lines.take(i).joinToString("\n").trimEnd() to links
+    }
+
     /** (label, url) when [raw] is nothing but links (and separators), else null. */
     fun parse(raw: String): List<Pair<String, String>>? {
         val text = raw.trim()

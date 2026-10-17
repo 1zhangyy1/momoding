@@ -4562,7 +4562,7 @@ fun ChatScreen(
                                     )
                                 }
                             }
-                            is FlatChatItem.AssistantMarkdownBlock -> app.momoding.ui.chat.LinkLine.parse(item.rawText)?.let { links ->
+                            is FlatChatItem.AssistantMarkdownBlock -> app.momoding.ui.chat.LinkLine.splitTrailing(item.rawText)?.takeIf { it.first.isBlank() }?.let { (_, links) ->
                                 app.momoding.ui.chat.LinkButtons(links, onOpen = urlClickHandler) // momoding: a line of links is a row of buttons
                             } ?: BoundsTrackedBlock(
                                 messageId = item.messageId,
@@ -4577,14 +4577,19 @@ fun ChatScreen(
                                     SideEffect {
                                         selectionController.rememberMessageMarkdown(item.messageId, item.messageMarkdown)
                                     }
+                                    // momoding: trailing links lines become buttons under the text
+                                    val momodingSplit = remember(item.rawText) { app.momoding.ui.chat.LinkLine.splitTrailing(item.rawText) }
+                                    Column {
                                     MarkdownBlock(
-                                        rawText = item.rawText,
+                                        rawText = momodingSplit?.first ?: item.rawText,
                                         isStreaming = item.isStreaming,
                                         shardId = TextShardId(
                                             messageId = item.messageId,
                                             shardId = "mdblock:${item.parentBlockId}:${item.blockIndex}",
                                         ),
                                     )
+                                    momodingSplit?.let { app.momoding.ui.chat.LinkButtons(it.second, onOpen = urlClickHandler) }
+                                    }
                                 }
                             }
                             is FlatChatItem.AssistantThinking -> {

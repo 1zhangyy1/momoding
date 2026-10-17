@@ -12,4 +12,11 @@ class LinkLineTest {
             LinkLine.parse("[在日历里看](minis://views/calendar) · [打开设置](minis://settings)"))
     @Test fun `a sentence with a link`() = assertNull(LinkLine.parse("已存入时钟（[查看](minis://views/alarm)）。"))
     @Test fun `an image is not a button`() = assertNull(LinkLine.parse("![图](minis://attachments/a.png)"))
+
+    @Test fun `trailing links split off a merged block`() {
+        val (text, links) = LinkLine.splitTrailing("已记上：周三 16:00 取快递。\n\n[在日历里看](minis://views/calendar?at=2026-10-21T16:00)")!!
+        assertEquals("已记上：周三 16:00 取快递。", text)
+        assertEquals(listOf("在日历里看" to "minis://views/calendar?at=2026-10-21T16:00"), links)
+        assertNull(LinkLine.splitTrailing("没有链接。"))
+    }
 }
