@@ -43,6 +43,7 @@ import org.json.JSONObject
  *   momoding-ask      → "needs your say": the question and 2–4 options; a tap answers it
  *   momoding-next     → suggested next steps as buttons; a tap sends one
  *   momoding-remember → one quiet line "Remembered: …"
+ *   momoding-permission → "To do this I need X · Turn on / Not now" (prototype perm card)
  *   momoding-notify and anything unknown → nothing (app protocol, not for the eye)
  */
 @Composable
@@ -53,6 +54,7 @@ fun MomodingBlock(language: String, code: String) {
         "momoding-ask" -> if (json != null) AskCard(json, code)
         "momoding-next" -> if (json != null) NextSteps(json)
         "momoding-remember" -> json?.optString("text")?.takeIf { it.isNotBlank() }?.let { QuietLine(stringResource(R.string.mo_remembered, it)) }
+        "momoding-permission" -> if (json != null) PermissionCard(json, code)
         else -> Unit
     }
 }
@@ -136,3 +138,83 @@ private object AskState {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY + id, value).apply()
     }
 }
+
+/**
+ * The prototype's permission card. Phone data (calendar, contacts, location, photos,
+ * notifications) is asked with the system dialog right here; when granted the chat is told to
+ * carry on. The hands need accessibility and drawing over apps, which live in Settings → Hands:
+ * the card opens it and offers "Done, carry on" for when the person comes back.
+ */
+@Composable
+private fun PermissionCard(o: JSONObject, code: String) {
+    val need = o.optString("need").trim().lowercase()
+    val context = LocalContext.current
+    val id = remember(code) { Integer.toHexString(code.hashCode()) }
+    var state by remember(id) { mutableStateOf(AskState.chosen(context, "perm.$id")) }
+    val label = when (need) {
+        "hands" -> stringResource(R.string.mo_perm_hands)
+        "calendar" -> stringResource(R.string.mo_risk_target_calendar)
+        "contacts" -> stringResource(R.string.mo_risk_target_contacts)
+        "photos" -> stringResource(R.string.mo_risk_target_photos)
+        "notifications" -> stringResource(R.string.mo_risk_target_notifications)
+        "location" -> stringResource(R.string.mo_perm_location)
+        else -> return
+    }
+    val permissions = PermissionNeeds.androidPermissions(need)
+    val carryOn = stringResource(R.string.mo_perm_carry_on_msg)
+    val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions(),
+    ) { result ->
+        if (result.values.any { it }) {
+            AskState.choose(context, "perm.$id", "granted"); state = "granted"; MomodingSend.send(carryOn)
+        } else {
+            // asked before and refused for good: the system no longer shows the dialog — its settings page does it
+            runCatching {
+                context.startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    android.net.Uri.fromParts("package", context.packageName, null)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+            AskState.choose(context, "perm.$id", "settings"); state = "settings"
+        }
+    }
+    Surface(
+        shape = RoundedCornerShape(16.dp), color = Tones.surface, border = BorderStroke(1.dp, Tones.hairline),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+    ) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+            Text(stringResource(R.string.mo_perm_title, label), fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+            Spacer(Modifier.height(4.dp))
+            Text(stringResource(R.string.mo_perm_detail), fontSize = 12.sp, color = ChatColors.secondaryText)
+            Spacer(Modifier.height(10.dp))
+            when (state) {
+                "granted" -> Text(stringResource(R.string.mo_perm_state_granted), fontSize = 13.sp, color = ChatColors.secondaryText)
+                "declined" -> Text(stringResource(R.string.mo_perm_state_declined), fontSize = 13.sp, color = ChatColors.secondaryText)
+                "settings", "hands" -> Chips(listOf(stringResource(R.string.mo_perm_done)), primaryFirst = true) {
+                    AskState.choose(context, "perm.$id", "granted"); state = "granted"; MomodingSend.send(carryOn)
+                }
+                else -> Chips(listOf(stringResource(R.string.mo_perm_open), stringResource(R.string.mo_perm_no)), primaryFirst = true) { pick ->
+                    if (pick == context.getString(R.string.mo_perm_no)) {
+                        AskState.choose(context, "perm.$id", "declined"); state = "declined"
+                        MomodingSend.send(context.getString(R.string.mo_perm_no_msg))
+                    } else if (need == "hands") {
+                        runCatching { context.startActivity(app.momoding.deeplink.OwnScheme.intent(context, android.net.Uri.parse("minis://settings/hands"), 0)) }
+                        AskState.choose(context, "perm.$id", "hands"); state = "hands"
+                    } else {
+                        launcher.launch(permissions)
+                    }
+                }
+            }
+        }
+    }
+}
+
+internal object PermissionNeeds {
+    fun androidPermissions(need: String): Array<String> = when (need) {
+        "calendar" -> arrayOf(android.Manifest.permission.READ_CALENDAR, android.Manifest.permission.WRITE_CALENDAR)
+        "contacts" -> arrayOf(android.Manifest.permission.READ_CONTACTS, android.Manifest.permission.WRITE_CONTACTS)
+        "location" -> arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION)
+        "photos" -> if (android.os.Build.VERSION.SDK_INT >= 33) arrayOf(android.Manifest.permission.READ_MEDIA_IMAGES) else arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+        "notifications" -> if (android.os.Build.VERSION.SDK_INT >= 33) arrayOf(android.Manifest.permission.POST_NOTIFICATIONS) else emptyArray()
+        else -> emptyArray()
+    }
+}
+

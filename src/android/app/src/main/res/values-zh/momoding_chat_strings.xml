@@ -72,4 +72,15 @@
     <string name="mo_ask_chosen">你选了：%1$s</string>
     <string name="mo_steps_show">看过程</string>
     <string name="mo_steps_hide">收起</string>
+    <string name="mo_perm_title">要先打开%1$s权限，我才能做这件事</string>
+    <string name="mo_perm_detail">只在我干活时用，随时能在设置里关掉。</string>
+    <string name="mo_perm_open">去打开</string>
+    <string name="mo_perm_no">不用了</string>
+    <string name="mo_perm_done">好了，接着做</string>
+    <string name="mo_perm_state_granted">已打开</string>
+    <string name="mo_perm_state_declined">没打开</string>
+    <string name="mo_perm_carry_on_msg">已经打开了，接着做吧。</string>
+    <string name="mo_perm_no_msg">不用了，这次先不做。</string>
+    <string name="mo_perm_hands">屏幕操作（无障碍和悬浮窗）</string>
+    <string name="mo_perm_location">位置</string>
 </resources>

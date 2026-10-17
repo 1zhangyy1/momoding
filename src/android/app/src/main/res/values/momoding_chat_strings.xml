@@ -72,4 +72,15 @@
     <string name="mo_ask_chosen">You chose: %1$s</string>
     <string name="mo_steps_show">See how it was done</string>
     <string name="mo_steps_hide">Hide</string>
+    <string name="mo_perm_title">To do this I need access to your %1$s</string>
+    <string name="mo_perm_detail">Only used while I work on something; you can switch it off in Settings anytime.</string>
+    <string name="mo_perm_open">Turn on</string>
+    <string name="mo_perm_no">Not now</string>
+    <string name="mo_perm_done">Done, carry on</string>
+    <string name="mo_perm_state_granted">Turned on</string>
+    <string name="mo_perm_state_declined">Not turned on</string>
+    <string name="mo_perm_carry_on_msg">It\'s on — carry on.</string>
+    <string name="mo_perm_no_msg">Not now.</string>
+    <string name="mo_perm_hands">the screen (accessibility and drawing over apps)</string>
+    <string name="mo_perm_location">location</string>
 </resources>

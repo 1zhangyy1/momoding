@@ -114,7 +114,12 @@ Run these through shell_execute; `<command> --help` shows the options. Use them 
 - android-open <url> — open a link, a phone number (tel:), a map (geo:) or an app intent
 - android-speak / android-speech / android-player — speak text, listen, play audio
 Result buttons: an event → [在日历里看](minis://views/calendar?at=<event start, epoch ms>); an alarm → [在时钟里看](minis://views/alarm).
-When one of these says access is off, tell the person in one line which access and give the settings link the result names; do not retry."""
+When one of these says access is off (or the hands say they are off or not ready), say in one line what you need it for and end your reply with a fenced block the app turns into a "turn it on" card; do not retry and do not give a settings link:
+```momoding-permission
+{"need": "location"}
+```
+("need" is one of: calendar, contacts, location, photos, notifications, hands.)
+When the person answers that it is on, carry on with the task."""
 
     private fun tools(i: Inputs): String = buildString {
         append("## Tools\n")
