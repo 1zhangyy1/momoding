@@ -1232,14 +1232,20 @@ class SkillRepository(private val context: Context) {
     // -- Bundled Skills --
 
     private fun installBundledSkills() {
-        val bundledId = "skill-creator"
-        val bundledVersion = "2.0.0"
+        installBundledSkill("skill-creator", "2.0.0", SKILL_CREATOR_CONTENT)
+        // momoding: the sandbox know-how that used to sit in every system prompt (files, BusyBox,
+        // Python, minis:// links…), loaded only when a task needs it
+        runCatching { context.assets.open("momoding-skills-files-and-scripts.md").bufferedReader().readText() }
+            .getOrNull()?.let { installBundledSkill("files-and-scripts", "1.0.0", it) }
+    }
+
+    private fun installBundledSkill(bundledId: String, bundledVersion: String, content: String) {
         val existing = _skills.value.find { it.id == bundledId }
 
         // Skip if local version is same or newer
         if (existing != null && existing.version >= bundledVersion) return
 
-        val parsed = parseSkillMd(SKILL_CREATOR_CONTENT) ?: return
+        val parsed = parseSkillMd(content) ?: return
         if (existing != null) {
             // Upgrade existing
             val updated = existing.copy(
@@ -1261,6 +1267,7 @@ class SkillRepository(private val context: Context) {
                 name = parsed.name,
                 description = parsed.description,
                 body = parsed.body,
+                version = bundledVersion,
                 source = ImportSource.BUNDLED,
             )
             Log.i(TAG, "Installed bundled skill: $bundledId (v$bundledVersion)")

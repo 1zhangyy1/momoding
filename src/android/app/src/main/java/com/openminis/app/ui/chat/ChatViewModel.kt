@@ -15188,6 +15188,25 @@ Memory system (currently DISABLED):
         // Mirrors iOS AIChatViewModel.baseSystemPrompt.
         // momoding: the person-first rules and how approvals work replace upstream's
         // "use shell commands proactively" opener; both are static, inside the cached prefix
+        // momoding: the main chat gets Momoding's prompt (docs 调研/提示词-逐段.md); sub agents keep upstream's
+        if (helperConfig == null) {
+            mcpRepository?.reloadFromDisk()
+            return app.momoding.prompt.MomodingPrompt.build(
+                context,
+                app.momoding.prompt.MomodingPrompt.Inputs(
+                    identity = identitySection,
+                    browserEnabled = browserToolEnabled,
+                    memoryOn = memoryOn,
+                    skills = skillRepository?.skillPromptFragment(activeSessionId),
+                    mcp = mcpRepository?.mcpPromptFragment(activeSessionId),
+                    recentNotes = if (memoryOn) memoryRepository?.loadRecentDailyMemoryFragment() else null,
+                    aboutPerson = if (memoryOn) app.momoding.memory.UserFile.promptFragment(context) else null,
+                    ladder = app.momoding.hands.Hands.promptParagraph(context),
+                    addenda = app.momoding.chat.SessionAddenda.forPrompt(realSessionId.ifEmpty { sessionId }),
+                ),
+            ).let(app.momoding.prompt.MomodingRules::rebrand)
+                .also { app.momoding.prompt.PromptDump.write(context, it) }
+        }
         val base = identitySection + app.momoding.prompt.MomodingRules.TEXT +
             app.momoding.guard.RiskPolicy.promptParagraph() + "\n\n" + """Available tools:
 - shell_execute: Run any shell command. Each invocation is an isolated process with stdout/stderr captured. Prefer this for most tasks — it is a real Linux environment with persistent filesystem. Common tools (python3, pip, curl, wget, git, ssh, etc.) can be installed via apk add; Python packages via pip install. Use `which <cmd>` to check if a tool is already installed before running apk add — many packages persist across sessions. When you need to wait before checking results (e.g. polling, waiting for a process), use the `delay` parameter instead of `sleep` in the command — delay blocks the agent flow without occupying the shell, so other concurrent tasks can use it during the wait. This avoids resource contention. Execution discipline for long-running or dispatched work: make tool calls immediately instead of describing intentions, and keep working until the task is complete. Within a turn, `delay` is your wait mechanism — to follow up on something still running, chain delay-then-check calls at a task-appropriate interval until you have the result or hit a sensible retry cap. For a check that should happen AFTER this turn ends, register it by running `minis-scheduled create …` via shell_execute (see the CLI list) — it fires a new turn at the scheduled time through a system alarm. NEVER end a turn with a promise of future action: 'I'll keep monitoring', 'will sync the result later', and ending right after a single still-running status check with 'let's keep waiting' are all the same violation — once your turn ends, NOTHING runs until the user's next message. If polling to completion is genuinely not worth blocking the turn, close honestly instead: either register a `minis-scheduled` follow-up (say so, with its task id) or state that you will only learn the outcome when the user next messages; see 'Scheduled tasks' later in this prompt.
@@ -15352,6 +15371,7 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
             app.momoding.chat.SessionAddenda.forPrompt(realSessionId.ifEmpty { sessionId })
                 ?.let { append("\n\n").append(it) }
         }.let(app.momoding.prompt.MomodingRules::rebrand) // momoding: the model never calls itself "Minis"
+            .also { app.momoding.prompt.PromptDump.write(context, it) } // momoding: debug builds only
     }
 
     /** momoding: after every completed turn — the turn budget of prompt addenda counts down. */
