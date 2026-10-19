@@ -81,7 +81,7 @@ val LightChatPalette = ChatPalette(
     codeBlockText = Color(0xFF34C759),
     inlineCodeBg = Color(0xFFF2F2F7),
     inlineCodeText = Color(0xFFFF9500),
-    link = Color(0xFF007AFF),
+    link = Color(0xFF2E7A12), // momoding: links in Momoding green
     blockquoteBar = Color(0x80FF9500),
     thinking = Color(0xFF007AFF),
     warningBg = Color(0x14FF9500),
@@ -139,7 +139,7 @@ val DarkChatPalette = ChatPalette(
     // chips read against both the wash and fenced blocks.
     inlineCodeBg = Color(0xFF34343A),
     inlineCodeText = Color(0xFFFF9F0A),
-    link = Color(0xFF0A84FF),
+    link = Color(0xFF6CC24A), // momoding
     blockquoteBar = Color(0x80FF9F0A),
     thinking = Color(0xFF0A84FF),
     warningBg = Color(0x14FF9F0A),

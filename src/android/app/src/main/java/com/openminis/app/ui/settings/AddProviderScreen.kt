@@ -292,7 +292,7 @@ private fun ChooseProviderScreen(
             chatTemplates.forEachIndexed { index, template ->
                 SettingsRow(
                     title = template.name,
-                    subtitle = template.baseURL.removePrefix("https://"),
+                    subtitle = template.note.ifBlank { template.baseURL.removePrefix("https://") }, // momoding: what you get, not the address
                     icon = icon,
                     iconColor = iconColor,
                     onClick = { onSelectChatTemplate(template) },
@@ -505,12 +505,14 @@ private fun ConfigureProviderScreen(
     var customBaseURL by remember { mutableStateOf(voiceTemplate?.baseURL ?: chatTemplate?.baseURL ?: "") }
 
     SettingsScaffold(
-        title = stringResource(R.string.add_provider_configure_provider, providerType.displayName),
+        // momoding: a preset is "连接 DeepSeek"; the protocol's name means nothing to the person
+        title = if (chatTemplate != null) stringResource(R.string.mo_add_provider_connect, chatTemplate.name)
+            else stringResource(R.string.add_provider_configure_provider, providerType.displayName),
         onBack = onBack,
     ) {
         // Identity section — Label only. Each provider auto-suggests a
         // unique label so users don't have to type one for the common case.
-        SettingsSection(
+        if (chatTemplate == null) SettingsSection( // momoding: a preset's name is its label
             header = stringResource(R.string.add_provider_identity),
             footer = stringResource(R.string.add_provider_the_label_is_shown_in_the_provider_list_),
         ) {
@@ -538,6 +540,7 @@ private fun ConfigureProviderScreen(
                 onCustomBaseURLChange = { customBaseURL = it },
                 providerRepository = providerRepository,
                 initialAppendV1 = voiceTemplate?.appendV1 ?: chatTemplate?.appendV1,
+                preset = chatTemplate != null,
                 onSaved = onSaved,
             )
             ProviderCredential.oauth -> OAuthConfigSection(
@@ -564,6 +567,8 @@ private fun ColumnScope.ApiKeyConfigSection(
     // [T-android-provider-voice] Voice templates carry their own v1-suffix
     // policy (e.g. MiMo appends /v1, ElevenLabs must not). null = type default.
     initialAppendV1: Boolean? = null,
+    // momoding: a preset filled the address and format in; only the key is the person's to give
+    preset: Boolean = false,
     onSaved: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -589,7 +594,7 @@ private fun ColumnScope.ApiKeyConfigSection(
         ProviderType.unsupported -> "API Key..."
     }
     SettingsSection(
-        header = stringResource(R.string.add_provider_credential),
+        header = if (preset) null else stringResource(R.string.add_provider_credential), // momoding
         footer = stringResource(R.string.add_provider_your_key_is_stored_securely_in_encrypted),
     ) {
         SettingsCardBlock {
@@ -613,7 +618,7 @@ private fun ColumnScope.ApiKeyConfigSection(
     }
 
     // ── Endpoint (skip for OpenRouter — fixed base URL) ─────────────────
-    if (providerType != ProviderType.openRouter) {
+    if (providerType != ProviderType.openRouter && !preset) {
         val defaultUrl = when (providerType) {
             ProviderType.gemini -> "https://generativelanguage.googleapis.com/v1beta"
             ProviderType.anthropic -> "https://api.anthropic.com"
@@ -664,7 +669,7 @@ private fun ColumnScope.ApiKeyConfigSection(
     }
 
     // ── API Format (OpenAI only) ────────────────────────────────────────
-    if (providerType == ProviderType.openAI) {
+    if (providerType == ProviderType.openAI && !preset) {
         SettingsSection(
             header = stringResource(R.string.provider_detail_api_format),
             footer = if (useResponsesAPI) {
@@ -731,7 +736,7 @@ private fun ColumnScope.ApiKeyConfigSection(
                 (providerType == ProviderType.openAI || providerType == ProviderType.anthropic)
         ),
     ) {
-        Text(stringResource(R.string.provider_list_add_provider))
+        Text(stringResource(if (preset) R.string.mo_add_provider_connect_button else R.string.provider_list_add_provider)) // momoding
     }
 }
 

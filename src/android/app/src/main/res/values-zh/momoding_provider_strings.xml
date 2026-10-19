@@ -2,4 +2,6 @@
 <resources>
     <string name="mo_add_provider_cn_header">国内常用</string>
     <string name="mo_add_provider_cn_footer">地址已经帮你填好，从服务商控制台复制 API Key 粘贴进来就行。</string>
+    <string name="mo_add_provider_connect">连接 %1$s</string>
+    <string name="mo_add_provider_connect_button">连接</string>
 </resources>

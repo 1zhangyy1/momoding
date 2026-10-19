@@ -1034,7 +1034,7 @@
     <string name="common_change">更換</string>
     <string name="common_remove">移除</string>
     <string name="provider_detail_set_manual_bearer_token">設定手動 Bearer Token</string>
-    <string name="add_provider_choose_provider">選擇 AI 服務商</string>
+    <string name="add_provider_choose_provider">更多服務商</string>
     <string name="add_provider_you_can_add_multiple_instances_of_the_sa">你可以新增同一供應商的多個實例（例如工作與個人帳號）。OpenAI 和 Anthropic 也支援相容的第三方端點 —— 選擇對應的通訊協定後再設定自訂 API Base URL。</string>
     <string name="add_provider_auth_method">認證方式</string>
     <string name="add_provider_choose_authentication">選擇身分驗證方式</string>
