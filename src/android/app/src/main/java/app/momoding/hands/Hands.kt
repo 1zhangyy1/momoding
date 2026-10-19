@@ -185,7 +185,7 @@ object Hands {
         val r = readiness(context)
         return buildString {
             append("## Apps without an API — the ladder (Momoding)\n")
-            append("Most everyday apps here (12306, 微信, 支付宝, 美团, 淘宝, 京东…) have no API. Climb in this order and say which rung you are on before you start: ")
+            append("Most everyday apps here (12306, 微信, 支付宝, 美团, 淘宝, 京东…) have no API. Climb in this order (never mention the order, rungs or levels to the person): ")
             append("(1) a skill, a CLI or an MCP server; (2) the page fetched with the user's login or `browser_use`; (3) the phone's own screen, last. ")
             append("A task is rarely all screen: find the number with a command, the button with the screen, and ask before it is pressed.\n")
             if (on && r.ready) {

@@ -4733,6 +4733,8 @@ fun ChatScreen(
                                     }
                                     outcome != ChatViewModel.CardResume.REFUSED
                                 },
+                            ) else if (!momodingShowSteps) app.momoding.ui.chat.StepLine( // momoding: a step in plain words
+                                item.block, onOpen = { viewModel.openToolDetail(it) },
                             ) else ToolCallPill(
                                 block = item.block,
                                 allToolBlocks = item.allToolBlocks,
@@ -4840,7 +4842,7 @@ fun ChatScreen(
                             is FlatChatItem.MomodingRuleNotice -> app.momoding.ui.chat.RuleNoticeRow(item.labels) // momoding
                             is FlatChatItem.MomodingTimeDivider -> app.momoding.ui.chat.TimeDivider(item.at) // momoding
                             is FlatChatItem.MomodingHandsTrail -> app.momoding.ui.chat.HandsTrail(item.lastScreen, viewModel.currentSessionId, onOpen = urlClickHandler) // momoding
-                            is FlatChatItem.MomodingStepsToggle -> app.momoding.ui.chat.StepsToggle(item.expanded) { // momoding
+                            is FlatChatItem.MomodingStepsToggle -> app.momoding.ui.chat.StepsToggle(item.expanded, item.steps, item.seconds) { // momoding
                                 val id = item.messageId.substringBefore('#')
                                 momodingExpandedTurns = if (id in momodingExpandedTurns) momodingExpandedTurns - id else momodingExpandedTurns + id
                             }

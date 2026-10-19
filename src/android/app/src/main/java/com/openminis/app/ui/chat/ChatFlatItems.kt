@@ -498,8 +498,8 @@ internal sealed class FlatChatItem {
         override val contentType = "trail"
     }
 
-    /** momoding: "看过程 / 收起" under a finished turn that did something (keyed by the turn's last message). */
-    data class MomodingStepsToggle(val messageId: String, val expanded: Boolean) : FlatChatItem() {
+    /** momoding: "✓ 做了 3 步 · 18 秒" opening a finished turn that did something (keyed by the turn's last message). */
+    data class MomodingStepsToggle(val messageId: String, val expanded: Boolean, val steps: Int = 0, val seconds: Int = 0) : FlatChatItem() {
         override val key = "steps:$messageId"
         override val contentType = "steps"
     }
@@ -804,6 +804,17 @@ internal fun buildFlatChatItems(
         // the assistant header so each info block stands on its own. Mirrors
         // iOS systemDividerRow / compactDividerRow.
         val isSystem = message.role == "system"
+        // momoding: a finished turn that did something opens with one line summing up its steps;
+        // tapped, the steps unfold right under it, in order, before the reply
+        if (!showStepsAll && message.role == "assistant" && (idx == 0 || messages[idx - 1].role != "assistant")) {
+            val last = turnLast[idx]
+            if (last >= 0 && !messages[last].isStreaming && turnHasSteps(last)) {
+                val blocks = (idx..last).flatMap { messages[it].toolBlocks }.filter { it.kind == "tool_use" }
+                val started = messages.getOrNull(idx - 1)?.sentAt ?: blocks.minOfOrNull { it.startTimeMs }?.takeIf { it > 0 }
+                val seconds = ((messages[last].completedAt ?: 0L) - (started ?: 0L)).takeIf { started != null && it > 0 }?.div(1000)?.toInt() ?: 0
+                out.add(dedupe(FlatChatItem.MomodingStepsToggle(messages[last].id, expanded = messages[last].id in expandedTurns, steps = blocks.size, seconds = seconds)))
+            }
+        }
         if (!showSteps && !isSystem && stepsOnlyTurn(message)) continue // momoding
         val joinedMarkdown = run {
             val parts = message.toolBlocks
@@ -1053,10 +1064,6 @@ internal fun buildFlatChatItems(
             }
         }
 
-        // momoding: "看过程 / 收起" closes a finished turn that did something
-        if (!showStepsAll && message.role == "assistant" && turnLast[idx] == idx && !message.isStreaming && turnHasSteps(idx)) {
-            out.add(dedupe(FlatChatItem.MomodingStepsToggle(message.id, expanded = message.id in expandedTurns)))
-        }
     }
     return out
 }

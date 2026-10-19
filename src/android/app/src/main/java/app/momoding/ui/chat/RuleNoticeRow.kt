@@ -41,26 +41,11 @@ fun RuleNoticeRow(entries: List<String>) {
         }.replace("（）", "").replace("()", "").replace(" ()", "")
         if (kind == RuleHits.REMEMBER) { QuietLine(line); return@forEach }
         val done = kind != RuleHits.DENIED && kind != RuleHits.TIMEOUT
-        Row(Modifier.padding(top = 2.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(if (done) "✓ " else "– ", fontSize = 12.sp, color = if (done) Tones.action else ChatColors.secondaryText)
-            Text(line, fontSize = 12.sp, color = ChatColors.secondaryText)
-            if (kind == RuleHits.RULE || kind == RuleHits.ALWAYS) Text(
-                " · " + stringResource(R.string.mo_rule_notice_edit),
-                fontSize = 12.sp, color = Tones.action,
-                modifier = Modifier.clickable {
-                    runCatching { context.startActivity(OwnScheme.intent(context, Uri.parse("minis://settings/permissions"), 0)) }
-                },
-            )
-        }
+        val editable = kind == RuleHits.RULE || kind == RuleHits.ALWAYS
+        MetaLine(
+            line, if (done) Mark.DONE else Mark.UNDONE,
+            action = if (editable) stringResource(R.string.mo_rule_notice_edit) else null,
+            onAction = if (editable) ({ runCatching { context.startActivity(OwnScheme.intent(context, Uri.parse("minis://settings/permissions"), 0)) } }) else null,
+        )
     } }
-}
-
-/** "看过程 / 收起" under a finished turn: the steps it took, folded by default (prototype vRes). */
-@Composable
-fun StepsToggle(expanded: Boolean, onToggle: () -> Unit) {
-    Text(
-        stringResource(if (expanded) R.string.mo_steps_hide else R.string.mo_steps_show),
-        fontSize = 12.sp, color = ChatColors.secondaryText,
-        modifier = Modifier.clickable(onClick = onToggle).padding(top = 2.dp, bottom = 6.dp, end = 12.dp),
-    )
 }

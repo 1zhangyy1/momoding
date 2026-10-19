@@ -129,11 +129,7 @@ private fun Chips(items: List<String>, primaryFirst: Boolean, onPick: (String) -
 
 /** The prototype's one quiet line: remembered, added to your rules, saved as a skill. */
 @Composable
-fun QuietLine(text: String) {
-    Row(Modifier.padding(top = 2.dp, bottom = 4.dp)) {
-        Text(text, fontSize = 12.sp, color = ChatColors.secondaryText)
-    }
-}
+fun QuietLine(text: String) = MetaLine(text)
 
 /** Which option was picked on an ask card (per card content), so the card stays answered. */
 private object AskState {

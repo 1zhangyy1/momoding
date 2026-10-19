@@ -82,15 +82,9 @@ fun CardTitle(text: String) {
     Text(text, fontSize = 15.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
 }
 
-/** What a settled card leaves behind: one line, a check when it went through. */
+/** What a settled card leaves behind: one [MetaLine], ✓ when it went through. */
 @Composable
-fun SettledLine(text: String, done: Boolean = true) {
-    Row(Modifier.padding(top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(if (done) "✓" else "–", fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-            color = if (done) Tones.action else ChatColors.secondaryText, modifier = Modifier.padding(end = 6.dp))
-        Text(text, fontSize = 13.sp, color = ChatColors.secondaryText, maxLines = 2, overflow = TextOverflow.Ellipsis)
-    }
-}
+fun SettledLine(text: String, done: Boolean = true) = MetaLine(text, if (done) Mark.DONE else Mark.UNDONE)
 
 /** The card's buttons, right-aligned, the main one last (Grok: secondary actions before the primary). */
 @Composable
