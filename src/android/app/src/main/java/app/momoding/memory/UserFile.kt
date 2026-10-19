@@ -23,6 +23,21 @@ object UserFile {
 
     fun promptFragment(context: Context): String = render(read(context))
 
+    private const val PREFS = "momoding"
+    private const val KEY_ASKED = "firstRun.askedName"
+
+    /** USER.md is empty and the name was never asked: this turn should end by asking it. */
+    fun shouldAskName(context: Context): Boolean =
+        read(context).isEmpty() && !context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_ASKED, false)
+
+    /** After the turn that carried the question (asked once, whatever the answer). */
+    fun markNameAsked(context: Context) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_ASKED, true).apply()
+    }
+
+    /** The last words of the system prompt for that one turn (where the model weighs them most). */
+    const val ASK_NAME_ADDENDUM = "## This turn\nYou do not know the person yet. Do what they asked first; then end your reply with one short line asking how they would like to be called (in their language, e.g. \"对了，我该怎么称呼你？\"). Nothing else about yourself."
+
     internal fun render(text: String): String = buildString {
         appendLine("## About the person (USER.md)")
         append("/var/minis/memory/USER.md is your short card on the person you work for: how to address them, ")
@@ -36,7 +51,7 @@ object UserFile {
         appendLine("```")
         appendLine("Never write secrets, passwords or codes into it.")
         if (text.isEmpty()) {
-            append("It is empty so far: when you learn how they want to be addressed, write that first.")
+            append("It is empty so far. When they tell you how to call them, write that first. Only write what they told you, never what you guessed.")
         } else {
             append(text.take(MAX_CHARS))
             if (text.length > MAX_CHARS) append("\n(USER.md is over $MAX_CHARS characters; tidy it next time you edit it.)")

@@ -19,4 +19,10 @@ class LinkLineTest {
         assertEquals(listOf("在日历里看" to "minis://views/calendar?at=2026-10-21T16:00"), links)
         assertNull(LinkLine.splitTrailing("没有链接。"))
     }
+
+    @Test fun `a links line followed by a question still becomes buttons`() {
+        val (text, links) = LinkLine.splitTrailing("定了：明天 14:00 交房租。\n\n[在日历里看](minis://views/calendar?at=x)\n\n对了，我该怎么称呼你？")!!
+        assertEquals("定了：明天 14:00 交房租。\n\n对了，我该怎么称呼你？", text)
+        assertEquals(1, links.size)
+    }
 }

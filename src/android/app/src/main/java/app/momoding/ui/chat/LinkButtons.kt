@@ -30,17 +30,15 @@ object LinkLine {
      * the text above it: split off the trailing lines that are only links. Null when there are none.
      */
     fun splitTrailing(raw: String): Pair<String, List<Pair<String, String>>>? {
-        val lines = raw.trimEnd().lines()
-        var i = lines.size
+        // any line that is only links (usually the last; a question may follow it) becomes buttons
         val links = mutableListOf<Pair<String, String>>()
-        while (i > 0) {
-            val l = lines[i - 1]
-            if (l.isBlank()) { i--; continue }
-            val found = parse(l) ?: break
-            links.addAll(0, found); i--
+        val kept = raw.trimEnd().lines().filter { l ->
+            val found = if (l.isBlank()) null else parse(l)
+            if (found != null) links.addAll(found)
+            found == null
         }
         if (links.isEmpty()) return null
-        return lines.take(i).joinToString("\n").trimEnd() to links
+        return kept.joinToString("\n").replace(Regex("\n{3,}"), "\n\n").trim() to links
     }
 
     /** (label, url) when [raw] is nothing but links (and separators), else null. */

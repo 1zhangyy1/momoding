@@ -15203,6 +15203,7 @@ Memory system (currently DISABLED):
                     aboutPerson = if (memoryOn) app.momoding.memory.UserFile.promptFragment(context) else null,
                     ladder = app.momoding.hands.Hands.promptParagraph(context),
                     addenda = app.momoding.chat.SessionAddenda.forPrompt(realSessionId.ifEmpty { sessionId }),
+                    askName = memoryOn && app.momoding.memory.UserFile.shouldAskName(context),
                 ),
             ).let(app.momoding.prompt.MomodingRules::rebrand)
                 .also { app.momoding.prompt.PromptDump.write(context, it) }
@@ -15377,6 +15378,7 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
     /** momoding: after every completed turn — the turn budget of prompt addenda counts down. */
     private fun momodingAfterTurn() {
         app.momoding.chat.SessionAddenda.onTurnFinished(realSessionId.ifEmpty { sessionId })
+        if (_memoryEnabled.value && app.momoding.memory.UserFile.shouldAskName(context)) app.momoding.memory.UserFile.markNameAsked(context) // momoding: asked once
     }
 
     // ─── Legacy tool execution methods (kept for compatibility) ───────────

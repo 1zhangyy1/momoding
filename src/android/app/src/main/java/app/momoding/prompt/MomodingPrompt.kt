@@ -36,6 +36,8 @@ object MomodingPrompt {
         val ladder: String,
         /** Turn-limited addenda for this session (a routine's turn, …). */
         val addenda: String?,
+        /** First conversation: end this turn by asking how to call the person. */
+        val askName: Boolean = false,
     )
 
     fun build(context: Context, i: Inputs): String = buildString {
@@ -59,6 +61,7 @@ object MomodingPrompt {
         append("\n").append(now()).append("\n")
         append("\n").append(i.ladder.trim())
         i.addenda?.takeIf { it.isNotBlank() }?.let { append("\n\n").append(it.trim()) }
+        if (i.askName) append("\n\n").append(app.momoding.memory.UserFile.ASK_NAME_ADDENDUM)
     }
 
     /** Date, weekday and time, so "today", "tomorrow" and "yesterday" come out right. */
