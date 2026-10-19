@@ -16,4 +16,7 @@
     <string name="mo_draft_failed_busy">「手」正在忙，稍後再試</string>
     <string name="mo_draft_failed_stopped">你停止了</string>
     <string name="mo_draft_retry">再試一次</string>
+    <string name="mo_draft_settled_sent">已傳送至 %1$s：「%2$s」</string>
+    <string name="mo_draft_settled_sent_plain">已傳送：「%1$s」</string>
+    <string name="mo_draft_settled_discarded">已丟棄草稿：「%1$s」</string>
 </resources>

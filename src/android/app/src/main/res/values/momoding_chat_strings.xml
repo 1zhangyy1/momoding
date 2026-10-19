@@ -110,4 +110,8 @@
     <string name="mo_routine_on_day">%1$d/%2$d %3$s</string>
     <string name="mo_routine_run_now">Run now</string>
     <string name="mo_routine_delete">Delete</string>
+    <string name="mo_ask_hint">Or just type your answer</string>
+    <string name="mo_perm_ask">Allow Momoding to use your %1$s?</string>
+    <string name="mo_perm_settled_granted">Allowed: %1$s</string>
+    <string name="mo_perm_settled_declined">Not allowed: %1$s</string>
 </resources>

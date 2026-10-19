@@ -28,4 +28,16 @@ class BubbleSplitTest {
         assertEquals(3, b.size)
         assertEquals(true, b[1].startsWith("```momoding-draft"))
     }
+
+    @Test fun askedInTheBubbleIsNotAskedAgainOnTheCard() {
+        val b = bubbles("晚上 7 点还是早上 7 点？\n\n```momoding-ask\n{\"question\": \"闹钟定在哪个 7 点？\", \"options\": [\"19:00\", \"07:00\"]}\n```")
+        assertEquals(2, b.size)
+        assertEquals(false, b[1].contains("question"))
+        assertEquals(true, b[1].contains("07:00"))
+    }
+
+    @Test fun cardKeepsItsQuestionWhenTheBubbleDidNotAsk() {
+        val b = bubbles("我找到两个会。\n\n```momoding-ask\n{\"question\": \"提醒哪一个？\", \"options\": [\"A\", \"B\"]}\n```")
+        assertEquals(true, b[1].contains("提醒哪一个"))
+    }
 }

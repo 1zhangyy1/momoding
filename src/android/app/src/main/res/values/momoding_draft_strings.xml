@@ -16,4 +16,7 @@
     <string name="mo_draft_failed_busy">the hands are busy; try again shortly</string>
     <string name="mo_draft_failed_stopped">you stopped it</string>
     <string name="mo_draft_retry">Try again</string>
+    <string name="mo_draft_settled_sent">Sent to %1$s — “%2$s”</string>
+    <string name="mo_draft_settled_sent_plain">Sent — “%1$s”</string>
+    <string name="mo_draft_settled_discarded">Draft discarded — “%1$s”</string>
 </resources>

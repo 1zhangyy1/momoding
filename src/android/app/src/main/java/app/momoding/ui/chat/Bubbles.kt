@@ -126,11 +126,23 @@ object BubbleSplit {
                 LIST.containsMatchIn(first) || first.startsWith(">") || first.startsWith("|") ||
                     LinkLine.splitTrailing(f)?.first?.isBlank() == true
                 )
-            if (attaches) out.last().append("\n\n").append(f) else out.add(StringBuilder(f))
+            val asked = fence && first.startsWith("```momoding-ask") && !lastFence &&
+                out.lastOrNull()?.trimEnd()?.let { it.endsWith("？") || it.endsWith("?") } == true
+            if (attaches) out.last().append("\n\n").append(f)
+            else out.add(StringBuilder(if (asked) withoutQuestion(f) else f))
             lastFence = fence
         }
         return out.map { it.toString() }
     }
 
     private val LIST = Regex("""^([-*+]|\d+[.)])\s""")
+
+    /** The bubble above already asked it: the card keeps only the options. */
+    private fun withoutQuestion(fence: String): String {
+        val body = fence.substringAfter('\n').substringBeforeLast("```").trim()
+        val o = runCatching { org.json.JSONObject(body) }.getOrNull() ?: return fence
+        if (!o.has("question")) return fence
+        o.remove("question")
+        return "```momoding-ask\n$o\n```"
+    }
 }

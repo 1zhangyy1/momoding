@@ -1,7 +1,6 @@
 package app.momoding.ui.chat
 
 import android.content.Context
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -9,14 +8,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -27,7 +22,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.momoding.chat.Drafts
@@ -77,24 +71,16 @@ private fun AskCard(o: JSONObject, code: String) {
     val context = LocalContext.current
     val id = remember(code) { Integer.toHexString(code.hashCode()) }
     var chosen by remember(id) { mutableStateOf(AskState.chosen(context, id)) }
-    Surface(
-        shape = RoundedCornerShape(16.dp), color = Tones.surface, border = BorderStroke(1.dp, Tones.hairline),
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-    ) {
-        Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
-            if (question.isNotEmpty()) {
-                Text(question, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
-                Spacer(Modifier.height(10.dp))
-            }
-            val c = chosen
-            if (c != null) {
-                Text(stringResource(R.string.mo_ask_chosen, c), fontSize = 13.sp, color = ChatColors.secondaryText)
-            } else {
-                Chips(opts, primaryFirst = true) { pick ->
-                    AskState.choose(context, id, pick); chosen = pick; MomodingSend.send(pick)
+    QuietCard {
+        if (question.isNotEmpty()) CardTitle(question)
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            opts.forEachIndexed { i, opt ->
+                OptionRow(i + 1, opt, picked = chosen == opt, settled = chosen != null) {
+                    AskState.choose(context, id, opt); chosen = opt; MomodingSend.send(opt)
                 }
             }
         }
+        if (chosen == null) Text(stringResource(R.string.mo_ask_hint), fontSize = 12.sp, color = ChatColors.secondaryText)
     }
 }
 
@@ -177,31 +163,33 @@ private fun PermissionCard(o: JSONObject, code: String) {
             AskState.choose(context, "perm.$id", "settings"); state = "settings"
         }
     }
-    Surface(
-        shape = RoundedCornerShape(16.dp), color = Tones.surface, border = BorderStroke(1.dp, Tones.hairline),
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-    ) {
-        Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
-            Text(stringResource(R.string.mo_perm_title, label), fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
-            Spacer(Modifier.height(4.dp))
-            Text(stringResource(R.string.mo_perm_detail), fontSize = 12.sp, color = ChatColors.secondaryText)
-            Spacer(Modifier.height(10.dp))
-            when (state) {
-                "granted" -> Text(stringResource(R.string.mo_perm_state_granted), fontSize = 13.sp, color = ChatColors.secondaryText)
-                "declined" -> Text(stringResource(R.string.mo_perm_state_declined), fontSize = 13.sp, color = ChatColors.secondaryText)
-                "settings", "hands" -> Chips(listOf(stringResource(R.string.mo_perm_done)), primaryFirst = true) {
-                    AskState.choose(context, "perm.$id", "granted"); state = "granted"; MomodingSend.send(carryOn)
-                }
-                else -> Chips(listOf(stringResource(R.string.mo_perm_open), stringResource(R.string.mo_perm_no)), primaryFirst = true) { pick ->
-                    if (pick == context.getString(R.string.mo_perm_no)) {
-                        AskState.choose(context, "perm.$id", "declined"); state = "declined"
-                        MomodingSend.send(context.getString(R.string.mo_perm_no_msg))
-                    } else if (need == "hands") {
-                        runCatching { context.startActivity(app.momoding.deeplink.OwnScheme.intent(context, android.net.Uri.parse("minis://settings/hands"), 0)) }
-                        AskState.choose(context, "perm.$id", "hands"); state = "hands"
-                    } else {
-                        launcher.launch(permissions)
+    val allow: (String) -> Unit = { pick ->
+        if (pick == context.getString(R.string.mo_perm_no)) {
+            AskState.choose(context, "perm.$id", "declined"); state = "declined"
+            MomodingSend.send(context.getString(R.string.mo_perm_no_msg))
+        } else if (need == "hands") {
+            runCatching { context.startActivity(app.momoding.deeplink.OwnScheme.intent(context, android.net.Uri.parse("minis://settings/hands"), 0)) }
+            AskState.choose(context, "perm.$id", "hands"); state = "hands"
+        } else {
+            launcher.launch(permissions)
+        }
+    }
+    when (state) {
+        "granted" -> SettledLine(stringResource(R.string.mo_perm_settled_granted, label))
+        "declined" -> SettledLine(stringResource(R.string.mo_perm_settled_declined, label), done = false)
+        else -> DecisionCard {
+            CardTitle(stringResource(R.string.mo_perm_ask, label))
+            Text(stringResource(R.string.mo_perm_detail), fontSize = 13.sp, lineHeight = 19.sp, color = ChatColors.secondaryText)
+            CardActions {
+                if (state == "settings" || state == "hands") {
+                    PillButton(stringResource(R.string.mo_perm_done), primary = true) {
+                        AskState.choose(context, "perm.$id", "granted"); state = "granted"; MomodingSend.send(carryOn)
                     }
+                } else {
+                    val no = stringResource(R.string.mo_perm_no)
+                    val open = stringResource(R.string.mo_perm_open)
+                    PillButton(no, primary = false) { allow(no) }
+                    PillButton(open, primary = true) { allow(open) }
                 }
             }
         }

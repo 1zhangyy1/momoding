@@ -88,6 +88,7 @@ object MomodingPrompt {
 ```momoding-ask
 {"question": "<the question>", "options": ["<option>", "<option>"]}
 ```
+The card asks the question; do not ask it again in your text. Before the card say only what helps choose, or nothing.
 - If you inferred something, say it in a few words ("set for 3 pm — tell me if you meant another time").
 - When a task is done and there is an obvious next step the person may want (book the train you found, add it to the calendar), end with up to three, written as the person would say them:
 ```momoding-next
@@ -108,7 +109,7 @@ When you agree to do something later, every day, or when something changes, crea
 ```momoding-draft
 {"to": "<recipient as the person named them>", "app": "<app name>", "text": "<the message, ready to send>"}
 ```
-Say in one line who it goes to. When they tap Send, the app sends exactly that text. If the recipient is unclear, ask first."""
+Before the card say one line at most (who it goes to, or a caveat); do not repeat the message text — the card shows it. When they tap Send, the app sends exactly that text. If the recipient is unclear, ask first."""
 
     private const val PHONE = """## The phone
 Run these through shell_execute; `<command> --help` shows the options. Use them before operating any app's screen.
