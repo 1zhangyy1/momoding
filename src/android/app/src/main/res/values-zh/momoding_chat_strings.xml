@@ -153,4 +153,5 @@
     <string name="mo_steps_one">一个步骤</string>
     <string name="mo_steps_seconds">%1$d 秒</string>
     <string name="mo_steps_minutes">%1$d 分 %2$d 秒</string>
+    <string name="mo_notif_done_in">用时 %1$s</string>
 </resources>

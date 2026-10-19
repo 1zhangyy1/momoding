@@ -153,4 +153,5 @@
     <string name="mo_steps_one">A step</string>
     <string name="mo_steps_seconds">%1$d s</string>
     <string name="mo_steps_minutes">%1$d min %2$d s</string>
+    <string name="mo_notif_done_in">Took %1$s</string>
 </resources>

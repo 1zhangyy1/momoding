@@ -1132,27 +1132,17 @@ class AgentForegroundService : Service() {
         val collapsedText = when (phase) {
             // Completed is a RESTING state: the chronometer is off, so the
             // total run time has to stay in the text or it would vanish.
-            AgentPhase.COMPLETED ->
-                getString(R.string.bg_service_notification_text_completed, sessionLabel, timeString)
+            AgentPhase.COMPLETED -> getString(R.string.mo_notif_done_in, timeString) // momoding: no "1 个会话"
             // [T-android-notification-chronometer] No baked-in time while
             // running — the system Chronometer (compat branch) or the ticked
             // shortCriticalText (promoted branch) renders the clock.
-            AgentPhase.TOOL -> getString(
-                R.string.bg_service_notification_text_running,
-                sessionLabel,
-                humanizeToolStatus(toolStatus, toolName),
-            )
-            AgentPhase.THINKING -> getString(
-                R.string.bg_service_notification_text_running,
-                sessionLabel,
-                getString(R.string.overlay_thinking),
-            )
-            AgentPhase.GENERATING -> getString(
-                R.string.bg_service_notification_text_running,
-                sessionLabel,
-                getString(R.string.overlay_streaming),
-            )
-            AgentPhase.IDLE -> getString(R.string.bg_service_notification_text_running, sessionLabel, toolStatus)
+            // momoding: one conversation, so no "1 个会话"; where it is working, in the header's words, not a tool name
+            AgentPhase.TOOL -> app.momoding.hands.Hands.progress.value?.let { h ->
+                if (h.app != null) getString(R.string.mo_status_hands_in, h.app, h.step) else getString(R.string.mo_status_hands, h.step)
+            } ?: if (toolName == "browser_use") getString(R.string.mo_status_browser_plain) else getString(R.string.mo_status_working)
+            AgentPhase.THINKING -> getString(R.string.overlay_thinking)
+            AgentPhase.GENERATING -> getString(R.string.mo_status_replying)
+            AgentPhase.IDLE -> getString(R.string.mo_status_working)
         }
 
         // [T-android-live-update-chip] Short critical text — the ≤7-char
