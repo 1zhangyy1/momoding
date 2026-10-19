@@ -120,7 +120,7 @@ fun ScheduledTasksScreen(
             items(tasks, key = { it.id }) { task ->
                 ScheduledTaskRow(
                     task = task,
-                    onClick = null, // momoding: a tap opens the row's actions
+                    onClick = { onEditTask(task.id) }, // momoding: actions are on the row; a tap edits
                     onToggle = { vm.setEnabled(task.id, it) },
                     onEdit = { onEditTask(task.id) },
                     onViewRuns = { onViewRuns(task.id) },
@@ -235,9 +235,23 @@ private fun ScheduledTaskRow(
                     text = app.momoding.chat.RoutineText.summary(LocalContext.current, task), // momoding
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp,
-                    maxLines = 2,
+                    maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )
+                // momoding: the prototype's row actions, right on the row
+                val rowCtx = LocalContext.current
+                Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp), modifier = Modifier.padding(top = 6.dp)) {
+                    Text(stringResource(R.string.mo_routine_run_now), fontSize = 13.sp, color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable {
+                            val app = rowCtx.applicationContext
+                            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                                com.openminis.app.scheduled.ScheduledAgentRunner.run(app, task, waitForCompletion = false)
+                            }
+                            android.widget.Toast.makeText(rowCtx, rowCtx.getString(R.string.mo_routine_try_started), android.widget.Toast.LENGTH_SHORT).show()
+                        })
+                    Text(stringResource(R.string.mo_routine_delete), fontSize = 13.sp, color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.clickable { onDelete() })
+                }
             }
             Spacer(Modifier.width(8.dp))
             SettingsSwitch(checked = task.enabled, onCheckedChange = onToggle)

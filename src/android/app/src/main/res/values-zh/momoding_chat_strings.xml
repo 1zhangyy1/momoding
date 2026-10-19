@@ -103,4 +103,11 @@
     <string name="mo_perm_purpose_location">天气、附近</string>
     <string name="mo_perm_state_on">已开</string>
     <string name="mo_perm_state_off">未开</string>
+    <string name="mo_routine_next">下次 %1$s</string>
+    <string name="mo_routine_paused">已暂停</string>
+    <string name="mo_routine_today">今天 %1$s</string>
+    <string name="mo_routine_tomorrow">明天 %1$s</string>
+    <string name="mo_routine_on_day">%1$d月%2$d日 %3$s</string>
+    <string name="mo_routine_run_now">现在跑一次</string>
+    <string name="mo_routine_delete">删除</string>
 </resources>

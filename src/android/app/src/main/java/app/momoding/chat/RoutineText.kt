@@ -27,13 +27,27 @@ object RoutineText {
         if (!task.enabled && RoutineAttention.isAutoPaused(context, task.id)) {
             return "$`when` · " + context.getString(R.string.mo_routine_auto_paused)
         }
+        if (!task.enabled) return "$`when` · " + context.getString(R.string.mo_routine_paused)
+        val next = task.nextTriggerMs()?.let { context.getString(R.string.mo_routine_next, dayAndTime(context, it)) }
         val last = task.runHistory.firstOrNull()
         val lastLine = last?.preview?.let { firstLine(NotifyDecision.visible(it)) }?.takeIf { it.isNotBlank() }
+        val head = listOfNotNull(`when`, next).joinToString(" · ")
         return when {
-            last == null -> `when`
-            !last.ok -> "$`when` · " + context.getString(R.string.mo_routine_last_failed)
-            lastLine != null -> "$`when` · " + context.getString(R.string.mo_routine_last, lastLine)
-            else -> `when`
+            last == null -> head
+            !last.ok -> head + "\n" + context.getString(R.string.mo_routine_last_failed)
+            lastLine != null -> head + "\n" + context.getString(R.string.mo_routine_last, lastLine)
+            else -> head
+        }
+    }
+
+    /** "今天 8:00" / "明天 8:00" / "10月23日 8:00". */
+    internal fun dayAndTime(context: Context, ms: Long, now: java.time.LocalDate = java.time.LocalDate.now()): String {
+        val at = java.time.Instant.ofEpochMilli(ms).atZone(java.time.ZoneId.systemDefault())
+        val time = "%d:%02d".format(at.hour, at.minute)
+        return when (at.toLocalDate()) {
+            now -> context.getString(R.string.mo_routine_today, time)
+            now.plusDays(1) -> context.getString(R.string.mo_routine_tomorrow, time)
+            else -> context.getString(R.string.mo_routine_on_day, at.monthValue, at.dayOfMonth, time)
         }
     }
 

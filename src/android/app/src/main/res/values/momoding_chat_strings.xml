@@ -103,4 +103,11 @@
     <string name="mo_perm_purpose_location">Weather and nearby</string>
     <string name="mo_perm_state_on">on</string>
     <string name="mo_perm_state_off">off</string>
+    <string name="mo_routine_next">next %1$s</string>
+    <string name="mo_routine_paused">paused</string>
+    <string name="mo_routine_today">today %1$s</string>
+    <string name="mo_routine_tomorrow">tomorrow %1$s</string>
+    <string name="mo_routine_on_day">%1$d/%2$d %3$s</string>
+    <string name="mo_routine_run_now">Run now</string>
+    <string name="mo_routine_delete">Delete</string>
 </resources>
