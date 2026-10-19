@@ -2,6 +2,7 @@ package app.momoding.ui.chat
 
 import android.net.Uri
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
@@ -26,7 +27,7 @@ import com.openminis.app.ui.theme.ChatColors
 @Composable
 fun RuleNoticeRow(entries: List<String>) {
     val context = LocalContext.current
-    entries.map { app.momoding.guard.RuleHits.decode(it) }.groupBy({ it.first }, { it.second }).forEach { (kind, labels) ->
+    Column { entries.map { app.momoding.guard.RuleHits.decode(it) }.groupBy({ it.first }, { it.second }).forEach { (kind, labels) ->
         val what = labels.filter { it.isNotBlank() }.map { app.momoding.guard.RiskText.targetLabel(context, it) ?: it }
             .distinct().joinToString("、")
         val line = when (kind) {
@@ -49,7 +50,7 @@ fun RuleNoticeRow(entries: List<String>) {
                 },
             )
         }
-    }
+    } }
 }
 
 /** "看过程 / 收起" under a finished turn: the steps it took, folded by default (prototype vRes). */
