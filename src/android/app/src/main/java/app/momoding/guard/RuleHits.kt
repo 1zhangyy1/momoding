@@ -17,6 +17,8 @@ object RuleHits {
 
     const val RULE = "rule"; const val ONCE = "once"; const val SESSION = "session"; const val ALWAYS = "always"
     const val DENIED = "denied"; const val TIMEOUT = "timeout"
+    /** Not a decision: a fact the turn wrote into USER.md ("记住了：…"). */
+    const val REMEMBER = "remember"
 
     private const val PREFS = "momoding"
     private const val KEY = "rules.hits"

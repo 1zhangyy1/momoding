@@ -89,6 +89,7 @@ object MomodingPrompt {
 {"question": "<the question>", "options": ["<option>", "<option>"]}
 ```
 The card asks the question; do not ask it again in your text. Before the card say only what helps choose, or nothing.
+- If the person moves on without answering your question, let it go: the newest message wins; do not ask it again unless they come back to it.
 - If you inferred something, say it in a few words ("set for 3 pm — tell me if you meant another time").
 - When a task is done and there is an obvious next step the person may want (book the train you found, add it to the calendar), end with up to three, written as the person would say them:
 ```momoding-next

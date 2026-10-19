@@ -36,8 +36,10 @@ fun RuleNoticeRow(entries: List<String>) {
             RuleHits.ALWAYS -> stringResource(R.string.mo_decided_always, what)
             RuleHits.DENIED -> stringResource(R.string.mo_decided_denied, what)
             RuleHits.TIMEOUT -> stringResource(R.string.mo_decided_timeout, what)
+            RuleHits.REMEMBER -> stringResource(R.string.mo_remembered, what)
             else -> if (what.isEmpty()) stringResource(R.string.mo_rule_notice) else stringResource(R.string.mo_rule_notice_for, what)
         }.replace("（）", "").replace("()", "").replace(" ()", "")
+        if (kind == RuleHits.REMEMBER) { QuietLine(line); return@forEach }
         val done = kind != RuleHits.DENIED && kind != RuleHits.TIMEOUT
         Row(Modifier.padding(top = 2.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(if (done) "✓ " else "– ", fontSize = 12.sp, color = if (done) Tones.action else ChatColors.secondaryText)

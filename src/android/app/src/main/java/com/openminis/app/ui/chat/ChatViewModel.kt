@@ -9097,6 +9097,7 @@ class ChatViewModel(
         // scheduled fire into an idle chat) reach this funnel without the
         // public sendMessage, and are new work too.
         com.openminis.app.agent.jobs.AgentJobRegistry.clearDelegationMute(activeSessionId)
+        app.momoding.memory.UserFile.markTurnStart(context, realSessionId.ifEmpty { sessionId }) // momoding: "记住了" lines
         // [T-android-paste-mediaref] `[Pasted#N]` markers are NOT expanded here
         // any more.
         //
@@ -15377,7 +15378,18 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
 
     /** momoding: after every completed turn — the turn budget of prompt addenda counts down. */
     private fun momodingAfterTurn() {
-        app.momoding.chat.SessionAddenda.onTurnFinished(realSessionId.ifEmpty { sessionId })
+        val sid = realSessionId.ifEmpty { sessionId }
+        app.momoding.chat.SessionAddenda.onTurnFinished(sid)
+        // momoding: what this turn wrote into USER.md gets its "记住了：…" line under the reply,
+        // unless the reply carries the model's own momoding-remember block
+        val added = app.momoding.memory.UserFile.added(context, sid)
+        val last = _messages.value.lastOrNull { it.role == "assistant" }
+        val saidIt = last?.toolBlocks?.any { it.kind == "text" && it.content.contains("```momoding-remember") } == true ||
+            last?.content?.contains("```momoding-remember") == true
+        if (added.isNotEmpty() && !saidIt) {
+            val at = (last?.completedAt ?: System.currentTimeMillis()) - 1
+            added.forEach { app.momoding.guard.RuleHits.record(sid, it, app.momoding.guard.RuleHits.REMEMBER, at) }
+        }
         if (_memoryEnabled.value && app.momoding.memory.UserFile.shouldAskName(context)) app.momoding.memory.UserFile.markNameAsked(context) // momoding: asked once
     }
 

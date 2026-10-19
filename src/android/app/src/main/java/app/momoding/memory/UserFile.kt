@@ -30,6 +30,25 @@ object UserFile {
     fun shouldAskName(context: Context): Boolean =
         read(context).isEmpty() && !context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_ASKED, false)
 
+    /** USER.md as each chat's current turn began, to tell what that turn added ([added]). */
+    private val atTurnStart = java.util.concurrent.ConcurrentHashMap<String, Set<String>>()
+
+    private fun facts(context: Context): Set<String> =
+        read(context).lines().map { it.trim().removePrefix("- ").trim() }.filter { it.isNotEmpty() }.toSet()
+
+    fun markTurnStart(context: Context, sessionId: String) { atTurnStart[sessionId] = facts(context) }
+
+    /**
+     * The facts this turn wrote into USER.md, without their dates, for the "记住了：…" line —
+     * shown by the app whether or not the model also said it.
+     */
+    fun added(context: Context, sessionId: String): List<String> {
+        val before = atTurnStart.remove(sessionId) ?: return emptyList()
+        return facts(context).filter { it !in before }
+            .map { it.replace(Regex("""\s*[（(]\d{4}-\d{2}-\d{2}[)）]\s*"""), " ").trim() }
+            .filter { it.isNotEmpty() }
+    }
+
     /** After the turn that carried the question (asked once, whatever the answer). */
     fun markNameAsked(context: Context) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_ASKED, true).apply()
