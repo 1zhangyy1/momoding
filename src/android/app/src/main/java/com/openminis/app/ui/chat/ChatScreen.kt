@@ -4062,6 +4062,7 @@ fun ChatScreen(
                     is FlatChatItem.AssistantError -> grayedMap[originalMessageId(messageId)] == true
                     is FlatChatItem.AssistantUsage -> grayedMap[originalMessageId(messageId)] == true
                     is FlatChatItem.MomodingRuleNotice -> false
+                    is FlatChatItem.MomodingTimeDivider -> false
                     is FlatChatItem.MomodingStepsToggle -> false
                     is FlatChatItem.MomodingHandsTrail -> false
                     is FlatChatItem.AssistantLegacyContent -> grayedMap[originalMessageId(messageId)] == true
@@ -4829,6 +4830,7 @@ fun ChatScreen(
                                 }
                             }
                             is FlatChatItem.MomodingRuleNotice -> app.momoding.ui.chat.RuleNoticeRow(item.labels) // momoding
+                            is FlatChatItem.MomodingTimeDivider -> app.momoding.ui.chat.TimeDivider(item.at) // momoding
                             is FlatChatItem.MomodingHandsTrail -> app.momoding.ui.chat.HandsTrail(item.lastScreen, viewModel.currentSessionId, onOpen = urlClickHandler) // momoding
                             is FlatChatItem.MomodingStepsToggle -> app.momoding.ui.chat.StepsToggle(item.expanded) { // momoding
                                 val id = item.messageId.substringBefore('#')

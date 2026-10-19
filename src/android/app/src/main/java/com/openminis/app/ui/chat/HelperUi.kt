@@ -1461,6 +1461,7 @@ internal fun HelperTranscript(
                 is FlatChatItem.AssistantTyping -> TypingIndicator()
                 is FlatChatItem.AssistantError -> InlineErrorBanner(item.error)
                 is FlatChatItem.MomodingRuleNotice -> app.momoding.ui.chat.RuleNoticeRow(item.labels) // momoding
+                is FlatChatItem.MomodingTimeDivider -> app.momoding.ui.chat.TimeDivider(item.at) // momoding
                 is FlatChatItem.MomodingStepsToggle -> Unit // momoding: sub agent transcripts show their steps
                 is FlatChatItem.MomodingHandsTrail -> Unit // momoding
                 is FlatChatItem.AssistantUsage -> {

@@ -504,6 +504,12 @@ internal sealed class FlatChatItem {
         override val contentType = "steps"
     }
 
+    /** momoding: "今天 16:30" above an exchange that starts after a pause (iMessage, Grok Bot). */
+    data class MomodingTimeDivider(val messageId: String, val at: Long) : FlatChatItem() {
+        override val key = "time:$messageId"
+        override val contentType = "time"
+    }
+
     /** momoding: "approved by your rule · edit rules" under a reply a standing rule let through. */
     data class MomodingRuleNotice(val messageId: String, val labels: List<String>) : FlatChatItem() {
         override val key = "rule:$messageId"
@@ -719,6 +725,7 @@ internal fun buildFlatChatItems(
             is FlatChatItem.AssistantError -> item.copy(messageId = "${item.messageId}#$n")
             is FlatChatItem.AssistantUsage -> item.copy(messageId = "${item.messageId}#$n")
             is FlatChatItem.MomodingRuleNotice -> item.copy(messageId = "${item.messageId}#$n")
+            is FlatChatItem.MomodingTimeDivider -> item.copy(messageId = "${item.messageId}#$n")
             is FlatChatItem.MomodingStepsToggle -> item.copy(messageId = "${item.messageId}#$n")
             is FlatChatItem.MomodingHandsTrail -> item.copy(messageId = "${item.messageId}#$n")
             is FlatChatItem.AssistantLegacyContent -> FlatChatItem.AssistantLegacyContent(
@@ -784,6 +791,11 @@ internal fun buildFlatChatItems(
             // gap — back-to-back candidate / queued sends otherwise have no
             // AssistantHeader between them and visually merge.
             val prevIsUser = idx > 0 && messages[idx - 1].role == "user"
+            // momoding: the time, when this exchange starts after an hour's pause or on a new day
+            val sentAt = message.sentAt ?: System.currentTimeMillis()
+            if (app.momoding.ui.chat.TimeDivider.shows(sentAt, previousTime(messages, idx))) {
+                out.add(dedupe(FlatChatItem.MomodingTimeDivider(message.id, sentAt)))
+            }
             out.add(dedupe(FlatChatItem.UserBubble(message, precededByUser = prevIsUser)))
             continue
         }
@@ -1047,6 +1059,15 @@ internal fun buildFlatChatItems(
         }
     }
     return out
+}
+
+/** momoding: when the conversation last moved before [idx]: a sent message or a finished reply. */
+private fun previousTime(messages: List<ChatMessage>, idx: Int): Long? {
+    for (i in idx - 1 downTo 0) {
+        val m = messages[i]
+        (m.sentAt ?: m.completedAt)?.let { return it }
+    }
+    return null
 }
 
 /** momoding (from nanoMuse): an assistant turn that is only steps — no words, no error — has nothing to show with steps hidden. */

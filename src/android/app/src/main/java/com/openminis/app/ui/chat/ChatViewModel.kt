@@ -17289,6 +17289,7 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
                     ChatTokenUsage.parse(entity.tokenUsage)
                 } else null,
                 completedAt = if (entity.role == "assistant") entity.createdAt else null,
+                sentAt = if (entity.role == "user") entity.createdAt else null, // momoding
                 // [T-error-persist-android] Restore the persisted terminal error
                 // so the inline error banner + Retry button survive a reload.
                 // Coalesce a blank value to null: the UI gate is `error?.let`, so

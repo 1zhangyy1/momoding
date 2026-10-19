@@ -114,4 +114,6 @@
     <string name="mo_perm_ask">允许 Momoding 使用你的%1$s吗？</string>
     <string name="mo_perm_settled_granted">已允许使用%1$s</string>
     <string name="mo_perm_settled_declined">没有允许使用%1$s</string>
+    <string name="mo_time_today">今天 %1$s</string>
+    <string name="mo_time_yesterday">昨天 %1$s</string>
 </resources>
