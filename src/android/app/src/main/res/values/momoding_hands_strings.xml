@@ -73,4 +73,6 @@
     <string name="mo_hands_no_vision_model">No model you have set up can see pictures. Add one that does (for example qwen3.8-27b on Alibaba Cloud Bailian) to let Momoding operate the screen.</string>
     <string name="mo_hands_on">On</string>
     <string name="mo_hands_off">Off</string>
+    <string name="mo_hands_pick_auto">Automatic</string>
+    <string name="mo_hands_pick_auto_sub">The best one you have</string>
 </resources>

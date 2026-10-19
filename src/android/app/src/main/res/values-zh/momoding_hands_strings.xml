@@ -73,4 +73,6 @@
     <string name="mo_hands_no_vision_model">你配置的模型里没有能看图的。加一个能看图的模型（比如阿里云百炼的 qwen3.8-27b），Momoding 才能操作屏幕。</string>
     <string name="mo_hands_on">已开启</string>
     <string name="mo_hands_off">已关闭</string>
+    <string name="mo_hands_pick_auto">自动挑</string>
+    <string name="mo_hands_pick_auto_sub">从你能用的里挑最合适的</string>
 </resources>

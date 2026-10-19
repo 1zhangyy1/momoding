@@ -105,6 +105,16 @@ object Hands {
         }
     }
 
+    /** Screen models known to do well (阶段C C3/C4: qwen3.8-27b 10/11, gemini-3.8-flash 5/5), best first, by substring. */
+    private val SCREEN_PREFERENCE = listOf("qwen3.8-27b", "gemini-3.8-flash", "qwen3.7-vl", "qwen-vl", "glm-5v", "glm-4.6v", "doubao-seed", "kimi-vl", "gemini")
+
+    /** The few vision models the picker offers: one per family, the preferred ones first (at most [max]). */
+    fun recommendedScreenModels(context: Context, max: Int = 6): List<Pair<ProviderInstance, ModelEntry>> {
+        val all = visionEntries(context)
+        val ranked = SCREEN_PREFERENCE.mapNotNull { want -> all.filter { it.second.model.id.contains(want, ignoreCase = true) }.minByOrNull { it.second.model.id.length } }
+        return ranked.distinctBy { app.momoding.providers.AutoSetup.family(it.second.model.id) }.take(max)
+    }
+
     /** No configured model can see the screen: the one sentence that says so, or null when one can. */
     fun unavailableLine(context: Context): String? =
         if (visionEntries(context).isEmpty()) context.getString(com.openminis.app.R.string.mo_hands_no_vision_model) else null

@@ -16,6 +16,12 @@ import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -67,6 +73,7 @@ fun HandsScreen(onBack: () -> Unit, onOpenProviders: () -> Unit, onOpenHandsMode
         owner.lifecycle.addObserver(obs)
         onDispose { owner.lifecycle.removeObserver(obs) }
     }
+    var pickModel by remember { mutableStateOf(false) }
     val readiness = remember(tick, config) { Hands.readiness(context) }
     val visionEntries = remember(config) { Hands.visionEntries(context) }
 
@@ -153,10 +160,13 @@ fun HandsScreen(onBack: () -> Unit, onOpenProviders: () -> Unit, onOpenHandsMode
                 SettingsRow(
                     title = stringResource(R.string.mo_models_hands_title),
                     subtitle = readiness.model?.let { m -> m.label + " · " + stringResource(whyText(m.why)) },
-                    onClick = onOpenHandsModel,
+                    onClick = { pickModel = true },
                     showDivider = false,
                 )
             }
+        }
+        if (pickModel) ScreenModelPicker(current = Hands.modelEntryId(context), onDismiss = { pickModel = false }) { id ->
+            Hands.setModelEntryId(context, id); pickModel = false; tick++
         }
 
         // ── the rules ──
@@ -231,5 +241,41 @@ private fun openOverlaySettings(context: Context) {
         )
     } catch (_: Throwable) {
         runCatching { context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+    }
+}
+
+
+/** Choose the screen model: automatic, or one of the few that do well on screens (one per family). */
+@Composable
+private fun ScreenModelPicker(current: String?, onDismiss: () -> Unit, onPick: (String?) -> Unit) {
+    val context = LocalContext.current
+    val options = remember { Hands.recommendedScreenModels(context) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.mo_models_hands_title)) },
+        text = {
+            Column {
+                PickRow(stringResource(R.string.mo_hands_pick_auto), stringResource(R.string.mo_hands_pick_auto_sub), current == null) { onPick(null) }
+                options.forEach { (inst, e) ->
+                    PickRow(e.model.displayName.ifBlank { e.model.id }.substringAfter(": "), inst.label, current == e.id) { onPick(e.id) }
+                }
+            }
+        },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+    )
+}
+
+@Composable
+private fun PickRow(title: String, subtitle: String, selected: Boolean, onClick: () -> Unit) {
+    androidx.compose.foundation.layout.Row(
+        Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(app.momoding.ui.Design.Radius.Row))
+            .clickable(onClick = onClick).padding(vertical = 10.dp, horizontal = 4.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, fontSize = app.momoding.ui.Design.Size.Body)
+            Text(subtitle, fontSize = app.momoding.ui.Design.Size.Caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (selected) androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Check, contentDescription = null, tint = app.momoding.ui.Tones.action)
     }
 }
