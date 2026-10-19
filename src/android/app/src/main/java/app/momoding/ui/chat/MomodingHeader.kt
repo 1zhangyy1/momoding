@@ -2,6 +2,7 @@
 package app.momoding.ui.chat
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,12 +44,13 @@ import com.openminis.app.ui.theme.ChatColors
  * request it is on. Waiting on the person reads as such, in the action colour.
  */
 @Composable
-fun MomodingHeader(isStreaming: Boolean, replying: Boolean, request: String?) {
+fun MomodingHeader(isStreaming: Boolean, replying: Boolean, request: String?, onOpenBrowser: (() -> Unit)? = null) {
     val context = LocalContext.current
     val soul by SoulStore.cachedMetadata.collectAsState()
     val face = remember(soul.name) { Identity.face(context)?.asImageBitmap() }
     val status = rememberStatusLine(isStreaming, replying, request)
-    val waiting = status?.second == true
+    val waiting = status?.waiting == true
+    val watchable = status?.inBrowser == true && onOpenBrowser != null
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         if (face != null) Image(face, contentDescription = null, modifier = Modifier.size(34.dp).clip(CircleShape))
         Column {
@@ -60,9 +62,12 @@ fun MomodingHeader(isStreaming: Boolean, replying: Boolean, request: String?) {
             // always reserved, so the header does not jump when the line comes and goes
             Box(Modifier.height(16.dp), contentAlignment = Alignment.CenterStart) {
                 if (status != null) Text(
-                    status.first, fontSize = 12.sp, lineHeight = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, style = NO_FONT_PAD,
-                    color = if (waiting) Tones.action else ChatColors.secondaryText,
-                    fontWeight = if (waiting) FontWeight.Medium else FontWeight.Normal,
+                    // in its browser the line opens the page it is on, to watch or take over (Grok's computer preview)
+                    if (watchable) status.text + "  ›" else status.text,
+                    fontSize = 12.sp, lineHeight = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, style = NO_FONT_PAD,
+                    color = if (waiting || watchable) Tones.action else ChatColors.secondaryText,
+                    fontWeight = if (waiting || watchable) FontWeight.Medium else FontWeight.Normal,
+                    modifier = if (watchable) Modifier.clickable { onOpenBrowser?.invoke() } else Modifier,
                 )
             }
         }
@@ -71,24 +76,34 @@ fun MomodingHeader(isStreaming: Boolean, replying: Boolean, request: String?) {
 
 private val NO_FONT_PAD = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
 
-/** (text, waitingOnThePerson), or null when there is nothing to say. */
+/** One line of what Momoding is doing; [inBrowser] when it is working in its own browser (M14: which computer). */
+private data class StatusLine(val text: String, val waiting: Boolean = false, val inBrowser: Boolean = false)
+
 @Composable
-private fun rememberStatusLine(isStreaming: Boolean, replying: Boolean, request: String?): Pair<String, Boolean>? {
+private fun rememberStatusLine(isStreaming: Boolean, replying: Boolean, request: String?): StatusLine? {
     val toolTitle by SessionActivityTracker.currentToolTitle.collectAsState()
     val toolRunning by SessionActivityTracker.isToolRunning.collectAsState()
     val lastToolTitle by SessionActivityTracker.lastToolTitle.collectAsState()
     val pendingRisk by RiskGate.pending.collectAsState()
     val hands by Hands.progress.collectAsState()
+    val toolName by SessionActivityTracker.currentToolName.collectAsState()
+    val lastToolName by SessionActivityTracker.lastToolName.collectAsState()
+    val browsing = isStreaming && (if (toolRunning) toolName else lastToolName) == "browser_use"
     val h = hands
     return when {
-        pendingRisk != null -> stringResource(R.string.mo_status_needs_approval) to true
-        h != null -> (if (h.app != null) stringResource(R.string.mo_status_hands_in, h.app, h.step) else stringResource(R.string.mo_status_hands, h.step)) to false
-        isStreaming && toolRunning && !toolTitle.isNullOrBlank() -> toolTitle!! to false
-        isStreaming && replying -> stringResource(R.string.mo_status_replying) to false
-        isStreaming && !lastToolTitle.isNullOrBlank() -> lastToolTitle!! to false
-        isStreaming && !request.isNullOrBlank() -> stringResource(R.string.mo_status_on, request) to false
-        isStreaming -> stringResource(R.string.mo_status_working) to false
-        else -> stringResource(R.string.mo_status_idle) to false // prototype: "在你手机上 · 随时可以交代"
+        pendingRisk != null -> StatusLine(stringResource(R.string.mo_status_needs_approval), waiting = true)
+        h != null -> StatusLine(if (h.app != null) stringResource(R.string.mo_status_hands_in, h.app, h.step) else stringResource(R.string.mo_status_hands, h.step))
+        browsing && !replying -> StatusLine(
+            (if (toolRunning) toolTitle else lastToolTitle)?.takeIf { it.isNotBlank() }?.let { stringResource(R.string.mo_status_browser, it) }
+                ?: stringResource(R.string.mo_status_browser_plain),
+            inBrowser = true,
+        )
+        isStreaming && toolRunning && !toolTitle.isNullOrBlank() -> StatusLine(toolTitle!!)
+        isStreaming && replying -> StatusLine(stringResource(R.string.mo_status_replying))
+        isStreaming && !lastToolTitle.isNullOrBlank() -> StatusLine(lastToolTitle!!)
+        isStreaming && !request.isNullOrBlank() -> StatusLine(stringResource(R.string.mo_status_on, request))
+        isStreaming -> StatusLine(stringResource(R.string.mo_status_working))
+        else -> StatusLine(stringResource(R.string.mo_status_idle)) // prototype: "在你手机上 · 随时可以交代"
     }
 }
 

@@ -7,8 +7,8 @@
     <string name="mo_appearance_show_steps">显示做事过程</string>
     <string name="mo_appearance_show_steps_footer">工具步骤、思考过程和底部的工具条。关闭时对话里只有你和 Momoding 说的话，以及各种卡片。</string>
     <string name="mo_status_needs_approval">需要你决定</string>
-    <string name="mo_status_hands_in">正在%1$s里 · 第 %2$d 步</string>
-    <string name="mo_status_hands">正在操作屏幕 · 第 %1$d 步</string>
+    <string name="mo_status_hands_in">在你的屏幕上 · %1$s · 第 %2$d 步</string>
+    <string name="mo_status_hands">在你的屏幕上 · 第 %1$d 步</string>
     <string name="mo_status_replying">正在写回复</string>
     <string name="mo_status_on">在办：%1$s</string>
     <string name="mo_status_working">工作中</string>
@@ -117,4 +117,6 @@
     <string name="mo_time_today">今天 %1$s</string>
     <string name="mo_time_yesterday">昨天 %1$s</string>
     <string name="mo_composer_placeholder">有什么事交给我…</string>
+    <string name="mo_status_browser">在它的浏览器里 · %1$s</string>
+    <string name="mo_status_browser_plain">在它的浏览器里</string>
 </resources>

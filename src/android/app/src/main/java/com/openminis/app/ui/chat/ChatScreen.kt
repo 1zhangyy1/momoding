@@ -2829,7 +2829,7 @@ fun ChatScreen(
                     }.collectAsState(initial = false)
                     val request = remember(messages) { app.momoding.ui.chat.requestBrief(messages.lastOrNull { it.role == "user" }?.content) }
                     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        app.momoding.ui.chat.MomodingHeader(isStreaming = isStreaming, replying = replying, request = request)
+                        app.momoding.ui.chat.MomodingHeader(isStreaming = isStreaming, replying = replying, request = request, onOpenBrowser = { viewModel.toggleBrowserSheet() })
                     }
                   } else {
                     // iOS-style centered layout: "Minis" + group row + provider·model row

@@ -7,8 +7,8 @@
     <string name="mo_appearance_show_steps">Show how the work is done</string>
     <string name="mo_appearance_show_steps_footer">Steps, reasoning and the live tool bar. Off: the chat shows only what you and Momoding said, and the cards.</string>
     <string name="mo_status_needs_approval">Needs your say</string>
-    <string name="mo_status_hands_in">In %1$s · step %2$d</string>
-    <string name="mo_status_hands">On the screen · step %1$d</string>
+    <string name="mo_status_hands_in">On your screen · %1$s · step %2$d</string>
+    <string name="mo_status_hands">On your screen · step %1$d</string>
     <string name="mo_status_replying">Writing the reply</string>
     <string name="mo_status_on">On: %1$s</string>
     <string name="mo_status_working">Working</string>
@@ -117,4 +117,6 @@
     <string name="mo_time_today">Today %1$s</string>
     <string name="mo_time_yesterday">Yesterday %1$s</string>
     <string name="mo_composer_placeholder">Anything I can do for you…</string>
+    <string name="mo_status_browser">In its browser · %1$s</string>
+    <string name="mo_status_browser_plain">In its browser</string>
 </resources>
