@@ -1,17 +1,21 @@
 package app.momoding.ui.chat
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.momoding.ui.Tones
@@ -60,6 +64,7 @@ fun LinkButtons(links: List<Pair<String, String>>, onOpen: (String) -> Unit) {
         modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
     ) {
         links.forEach { (label, url) ->
+            if (Works.isWork(url)) { WorkCard(label, url) { onOpen(url) }; return@forEach }
             Surface(shape = CircleShape, color = Tones.surface, border = BorderStroke(1.dp, Tones.hairline)) {
                 Text(
                     label, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface,
@@ -68,4 +73,38 @@ fun LinkButtons(links: List<Pair<String, String>>, onOpen: (String) -> Unit) {
             }
         }
     }
+}
+
+/**
+ * A file Momoding made (a `minis://workspace/...` link) as a small card rather than a pill: what
+ * kind of file, its name, and Open — Grok Bot's "comes back with" the thing it made.
+ */
+@Composable
+private fun WorkCard(label: String, url: String, onOpen: () -> Unit) {
+    val name = url.substringAfterLast('/').substringBefore('?')
+    Surface(shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp), color = Tones.surface, border = BorderStroke(1.dp, Tones.hairline)) {
+        androidx.compose.foundation.layout.Row(
+            Modifier.clickable(onClick = onOpen).padding(start = 10.dp, end = 14.dp, top = 10.dp, bottom = 10.dp),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        ) {
+            androidx.compose.foundation.layout.Box(
+                Modifier.size(36.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)).background(Tones.fill),
+                contentAlignment = androidx.compose.ui.Alignment.Center,
+            ) {
+                Text(Works.kind(name), fontSize = 11.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = Tones.action)
+            }
+            androidx.compose.foundation.layout.Column(Modifier.padding(start = 10.dp).widthIn(max = 220.dp)) {
+                Text(label, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                if (name.isNotEmpty() && name != label) Text(name, fontSize = 12.sp, color = com.openminis.app.ui.theme.ChatColors.secondaryText, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            }
+            Text("  ›", fontSize = 15.sp, color = com.openminis.app.ui.theme.ChatColors.secondaryText)
+        }
+    }
+}
+
+internal object Works {
+    fun isWork(url: String): Boolean = url.startsWith("minis://workspace/") && !url.endsWith("/")
+
+    /** The file kind in a few letters for the tile: CSV, XLSX, PDF, HTML… */
+    fun kind(name: String): String = name.substringAfterLast('.', "").uppercase().take(4).ifEmpty { "FILE" }
 }
