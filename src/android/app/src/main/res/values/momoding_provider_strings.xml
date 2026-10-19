@@ -4,4 +4,6 @@
     <string name="mo_add_provider_cn_footer">Fills in the address for you; paste the API key from the provider\'s console.</string>
     <string name="mo_add_provider_connect">Connect %1$s</string>
     <string name="mo_add_provider_connect_button">Connect</string>
+    <string name="mo_provider_refresh">Refresh the model list</string>
+    <string name="mo_provider_refreshing">Refreshing…</string>
 </resources>

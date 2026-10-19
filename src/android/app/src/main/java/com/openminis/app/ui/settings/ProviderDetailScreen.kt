@@ -454,7 +454,8 @@ fun ProviderDetailScreen(
         // Picks how minis-model-use routes image-output models:
         // auto-probe / forced Images API / forced Chat Completions. Mirrors
         // iOS ProviderInstanceDetailView.imageEndpointSection.
-        if (instance.supportsImageEndpointSetting) {
+        val momodingAdvanced = app.momoding.ui.chat.ShowSteps.remember().value // momoding: endpoint and thinking rules are for the steps-shown view
+        if (instance.supportsImageEndpointSetting && momodingAdvanced) {
             val mode = instance.imageEndpointMode
             SettingsSection(
                 header = "Image Generation",
@@ -565,7 +566,7 @@ fun ProviderDetailScreen(
         }
 
         // ─── Thinking Rules [T-android-thinking-rules-phase2 §3] ─────
-        ThinkingRulesSection(instance = instance, providerRepository = providerRepository)
+        if (momodingAdvanced) ThinkingRulesSection(instance = instance, providerRepository = providerRepository)
 
         // ─── Models ─────────────────────────────────────────────────
         SettingsSection(
@@ -574,7 +575,7 @@ fun ProviderDetailScreen(
             // Refresh action sits as the first row, mirroring the iOS
             // tap-to-refresh affordance in the section header area.
             SettingsRow(
-                title = if (isRefreshing) "Refreshing…" else "Refresh model list",
+                title = stringResource(if (isRefreshing) R.string.mo_provider_refreshing else R.string.mo_provider_refresh), // momoding: was English only
                 onClick = if (isRefreshing) {
                     null
                 } else {
