@@ -62,6 +62,9 @@ import app.momoding.ui.Design
 /** The first-run route (debug: `momoding://first-run` opens it on any install). */
 const val ROUTE_FIRST_RUN = "momoding/first_run"
 
+/** The same three pages for a walkthrough on a set-up phone (`momoding://settings/first-run-preview`): they step on regardless of the provider, mark nothing done, ask for nothing. */
+const val ROUTE_FIRST_RUN_PREVIEW = "momoding/first_run_preview"
+
 object FirstRun {
     private const val PREFS = "momoding"
     private const val KEY_DONE = "firstRun.done"
@@ -85,6 +88,7 @@ fun FirstRunScreen(
     onAddProvider: () -> Unit,
     onPickModels: () -> Unit,
     onDone: () -> Unit,
+    preview: Boolean = false,
 ) {
     val context = LocalContext.current
     val config by providerRepository.config.collectAsState()
@@ -96,12 +100,14 @@ fun FirstRunScreen(
         if (hasProvider && !hasModels) app.momoding.providers.AutoSetup.ensureDefaultGroup(providerRepository)
     }
     var meetSeen by rememberSaveable { mutableIntStateOf(0) }
+    var previewStep by rememberSaveable { mutableIntStateOf(0) }
     val page = when {
+        preview -> Page.entries[previewStep.coerceAtMost(Page.entries.lastIndex)]
         !hasProvider || !hasModels -> Page.MODEL
         meetSeen == 0 -> Page.MEET
         else -> Page.NOTIFY
     }
-    val finish = { FirstRun.markDone(context); onDone() }
+    val finish = { if (!preview) FirstRun.markDone(context); onDone() }
     val notifLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { finish() }
 
     Column(
@@ -118,6 +124,7 @@ fun FirstRunScreen(
                 Body(stringResource(R.string.mo_ob_model_vision), small = true)
                 Spacer(Modifier.weight(1f))
                 when {
+                    preview -> Primary(stringResource(R.string.mo_ob_model_connect)) { previewStep = 1; onAddProvider() }
                     !hasProvider -> Primary(stringResource(R.string.mo_ob_model_connect), onAddProvider)
                     !hasEntries -> Body(stringResource(R.string.mo_ob_model_preparing)) // models still loading
                     else -> Primary(stringResource(R.string.mo_ob_model_pick), onPickModels) // nothing we know: pick by hand
@@ -136,14 +143,14 @@ fun FirstRunScreen(
                 Point(stringResource(R.string.mo_ob_meet_ask))
                 Point(stringResource(R.string.mo_ob_meet_routine))
                 Spacer(Modifier.weight(1f))
-                Primary(stringResource(R.string.mo_ob_meet_ok)) { meetSeen = 1 }
+                Primary(stringResource(R.string.mo_ob_meet_ok)) { meetSeen = 1; previewStep = 2 }
             }
             Page.NOTIFY -> {
                 Title(stringResource(R.string.mo_ob_notify_title))
                 Body(stringResource(R.string.mo_ob_notify_body))
                 Spacer(Modifier.weight(1f))
                 Primary(stringResource(R.string.mo_ob_notify_on)) {
-                    if (Build.VERSION.SDK_INT >= 33) notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) else finish()
+                    if (Build.VERSION.SDK_INT >= 33 && !preview) notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) else finish()
                 }
                 TextButton(onClick = finish, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.mo_ob_notify_later), color = MaterialTheme.colorScheme.onSurfaceVariant)

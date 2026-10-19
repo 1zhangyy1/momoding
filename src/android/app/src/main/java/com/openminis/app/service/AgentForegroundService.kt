@@ -119,6 +119,7 @@ class AgentForegroundService : Service() {
          * Starts or updates the foreground service with current status.
          */
         fun startService(context: Context, sessionCount: Int, toolStatus: String) {
+            awaitingStart = true // momoding
             val intent = Intent(context, AgentForegroundService::class.java).apply {
                 putExtra(EXTRA_SESSION_COUNT, sessionCount)
                 putExtra(EXTRA_TOOL_STATUS, toolStatus)
@@ -134,9 +135,21 @@ class AgentForegroundService : Service() {
          * Stops the foreground service.
          */
         fun stopService(context: Context) {
+            // momoding: a stop that lands before the pending start reached onStartCommand would have
+            // the system tear the service down unpromoted and kill the process
+            // (ForegroundServiceDidNotStartInTimeException — a chat opened and left at once, as a
+            // cold deep link does). The pending start unwinds itself instead: by then the tracker
+            // wants no service, so onStartCommand promotes and stops ("nothing to run" below).
+            if (awaitingStart) {
+                Log.d(TAG, "stop before the start was handled — the start will unwind itself")
+                return
+            }
             val intent = Intent(context, AgentForegroundService::class.java)
             context.stopService(intent)
         }
+
+        /** True from [startService] until onStartCommand runs (momoding). */
+        @Volatile private var awaitingStart = false
     }
 
     private var startTimeMs: Long = 0L
@@ -209,6 +222,7 @@ class AgentForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        awaitingStart = false // momoding: from here on a stop is safe; see stopService
         // [T-STALL-DIAG] Revival probe. `intent == null` means the SYSTEM
         // re-created this service under START_STICKY after the process died —
         // the suspected "dirty shell" path behind "killing the app doesn't

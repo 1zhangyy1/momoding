@@ -300,7 +300,13 @@ fun AppNavigation(
             // parser already resolved the path → route mapping so we
             // just navigate.
             is DeepLinkAction.OpenSettingsScreen -> {
-                navController.safeNavigate(initialDeepLink.route)
+                // momoding: on a cold start safeNavigate dropped this (the start destination is not
+                // RESUMED yet — the T314 trap) and left upstream's session list showing. The main chat
+                // goes underneath, so Back from the page returns to the conversation.
+                navController.navigate(Routes.chat(app.momoding.home.MainChat.resolve(context, chatRepository))) {
+                    popUpTo(Routes.SESSION_LIST) { inclusive = false }
+                }
+                navController.navigate(initialDeepLink.route)
             }
             is DeepLinkAction.OpenPermissionSettings -> {
                 navController.safeNavigate(Routes.PERMISSIONS)
@@ -1516,6 +1522,15 @@ fun AppNavigation(
             )
         }
 
+        composable(app.momoding.onboarding.ROUTE_FIRST_RUN_PREVIEW) { // momoding: walkthrough of the first run
+            app.momoding.onboarding.FirstRunScreen(
+                providerRepository = providerRepository,
+                onAddProvider = { navController.safeNavigate(Routes.ADD_PROVIDER) },
+                onPickModels = {},
+                onDone = { navController.safePopBackStack() },
+                preview = true,
+            )
+        }
         // momoding: first run (connect a model → meet → notifications), then the main chat
         composable(app.momoding.onboarding.ROUTE_FIRST_RUN) {
             val firstRunScope = androidx.compose.runtime.rememberCoroutineScope()

@@ -181,6 +181,7 @@ object DeepLinkHandler {
             "skills" -> DeepLinkAction.OpenSettingsScreen(Routes.SKILLS)
             "hands", "screen" -> DeepLinkAction.OpenSettingsScreen(app.momoding.ui.hands.ROUTE_HANDS) // momoding
             "first-run" -> DeepLinkAction.OpenSettingsScreen(app.momoding.onboarding.ROUTE_FIRST_RUN) // momoding: walkthroughs
+            "first-run-preview" -> DeepLinkAction.OpenSettingsScreen(app.momoding.onboarding.ROUTE_FIRST_RUN_PREVIEW) // momoding: walkthroughs
             "rules" -> DeepLinkAction.OpenSettingsScreen(app.momoding.ui.guard.ROUTE_RULES) // momoding
             "memory" -> DeepLinkAction.OpenSettingsScreen(Routes.MEMORY)
             // [T-p2-agent-settings] Settings › Agents; scheduled tasks list.
