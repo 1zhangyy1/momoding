@@ -7,13 +7,16 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * When a standing rule ("Always allow for calendar") lets something run without a card, the chat
- * says so in one line under that reply — Grok Bot's "approved by your rule · edit rules" — so the
- * person knows why they were not asked and where to change it. [RiskGate] records each hit; the
- * chat matches hits to replies by time (a hit belongs to the first reply finished after it).
+ * Every approval decision leaves one line under the reply it belongs to, as in Grok Bot: a
+ * standing rule let it through ("approved by your rule · edit rules"), or the person answered the
+ * card (allowed once, from now on, denied, no answer in time). [RiskGate] records each; the chat
+ * matches them to replies by time (one belongs to the first reply finished after it).
  */
 object RuleHits {
-    data class Hit(val sessionId: String, val label: String, val at: Long)
+    data class Hit(val sessionId: String, val label: String, val at: Long, val kind: String = RULE)
+
+    const val RULE = "rule"; const val ONCE = "once"; const val SESSION = "session"; const val ALWAYS = "always"
+    const val DENIED = "denied"; const val TIMEOUT = "timeout"
 
     private const val PREFS = "momoding"
     private const val KEY = "rules.hits"
@@ -26,15 +29,15 @@ object RuleHits {
         app = context.applicationContext
         _hits.value = runCatching {
             val a = JSONArray(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, "[]"))
-            List(a.length()) { a.getJSONObject(it).let { o -> Hit(o.getString("s"), o.getString("l"), o.getLong("t")) } }
+            List(a.length()) { a.getJSONObject(it).let { o -> Hit(o.getString("s"), o.getString("l"), o.getLong("t"), o.optString("k", RULE)) } }
         }.getOrDefault(emptyList())
     }
 
-    fun record(sessionId: String, label: String, at: Long = System.currentTimeMillis()) {
-        val next = (_hits.value + Hit(sessionId, label, at)).takeLast(KEEP)
+    fun record(sessionId: String, label: String, kind: String = RULE, at: Long = System.currentTimeMillis()) {
+        val next = (_hits.value + Hit(sessionId, label, at, kind)).takeLast(KEEP)
         _hits.value = next
         app?.let { c ->
-            val a = JSONArray().apply { next.forEach { put(JSONObject().put("s", it.sessionId).put("l", it.label).put("t", it.at)) } }
+            val a = JSONArray().apply { next.forEach { put(JSONObject().put("s", it.sessionId).put("l", it.label).put("t", it.at).put("k", it.kind)) } }
             c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, a.toString()).apply()
         }
     }
@@ -44,7 +47,12 @@ object RuleHits {
         app?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)?.edit()?.remove(KEY)?.apply()
     }
 
-    /** (time, label) for one chat, oldest first, for the chat's row builder. */
+    /** (time, kind + label) for one chat, oldest first, for the chat's row builder; [decode] splits it. */
     fun forSession(all: List<Hit>, sessionId: String?): List<Pair<Long, String>> =
-        if (sessionId == null) emptyList() else all.filter { it.sessionId == sessionId }.map { it.at to it.label }
+        if (sessionId == null) emptyList() else all.filter { it.sessionId == sessionId }.map { it.at to it.kind + SEP + it.label }
+
+    fun decode(entry: String): Pair<String, String> =
+        if (SEP in entry) entry.substringBefore(SEP) to entry.substringAfter(SEP) else RULE to entry
+
+    private const val SEP = '\u001f'
 }

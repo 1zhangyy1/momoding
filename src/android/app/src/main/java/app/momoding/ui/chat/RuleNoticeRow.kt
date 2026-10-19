@@ -13,27 +13,42 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.momoding.deeplink.OwnScheme
+import app.momoding.guard.RuleHits
 import app.momoding.ui.Tones
 import com.openminis.app.R
 import com.openminis.app.ui.theme.ChatColors
 
-/** One quiet line under a reply a standing rule let through: why nobody asked, and where to change it. */
+/**
+ * What was decided about the steps in this reply, one quiet line per kind (Grok Bot's settled
+ * approval): approved by your rule · edit rules; allowed once; from now on · edit rules; denied;
+ * no answer in time.
+ */
 @Composable
-fun RuleNoticeRow(labels: List<String>) {
+fun RuleNoticeRow(entries: List<String>) {
     val context = LocalContext.current
-    val what = labels.filter { it.isNotBlank() }.map { app.momoding.guard.RiskText.targetLabel(context, it) ?: it }.joinToString("、")
-    Row(Modifier.padding(top = 2.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            if (what.isEmpty()) stringResource(R.string.mo_rule_notice) else stringResource(R.string.mo_rule_notice_for, what),
-            fontSize = 12.sp, color = ChatColors.secondaryText,
-        )
-        Text(
-            " · " + stringResource(R.string.mo_rule_notice_edit),
-            fontSize = 12.sp, color = Tones.action,
-            modifier = Modifier.clickable {
-                runCatching { context.startActivity(OwnScheme.intent(context, Uri.parse("minis://settings/permissions"), 0)) }
-            },
-        )
+    entries.map { app.momoding.guard.RuleHits.decode(it) }.groupBy({ it.first }, { it.second }).forEach { (kind, labels) ->
+        val what = labels.filter { it.isNotBlank() }.map { app.momoding.guard.RiskText.targetLabel(context, it) ?: it }
+            .distinct().joinToString("、")
+        val line = when (kind) {
+            RuleHits.ONCE -> stringResource(R.string.mo_decided_once, what)
+            RuleHits.SESSION -> stringResource(R.string.mo_decided_session, what)
+            RuleHits.ALWAYS -> stringResource(R.string.mo_decided_always, what)
+            RuleHits.DENIED -> stringResource(R.string.mo_decided_denied, what)
+            RuleHits.TIMEOUT -> stringResource(R.string.mo_decided_timeout, what)
+            else -> if (what.isEmpty()) stringResource(R.string.mo_rule_notice) else stringResource(R.string.mo_rule_notice_for, what)
+        }.replace("（）", "").replace("()", "").replace(" ()", "")
+        val done = kind != RuleHits.DENIED && kind != RuleHits.TIMEOUT
+        Row(Modifier.padding(top = 2.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(if (done) "✓ " else "– ", fontSize = 12.sp, color = if (done) Tones.action else ChatColors.secondaryText)
+            Text(line, fontSize = 12.sp, color = ChatColors.secondaryText)
+            if (kind == RuleHits.RULE || kind == RuleHits.ALWAYS) Text(
+                " · " + stringResource(R.string.mo_rule_notice_edit),
+                fontSize = 12.sp, color = Tones.action,
+                modifier = Modifier.clickable {
+                    runCatching { context.startActivity(OwnScheme.intent(context, Uri.parse("minis://settings/permissions"), 0)) }
+                },
+            )
+        }
     }
 }
 

@@ -39,6 +39,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -241,6 +242,17 @@ private fun android.content.Context.findActivity(): android.app.Activity? {
 
 @Composable
 private fun Preview(request: RiskRequest) {
+    // momoding: a command is for the curious — folded behind "View the command", as in Grok Bot
+    if (request.kind == GuardKind.SHELL) {
+        var open by androidx.compose.runtime.saveable.rememberSaveable(request.id) { androidx.compose.runtime.mutableStateOf(false) }
+        if (!open) {
+            Text(
+                stringResource(R.string.mo_risk_view_command) + " ›", fontSize = 13.sp, color = ChatColors.secondaryText,
+                modifier = Modifier.clickable { open = true }.padding(vertical = 2.dp),
+            )
+            return
+        }
+    }
     Column(
         Modifier
             .fillMaxWidth()

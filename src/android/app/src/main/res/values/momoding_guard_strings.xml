@@ -69,4 +69,10 @@
     <string name="mo_risk_target_contacts">contacts</string>
     <string name="mo_risk_target_photos">photos</string>
     <string name="mo_risk_target_notifications">notifications</string>
+    <string name="mo_decided_once">Allowed once (%1$s)</string>
+    <string name="mo_decided_session">Allowed for this chat (%1$s)</string>
+    <string name="mo_decided_always">Allowed from now on (%1$s)</string>
+    <string name="mo_decided_denied">Denied (%1$s)</string>
+    <string name="mo_decided_timeout">No answer in time, so this was not done (%1$s)</string>
+    <string name="mo_risk_view_command">View the command</string>
 </resources>

@@ -69,4 +69,10 @@
     <string name="mo_risk_target_contacts">通訊錄</string>
     <string name="mo_risk_target_photos">相簿</string>
     <string name="mo_risk_target_notifications">通知</string>
+    <string name="mo_decided_once">已允許一次（%1$s）</string>
+    <string name="mo_decided_session">這次對話內允許（%1$s）</string>
+    <string name="mo_decided_always">今後允許（%1$s）</string>
+    <string name="mo_decided_denied">已拒絕（%1$s）</string>
+    <string name="mo_decided_timeout">沒等到你的回覆，沒有做（%1$s）</string>
+    <string name="mo_risk_view_command">查看命令</string>
 </resources>

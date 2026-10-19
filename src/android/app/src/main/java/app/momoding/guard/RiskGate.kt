@@ -202,7 +202,16 @@ object RiskGate {
             pageUrl = pageUrl,
             elementText = elementText,
         )
-        return when (ask(request)) {
+        val decision = ask(request)
+        // momoding: the chat shows what was decided in one line under the reply
+        RuleHits.record(sessionId, RiskText.plainTarget(assessment.target), when (decision) {
+            RiskDecision.ALLOW_ONCE -> RuleHits.ONCE
+            RiskDecision.ALLOW_SESSION -> RuleHits.SESSION
+            RiskDecision.ALLOW_ALWAYS -> RuleHits.ALWAYS
+            RiskDecision.DENY -> RuleHits.DENIED
+            RiskDecision.TIMEOUT -> RuleHits.TIMEOUT
+        })
+        return when (decision) {
             RiskDecision.ALLOW_ONCE -> GateOutcome.Allowed()
             RiskDecision.ALLOW_SESSION -> {
                 if (request.canSession) Grants.grantSession(assessment.riskClass, sessionId, assessment.reason, assessment.target)
@@ -211,8 +220,8 @@ object RiskGate {
             RiskDecision.ALLOW_ALWAYS -> {
                 val target = assessment.target?.takeIf { request.canAlways }
                 target?.let { Grants.grantAlways(assessment.riskClass, it, assessment.reason) }
-                // Point the person to where it lives, once, right after they chose it.
-                GateOutcome.Allowed(target?.let { rememberedNotice(RiskText.plainTarget(it), assessment.riskClass) })
+                // The chat's line says where it lives; only a payment rule is also said out loud.
+                GateOutcome.Allowed(target?.takeIf { assessment.riskClass == RiskClass.MONEY }?.let { rememberedNotice(RiskText.plainTarget(it), assessment.riskClass) })
             }
             RiskDecision.DENY -> GateOutcome.Denied(
                 "The user did not allow this (${assessment.reason}). Do not retry it or work around it; " +
