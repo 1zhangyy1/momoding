@@ -30,6 +30,8 @@ data class RiskRequest(
     val pageUrl: String? = null,
     /** For browser requests: the element's own text. */
     val elementText: String? = null,
+    /** In the model's words, what this step does ("删除下周一转房租的日程"); the card leads with it. */
+    val summary: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
 ) {
     /**
@@ -167,9 +169,9 @@ object RiskGate {
     // ── the two entry points the tools call ────────────────────────────────────────────────
 
     /** Decides for a shell command: grants first, then the card. */
-    suspend fun checkShell(sessionId: String, command: String): GateOutcome {
+    suspend fun checkShell(sessionId: String, command: String, summary: String? = null): GateOutcome {
         val a = ShellGuard.assess(command)
-        return check(sessionId, GuardKind.SHELL, a, preview = command.trim())
+        return check(sessionId, GuardKind.SHELL, a, preview = command.trim(), summary = summary)
     }
 
     suspend fun check(
@@ -179,6 +181,7 @@ object RiskGate {
         preview: String,
         pageUrl: String? = null,
         elementText: String? = null,
+        summary: String? = null,
     ): GateOutcome {
         if (!assessment.needsApproval) {
             return GateOutcome.Allowed(
@@ -201,6 +204,7 @@ object RiskGate {
             preview = preview,
             pageUrl = pageUrl,
             elementText = elementText,
+            summary = summary,
         )
         val decision = ask(request)
         // momoding: the chat shows what was decided in one line under the reply

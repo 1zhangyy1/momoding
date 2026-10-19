@@ -14200,7 +14200,7 @@ class ChatViewModel(
 
             // momoding: delete / change / send / pay stop for the user's yes; installs run with a notice
             var approvalNotice: String? = null
-            when (val gate = app.momoding.guard.RiskGate.checkShell(activeSessionId, command)) {
+            when (val gate = app.momoding.guard.RiskGate.checkShell(activeSessionId, command, toolTitle.takeIf { it != "shell_execute" })) {
                 is app.momoding.guard.GateOutcome.Denied -> {
                     val idx = toolBlocks.indexOfFirst { it.id == toolId }
                     if (idx >= 0) toolBlocks[idx] = toolBlocks[idx].copy(content = "")
