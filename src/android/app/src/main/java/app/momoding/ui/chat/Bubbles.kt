@@ -30,10 +30,10 @@ object BubbleShape {
  * and stay bare.
  */
 @Composable
-fun AgentBubble(rawText: String, last: Boolean, id: String? = null, content: @Composable () -> Unit) {
+fun AgentBubble(rawText: String, last: Boolean, id: String? = null, delayMs: Int = 0, content: @Composable () -> Unit) {
     if (isBare(rawText)) { content(); return }
     val shape = BubbleShape.agent(last)
-    if (id != null) PopIn(id, fromStart = true) { Bubble(shape, content) } else Bubble(shape, content)
+    if (id != null) PopIn(id, fromStart = true, delayMs) { Bubble(shape, content) } else Bubble(shape, content)
 }
 
 @Composable
@@ -67,11 +67,11 @@ object PopRegistry {
  * cubic-bezier(.22,1,.36,1), growing from the speaker's side.
  */
 @Composable
-fun PopIn(id: String, fromStart: Boolean, content: @Composable () -> Unit) {
+fun PopIn(id: String, fromStart: Boolean, delayMs: Int = 0, content: @Composable () -> Unit) {
     val animate = androidx.compose.runtime.remember(id) { PopRegistry.claim(id) }
     val progress = androidx.compose.runtime.remember(id) { androidx.compose.animation.core.Animatable(if (animate) 0f else 1f) }
     if (animate) androidx.compose.runtime.LaunchedEffect(id) {
-        progress.animateTo(1f, androidx.compose.animation.core.tween(180, easing = androidx.compose.animation.core.CubicBezierEasing(.22f, 1f, .36f, 1f)))
+        progress.animateTo(1f, androidx.compose.animation.core.tween(180, delayMillis = delayMs, easing = androidx.compose.animation.core.CubicBezierEasing(.22f, 1f, .36f, 1f)))
     }
     Box(
         Modifier.graphicsLayer {
@@ -107,4 +107,30 @@ fun TypingBubble() {
             }
         }
     }
+}
+
+/**
+ * Where one bubble ends and the next begins (pi-human-message: one message per conversational
+ * act). The model marks a new bubble with a blank line; a list, quote, table or line of links
+ * stays in the bubble it belongs to; a fenced block (code, a Momoding card) stands alone. The
+ * same grouping is used while streaming and afterwards, so bubbles never merge or jump.
+ */
+object BubbleSplit {
+    fun group(fragments: List<String>): List<String> {
+        val out = mutableListOf<StringBuilder>()
+        var lastFence = true
+        for (f in fragments) {
+            val first = f.lineSequence().firstOrNull { it.isNotBlank() }?.trimStart() ?: continue
+            val fence = first.startsWith("```") || first.startsWith("~~~")
+            val attaches = !fence && !lastFence && out.isNotEmpty() && (
+                LIST.containsMatchIn(first) || first.startsWith(">") || first.startsWith("|") ||
+                    LinkLine.splitTrailing(f)?.first?.isBlank() == true
+                )
+            if (attaches) out.last().append("\n\n").append(f) else out.add(StringBuilder(f))
+            lastFence = fence
+        }
+        return out.map { it.toString() }
+    }
+
+    private val LIST = Regex("""^([-*+]|\d+[.)])\s""")
 }

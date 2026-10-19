@@ -4591,7 +4591,7 @@ fun ChatScreen(
                                     // momoding: trailing links lines become buttons under the text
                                     val momodingSplit = remember(item.rawText) { app.momoding.ui.chat.LinkLine.splitTrailing(item.rawText) }
                                     Column {
-                                    app.momoding.ui.chat.AgentBubble(momodingSplit?.first ?: item.rawText, last = true, id = "${item.messageId}:${item.parentBlockId}") {
+                                    app.momoding.ui.chat.AgentBubble(momodingSplit?.first ?: item.rawText, last = item.isLastBlockOfMessage, id = "${item.messageId}:${item.parentBlockId}:${item.blockIndex}", delayMs = if (item.isStreaming) 0 else item.blockIndex * 140) {
                                     MarkdownBlock(
                                         rawText = momodingSplit?.first ?: item.rawText,
                                         isStreaming = item.isStreaming,

@@ -919,19 +919,9 @@ internal fun buildFlatChatItems(
                         // subsequent user turn pushed this assistant turn
                         // into history. Until then, the same key set the
                         // user was scrolled into stays valid.
-                        // [T-android-flatitems-sublist-cme] Index-based scan
-                        // instead of messages.subList(idx+1, size).all{} — a
-                        // subList is a live view sharing the parent's modCount,
-                        // which threw ConcurrentModificationException when the
-                        // backing list changed under it. A plain index loop
-                        // touches no view.
-                        val isLastAssistantTurn = idx == messages.lastIndex ||
-                            (idx + 1 until messages.size).all { messages[it].role != "assistant" }
-                        val fragments = if (isLastText && isLastAssistantTurn) {
-                            rawFragments
-                        } else {
-                            coalesceMarkdownFragments(rawFragments)
-                        }
+                        // momoding: one bubble per paragraph the model wrote, the same while
+                        // streaming and afterwards (app.momoding.ui.chat.BubbleSplit)
+                        val fragments = app.momoding.ui.chat.BubbleSplit.group(rawFragments)
                         if (fragments.isEmpty()) {
                             // Defensive: if the splitter returns nothing for
                             // a non-empty input (shouldn't happen), fall back
