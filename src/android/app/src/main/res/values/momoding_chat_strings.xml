@@ -86,4 +86,21 @@
     <string name="mo_routine_wake_caption_no_time">Routine · %1$s</string>
     <string name="mo_status_idle">On your phone · ready when you are</string>
     <string name="mo_ob_model_preparing">Getting the models ready…</string>
+    <string name="mo_settings_phone">Phone permissions</string>
+    <string name="mo_settings_ask_first">Ask first</string>
+    <string name="mo_settings_rules_page">Allow rules</string>
+    <string name="mo_settings_rules_none">No rules yet</string>
+    <string name="mo_settings_rules_count">%1$d rules</string>
+    <string name="mo_settings_models_none">No model connected</string>
+    <string name="mo_settings_models_change">Change</string>
+    <string name="mo_perm_row_notifications">Notifications</string>
+    <string name="mo_perm_purpose_notifications">When there is a result or something needs you</string>
+    <string name="mo_perm_row_calendar">Calendar</string>
+    <string name="mo_perm_purpose_calendar">Reminders and events</string>
+    <string name="mo_perm_row_contacts">Contacts</string>
+    <string name="mo_perm_purpose_contacts">Finding people</string>
+    <string name="mo_perm_row_location">Location</string>
+    <string name="mo_perm_purpose_location">Weather and nearby</string>
+    <string name="mo_perm_state_on">on</string>
+    <string name="mo_perm_state_off">off</string>
 </resources>

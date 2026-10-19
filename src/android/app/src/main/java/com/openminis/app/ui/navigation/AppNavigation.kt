@@ -581,6 +581,7 @@ fun AppNavigation(
                 onSkillsClick = { navController.safeNavigate(Routes.SKILLS) },
                 onHandsClick = { navController.safeNavigate(app.momoding.ui.hands.ROUTE_HANDS) }, // momoding
                 onRoutinesClick = { navController.safeNavigate(Routes.SCHEDULED_TASKS) }, // momoding
+                onRulesClick = { navController.safeNavigate(app.momoding.ui.guard.ROUTE_RULES) }, // momoding
                 onTerminalClick = { navController.safeNavigate(Routes.terminal()) },
                 onMemoryClick = { navController.safeNavigate(Routes.MEMORY) },
                 onAgentsClick = { navController.safeNavigate(Routes.AGENTS) },
@@ -1216,6 +1217,9 @@ fun AppNavigation(
             }
         }
 
+        composable(app.momoding.ui.guard.ROUTE_RULES) { // momoding: remembered approvals
+            app.momoding.ui.guard.RulesScreen(onBack = { navController.safePopBackStack() })
+        }
         // momoding: the phone's screen as a hand — the switch, what it needs, the screen model
         composable(app.momoding.ui.hands.ROUTE_HANDS) {
             app.momoding.ui.hands.HandsScreen(

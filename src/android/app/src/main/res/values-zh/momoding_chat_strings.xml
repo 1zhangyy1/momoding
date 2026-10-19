@@ -86,4 +86,21 @@
     <string name="mo_routine_wake_caption_no_time">🕗 例行 · %1$s</string>
     <string name="mo_status_idle">在你手机上 · 随时可以交代</string>
     <string name="mo_ob_model_preparing">正在准备模型…</string>
+    <string name="mo_settings_phone">手机权限</string>
+    <string name="mo_settings_ask_first">先问你</string>
+    <string name="mo_settings_rules_page">允许规则</string>
+    <string name="mo_settings_rules_none">还没有</string>
+    <string name="mo_settings_rules_count">%1$d 条</string>
+    <string name="mo_settings_models_none">还没连模型</string>
+    <string name="mo_settings_models_change">更换</string>
+    <string name="mo_perm_row_notifications">通知</string>
+    <string name="mo_perm_purpose_notifications">有结果或需要你时</string>
+    <string name="mo_perm_row_calendar">日历</string>
+    <string name="mo_perm_purpose_calendar">提醒和日程</string>
+    <string name="mo_perm_row_contacts">通讯录</string>
+    <string name="mo_perm_purpose_contacts">找联系人</string>
+    <string name="mo_perm_row_location">位置</string>
+    <string name="mo_perm_purpose_location">天气、附近</string>
+    <string name="mo_perm_state_on">已开</string>
+    <string name="mo_perm_state_off">未开</string>
 </resources>

@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="mo_grants_empty">還沒有記住任何授權</string>
-    <string name="mo_grants_footer_tiers">按危險程度分組。付款排在最前：這些不再彈出卡片，只限你用螢幕鎖確認過的那一個應用程式或網站。刪除與傳送是你在卡片上點「一律允許」記住的。安裝從不詢問，事後告知。點任意一行即可撤銷，下次遇到會重新詢問。</string>
-    <string name="mo_grants_header">Momoding 記住的授權</string>
+    <string name="mo_grants_empty">還沒有。在卡片上選「總是允許」，就會出現在這裡。</string>
+    <string name="mo_grants_footer_tiers">點一條可以撤銷，下次遇到會重新問你。</string>
+    <string name="mo_grants_header">記住的授權</string>
     <string name="mo_grants_revoke">撤銷</string>
     <string name="mo_grants_revoke_confirm">撤銷這條授權？下次遇到會重新問你。</string>
     <string name="mo_hands_this_phone">這台手機</string>

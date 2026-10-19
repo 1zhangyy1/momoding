@@ -58,6 +58,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.runtime.setValue
@@ -87,6 +88,7 @@ fun SettingsScreen(
     onSkillsClick: () -> Unit = {},
     onHandsClick: () -> Unit = {}, // momoding: operating the phone's screen
     onRoutinesClick: () -> Unit = {}, // momoding: the routines list, on the first level
+    onRulesClick: () -> Unit = {}, // momoding: remembered approvals
     onTerminalClick: () -> Unit = {},
     onMemoryClick: () -> Unit = {},
     /** [T-p2-agent-settings] Settings › Agents (delegation on/off), below Memory. */
@@ -143,17 +145,34 @@ fun SettingsScreen(
         ) {
             // momoding: the first level is what a person needs; the rest is under Advanced
             var showAdvanced by rememberSaveable { mutableStateOf(false) }
-            SettingsSection(title = stringResource(R.string.app_name)) {
-                SettingsItem(icon = Icons.Outlined.Lock, iconColor = Color(0xFF34C759), title = stringResource(R.string.mo_settings_models),
-                    subtitle = stringResource(R.string.mo_settings_models_sub), onClick = onProvidersClick)
+            // prototype pSettings: 模型 · 手机权限 · 先问你, then the rest
+            val momodingPerms = app.momoding.ui.settings.rememberPhonePermissions()
+            SettingsSection(title = stringResource(R.string.mo_settings_models)) {
+                SettingsItem(icon = Icons.Outlined.Lock, iconColor = Color(0xFF34C759),
+                    title = app.momoding.ui.settings.currentModelLabel(context) ?: stringResource(R.string.mo_settings_models_none),
+                    subtitle = stringResource(R.string.mo_settings_models_change), onClick = onProvidersClick, showDivider = false)
+            }
+            SettingsSection(title = stringResource(R.string.mo_settings_phone)) {
                 SettingsItem(icon = Icons.Outlined.TouchApp, iconColor = Color(0xFF2E7A12), title = stringResource(R.string.mo_hands_title),
                     subtitle = stringResource(if (app.momoding.hands.Hands.enabled(context)) R.string.mo_hands_on else R.string.mo_hands_off), onClick = onHandsClick)
-                SettingsItem(icon = Icons.Outlined.Shield, iconColor = Color(0xFF007AFF), title = stringResource(R.string.mo_settings_rules),
-                    subtitle = stringResource(R.string.mo_settings_rules_sub), onClick = onPermissionsClick)
-                SettingsItem(icon = Icons.Outlined.BatteryFull, iconColor = Color(0xFFFF9500), title = stringResource(R.string.mo_settings_background),
-                    subtitle = stringResource(R.string.mo_settings_background_sub), onClick = onBackgroundClick)
+                momodingPerms.forEachIndexed { i, p ->
+                    SettingsItem(icon = p.icon, iconColor = if (p.granted) Color(0xFF34C759) else Color(0xFF8E8E93),
+                        title = stringResource(p.title),
+                        subtitle = stringResource(p.purpose) + " · " + stringResource(if (p.granted) R.string.mo_perm_state_on else R.string.mo_perm_state_off),
+                        onClick = { app.momoding.ui.settings.openAppPermissionSettings(context, p) }, showDivider = i < momodingPerms.lastIndex)
+                }
+            }
+            SettingsSection(title = stringResource(R.string.mo_settings_ask_first)) {
+                val ruleCount = app.momoding.guard.Grants.always.collectAsState().value.size
+                SettingsItem(icon = Icons.Outlined.Shield, iconColor = Color(0xFF007AFF), title = stringResource(R.string.mo_settings_rules_page),
+                    subtitle = if (ruleCount == 0) stringResource(R.string.mo_settings_rules_none) else stringResource(R.string.mo_settings_rules_count, ruleCount),
+                    onClick = onRulesClick, showDivider = false)
+            }
+            SettingsSection(title = stringResource(R.string.app_name)) {
                 SettingsItem(icon = Icons.Outlined.Schedule, iconColor = Color(0xFF5856D6), title = stringResource(R.string.mo_settings_routines),
                     subtitle = stringResource(R.string.mo_settings_routines_sub), onClick = onRoutinesClick)
+                SettingsItem(icon = Icons.Outlined.BatteryFull, iconColor = Color(0xFFFF9500), title = stringResource(R.string.mo_settings_background),
+                    subtitle = stringResource(R.string.mo_settings_background_sub), onClick = onBackgroundClick)
                 SettingsItem(icon = Icons.Outlined.AutoAwesome, iconColor = Color(0xFFAF52DE), title = stringResource(R.string.mo_settings_about_bot),
                     subtitle = stringResource(R.string.mo_settings_about_bot_sub), onClick = onSoulClick)
                 SettingsItem(icon = Icons.Outlined.Palette, iconColor = Color(0xFFFF2D55), title = stringResource(R.string.settings_section_appearance),

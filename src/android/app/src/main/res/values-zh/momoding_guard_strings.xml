@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="mo_grants_empty">还没有记住任何授权</string>
-    <string name="mo_grants_footer_tiers">按危险程度分组。付款排在最前：这些不再弹卡片，只限你用锁屏确认过的那一个应用或网站。删除与发送是你在卡片上点「总是允许」记住的。安装从不询问，事后告知。点任意一行即可撤销，下次遇到会重新询问。</string>
-    <string name="mo_grants_header">Momoding 记住的授权</string>
+    <string name="mo_grants_empty">还没有。在卡片上选“总是允许”，就会出现在这里。</string>
+    <string name="mo_grants_footer_tiers">点一条可以撤销，下次遇到会重新问你。</string>
+    <string name="mo_grants_header">记住的授权</string>
     <string name="mo_grants_revoke">撤销</string>
     <string name="mo_grants_revoke_confirm">撤销这条授权？下次遇到会重新问你。</string>
     <string name="mo_hands_this_phone">这台手机</string>

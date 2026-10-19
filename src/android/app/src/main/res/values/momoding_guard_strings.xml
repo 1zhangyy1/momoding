@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="mo_grants_empty">Nothing remembered yet</string>
-    <string name="mo_grants_footer_tiers">Grouped by how much they matter. Payments come first: those run without a card, only in the one app or site you confirmed with your screen lock. Deleting and sending were remembered from the card with “Always allow for …”. Installs never ask; you are told afterwards. Tap any line to revoke it; the next time it comes up you will be asked again.</string>
-    <string name="mo_grants_header">Momoding remembered approvals</string>
+    <string name="mo_grants_empty">No rules yet. Choose “Always allow” on a card and it shows up here.</string>
+    <string name="mo_grants_footer_tiers">Tap one to remove it; next time you will be asked again.</string>
+    <string name="mo_grants_header">Remembered</string>
     <string name="mo_grants_revoke">Revoke</string>
     <string name="mo_grants_revoke_confirm">Revoke this approval? The next time it comes up, you will be asked again.</string>
     <string name="mo_hands_this_phone">this phone</string>
