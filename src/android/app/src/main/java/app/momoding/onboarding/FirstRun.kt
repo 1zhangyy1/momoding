@@ -89,6 +89,11 @@ fun FirstRunScreen(
     val config by providerRepository.config.collectAsState()
     val hasProvider = config.instances.isNotEmpty()
     val hasModels = config.modelGroups.isNotEmpty()
+    // momoding: the chat model is picked for the person once the provider's models are in
+    val hasEntries = config.modelEntries.isNotEmpty()
+    androidx.compose.runtime.LaunchedEffect(config) {
+        if (hasProvider && !hasModels) app.momoding.providers.AutoSetup.ensureDefaultGroup(providerRepository)
+    }
     var meetSeen by rememberSaveable { mutableIntStateOf(0) }
     val page = when {
         !hasProvider || !hasModels -> Page.MODEL
@@ -111,8 +116,11 @@ fun FirstRunScreen(
                 Spacer(Modifier.height(12.dp))
                 Body(stringResource(R.string.mo_ob_model_vision), small = true)
                 Spacer(Modifier.weight(1f))
-                if (!hasProvider) Primary(stringResource(R.string.mo_ob_model_connect), onAddProvider)
-                else Primary(stringResource(R.string.mo_ob_model_pick), onPickModels)
+                when {
+                    !hasProvider -> Primary(stringResource(R.string.mo_ob_model_connect), onAddProvider)
+                    !hasEntries -> Body(stringResource(R.string.mo_ob_model_preparing)) // models still loading
+                    else -> Primary(stringResource(R.string.mo_ob_model_pick), onPickModels) // nothing we know: pick by hand
+                }
             }
             Page.MEET -> {
                 val face = remember { Identity.face(context)?.asImageBitmap() }

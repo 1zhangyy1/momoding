@@ -85,4 +85,5 @@
     <string name="mo_perm_location">位置</string>
     <string name="mo_routine_wake_caption_no_time">🕗 例行 · %1$s</string>
     <string name="mo_status_idle">在你手机上 · 随时可以交代</string>
+    <string name="mo_ob_model_preparing">正在准备模型…</string>
 </resources>

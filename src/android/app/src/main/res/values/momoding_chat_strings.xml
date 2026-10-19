@@ -85,4 +85,5 @@
     <string name="mo_perm_location">location</string>
     <string name="mo_routine_wake_caption_no_time">Routine · %1$s</string>
     <string name="mo_status_idle">On your phone · ready when you are</string>
+    <string name="mo_ob_model_preparing">Getting the models ready…</string>
 </resources>
