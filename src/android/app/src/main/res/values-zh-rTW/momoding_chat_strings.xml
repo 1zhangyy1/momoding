@@ -131,4 +131,22 @@
     <string name="mo_handoff_settled_plain">已交回：%1$s</string>
     <string name="mo_card_expired">已過期</string>
     <string name="mo_card_expired_line">已過期：%1$s</string>
+    <string name="mo_computer_title">它的電腦</string>
+    <string name="mo_computer_row_sub">手機裡的 Linux 和瀏覽器</string>
+    <string name="mo_computer_intro">Momoding 在你手機裡有一台自己的小電腦：能上網、處理檔案，不佔你的螢幕。只有 App 裡的事才借你的螢幕，你看得見，隨時能停。</string>
+    <string name="mo_computer_files">它做出來的東西</string>
+    <string name="mo_computer_files_none">還沒有。讓它做個表格或網頁，會出現在這裡。</string>
+    <string name="mo_computer_browser">它的瀏覽器</string>
+    <string name="mo_computer_browser_footer">在它瀏覽器裡登入過的網站會一直登入著，下次不用再登。</string>
+    <string name="mo_computer_sites">去過的網站</string>
+    <string name="mo_computer_sites_none">還沒有</string>
+    <string name="mo_computer_sign_out">登出所有網站</string>
+    <string name="mo_computer_sign_out_detail">它的瀏覽器會忘掉所有登入和網站資料。下次網站要登入時，會再請你登一次。</string>
+    <string name="mo_computer_space">佔用空間</string>
+    <string name="mo_computer_space_total">共佔用 %1$s</string>
+    <string name="mo_computer_space_parts">Linux %1$s · 檔案和截圖 %2$s · 瀏覽器 %3$s</string>
+    <string name="mo_computer_clear_files">清空它做出來的東西</string>
+    <string name="mo_computer_clear_files_detail">刪除它在這個對話裡做出來的檔案。對話本身不受影響。</string>
+    <string name="mo_computer_confirm">清空</string>
+    <string name="mo_computer_sign_out_confirm">登出</string>
 </resources>

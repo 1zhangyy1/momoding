@@ -131,4 +131,22 @@
     <string name="mo_handoff_settled_plain">Handed back: %1$s</string>
     <string name="mo_card_expired">Expired</string>
     <string name="mo_card_expired_line">Expired: %1$s</string>
+    <string name="mo_computer_title">Its computer</string>
+    <string name="mo_computer_row_sub">Linux and a browser inside your phone</string>
+    <string name="mo_computer_intro">Momoding has a small computer of its own inside your phone: it goes online and handles files without using your screen. Only work inside apps borrows your screen, where you can see it and stop it.</string>
+    <string name="mo_computer_files">What it made</string>
+    <string name="mo_computer_files_none">Nothing yet. Ask it for a table or a page and it shows up here.</string>
+    <string name="mo_computer_browser">Its browser</string>
+    <string name="mo_computer_browser_footer">Sites you sign into in its browser stay signed in, so you do not have to sign in again.</string>
+    <string name="mo_computer_sites">Sites it has been to</string>
+    <string name="mo_computer_sites_none">None yet</string>
+    <string name="mo_computer_sign_out">Sign out of every site</string>
+    <string name="mo_computer_sign_out_detail">Its browser forgets every sign-in and site data. Next time a site needs you, it asks you to sign in again.</string>
+    <string name="mo_computer_space">Space</string>
+    <string name="mo_computer_space_total">Uses %1$s</string>
+    <string name="mo_computer_space_parts">Linux %1$s · files and screenshots %2$s · browser %3$s</string>
+    <string name="mo_computer_clear_files">Clear what it made</string>
+    <string name="mo_computer_clear_files_detail">Deletes the files it made in this conversation. The chat itself stays.</string>
+    <string name="mo_computer_confirm">Clear</string>
+    <string name="mo_computer_sign_out_confirm">Sign out</string>
 </resources>

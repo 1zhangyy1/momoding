@@ -131,4 +131,22 @@
     <string name="mo_handoff_settled_plain">已交回：%1$s</string>
     <string name="mo_card_expired">已过期</string>
     <string name="mo_card_expired_line">已过期：%1$s</string>
+    <string name="mo_computer_title">它的电脑</string>
+    <string name="mo_computer_row_sub">手机里的 Linux 和浏览器</string>
+    <string name="mo_computer_intro">Momoding 在你手机里有一台自己的小电脑：能上网、处理文件，不占你的屏幕。只有 App 里的事才借你的屏幕，你看得见，随时能停。</string>
+    <string name="mo_computer_files">它做出来的东西</string>
+    <string name="mo_computer_files_none">还没有。让它做个表格或网页，会出现在这里。</string>
+    <string name="mo_computer_browser">它的浏览器</string>
+    <string name="mo_computer_browser_footer">在它浏览器里登录过的网站会一直登录着，下次不用再登。</string>
+    <string name="mo_computer_sites">去过的网站</string>
+    <string name="mo_computer_sites_none">还没有</string>
+    <string name="mo_computer_sign_out">退出所有网站的登录</string>
+    <string name="mo_computer_sign_out_detail">它的浏览器会忘掉所有登录和网站数据。下次网站要登录时，会再请你登一次。</string>
+    <string name="mo_computer_space">占用空间</string>
+    <string name="mo_computer_space_total">共占用 %1$s</string>
+    <string name="mo_computer_space_parts">Linux %1$s · 文件和截图 %2$s · 浏览器 %3$s</string>
+    <string name="mo_computer_clear_files">清空它做出来的东西</string>
+    <string name="mo_computer_clear_files_detail">删除它在这个对话里做出来的文件。对话本身不受影响。</string>
+    <string name="mo_computer_confirm">清空</string>
+    <string name="mo_computer_sign_out_confirm">退出</string>
 </resources>

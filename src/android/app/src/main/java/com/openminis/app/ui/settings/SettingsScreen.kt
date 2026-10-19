@@ -60,6 +60,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.material.icons.outlined.Computer
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -89,6 +90,7 @@ fun SettingsScreen(
     onHandsClick: () -> Unit = {}, // momoding: operating the phone's screen
     onRoutinesClick: () -> Unit = {}, // momoding: the routines list, on the first level
     onRulesClick: () -> Unit = {}, // momoding: remembered approvals
+    onComputerClick: () -> Unit = {}, // momoding: its own computer (M14)
     onTerminalClick: () -> Unit = {},
     onMemoryClick: () -> Unit = {},
     /** [T-p2-agent-settings] Settings › Agents (delegation on/off), below Memory. */
@@ -169,6 +171,8 @@ fun SettingsScreen(
                     onClick = onRulesClick, showDivider = false)
             }
             SettingsSection(title = stringResource(R.string.app_name)) {
+                SettingsItem(icon = Icons.Outlined.Computer, iconColor = Color(0xFF34C759), title = stringResource(R.string.mo_computer_title),
+                    subtitle = stringResource(R.string.mo_computer_row_sub), onClick = onComputerClick)
                 SettingsItem(icon = Icons.Outlined.Schedule, iconColor = Color(0xFF5856D6), title = stringResource(R.string.mo_settings_routines),
                     subtitle = stringResource(R.string.mo_settings_routines_sub), onClick = onRoutinesClick)
                 SettingsItem(icon = Icons.Outlined.BatteryFull, iconColor = Color(0xFFFF9500), title = stringResource(R.string.mo_settings_background),

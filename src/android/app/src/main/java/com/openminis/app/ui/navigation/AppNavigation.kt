@@ -590,6 +590,7 @@ fun AppNavigation(
                 onHandsClick = { navController.safeNavigate(app.momoding.ui.hands.ROUTE_HANDS) }, // momoding
                 onRoutinesClick = { navController.safeNavigate(Routes.SCHEDULED_TASKS) }, // momoding
                 onRulesClick = { navController.safeNavigate(app.momoding.ui.guard.ROUTE_RULES) }, // momoding
+                onComputerClick = { navController.safeNavigate(app.momoding.ui.computer.ROUTE_COMPUTER) }, // momoding
                 onTerminalClick = { navController.safeNavigate(Routes.terminal()) },
                 onMemoryClick = { navController.safeNavigate(Routes.MEMORY) },
                 onAgentsClick = { navController.safeNavigate(Routes.AGENTS) },
@@ -1225,6 +1226,15 @@ fun AppNavigation(
             }
         }
 
+        composable(app.momoding.ui.computer.ROUTE_COMPUTER) { // momoding: its own computer (M14)
+            app.momoding.ui.computer.ComputerScreen(
+                onBack = { navController.safePopBackStack() },
+                onPreview = { f ->
+                    FilePreviewHolder.currentItem = com.openminis.app.ui.sandbox.FileItem(f, f.name, false, false, f.length(), f.lastModified())
+                    navController.safeNavigate(Routes.FILE_PREVIEW)
+                },
+            )
+        }
         composable(app.momoding.ui.guard.ROUTE_RULES) { // momoding: remembered approvals
             app.momoding.ui.guard.RulesScreen(onBack = { navController.safePopBackStack() })
         }
