@@ -75,4 +75,5 @@
     <string name="mo_decided_denied">已拒绝（%1$s）</string>
     <string name="mo_decided_timeout">没等到你的回复，没有做（%1$s）</string>
     <string name="mo_risk_view_command">查看命令</string>
+    <string name="mo_grants_added">%1$s 加的</string>
 </resources>

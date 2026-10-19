@@ -27,7 +27,6 @@ import app.momoding.guard.Grants
 import app.momoding.guard.RiskClass
 import app.momoding.guard.RiskText
 import app.momoding.guard.RiskTier
-import java.text.DateFormat
 import java.util.Date
 
 /**
@@ -58,13 +57,14 @@ fun GrantsSection() {
     shown.forEachIndexed { t, tier ->
         val rows = grouped[tier].orEmpty().sortedByDescending { it.grantedAt }
         SettingsSection(
-            header = if (t == 0) stringResource(R.string.mo_grants_header) + " · " + RiskText.tierLabel(context, tier) else RiskText.tierLabel(context, tier),
+            header = RiskText.tierLabel(context, tier), // momoding: the page title already says what these are
             footer = if (t == shown.lastIndex) stringResource(R.string.mo_grants_footer_tiers) else null,
         ) {
             rows.forEachIndexed { i, g ->
                 SettingsRow(
                     title = RiskText.classLabel(context, g.riskClass) + " · " + (RiskText.targetLabel(context, g.target) ?: g.target ?: ""),
-                    subtitle = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(g.grantedAt)),
+                    // momoding: "今天 21:44 加的", in the app's language like the chat's times
+                    subtitle = stringResource(R.string.mo_grants_added, app.momoding.ui.chat.TimeDivider.label(g.grantedAt, stringResource(R.string.mo_time_today), stringResource(R.string.mo_time_yesterday), locale = context.resources.configuration.locales[0])),
                     icon = when (g.riskClass) {
                         RiskClass.DESTRUCTIVE -> Icons.Outlined.DeleteOutline
                         RiskClass.MONEY -> Icons.Outlined.Payments

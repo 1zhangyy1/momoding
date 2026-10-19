@@ -25,7 +25,9 @@ import app.momoding.ui.Design
 @Composable
 fun TimeDivider(at: Long) {
     val context = LocalContext.current
-    val text = remember(at) { TimeDivider.label(at, context.getString(R.string.mo_time_today), context.getString(R.string.mo_time_yesterday)) }
+    val text = remember(at) {
+        TimeDivider.label(at, context.getString(R.string.mo_time_today), context.getString(R.string.mo_time_yesterday), locale = context.resources.configuration.locales[0])
+    }
     Box(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 6.dp), contentAlignment = Alignment.Center) {
         Text(text, fontSize = Design.Size.Caption, color = ChatColors.secondaryText)
     }

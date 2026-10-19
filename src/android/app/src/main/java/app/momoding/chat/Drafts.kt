@@ -126,7 +126,7 @@ object Drafts {
                     appHint = d.app.ifBlank { null },
                     sessionId = runSession,
                     agentName = Identity.name(context),
-                    language = Locale.getDefault().getDisplayLanguage(Locale.ENGLISH).ifBlank { "the user's language" },
+                    language = context.resources.configuration.locales[0].getDisplayLanguage(Locale.ENGLISH).ifBlank { "the user's language" }, // momoding: the app's language, not the system's
                 )
             )
             when (val o = r.outcome) {

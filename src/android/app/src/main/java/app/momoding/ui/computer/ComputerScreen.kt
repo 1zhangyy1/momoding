@@ -147,7 +147,7 @@ internal object Computer {
 
     /** "今天 19:43" in the app's language, as the chat's time dividers say it. */
     fun age(context: Context, at: Long): String =
-        app.momoding.ui.chat.TimeDivider.label(at, context.getString(R.string.mo_time_today), context.getString(R.string.mo_time_yesterday))
+        app.momoding.ui.chat.TimeDivider.label(at, context.getString(R.string.mo_time_today), context.getString(R.string.mo_time_yesterday), locale = context.resources.configuration.locales[0])
 
     /** Its browser forgets every sign-in: cookies and site storage. */
     fun signOutEverywhere() {

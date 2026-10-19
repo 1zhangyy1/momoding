@@ -103,7 +103,7 @@ class HandsOffloadHandler(private val context: Context) : NativeOffloadHandler {
             maxSteps = maxSteps,
             sessionId = sessionId,
             agentName = Identity.name(context),
-            language = Locale.getDefault().getDisplayLanguage(Locale.ENGLISH).ifBlank { "the user's language" },
+            language = context.resources.configuration.locales[0].getDisplayLanguage(Locale.ENGLISH).ifBlank { "the user's language" }, // momoding: the app's language, not the system's
         )
         // Taken atomically, so two runs arriving together cannot both start; given back when the run ends.
         if (!Hands.claim()) return refused("busy", "The hands are already working on something; wait for it to finish or stop it.")
