@@ -600,6 +600,16 @@ fun ChatScreen(
         app.momoding.ui.chat.MomodingSend.handler = { viewModel.sendMessage(it) }
         onDispose { app.momoding.ui.chat.MomodingSend.handler = null }
     }
+    // momoding: rows already there when the chat opens never pop in (only new ones do)
+    run {
+        val primeMsgs by viewModel.uiMessages.collectAsState()
+        remember(sessionId, primeMsgs.isNotEmpty()) {
+            if (primeMsgs.isNotEmpty()) app.momoding.ui.chat.PopRegistry.prime(
+                primeMsgs.flatMap { m -> listOf(m.id) + m.toolBlocks.map { "${m.id}:${it.id}" } }
+            )
+            0
+        }
+    }
     // [T-android-larky-longsession-followup] Consume the tail-windowed
     // view instead of the canonical full list. For sessions with ≤300
     // messages this is the SAME reference (zero overhead); for longer
@@ -4450,7 +4460,7 @@ fun ChatScreen(
                         when (item) {
                             is FlatChatItem.UserBubble -> {
                                 // momoding: a row a routine sent is one quiet line, not a bubble in the person's voice
-                                app.momoding.ui.chat.RoutineWakeRow(item.message.id.substringBefore('#')) {
+                                app.momoding.ui.chat.RoutineWakeRow(item.message.id.substringBefore('#')) { app.momoding.ui.chat.PopIn(item.message.id, fromStart = false) {
                                 // User bubbles intentionally don't register
                                 // MinisTextKit shards — long-press on a user
                                 // bubble shows its own action menu (Copy /
@@ -4534,7 +4544,7 @@ fun ChatScreen(
                                     }
                                 },
                             )
-                            } // momoding: close RoutineWakeRow
+                            }} // momoding: close RoutineWakeRow
                             } // close UserBubble SideEffect + UserMessageBubble block
                             is FlatChatItem.AssistantHeader -> AssistantHeader()
                             is FlatChatItem.AssistantText -> BoundsTrackedBlock(
@@ -4581,7 +4591,7 @@ fun ChatScreen(
                                     // momoding: trailing links lines become buttons under the text
                                     val momodingSplit = remember(item.rawText) { app.momoding.ui.chat.LinkLine.splitTrailing(item.rawText) }
                                     Column {
-                                    app.momoding.ui.chat.AgentBubble(momodingSplit?.first ?: item.rawText, last = true) {
+                                    app.momoding.ui.chat.AgentBubble(momodingSplit?.first ?: item.rawText, last = true, id = "${item.messageId}:${item.parentBlockId}") {
                                     MarkdownBlock(
                                         rawText = momodingSplit?.first ?: item.rawText,
                                         isStreaming = item.isStreaming,

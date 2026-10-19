@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import app.momoding.ui.Tones
 
@@ -28,10 +29,15 @@ object BubbleShape {
  * and stay bare.
  */
 @Composable
-fun AgentBubble(rawText: String, last: Boolean, content: @Composable () -> Unit) {
+fun AgentBubble(rawText: String, last: Boolean, id: String? = null, content: @Composable () -> Unit) {
     if (isBare(rawText)) { content(); return }
     val shape = BubbleShape.agent(last)
-    Box(Modifier.fillMaxWidth().padding(end = 40.dp), contentAlignment = Alignment.TopStart) {
+    if (id != null) PopIn(id, fromStart = true) { Bubble(shape, content) } else Bubble(shape, content)
+}
+
+@Composable
+private fun Bubble(shape: androidx.compose.ui.graphics.Shape, content: @Composable () -> Unit) {
+    Box(Modifier.fillMaxWidth().padding(top = 4.dp, end = 40.dp), contentAlignment = Alignment.TopStart) {
         Box(
             Modifier.widthIn(max = 520.dp).clip(shape).background(Tones.agentBubble)
                 .padding(horizontal = 14.dp, vertical = 9.dp),
@@ -42,4 +48,36 @@ fun AgentBubble(rawText: String, last: Boolean, content: @Composable () -> Unit)
 private fun isBare(raw: String): Boolean {
     val t = raw.trimStart()
     return t.isEmpty() || t.startsWith("```") || t.startsWith("~~~") || t.startsWith("|") || t.startsWith("<")
+}
+
+/**
+ * Which chat rows have already been on screen, so only new ones pop in. Everything present
+ * when a chat is opened is primed as seen; history never animates.
+ */
+object PopRegistry {
+    private val seen = java.util.Collections.synchronizedSet(HashSet<String>())
+    fun prime(ids: Collection<String>) { seen.addAll(ids) }
+    /** True the first time [id] is drawn after priming (and marks it). */
+    fun claim(id: String): Boolean = seen.add(id)
+}
+
+/**
+ * Grok Bot's bubble entrance: from 92% and transparent to full size in 180ms on
+ * cubic-bezier(.22,1,.36,1), growing from the speaker's side.
+ */
+@Composable
+fun PopIn(id: String, fromStart: Boolean, content: @Composable () -> Unit) {
+    val animate = androidx.compose.runtime.remember(id) { PopRegistry.claim(id) }
+    val progress = androidx.compose.runtime.remember(id) { androidx.compose.animation.core.Animatable(if (animate) 0f else 1f) }
+    if (animate) androidx.compose.runtime.LaunchedEffect(id) {
+        progress.animateTo(1f, androidx.compose.animation.core.tween(180, easing = androidx.compose.animation.core.CubicBezierEasing(.22f, 1f, .36f, 1f)))
+    }
+    Box(
+        Modifier.graphicsLayer {
+            val p = progress.value
+            alpha = p
+            scaleX = .92f + .08f * p; scaleY = .92f + .08f * p
+            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(if (fromStart) 0f else 1f, .5f)
+        },
+    ) { content() }
 }
