@@ -129,4 +129,6 @@
     <string name="mo_handoff_done_msg">好了，接著做吧。</string>
     <string name="mo_handoff_settled">已交回：在「%1$s」%2$s</string>
     <string name="mo_handoff_settled_plain">已交回：%1$s</string>
+    <string name="mo_card_expired">已過期</string>
+    <string name="mo_card_expired_line">已過期：%1$s</string>
 </resources>

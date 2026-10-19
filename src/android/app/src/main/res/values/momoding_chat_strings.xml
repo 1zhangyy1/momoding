@@ -129,4 +129,6 @@
     <string name="mo_handoff_done_msg">Done, carry on.</string>
     <string name="mo_handoff_settled">Handed back: %2$s on %1$s</string>
     <string name="mo_handoff_settled_plain">Handed back: %1$s</string>
+    <string name="mo_card_expired">Expired</string>
+    <string name="mo_card_expired_line">Expired: %1$s</string>
 </resources>

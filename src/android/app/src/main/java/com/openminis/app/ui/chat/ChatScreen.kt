@@ -619,6 +619,11 @@ fun ChatScreen(
     // Callers needing the full history (compact / fork / regenerate / send)
     // continue to read viewModel.messages directly inside the VM.
     val messages by viewModel.uiMessages.collectAsState()
+    // momoding: the replies since the person last wrote; an unanswered card outside them has expired
+    val momodingLiveTurn = remember(messages) {
+        val u = messages.indexOfLast { it.role == "user" }
+        messages.drop(u + 1).filter { it.role == "assistant" }.map { it.id }.toSet()
+    }
     // [T-android-usage-capsule-style] Which replies currently show their usage
     // capsule. Empty by default — it is revealed by tapping the reply's tail.
     val revealedUsageIds by viewModel.revealedUsageIds.collectAsState()
@@ -4594,7 +4599,7 @@ fun ChatScreen(
                                     val momodingSplit = remember(item.rawText) { app.momoding.ui.chat.LinkLine.splitTrailing(item.rawText) }
                                     Column {
                                     app.momoding.ui.chat.AgentBubble(momodingSplit?.first ?: item.rawText, last = item.isLastBlockOfMessage, id = "${item.messageId}:${item.parentBlockId}:${item.blockIndex}", delayMs = if (item.isStreaming) 0 else item.blockIndex * 140) {
-                                    androidx.compose.runtime.CompositionLocalProvider(app.momoding.ui.chat.LocalMomodingMessage provides item.messageId) {
+                                    androidx.compose.runtime.CompositionLocalProvider(app.momoding.ui.chat.LocalMomodingMessage provides item.messageId, app.momoding.ui.chat.LocalMomodingLive provides (item.messageId in momodingLiveTurn)) {
                                     MarkdownBlock(
                                         rawText = momodingSplit?.first ?: item.rawText,
                                         isStreaming = item.isStreaming,

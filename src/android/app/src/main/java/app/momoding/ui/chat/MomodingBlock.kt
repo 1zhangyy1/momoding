@@ -62,6 +62,9 @@ fun MomodingBlock(language: String, code: String) {
  */
 val LocalMomodingMessage = androidx.compose.runtime.staticCompositionLocalOf { "" }
 
+/** False for a card in an earlier turn: if it was never answered, it has expired (Grok's "This ask expired"). */
+val LocalMomodingLive = androidx.compose.runtime.compositionLocalOf { true }
+
 @Composable
 private fun cardId(code: String): String {
     val message = LocalMomodingMessage.current
@@ -87,16 +90,17 @@ private fun AskCard(o: JSONObject, code: String) {
     val context = LocalContext.current
     val id = cardId(code)
     var chosen by remember(id) { mutableStateOf(AskState.chosen(context, id)) }
+    val expired = chosen == null && !LocalMomodingLive.current
     QuietCard {
         if (question.isNotEmpty()) CardTitle(question)
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             opts.forEachIndexed { i, opt ->
-                OptionRow(i + 1, opt, picked = chosen == opt, settled = chosen != null) {
+                OptionRow(i + 1, opt, picked = chosen == opt, settled = chosen != null || expired) {
                     AskState.choose(context, id, opt); chosen = opt; MomodingSend.send(opt)
                 }
             }
         }
-        if (chosen == null) Text(stringResource(R.string.mo_ask_hint), fontSize = 12.sp, color = ChatColors.secondaryText)
+        if (chosen == null) Text(stringResource(if (expired) R.string.mo_card_expired else R.string.mo_ask_hint), fontSize = 12.sp, color = ChatColors.secondaryText)
     }
 }
 
@@ -190,6 +194,10 @@ private fun PermissionCard(o: JSONObject, code: String) {
             launcher.launch(permissions)
         }
     }
+    if (state == null && !LocalMomodingLive.current) {
+        SettledLine(stringResource(R.string.mo_card_expired_line, stringResource(R.string.mo_perm_ask, label)), done = false)
+        return
+    }
     when (state) {
         "granted" -> SettledLine(stringResource(R.string.mo_perm_settled_granted, label))
         "declined" -> SettledLine(stringResource(R.string.mo_perm_settled_declined, label), done = false)
@@ -230,8 +238,13 @@ private fun HandoffCard(o: JSONObject, code: String) {
         SettledLine(if (site.isNotEmpty()) stringResource(R.string.mo_handoff_settled, site, what) else stringResource(R.string.mo_handoff_settled_plain, what), done = false)
         return
     }
+    val title = if (site.isNotEmpty()) stringResource(R.string.mo_handoff_title, site, what) else stringResource(R.string.mo_handoff_title_plain, what)
+    if (state == null && !LocalMomodingLive.current) {
+        SettledLine(stringResource(R.string.mo_card_expired_line, title), done = false)
+        return
+    }
     DecisionCard {
-        CardTitle(if (site.isNotEmpty()) stringResource(R.string.mo_handoff_title, site, what) else stringResource(R.string.mo_handoff_title_plain, what))
+        CardTitle(title)
         Text(stringResource(R.string.mo_handoff_detail), fontSize = 13.sp, lineHeight = 19.sp, color = ChatColors.secondaryText)
         CardActions {
             if (state == "opened") PillButton(stringResource(R.string.mo_handoff_open_again), primary = false) { MomodingSend.openBrowser?.invoke() }
