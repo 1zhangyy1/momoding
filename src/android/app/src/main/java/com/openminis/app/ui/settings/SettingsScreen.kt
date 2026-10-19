@@ -190,51 +190,52 @@ fun SettingsScreen(
                     onClick = { showAdvanced = !showAdvanced }, showDivider = false)
             }
             if (showAdvanced) {
-            // momoding: Advanced in Momoding's words — the same pages as upstream, grouped by what a
+            // momoding: Advanced in Momoding's words — the same pages as upstream (each row named as its
+            // page is titled, explained in the subtitle), grouped by what a
             // person is after; what the first level already has (appearance, background, its
             // manner) is not repeated here
             SettingsSection(title = stringResource(R.string.mo_adv_models)) {
-                SettingsItem(icon = Icons.Outlined.Lock, iconColor = Color(0xFF007AFF), title = stringResource(R.string.mo_adv_providers),
+                SettingsItem(icon = Icons.Outlined.Lock, iconColor = Color(0xFF007AFF), title = stringResource(R.string.provider_list_providers),
                     subtitle = stringResource(R.string.mo_adv_providers_sub), onClick = onProvidersClick)
-                SettingsItem(icon = Icons.Outlined.Settings, iconColor = Color(0xFF5856D6), title = stringResource(R.string.mo_adv_groups),
+                SettingsItem(icon = Icons.Outlined.Settings, iconColor = Color(0xFF5856D6), title = stringResource(R.string.model_groups_model_groups),
                     subtitle = stringResource(R.string.mo_adv_groups_sub), onClick = onModelGroupsClick)
-                SettingsItem(icon = Icons.Outlined.BarChart, iconColor = Color(0xFF34C759), title = stringResource(R.string.mo_adv_usage),
+                SettingsItem(icon = Icons.Outlined.BarChart, iconColor = Color(0xFF34C759), title = stringResource(R.string.usage_title),
                     subtitle = stringResource(R.string.mo_adv_usage_sub), onClick = onUsageClick, showDivider = false)
             }
             SettingsSection(title = stringResource(R.string.mo_adv_abilities)) {
-                SettingsItem(icon = Icons.Outlined.Extension, iconColor = Color(0xFFFF9500), title = stringResource(R.string.mo_adv_skills),
+                SettingsItem(icon = Icons.Outlined.Extension, iconColor = Color(0xFFFF9500), title = stringResource(R.string.skill_title),
                     subtitle = stringResource(R.string.mo_adv_skills_sub), onClick = onSkillsClick)
-                SettingsItem(icon = Icons.Outlined.Handyman, iconColor = Color(0xFF8E8E93), title = stringResource(R.string.mo_adv_tools),
+                SettingsItem(icon = Icons.Outlined.Handyman, iconColor = Color(0xFF8E8E93), title = stringResource(R.string.settings_agent_tools),
                     subtitle = stringResource(R.string.mo_adv_tools_sub), onClick = onAgentToolsClick)
-                SettingsItem(icon = Icons.Outlined.Dashboard, iconColor = Color(0xFF5AC8FA), title = stringResource(R.string.mo_adv_services),
+                SettingsItem(icon = Icons.Outlined.Dashboard, iconColor = Color(0xFF5AC8FA), title = stringResource(R.string.mcp_title),
                     subtitle = stringResource(R.string.mo_adv_services_sub), onClick = onMcpClick)
-                SettingsItem(icon = Icons.Outlined.Groups, iconColor = Color(0xFFAF52DE), title = stringResource(R.string.mo_adv_helpers),
+                SettingsItem(icon = Icons.Outlined.Groups, iconColor = Color(0xFFAF52DE), title = stringResource(R.string.sub_agents_title),
                     subtitle = stringResource(R.string.mo_adv_helpers_sub), onClick = onAgentsClick)
-                SettingsItem(icon = Icons.Outlined.Psychology, iconColor = Color(0xFFFF2D55), title = stringResource(R.string.mo_adv_memory),
+                SettingsItem(icon = Icons.Outlined.Psychology, iconColor = Color(0xFFFF2D55), title = stringResource(R.string.memory_title),
                     subtitle = stringResource(R.string.mo_adv_memory_sub), onClick = onMemoryClick, showDivider = false)
             }
             SettingsSection(title = stringResource(R.string.mo_computer_title)) {
-                SettingsItem(icon = Icons.Outlined.Storage, iconColor = Color(0xFF34C759), title = stringResource(R.string.mo_adv_linux),
+                SettingsItem(icon = Icons.Outlined.Storage, iconColor = Color(0xFF34C759), title = stringResource(R.string.storage_title),
                     subtitle = stringResource(R.string.mo_adv_linux_sub), onClick = onRootfsClick)
                 SettingsItem(icon = Icons.Outlined.Terminal, iconColor = Color(0xFF1C1C1E), title = stringResource(R.string.mo_adv_terminal),
                     subtitle = stringResource(R.string.mo_adv_terminal_sub), onClick = onTerminalClick)
-                SettingsItem(icon = Icons.Outlined.FolderShared, iconColor = Color(0xFF007AFF), title = stringResource(R.string.mo_adv_shared),
+                SettingsItem(icon = Icons.Outlined.FolderShared, iconColor = Color(0xFF007AFF), title = stringResource(R.string.shared_folders_title),
                     subtitle = stringResource(R.string.mo_adv_shared_sub), onClick = onSharedFoldersClick)
-                SettingsItem(icon = Icons.Outlined.Folder, iconColor = Color(0xFFFF9500), title = stringResource(R.string.mo_adv_mounts),
+                SettingsItem(icon = Icons.Outlined.Folder, iconColor = Color(0xFFFF9500), title = stringResource(R.string.settings_mount_external_folders),
                     subtitle = stringResource(R.string.mo_adv_mounts_sub), onClick = onMountedFoldersClick)
-                SettingsItem(icon = Icons.Outlined.AutoAwesome, iconColor = Color(0xFF5856D6), title = stringResource(R.string.mo_adv_env),
+                SettingsItem(icon = Icons.Outlined.AutoAwesome, iconColor = Color(0xFF5856D6), title = stringResource(R.string.env_var_title),
                     subtitle = stringResource(R.string.mo_adv_env_sub), onClick = onEnvVarsClick, showDivider = false)
             }
             SettingsSection(title = stringResource(R.string.mo_adv_data)) {
-                SettingsItem(icon = Icons.Outlined.Backup, iconColor = Color(0xFF34C759), title = stringResource(R.string.mo_adv_backup),
+                SettingsItem(icon = Icons.Outlined.Backup, iconColor = Color(0xFF34C759), title = stringResource(R.string.backup_title),
                     subtitle = stringResource(R.string.mo_adv_backup_sub), onClick = onBackupClick)
-                SettingsItem(icon = Icons.Outlined.Description, iconColor = Color(0xFF8E8E93), title = stringResource(R.string.mo_adv_logs),
+                SettingsItem(icon = Icons.Outlined.Description, iconColor = Color(0xFF8E8E93), title = stringResource(R.string.log_title),
                     subtitle = stringResource(R.string.mo_adv_logs_sub), onClick = onLogsClick)
-                SettingsItem(icon = Icons.Outlined.Shield, iconColor = Color(0xFF007AFF), title = stringResource(R.string.mo_adv_permissions),
+                SettingsItem(icon = Icons.Outlined.Shield, iconColor = Color(0xFF007AFF), title = stringResource(R.string.permissions_title),
                     subtitle = stringResource(R.string.mo_adv_permissions_sub), onClick = onPermissionsClick, showDivider = false)
             }
             SettingsSection(title = stringResource(R.string.mo_adv_about)) {
-                SettingsItem(icon = Icons.Outlined.Info, iconColor = Color(0xFF8E8E93), title = stringResource(R.string.mo_adv_version),
+                SettingsItem(icon = Icons.Outlined.Info, iconColor = Color(0xFF8E8E93), title = stringResource(R.string.about_title),
                     subtitle = stringResource(R.string.mo_adv_version_sub), onClick = onAboutClick)
                 SettingsItem(icon = Icons.Outlined.Shield, iconColor = Color(0xFF8E8E93), title = stringResource(R.string.settings_privacy_policy),
                     subtitle = null, onClick = { openExternalUrl(context, "https://openminis.github.io/privacy-policy.html") })
