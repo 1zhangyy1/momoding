@@ -13,3 +13,10 @@ class RoutineTextTest {
         assertEquals(41, RoutineText.firstLine("x".repeat(80)).length)
     }
 }
+
+class RoutineDaysTest {
+    @org.junit.Test fun weekdaysMondayFirstInChinese() {
+        org.junit.Assert.assertEquals("周五", app.momoding.chat.RoutineText.days(setOf(java.util.Calendar.FRIDAY), java.util.Locale.CHINA))
+        org.junit.Assert.assertEquals("周一、周日", app.momoding.chat.RoutineText.days(setOf(java.util.Calendar.SUNDAY, java.util.Calendar.MONDAY), java.util.Locale.CHINA))
+    }
+}

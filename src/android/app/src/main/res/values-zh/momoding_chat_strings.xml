@@ -38,7 +38,7 @@
     <string name="mo_routine_once">一次</string>
     <string name="mo_routine_daily">每天 %1$s 左右</string>
     <string name="mo_routine_weekdays">工作日 %1$s 左右</string>
-    <string name="mo_routine_custom">部分日子 %1$s 左右</string>
+    <string name="mo_routine_custom">每%1$s %2$s 左右</string>
     <string name="mo_routine_once_at">%1$s 左右一次</string>
     <string name="mo_routine_auto_paused">没人看，已暂停</string>
     <string name="mo_routine_last">上次：%1$s</string>

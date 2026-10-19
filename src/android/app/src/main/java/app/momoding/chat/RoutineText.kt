@@ -20,7 +20,7 @@ object RoutineText {
             ScheduledTriggerKind.CALENDAR -> when (task.repeatMode) {
                 ScheduledRepeatMode.DAILY -> context.getString(R.string.mo_routine_daily, time)
                 ScheduledRepeatMode.WEEKDAYS -> context.getString(R.string.mo_routine_weekdays, time)
-                ScheduledRepeatMode.CUSTOM -> context.getString(R.string.mo_routine_custom, time)
+                ScheduledRepeatMode.CUSTOM -> context.getString(R.string.mo_routine_custom, days(task.customDays, context.resources.configuration.locales[0]), time)
                 ScheduledRepeatMode.ONCE -> context.getString(R.string.mo_routine_once_at, time)
             }
         }
@@ -38,6 +38,13 @@ object RoutineText {
             lastLine != null -> head + "\n" + context.getString(R.string.mo_routine_last, lastLine)
             else -> head
         }
+    }
+
+    /** "周五" / "周一、周三" from Calendar.DAY_OF_WEEK values, Monday first, in the app's language. */
+    internal fun days(customDays: Set<Int>, locale: java.util.Locale = java.util.Locale.getDefault()): String {
+        val names = java.text.DateFormatSymbols(locale).shortWeekdays
+        val sep = if (locale.language == "zh") "、" else ", "
+        return customDays.sortedBy { (it + 5) % 7 }.joinToString(sep) { names[it] }
     }
 
     /** "今天 8:00" / "明天 8:00" / "10月23日 8:00". */

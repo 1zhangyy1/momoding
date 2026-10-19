@@ -436,7 +436,8 @@ private fun EditFormBody(
         )
 
         // ── Target mode ──
-        Column {
+        // momoding: one conversation — a routine always reports back into it; the modes are for the steps-shown view
+        if (app.momoding.ui.chat.ShowSteps.remember().value) Column {
             SectionLabel(stringResource(R.string.scheduled_task_field_target))
             Spacer(Modifier.height(8.dp))
             val targetOpts = listOf(
@@ -522,12 +523,13 @@ private fun EditFormBody(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    val days = listOf(
-                        Calendar.MONDAY to "Mon", Calendar.TUESDAY to "Tue",
-                        Calendar.WEDNESDAY to "Wed", Calendar.THURSDAY to "Thu",
-                        Calendar.FRIDAY to "Fri", Calendar.SATURDAY to "Sat",
-                        Calendar.SUNDAY to "Sun",
-                    )
+                    // momoding: the app's language, in the narrowest form ("一" … "日", "M" … "S") so seven fit on a phone
+                    val appLocale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
+                    val narrow = java.text.DateFormatSymbols(appLocale).let { sym ->
+                        if (appLocale.language == "zh") sym.shortWeekdays.map { it.removePrefix("周").removePrefix("星期") } else sym.shortWeekdays.map { it.take(2) }
+                    }
+                    val days = listOf(Calendar.MONDAY, Calendar.TUESDAY, Calendar.WEDNESDAY, Calendar.THURSDAY, Calendar.FRIDAY, Calendar.SATURDAY, Calendar.SUNDAY)
+                        .map { it to narrow[it] }
                     days.forEach { (dow, name) ->
                         FilterChip(
                             selected = dow in customDays,
@@ -537,7 +539,7 @@ private fun EditFormBody(
                                 }
                                 onCustomDaysChange(next)
                             },
-                            label = { Text(name, fontSize = 12.sp) },
+                            label = { Text(name, fontSize = 13.sp, maxLines = 1, modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center) },
                             modifier = Modifier.weight(1f),
                         )
                     }
@@ -590,7 +592,8 @@ private fun EditFormBody(
         }
 
         // ── Model (optional) ──
-        PickerRow(
+        val momodingAdvanced = app.momoding.ui.chat.ShowSteps.remember().value // momoding: model and thinking per routine are for the steps-shown view
+        if (momodingAdvanced) PickerRow(
             title = stringResource(R.string.scheduled_task_field_model),
             value = modelDisplay ?: stringResource(R.string.scheduled_task_model_default),
             onClick = { showModelPicker = true },
@@ -601,7 +604,7 @@ private fun EditFormBody(
         // [T-android-scheduled-task-thinking] Reported: "定时任务不能添加思考强度".
         // The runner already accepted a level (HeadlessChatRunner.prompt) — it
         // was hardcoded null because the task had nowhere to carry one.
-        PickerRow(
+        if (momodingAdvanced) PickerRow(
             title = stringResource(R.string.scheduled_task_field_thinking),
             value = thinkingLevel?.localizedName(LocalContext.current)
                 ?: stringResource(R.string.scheduled_task_model_default),

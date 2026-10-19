@@ -1760,7 +1760,7 @@
     <string name="scheduled_task_field_label">標籤</string>
     <string name="scheduled_task_field_time">觸發時間</string>
     <string name="scheduled_task_field_repeat">重複</string>
-    <string name="scheduled_task_field_prompt">提示</string>
+    <string name="scheduled_task_field_prompt">要它做什麼</string>
     <string name="scheduled_task_field_prompt_hint">觸發時要讓助理做什麼？</string>
     <string name="scheduled_task_target_new_session_note">每次觸發都會建立新的對話工作階段，並在結束後發出通知。點擊通知即可查看結果。</string>
     <string name="scheduled_task_repeat_once">一次</string>
@@ -1943,11 +1943,11 @@
     <string name="agent_settings_sub_footer">代理預設與目前對話使用同一模型層級；對於簡單、易驗證的任務，助理可能選用 Sub 模型群組——請在「服務商 › 模型群組」中設定。</string>
     <string name="agent_settings_not_configured">未設定</string>
     <string name="scheduled_task_target_agent">代理任務</string>
-    <string name="scheduled_card_label">定時任務</string>
+    <string name="scheduled_card_label">例行任務</string>
     <string name="scheduled_card_next_fire">下次：%1$s</string>
     <string name="scheduled_card_last_run">這是最後一次執行</string>
     <string name="scheduled_card_cancel">取消這個定時</string>
-    <string name="scheduled_card_cancel_confirm_title">取消這個定時任務？</string>
+    <string name="scheduled_card_cancel_confirm_title">取消這個例行任務？</string>
     <string name="scheduled_card_cancel_confirm_body">“%1$s” 將不再執行。已產生的結果會保留在本對話中。</string>
     <string name="scheduled_card_cancel_confirm_ok">取消任務</string>
     <string name="scheduled_card_cancel_confirm_keep">保留</string>
@@ -2020,7 +2020,7 @@
     <string name="send_return_mode_newline">Return 鍵換行</string>
     <string name="send_return_mode_a11y_action">Return 鍵選項</string>
     <!-- [T-scheduled-task-detail] Scheduled task detail page -->
-    <string name="scheduled_detail_title">定時任務</string>
+    <string name="scheduled_detail_title">例行任務</string>
     <string name="scheduled_detail_close">關閉</string>
     <string name="scheduled_status_running">執行中</string>
     <string name="scheduled_status_waiting">等待下次執行</string>
@@ -2028,7 +2028,7 @@
     <string name="scheduled_status_failed">執行失敗</string>
     <string name="scheduled_status_disabled">已停用</string>
     <string name="scheduled_status_deleted">已刪除</string>
-    <string name="scheduled_detail_deleted_note">此定時任務已被刪除，已執行的內容仍保留在各自的對話中。</string>
+    <string name="scheduled_detail_deleted_note">此例行任務已被刪除，已執行的內容仍保留在各自的對話中。</string>
     <string name="scheduled_detail_run_n">第 %1$d 次</string>
     <string name="scheduled_detail_of_total">" / 共 %1$d 次"</string>
     <string name="scheduled_detail_next_run">下次執行</string>
@@ -2069,7 +2069,7 @@
     <string name="scheduled_trigger_interval">每 %1$s</string>
     <string name="scheduled_trigger_interval_count">每 %1$s · 共 %2$d 次</string>
     <string name="scheduled_trigger_on_completion">「%1$s」完成後</string>
-    <string name="scheduled_detail_prompt">提示詞</string>
+    <string name="scheduled_detail_prompt">要它做什麼</string>
     <string name="scheduled_detail_expand">展開</string>
     <string name="scheduled_detail_collapse">收合</string>
     <string name="scheduled_detail_copy_prompt">複製提示詞</string>

@@ -1755,14 +1755,14 @@
     <string name="shortcut_camera_chat_long">拍照对话</string>
     <string name="ok">确定</string>
     <string name="sessionlist_scheduled_tasks">定时任务</string>
-    <string name="scheduled_tasks_title">定时任务</string>
-    <string name="scheduled_tasks_empty">还没有定时任务。点击 + 安排一个会在指定时间自动运行的提示词。</string>
-    <string name="scheduled_task_new">新建定时任务</string>
-    <string name="scheduled_task_edit">编辑定时任务</string>
+    <string name="scheduled_tasks_title">例行任务</string>
+    <string name="scheduled_tasks_empty">还没有例行任务。点击 + 安排一个会在指定时间自动运行的提示词。</string>
+    <string name="scheduled_task_new">新建例行任务</string>
+    <string name="scheduled_task_edit">编辑例行任务</string>
     <string name="scheduled_task_field_label">名称</string>
     <string name="scheduled_task_field_time">触发时间</string>
     <string name="scheduled_task_field_repeat">重复</string>
-    <string name="scheduled_task_field_prompt">提示词</string>
+    <string name="scheduled_task_field_prompt">要它做什么</string>
     <string name="scheduled_task_field_prompt_hint">触发时希望助手做什么？</string>
     <string name="scheduled_task_target_new_session_note">每次触发都会创建一个新的聊天会话，完成后发送通知。点击通知即可查看结果。</string>
     <string name="scheduled_task_repeat_once">一次</string>
@@ -1772,13 +1772,13 @@
     <string name="scheduled_task_run_now">立即运行</string>
     <string name="scheduled_task_save">保存</string>
     <string name="scheduled_task_delete">删除</string>
-    <string name="scheduled_task_delete_title">删除定时任务？</string>
+    <string name="scheduled_task_delete_title">删除例行任务？</string>
     <string name="scheduled_task_delete_body">将「%1$s」从定时列表中移除。它已经创建的聊天会话会保留。</string>
     <string name="scheduled_task_delete_confirm">删除</string>
     <string name="scheduled_task_run_now_done">任务已完成</string>
-    <string name="scheduled_task_run_now_done_body">定时任务已运行并生成了回复。</string>
+    <string name="scheduled_task_run_now_done_body">例行任务已运行并生成了回复。</string>
     <string name="scheduled_task_run_now_failed">任务失败</string>
-    <string name="scheduled_task_run_now_failed_body">定时任务无法运行。请检查是否已配置服务商。</string>
+    <string name="scheduled_task_run_now_failed_body">例行任务无法运行。请检查是否已配置服务商。</string>
     <string name="scheduled_task_run_now_open_session">打开会话</string>
     <string name="scheduled_task_run_now_dismiss">忽略</string>
     <string name="scheduled_task_field_target">触发时，应当</string>
@@ -1979,11 +1979,11 @@
     <string name="sub_agent_builtin_name">通用子代理</string>
     <string name="sub_agent_builtin_description">需要自己的工具循环才能完成的开放式工作：多轮探索代码库或网页、把大量输出提炼成结论，或并行跑几条独立分支。</string>
     <string name="agent_model_group_unavailable">绑定的模型分组不可用——已改用当前对话的模型</string>
-    <string name="scheduled_card_label">定时任务</string>
+    <string name="scheduled_card_label">例行任务</string>
     <string name="scheduled_card_next_fire">下次：%1$s</string>
     <string name="scheduled_card_last_run">这是最后一次运行</string>
     <string name="scheduled_card_cancel">取消该定时</string>
-    <string name="scheduled_card_cancel_confirm_title">取消这个定时任务？</string>
+    <string name="scheduled_card_cancel_confirm_title">取消这个例行任务？</string>
     <string name="scheduled_card_cancel_confirm_body">“%1$s” 将不再运行。已产生的结果会保留在本对话中。</string>
     <string name="scheduled_card_cancel_confirm_ok">取消任务</string>
     <string name="scheduled_card_cancel_confirm_keep">保留</string>
@@ -2037,7 +2037,7 @@
     <string name="send_return_mode_newline">回车换行</string>
     <string name="send_return_mode_a11y_action">回车键选项</string>
     <!-- [T-scheduled-task-detail] Scheduled task detail page -->
-    <string name="scheduled_detail_title">定时任务</string>
+    <string name="scheduled_detail_title">例行任务</string>
     <string name="scheduled_detail_close">关闭</string>
     <string name="scheduled_status_running">执行中</string>
     <string name="scheduled_status_waiting">等待下次执行</string>
@@ -2045,7 +2045,7 @@
     <string name="scheduled_status_failed">执行失败</string>
     <string name="scheduled_status_disabled">已停用</string>
     <string name="scheduled_status_deleted">已删除</string>
-    <string name="scheduled_detail_deleted_note">此定时任务已被删除，已执行的内容仍保留在各自的对话中。</string>
+    <string name="scheduled_detail_deleted_note">此例行任务已被删除，已执行的内容仍保留在各自的对话中。</string>
     <string name="scheduled_detail_run_n">第 %1$d 次</string>
     <string name="scheduled_detail_of_total">" / 共 %1$d 次"</string>
     <string name="scheduled_detail_next_run">下次执行</string>
@@ -2086,7 +2086,7 @@
     <string name="scheduled_trigger_interval">每 %1$s</string>
     <string name="scheduled_trigger_interval_count">每 %1$s · 共 %2$d 次</string>
     <string name="scheduled_trigger_on_completion">「%1$s」完成后</string>
-    <string name="scheduled_detail_prompt">提示词</string>
+    <string name="scheduled_detail_prompt">要它做什么</string>
     <string name="scheduled_detail_expand">展开</string>
     <string name="scheduled_detail_collapse">收起</string>
     <string name="scheduled_detail_copy_prompt">复制提示词</string>

@@ -38,7 +38,7 @@
     <string name="mo_routine_once">Once</string>
     <string name="mo_routine_daily">Every day around %1$s</string>
     <string name="mo_routine_weekdays">Weekdays around %1$s</string>
-    <string name="mo_routine_custom">Some days around %1$s</string>
+    <string name="mo_routine_custom">Every %1$s around %2$s</string>
     <string name="mo_routine_once_at">Once around %1$s</string>
     <string name="mo_routine_auto_paused">nobody was reading it, so it paused</string>
     <string name="mo_routine_last">Last: %1$s</string>
