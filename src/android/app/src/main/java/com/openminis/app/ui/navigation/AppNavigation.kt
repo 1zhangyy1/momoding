@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -396,7 +397,7 @@ fun AppNavigation(
             // momoding: a fresh install gets Momoding's three-page first run instead of the setup list
             app.momoding.onboarding.FirstRun.needed(context, hasAnyProvider) -> app.momoding.onboarding.ROUTE_FIRST_RUN
             !hasAnySession && !hasAnyProvider -> null
-            crashSafeHome -> null
+            crashSafeHome -> app.momoding.home.ROUTE_RECOVER // momoding: its own safety landing, not upstream's list
             else -> Routes.chat(app.momoding.home.MainChat.resolve(context, chatRepository))
         }
         if (target != null) {
@@ -591,6 +592,7 @@ fun AppNavigation(
                 onRoutinesClick = { navController.safeNavigate(Routes.SCHEDULED_TASKS) }, // momoding
                 onRulesClick = { navController.safeNavigate(app.momoding.ui.guard.ROUTE_RULES) }, // momoding
                 onComputerClick = { navController.safeNavigate(app.momoding.ui.computer.ROUTE_COMPUTER) }, // momoding
+                onModelsClick = { navController.safeNavigate(app.momoding.ui.settings.ROUTE_MODELS) }, // momoding
                 onTerminalClick = { navController.safeNavigate(Routes.terminal()) },
                 onMemoryClick = { navController.safeNavigate(Routes.MEMORY) },
                 onAgentsClick = { navController.safeNavigate(Routes.AGENTS) },
@@ -1226,6 +1228,22 @@ fun AppNavigation(
             }
         }
 
+        composable(app.momoding.home.ROUTE_RECOVER) { // momoding: after repeated crashes
+            val scope = rememberCoroutineScope()
+            val activity = LocalContext.current as? android.app.Activity
+            androidx.activity.compose.BackHandler { activity?.moveTaskToBack(true) }
+            app.momoding.home.RecoverScreen(
+                onBackToChat = { scope.launch { navController.navigate(Routes.chat(app.momoding.home.MainChat.resolve(context, chatRepository))) { popUpTo(app.momoding.home.ROUTE_RECOVER) { inclusive = true } } } },
+                onFreshChat = { navController.navigate(Routes.chat(app.momoding.home.MainChat.fresh(context))) { popUpTo(app.momoding.home.ROUTE_RECOVER) { inclusive = true } } },
+            )
+        }
+        composable(app.momoding.ui.settings.ROUTE_MODELS) { // momoding: which model thinks, which one sees
+            app.momoding.ui.settings.ModelsScreen(
+                onBack = { navController.safePopBackStack() },
+                onOpenHands = { navController.safeNavigate(app.momoding.ui.hands.ROUTE_HANDS) },
+                onOpenProviders = { navController.safeNavigate(Routes.PROVIDER_LIST) },
+            )
+        }
         composable(app.momoding.ui.computer.ROUTE_COMPUTER) { // momoding: its own computer (M14)
             app.momoding.ui.computer.ComputerScreen(
                 onBack = { navController.safePopBackStack() },

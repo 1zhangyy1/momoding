@@ -154,4 +154,17 @@
     <string name="mo_steps_seconds">%1$d s</string>
     <string name="mo_steps_minutes">%1$d min %2$d s</string>
     <string name="mo_notif_done_in">Took %1$s</string>
+    <string name="mo_models_title">Models</string>
+    <string name="mo_models_thinking">Thinks with</string>
+    <string name="mo_models_thinking_footer">Models known to work well for Momoding. The one you leave stays as the fallback. Takes effect from the next message.</string>
+    <string name="mo_models_fallback">fallback</string>
+    <string name="mo_models_seeing">Looks at the screen with</string>
+    <string name="mo_models_seeing_footer">Used when it borrows your screen. Change it on the Hands page.</string>
+    <string name="mo_models_seeing_none">No model that can see pictures yet</string>
+    <string name="mo_models_provider">Provider</string>
+    <string name="mo_models_provider_sub">Keys and every model</string>
+    <string name="mo_recover_title">It did not open properly last time</string>
+    <string name="mo_recover_body">Something went wrong the last few times Momoding opened. Your conversation and everything it did are still here.</string>
+    <string name="mo_recover_back">Back to the conversation</string>
+    <string name="mo_recover_fresh">Start a fresh conversation</string>
 </resources>

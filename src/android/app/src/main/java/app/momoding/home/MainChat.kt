@@ -34,6 +34,12 @@ object MainChat {
         return draft ?: "__new__${UUID.randomUUID()}".also { draft = it }
     }
 
+    /** A fresh main chat (the old one may be what keeps crashing): a new draft, pinned once it is saved. */
+    fun fresh(context: Context): String {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(KEY_SESSION).apply()
+        return "__new__${UUID.randomUUID()}".also { draft = it }
+    }
+
     /** Called by ChatViewModel.ensureSession when a draft gets its database row. */
     fun onPromoted(context: Context, draftId: String, realId: String) {
         if (draftId != draft) return

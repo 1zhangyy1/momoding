@@ -24,15 +24,24 @@ object AutoSetup {
     )
     private val SKIP = Regex("""embed|rerank|tts|whisper|asr|image|audio|:batch|:free|-vl-|ocr|guard|coder""", RegexOption.IGNORE_CASE)
 
+    /** Every model on the preference list that the provider has, best first: the models page offers these. */
+    internal fun recommended(modelIds: List<String>): List<String> {
+        val usable = modelIds.filterNot { SKIP.containsMatchIn(it) }
+        // one per preference entry (the plain id over dated variants)
+        return CHAT_PREFERENCE.mapNotNull { want ->
+            usable.filter { it.contains(want, ignoreCase = true) && !it.contains("prime") }.minByOrNull { it.length }
+        }.distinct()
+    }
+
+    /** "deepseek" for deepseek/deepseek-v4.1-flash: models of one family stand in for each other. */
+    internal fun family(id: String) = id.substringAfter('/').takeWhile { it.isLetter() }.lowercase()
+
     /** The chat models to put in the group, best first (at most two). */
     internal fun pick(modelIds: List<String>): List<String> {
         val usable = modelIds.filterNot { SKIP.containsMatchIn(it) }
-        // one per preference entry (the plain id over dated variants), and the fallback from another family
-        val ranked = CHAT_PREFERENCE.mapNotNull { want ->
-            usable.filter { it.contains(want, ignoreCase = true) && !it.contains("prime") }.minByOrNull { it.length }
-        }.distinct()
+        // the best one, and the fallback from another family
+        val ranked = recommended(modelIds)
         if (ranked.isEmpty()) return usable.take(1)
-        fun family(id: String) = id.substringAfter('/').takeWhile { it.isLetter() }.lowercase()
         val first = ranked.first()
         return listOfNotNull(first, ranked.firstOrNull { family(it) != family(first) })
     }

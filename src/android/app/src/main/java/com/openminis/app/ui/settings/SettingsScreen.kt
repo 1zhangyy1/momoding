@@ -91,6 +91,7 @@ fun SettingsScreen(
     onRoutinesClick: () -> Unit = {}, // momoding: the routines list, on the first level
     onRulesClick: () -> Unit = {}, // momoding: remembered approvals
     onComputerClick: () -> Unit = {}, // momoding: its own computer (M14)
+    onModelsClick: () -> Unit = {}, // momoding: which model thinks, which one sees
     onTerminalClick: () -> Unit = {},
     onMemoryClick: () -> Unit = {},
     /** [T-p2-agent-settings] Settings › Agents (delegation on/off), below Memory. */
@@ -152,7 +153,7 @@ fun SettingsScreen(
             SettingsSection(title = stringResource(R.string.mo_settings_models)) {
                 SettingsItem(icon = Icons.Outlined.Lock, iconColor = Color(0xFF34C759),
                     title = app.momoding.ui.settings.currentModelLabel(context) ?: stringResource(R.string.mo_settings_models_none),
-                    subtitle = stringResource(R.string.mo_settings_models_change), onClick = onProvidersClick, showDivider = false)
+                    subtitle = stringResource(R.string.mo_settings_models_change), onClick = onModelsClick, showDivider = false)
             }
             SettingsSection(title = stringResource(R.string.mo_settings_phone)) {
                 SettingsItem(icon = Icons.Outlined.TouchApp, iconColor = Color(0xFF2E7A12), title = stringResource(R.string.mo_hands_title),

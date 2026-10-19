@@ -154,4 +154,17 @@
     <string name="mo_steps_seconds">%1$d 秒</string>
     <string name="mo_steps_minutes">%1$d 分 %2$d 秒</string>
     <string name="mo_notif_done_in">用时 %1$s</string>
+    <string name="mo_models_title">模型</string>
+    <string name="mo_models_thinking">用它想事情</string>
+    <string name="mo_models_thinking_footer">这些是在 Momoding 上用着顺手的模型。换下来的那个留作备用。下一句话起生效。</string>
+    <string name="mo_models_fallback">备用</string>
+    <string name="mo_models_seeing">用它看屏幕</string>
+    <string name="mo_models_seeing_footer">借你屏幕干活时用。在“动手操作屏幕”里换。</string>
+    <string name="mo_models_seeing_none">还没有能看图的模型</string>
+    <string name="mo_models_provider">服务商</string>
+    <string name="mo_models_provider_sub">Key 和全部模型</string>
+    <string name="mo_recover_title">上次没打开好</string>
+    <string name="mo_recover_body">Momoding 最近几次打开时出了点问题。你的对话和它做的事都还在。</string>
+    <string name="mo_recover_back">回到对话</string>
+    <string name="mo_recover_fresh">先开一个新对话</string>
 </resources>
