@@ -24,7 +24,7 @@
     <string name="mo_hands_fx_tap_target">點按「%1$s」</string>
     <string name="mo_hands_fx_type">輸入「%1$s」</string>
     <string name="mo_hands_fx_wait">等 %1$d 秒</string>
-    <string name="mo_hands_intro">對於沒有介面的 App，它像你一樣用手機：看一眼截圖，然後點、輸、滑。技能、命令列、瀏覽器能辦的先用，螢幕是最後一步。預設關閉。</string>
+    <string name="mo_hands_intro">有些 App 沒法直接辦，它就像你一樣用手機：看一眼螢幕，然後點、輸、滑。手機能力和它自己的電腦能辦的先辦，借你的螢幕放在最後。預設關閉。</string>
     <string name="mo_hands_looking">正在看螢幕…</string>
     <string name="mo_hands_model_footer">每一步都會把一張截圖發給這個模型，它和對話模型是兩個獨立的設定。小一點的視覺模型就夠用，也更省錢。</string>
     <string name="mo_hands_need_a11y">無障礙服務</string>
@@ -42,8 +42,8 @@
     <string name="mo_hands_needs_footer">無障礙服務只負責截圖和手勢，不讀取螢幕內容。懸浮視窗權限用來顯示膠囊。</string>
     <string name="mo_hands_open">打開</string>
     <string name="mo_hands_protected_screen">這個頁面受保護，讀不到內容。請你自己完成這一步，然後點「繼續」。</string>
-    <string name="mo_hands_rule_approvals">付款、傳送、發布、刪除之前先問你，和命令列、瀏覽器一樣。</string>
-    <string name="mo_hands_rule_ladder">螢幕排最後：先試技能、命令列、瀏覽器。</string>
+    <string name="mo_hands_rule_approvals">付款、傳送、發布、刪除之前先問你。</string>
+    <string name="mo_hands_rule_ladder">借你的螢幕放在最後：先用手機能力和它自己的電腦。</string>
     <string name="mo_hands_rule_screenshots">每一步的截圖隨對話保存，只傳給你自己的模型。</string>
     <string name="mo_hands_rule_secrets">從不代輸密碼、驗證碼、卡號；遇到就把手機交還給你。</string>
     <string name="mo_hands_rule_stop">「停止」一直在螢幕上，點了就不會再動。</string>
@@ -61,10 +61,10 @@
     <string name="mo_hands_switch">允許操作螢幕</string>
     <string name="mo_hands_switch_footer">操作時螢幕頂部會有一個膠囊，顯示每一步和「停止」按鈕。登入、密碼、驗證碼永遠留給你自己輸。</string>
     <string name="mo_hands_title">動手操作螢幕</string>
-    <string name="mo_hands_why_any">唯一一個啟用了、又能看圖的模型</string>
+    <string name="mo_hands_why_any">唯一能看圖的模型</string>
     <string name="mo_hands_why_chat">你選的對話模型</string>
     <string name="mo_hands_why_chosen">在這裡選的</string>
-    <string name="mo_hands_why_default">你自己 key 下的動手預設模型</string>
+    <string name="mo_hands_why_default">自動挑的看圖模型</string>
     <string name="mo_hands_why_group">預設模型群組裡第一個能看圖的</string>
     <string name="mo_hands_why_vision_group">你的視覺模型群組</string>
     <string name="mo_hands_your_turn">輪到你了</string>

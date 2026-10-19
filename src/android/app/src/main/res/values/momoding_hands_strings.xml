@@ -24,7 +24,7 @@
     <string name="mo_hands_fx_tap_target">Tap “%1$s”</string>
     <string name="mo_hands_fx_type">Type “%1$s”</string>
     <string name="mo_hands_fx_wait">Wait %1$d s</string>
-    <string name="mo_hands_intro">For apps with no API it uses the phone the way you do: a screenshot, then taps, typing and swipes. Skills, commands and the browser come first; the screen is the last resort. Off until you switch it on.</string>
+    <string name="mo_hands_intro">Some apps cannot be reached directly, so it uses the phone the way you do: a look at the screen, then a tap, some typing, a swipe. What the phone itself and its own computer can do comes first; borrowing your screen comes last. Off by default.</string>
     <string name="mo_hands_looking">Looking at the screen…</string>
     <string name="mo_hands_model_footer">Every step sends one screenshot to this model; it is a setting apart from the chat model. Smaller vision models are fine here and cost less.</string>
     <string name="mo_hands_need_a11y">Accessibility service</string>
@@ -42,8 +42,8 @@
     <string name="mo_hands_needs_footer">The accessibility service takes the screenshot and performs the gestures; it does not read the screen\'s contents. Drawing over other apps is for the capsule.</string>
     <string name="mo_hands_open">Open</string>
     <string name="mo_hands_protected_screen">This screen is protected and cannot be read. Finish this part yourself, then tap Continue.</string>
-    <string name="mo_hands_rule_approvals">Paying, sending, posting or deleting waits for your approval, as in the shell and the browser.</string>
-    <string name="mo_hands_rule_ladder">The screen comes last: a skill, a command or the browser first.</string>
+    <string name="mo_hands_rule_approvals">It asks before paying, sending, posting or deleting.</string>
+    <string name="mo_hands_rule_ladder">Your screen comes last: the phone itself and its own computer first.</string>
     <string name="mo_hands_rule_screenshots">Each step\'s screenshot is kept with the conversation and sent only to your own model.</string>
     <string name="mo_hands_rule_secrets">Never types passwords, codes or card numbers; it hands the phone to you.</string>
     <string name="mo_hands_rule_stop">Stop is always on the screen; nothing continues after it.</string>
@@ -61,10 +61,10 @@
     <string name="mo_hands_switch">Let the agent use the screen</string>
     <string name="mo_hands_switch_footer">While it works, a capsule at the top of the screen shows each step and a Stop button. Logins, passwords and codes are always left to you.</string>
     <string name="mo_hands_title">Hands</string>
-    <string name="mo_hands_why_any">the only enabled model that can see</string>
+    <string name="mo_hands_why_any">The only model that can see pictures</string>
     <string name="mo_hands_why_chat">the chat model you picked</string>
     <string name="mo_hands_why_chosen">chosen here</string>
-    <string name="mo_hands_why_default">the hands\' default under your own key</string>
+    <string name="mo_hands_why_default">Picked automatically</string>
     <string name="mo_hands_why_group">first in your default group that can see</string>
     <string name="mo_hands_why_vision_group">your Vision Group</string>
     <string name="mo_hands_your_turn">Your turn</string>
