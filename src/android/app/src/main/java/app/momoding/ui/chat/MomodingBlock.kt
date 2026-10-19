@@ -109,22 +109,14 @@ private fun AskCard(o: JSONObject, code: String) {
 private fun NextSteps(o: JSONObject) {
     val steps = options(o, "steps")
     if (steps.isEmpty()) return
-    Column(Modifier.padding(top = 2.dp, bottom = 4.dp)) { Chips(steps, primaryFirst = false) { MomodingSend.send(it) } }
+    Column(Modifier.padding(top = 2.dp, bottom = 4.dp)) { Chips(steps) { MomodingSend.send(it) } }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Chips(items: List<String>, primaryFirst: Boolean, onPick: (String) -> Unit) {
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        items.forEachIndexed { i, s ->
-            val primary = primaryFirst && i == 0
-            Text(
-                s, fontSize = Design.Size.Label,
-                color = if (primary) androidx.compose.ui.graphics.Color.White else MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.clip(CircleShape).background(if (primary) Tones.action else Tones.fill)
-                    .clickable { onPick(s) }.padding(horizontal = 14.dp, vertical = 8.dp),
-            )
-        }
+private fun Chips(items: List<String>, onPick: (String) -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(Design.Space.Gap), verticalArrangement = Arrangement.spacedBy(Design.Space.Gap)) {
+        items.forEach { s -> Pill(s, PillKind.SUGGEST) { onPick(s) } }
     }
 }
 

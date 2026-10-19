@@ -247,10 +247,10 @@ private fun Preview(request: RiskRequest) {
     if (request.kind == GuardKind.SHELL) {
         var open by androidx.compose.runtime.saveable.rememberSaveable(request.id) { androidx.compose.runtime.mutableStateOf(false) }
         if (!open) {
-            Text(
-                stringResource(R.string.mo_risk_view_command) + " ›", fontSize = Design.Size.Note, color = ChatColors.secondaryText,
-                modifier = Modifier.clickable { open = true }.padding(vertical = 2.dp),
-            )
+            Row(Modifier.clickable { open = true }.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.mo_risk_view_command), fontSize = Design.Size.Note, color = ChatColors.secondaryText)
+                app.momoding.ui.chat.Chevron()
+            }
             return
         }
     }

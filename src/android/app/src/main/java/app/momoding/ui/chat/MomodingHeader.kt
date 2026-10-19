@@ -62,14 +62,16 @@ fun MomodingHeader(isStreaming: Boolean, replying: Boolean, request: String?, on
             )
             // always reserved, so the header does not jump when the line comes and goes
             Box(Modifier.height(16.dp), contentAlignment = Alignment.CenterStart) {
-                if (status != null) Text(
+                if (status != null) Row(verticalAlignment = Alignment.CenterVertically) { Text(
                     // in its browser the line opens the page it is on, to watch or take over (Grok's computer preview)
-                    if (watchable) status.text + "  ›" else status.text,
+                    status.text,
                     fontSize = Design.Size.Caption, lineHeight = Design.Line.Micro, maxLines = 1, overflow = TextOverflow.Ellipsis, style = NO_FONT_PAD,
                     color = if (waiting || watchable) Tones.action else ChatColors.secondaryText,
                     fontWeight = if (waiting || watchable) FontWeight.Medium else FontWeight.Normal,
                     modifier = if (watchable) Modifier.clickable { onOpenBrowser?.invoke() } else Modifier,
                 )
+                    if (watchable) Chevron(tint = Tones.action)
+                }
             }
         }
     }

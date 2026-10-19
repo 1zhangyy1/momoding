@@ -66,12 +66,7 @@ fun LinkButtons(links: List<Pair<String, String>>, onOpen: (String) -> Unit) {
     ) {
         links.forEach { (label, url) ->
             if (Works.isWork(url)) { WorkCard(label, url) { onOpen(url) }; return@forEach }
-            Surface(shape = CircleShape, color = Tones.surface, border = BorderStroke(1.dp, Tones.hairline)) {
-                Text(
-                    label, fontSize = Design.Size.Label, color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.clickable { onOpen(url) }.padding(horizontal = 14.dp, vertical = 8.dp),
-                )
-            }
+            Pill(label, PillKind.LINK) { onOpen(url) }
         }
     }
 }
@@ -98,7 +93,8 @@ private fun WorkCard(label: String, url: String, onOpen: () -> Unit) {
                 Text(label, fontSize = Design.Size.Body, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 if (name.isNotEmpty() && name != label) Text(name, fontSize = Design.Size.Caption, color = com.openminis.app.ui.theme.ChatColors.secondaryText, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
-            Text("  ›", fontSize = Design.Size.Body, color = com.openminis.app.ui.theme.ChatColors.secondaryText)
+            androidx.compose.foundation.layout.Spacer(Modifier.size(6.dp))
+            Chevron()
         }
     }
 }

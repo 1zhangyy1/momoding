@@ -3,6 +3,9 @@ package app.momoding.ui.chat
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -121,12 +124,13 @@ fun OptionRow(index: Int, text: String, picked: Boolean, settled: Boolean, onPic
             .heightIn(min = 44.dp).padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            if (picked) "✓" else "$index", fontSize = Design.Size.Caption, fontWeight = FontWeight.SemiBold,
-            color = if (picked) Color.White else ChatColors.secondaryText,
-            modifier = Modifier.clip(CircleShape).background(if (picked) Tones.action else Tones.fill)
-                .padding(horizontal = 7.dp, vertical = 2.dp),
-        )
+        Box(
+            Modifier.size(22.dp).clip(CircleShape).background(if (picked) Tones.action else Tones.fill),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (picked) androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+            else Text("$index", fontSize = Design.Size.Caption, fontWeight = FontWeight.SemiBold, color = ChatColors.secondaryText)
+        }
         Text(text, fontSize = Design.Size.Body, lineHeight = Design.Line.Body, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(start = 10.dp))
     }
 }

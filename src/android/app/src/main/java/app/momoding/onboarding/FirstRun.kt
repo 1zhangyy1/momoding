@@ -168,7 +168,7 @@ fun FirstRunScreen(
 }
 
 @Composable private fun Body(text: String, small: Boolean = false) {
-    Text(text, fontSize = if (small) 13.sp else 16.sp, lineHeight = if (small) 19.sp else 24.sp,
+    Text(text, fontSize = if (small) Design.Size.Note else Design.Size.Body, lineHeight = if (small) Design.Line.Note else Design.Line.Body,
         color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
@@ -198,11 +198,8 @@ fun StarterExamples(onPick: (String) -> Unit) {
         Text(stringResource(R.string.mo_ex_title), fontSize = Design.Size.Display, fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onBackground, textAlign = TextAlign.Start)
         Spacer(Modifier.height(14.dp))
-        examples.forEach { ex ->
-            Box(Modifier.padding(vertical = 4.dp).clip(CircleShape).background(Tones.fill)
-                .then(Modifier.padding(0.dp))) {
-                TextButton(onClick = { onPick(ex) }) { Text(ex, fontSize = Design.Size.Label, color = MaterialTheme.colorScheme.onBackground) }
-            }
+        Column(verticalArrangement = Arrangement.spacedBy(Design.Space.Gap)) {
+            examples.forEach { ex -> app.momoding.ui.chat.Pill(ex, app.momoding.ui.chat.PillKind.SUGGEST) { onPick(ex) } }
         }
     }
 }

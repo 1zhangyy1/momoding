@@ -65,9 +65,12 @@ fun MetaLine(
             " · $action", fontSize = Design.Size.Caption, lineHeight = Design.Line.Caption, color = Tones.action, fontWeight = FontWeight.Medium,
             modifier = if (onAction != null) Modifier.clickable(onClick = onAction) else Modifier,
         )
-        if (chevron != null) Icon(
-            Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = ChatColors.secondaryText,
-            modifier = Modifier.size(16.dp).rotate(if (chevron) 90f else 0f),
-        )
+        if (chevron != null) Chevron(open = chevron)
     }
+}
+
+/** The one "there is more" mark: a small chevron, pointing down when [open]. */
+@Composable
+fun Chevron(open: Boolean = false, tint: androidx.compose.ui.graphics.Color = ChatColors.secondaryText) {
+    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp).rotate(if (open) 90f else 0f))
 }
