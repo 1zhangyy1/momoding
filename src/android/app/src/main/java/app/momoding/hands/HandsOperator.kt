@@ -80,10 +80,14 @@ class HandsOperator(private val context: Context) {
         /** One line per step, for the tool result. */
         val log: List<String>,
         val model: String?,
+        /** The taps that pay, send or delete which went through in this run, whatever the outcome. */
+        val done: List<String> = emptyList(),
     )
 
     private class Turn(val userText: String, val image: ByteArray?, var assistant: String)
 
+    /** Irreversible taps that went through in the current run (see [Result.done]). */
+    private val done = java.util.Collections.synchronizedList(mutableListOf<String>())
     private val stop = AtomicBoolean(false)
     private val stopReason = AtomicReference<String?>(null)
     private val userSignal = AtomicReference<CountDownLatch?>(null)
@@ -113,6 +117,7 @@ class HandsOperator(private val context: Context) {
     fun run(opts: Options): Result {
         val runId = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
         val log = mutableListOf<String>()
+        done.clear()
         val traceDir = traceDir(opts.sessionId, runId)
         var lastScreen: String? = null
         var steps = 0
@@ -265,7 +270,8 @@ class HandsOperator(private val context: Context) {
                         val gate = approveTap(svc, opts.sessionId, target, ScreenWords.at(svc, px, py))
                         if (gate.denied != null) {
                             trace(traceDir, steps, parsed.thought, reply, "refused: ${gate.denied}", lastScreen)
-                            return finish(Outcome.Infeasible("the user did not allow the tap “${gate.shown.take(40)}” — ${gate.denied}"), steps, runId, lastScreen, traceDir, log, model.label)
+                            val before = if (done.isEmpty()) "" else " Already done earlier in this run: ${done.joinToString("; ")}."
+                            return finish(Outcome.Infeasible("the user did not allow the tap “${gate.shown.take(40)}” — ${gate.denied}$before"), steps, runId, lastScreen, traceDir, log, model.label)
                         }
                         // A remembered approval, or a payment that ran on one: the chat model
                         // sees it in the log and tells the user where it lives.
@@ -285,6 +291,11 @@ class HandsOperator(private val context: Context) {
                         }
                         capsule.stage.ripple(px, py)
                         lastResult = if (ok) "${action.describe()} at ($px, $py) was performed." else "the gesture at ($px, $py) was rejected by the system; try again or another way."
+                        if (ok && gate.gated) {
+                            done += "tapped “${gate.shown.take(40)}”" + (gate.app?.let { " in $it" } ?: "")
+                            lastResult += " That was the step the task is about and it went through: check this screen once, then finish with goal_status complete. " +
+                                "Do not do it again, or to another item, unless the task asked for several."
+                        }
                         Thread.sleep(TAP_SETTLE_MS)
                     }
                     is HandsAction.Swipe -> {
@@ -376,7 +387,7 @@ class HandsOperator(private val context: Context) {
     }
 
     private fun finish(outcome: Outcome, steps: Int, runId: String, lastScreen: String?, traceDir: File?, log: List<String>, model: String?): Result =
-        Result(outcome, steps, runId, lastScreen, traceDir?.let { "/var/minis/attachments/hands/$runId/trace.jsonl" }, log, model)
+        Result(outcome, steps, runId, lastScreen, traceDir?.let { "/var/minis/attachments/hands/$runId/trace.jsonl" }, log, model, done.toList())
 
     // ── the user's turn ────────────────────────────────────────────────────
 
@@ -395,7 +406,7 @@ class HandsOperator(private val context: Context) {
     }
 
     /** Null [denied] when the tap may go ahead; [notice] is what the chat model should pass on. */
-    private data class TapGate(val denied: String? = null, val notice: String? = null, val shown: String = "")
+    private data class TapGate(val denied: String? = null, val notice: String? = null, val shown: String = "", val gated: Boolean = false, val app: String? = null)
 
     /**
      * The approval for a tap whose label says pay, send, post or delete. The person is in the
@@ -423,8 +434,8 @@ class HandsOperator(private val context: Context) {
         }
         capsule.working(0, context.getString(com.openminis.app.R.string.mo_hands_looking))
         return when (outcome) {
-            is GateOutcome.Allowed -> TapGate(notice = outcome.notice, shown = shown)
-            is GateOutcome.Denied -> TapGate(denied = outcome.message, shown = shown)
+            is GateOutcome.Allowed -> TapGate(notice = outcome.notice, shown = shown, gated = true, app = appLabel)
+            is GateOutcome.Denied -> TapGate(denied = outcome.message, shown = shown, gated = true, app = appLabel)
         }
     }
 

@@ -118,6 +118,7 @@ class HandsOffloadHandler(private val context: Context) : NativeOffloadHandler {
             .put("last_screen", result.lastScreen ?: JSONObject.NULL)
             .put("trace", result.tracePath ?: JSONObject.NULL)
             .put("log", JSONArray(result.log))
+            .put("done", JSONArray(result.done))
         when (val o = result.outcome) {
             is HandsOperator.Outcome.Done -> body.put("answer", o.answer)
             is HandsOperator.Outcome.Infeasible -> body.put("message", o.message)

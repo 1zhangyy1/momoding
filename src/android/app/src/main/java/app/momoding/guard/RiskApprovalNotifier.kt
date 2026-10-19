@@ -67,6 +67,9 @@ class RiskApprovalNotifier(
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_RECOMMENDATION)
+            // Its own group, so Android never folds it into an auto-grouped "Momoding (n)" bundle
+            // with the chat's other notifications, where its buttons are hidden.
+            .setGroup("$TAG_NOTIF-${request.id}")
             .setTimeoutAfter(RiskGate.TIMEOUT_MS)
             .build()
         return try {
