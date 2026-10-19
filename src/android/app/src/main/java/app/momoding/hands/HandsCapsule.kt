@@ -344,7 +344,7 @@ class HandsCapsule(private val context: Context) {
         setTextSize(TypedValue.COMPLEX_UNIT_SP, app.momoding.ui.Design.Size.Note.value)
         typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         setPadding(dp(12), dp(7), dp(12), dp(7))
-        background = GradientDrawable().apply { cornerRadius = dp(16).toFloat(); setColor(color) }
+        background = GradientDrawable().apply { cornerRadius = dp(app.momoding.ui.Design.Radius.Panel.value.toInt()).toFloat(); setColor(color) }
         layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(6) }
         setOnClickListener { onClick() }
     }
