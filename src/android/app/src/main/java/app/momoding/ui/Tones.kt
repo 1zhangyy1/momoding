@@ -23,6 +23,11 @@ object Tones {
     val hairline: Color
         @Composable @ReadOnlyComposable get() = if (dark) Color(0xFF2E3429) else Color(0xFFE8E6DC)
 
+    /** The brand greens as plain ARGB, for the screen overlays drawn with Android views (capsule, glow). */
+    const val ACTION_ARGB = 0xFF2E7A12.toInt()
+    const val BRIGHT_ARGB = 0xFF6CC24A.toInt() // on dark glass: the capsule's ring, the glow, the aim
+    const val LIME_ARGB = 0xFFA6E07A.toInt() // the trail of a moving finger
+
     /** The primary action: Momoding's deep green, readable with white text. */
     val action: Color = Color(0xFF2E7A12)
 

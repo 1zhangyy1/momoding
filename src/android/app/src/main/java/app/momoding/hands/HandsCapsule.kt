@@ -289,13 +289,13 @@ class HandsCapsule(private val context: Context) {
         }
         val title = TextView(context).apply {
             setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, app.momoding.ui.Design.Size.Note.value)
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             maxLines = 1
         }
         val detail = TextView(context).apply {
             setTextColor(0xCCFFFFFF.toInt())
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, app.momoding.ui.Design.Size.Caption.value)
             maxLines = 2
         }
         texts.addView(title); texts.addView(detail)
@@ -341,7 +341,7 @@ class HandsCapsule(private val context: Context) {
     private fun button(text: String, color: Int, onClick: () -> Unit): TextView = TextView(context).apply {
         this.text = text
         setTextColor(Color.WHITE)
-        setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, app.momoding.ui.Design.Size.Note.value)
         typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         setPadding(dp(12), dp(7), dp(12), dp(7))
         background = GradientDrawable().apply { cornerRadius = dp(16).toFloat(); setColor(color) }
@@ -485,9 +485,9 @@ class HandsCapsule(private val context: Context) {
     companion object {
         private const val TAG = "HandsCapsule"
         /** The stage's three hues (HandsStage, the desktop stage's --accent / --violet / --cyan). */
-        private const val ACCENT = 0xFF0A66E4.toInt()
-        private const val VIOLET = 0xFF7C5CFF.toInt()
-        private const val CYAN = 0xFF06B6D4.toInt()
+        private const val ACCENT = app.momoding.ui.Tones.BRIGHT_ARGB
+        private const val VIOLET = app.momoding.ui.Tones.ACTION_ARGB
+        private const val CYAN = app.momoding.ui.Tones.LIME_ARGB
         /** The pill's ink and its hairline edge, as on the desktop: rgba(17,18,24,.82) and white at 10 %. */
         private const val INK = 0xD1111218.toInt()
         private const val EDGE = 0x1AFFFFFF
