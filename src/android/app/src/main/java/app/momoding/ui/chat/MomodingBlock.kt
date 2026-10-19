@@ -38,6 +38,7 @@ import org.json.JSONObject
  *   momoding-next     → suggested next steps as buttons; a tap sends one
  *   momoding-remember → one quiet line "Remembered: …"
  *   momoding-permission → "To do this I need X · Turn on / Not now" (prototype perm card)
+ *   momoding-handoff  → "Sign in to X for me" on the page its browser left open (Grok's sign-in handoff)
  *   momoding-notify and anything unknown → nothing (app protocol, not for the eye)
  */
 @Composable
@@ -50,13 +51,28 @@ fun MomodingBlock(language: String, code: String) {
         "momoding-remember" -> json?.optString("text")?.replace(Regex("""^\s*(记下了|记住了|已记住|Remembered|Noted)[:：,，\s]*"""), "")
             ?.takeIf { it.isNotBlank() }?.let { QuietLine(stringResource(R.string.mo_remembered, it)) }
         "momoding-permission" -> if (json != null) PermissionCard(json, code)
+        "momoding-handoff" -> if (json != null) HandoffCard(json, code)
         else -> Unit
     }
+}
+
+/**
+ * The message a card belongs to. A card's answered state is kept per message and content, so the
+ * same card in a later reply (the model asking again) is a new card, not the old answered one.
+ */
+val LocalMomodingMessage = androidx.compose.runtime.staticCompositionLocalOf { "" }
+
+@Composable
+private fun cardId(code: String): String {
+    val message = LocalMomodingMessage.current
+    return remember(message, code) { Integer.toHexString((message + "\u0000" + code).hashCode()) }
 }
 
 /** Where a tap on a chip or an option goes: the chat on screen sends it as the person's message. */
 object MomodingSend {
     @Volatile var handler: ((String) -> Unit)? = null
+    /** Opens Momoding's own browser on the page it left, with the controls handed to the person. */
+    @Volatile var openBrowser: (() -> Unit)? = null
     fun send(text: String) { handler?.invoke(text) }
 }
 
@@ -69,7 +85,7 @@ private fun AskCard(o: JSONObject, code: String) {
     val opts = options(o, "options")
     if (opts.isEmpty()) return
     val context = LocalContext.current
-    val id = remember(code) { Integer.toHexString(code.hashCode()) }
+    val id = cardId(code)
     var chosen by remember(id) { mutableStateOf(AskState.chosen(context, id)) }
     QuietCard {
         if (question.isNotEmpty()) CardTitle(question)
@@ -136,7 +152,7 @@ private object AskState {
 private fun PermissionCard(o: JSONObject, code: String) {
     val need = o.optString("need").trim().lowercase()
     val context = LocalContext.current
-    val id = remember(code) { Integer.toHexString(code.hashCode()) }
+    val id = cardId(code)
     var state by remember(id) { mutableStateOf(AskState.chosen(context, "perm.$id")) }
     val label = when (need) {
         "hands" -> stringResource(R.string.mo_perm_hands)
@@ -190,6 +206,40 @@ private fun PermissionCard(o: JSONObject, code: String) {
                     val open = stringResource(R.string.mo_perm_open)
                     PillButton(no, primary = false) { allow(no) }
                     PillButton(open, primary = true) { allow(open) }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Grok Bot's sign-in handoff on the phone: a page in Momoding's own browser needs the person (a
+ * login, a code, a captcha). Go opens that page with the controls handed over; Done tells the chat
+ * to carry on from there. The sign-in stays in its browser for next time.
+ */
+@Composable
+private fun HandoffCard(o: JSONObject, code: String) {
+    val site = o.optString("site").trim()
+    val what = o.optString("what").trim().ifEmpty { stringResource(R.string.mo_handoff_login) }
+    val context = LocalContext.current
+    val id = cardId(code)
+    var state by remember(id) { mutableStateOf(AskState.chosen(context, "handoff.$id")) }
+    val carryOn = stringResource(R.string.mo_handoff_done_msg)
+    if (state == "done") {
+        // handed back, not "signed in": the person tapped Done, and only the next look at the page can tell
+        SettledLine(if (site.isNotEmpty()) stringResource(R.string.mo_handoff_settled, site, what) else stringResource(R.string.mo_handoff_settled_plain, what), done = false)
+        return
+    }
+    DecisionCard {
+        CardTitle(if (site.isNotEmpty()) stringResource(R.string.mo_handoff_title, site, what) else stringResource(R.string.mo_handoff_title_plain, what))
+        Text(stringResource(R.string.mo_handoff_detail), fontSize = 13.sp, lineHeight = 19.sp, color = ChatColors.secondaryText)
+        CardActions {
+            if (state == "opened") PillButton(stringResource(R.string.mo_handoff_open_again), primary = false) { MomodingSend.openBrowser?.invoke() }
+            PillButton(stringResource(if (state == "opened") R.string.mo_handoff_done else R.string.mo_handoff_open), primary = true) {
+                if (state == "opened") {
+                    AskState.choose(context, "handoff.$id", "done"); state = "done"; MomodingSend.send(carryOn)
+                } else {
+                    AskState.choose(context, "handoff.$id", "opened"); state = "opened"; MomodingSend.openBrowser?.invoke()
                 }
             }
         }

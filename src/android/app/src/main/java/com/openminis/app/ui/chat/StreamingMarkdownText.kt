@@ -1508,9 +1508,11 @@ private val taskListItemRegex = Regex("^[-*+]\\s+\\[[ xX]\\]\\s+.*")
 private val taskListPrefixRegex = Regex("^[-*+]\\s+\\[[ xX]\\]\\s+")
 private val bulletListItemRegex = Regex("^[-*+]\\s+.*")
 private val bulletListPrefixRegex = Regex("^[-*+]\\s+")
-private val numberedListItemRegex = Regex("^\\d+[.)\\s]+.*")
+// momoding: a list item needs its "." or ")" (CommonMark) — "12306 需要先登录" or "3 点的闹钟设好了"
+// starts with a number and a space and is a sentence, not item 12306 of a list
+private val numberedListItemRegex = Regex("^\\d{1,9}[.)](\\s+.*)?$")
 private val numberedListStartRegex = Regex("^(\\d+)")
-private val numberedListPrefixRegex = Regex("^\\d+[.)\\s]+")
+private val numberedListPrefixRegex = Regex("^\\d{1,9}[.)]\\s*")
 
 /**
  * A blockquote line must be `>` followed by a space, a tab, or end of line.

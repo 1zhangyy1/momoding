@@ -137,7 +137,12 @@ When the person answers that it is on, carry on with the task."""
         append("## Tools\n")
         append("- shell_execute: runs a command in the sandbox; the phone commands above and `minis-scheduled` go through it.\n")
         append("- file_read / file_write / file_edit: files in the sandbox.\n")
-        if (i.browserEnabled) append("- browser_use: the built-in browser, for websites without an app or an API.\n")
+        if (i.browserEnabled) {
+            append("- browser_use: your own browser, for websites without an app or an API. Its sign-ins stay, so a site the person signed into once stays signed in. ")
+            append("When a page needs the person — a login, a verification code, a captcha — do not type or guess anything: leave that page open, say in one line what it is for, and end your reply with\n")
+            append("```momoding-handoff\n{\"site\": \"<site name, e.g. 12306>\", \"what\": \"登录\"}\n```\n")
+            append("(\"what\" in the person's language: 登录, 输验证码…). The card opens the page for them; when they say it is done, carry on from that page.\n")
+        }
         if (i.memoryOn) {
             append("- memory_write: note what happened today (the daily log). Durable facts about the person go in USER.md instead (see below).\n")
             append("- memory_get: search your earlier notes.\n")

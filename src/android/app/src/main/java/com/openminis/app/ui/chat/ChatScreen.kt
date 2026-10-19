@@ -598,7 +598,8 @@ fun ChatScreen(
     // momoding: chips and options in the chat (momoding-ask / momoding-next) send through this chat
     DisposableEffect(viewModel) {
         app.momoding.ui.chat.MomodingSend.handler = { viewModel.sendMessage(it) }
-        onDispose { app.momoding.ui.chat.MomodingSend.handler = null }
+        app.momoding.ui.chat.MomodingSend.openBrowser = { viewModel.handBrowserToUser() }
+        onDispose { app.momoding.ui.chat.MomodingSend.handler = null; app.momoding.ui.chat.MomodingSend.openBrowser = null }
     }
     // momoding: rows already there when the chat opens never pop in (only new ones do)
     run {
@@ -4593,6 +4594,7 @@ fun ChatScreen(
                                     val momodingSplit = remember(item.rawText) { app.momoding.ui.chat.LinkLine.splitTrailing(item.rawText) }
                                     Column {
                                     app.momoding.ui.chat.AgentBubble(momodingSplit?.first ?: item.rawText, last = item.isLastBlockOfMessage, id = "${item.messageId}:${item.parentBlockId}:${item.blockIndex}", delayMs = if (item.isStreaming) 0 else item.blockIndex * 140) {
+                                    androidx.compose.runtime.CompositionLocalProvider(app.momoding.ui.chat.LocalMomodingMessage provides item.messageId) {
                                     MarkdownBlock(
                                         rawText = momodingSplit?.first ?: item.rawText,
                                         isStreaming = item.isStreaming,
@@ -4601,6 +4603,7 @@ fun ChatScreen(
                                             shardId = "mdblock:${item.parentBlockId}:${item.blockIndex}",
                                         ),
                                     )
+                                    }
                                     }
                                     momodingSplit?.let { app.momoding.ui.chat.LinkButtons(it.second, onOpen = urlClickHandler) }
                                     }

@@ -119,4 +119,14 @@
     <string name="mo_composer_placeholder">Anything I can do for you…</string>
     <string name="mo_status_browser">In its browser · %1$s</string>
     <string name="mo_status_browser_plain">In its browser</string>
+    <string name="mo_handoff_login">sign in</string>
+    <string name="mo_handoff_title">%2$s on %1$s for me</string>
+    <string name="mo_handoff_title_plain">%1$s for me</string>
+    <string name="mo_handoff_detail">The page is open in Momoding\'s browser. When you are done, tap Done and it carries on from there; the sign-in stays for next time.</string>
+    <string name="mo_handoff_open">Open the page</string>
+    <string name="mo_handoff_open_again">Open again</string>
+    <string name="mo_handoff_done">Done, carry on</string>
+    <string name="mo_handoff_done_msg">Done, carry on.</string>
+    <string name="mo_handoff_settled">Handed back: %2$s on %1$s</string>
+    <string name="mo_handoff_settled_plain">Handed back: %1$s</string>
 </resources>

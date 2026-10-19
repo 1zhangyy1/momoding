@@ -93,6 +93,13 @@ internal fun ChatViewModel.toggleBrowserSheet() {
     _showBrowserSheet.value = opening
 }
 
+/** momoding: the person signs in on the page Momoding left open — its tabs are theirs until it browses again. */
+internal fun ChatViewModel.handBrowserToUser() {
+    browserTabPool.releaseAllTabsToUser()
+    browserTabPool.ensureTabForUI()
+    _showBrowserSheet.value = true
+}
+
 internal fun ChatViewModel.dismissBrowserSheet() {
     _showBrowserSheet.value = false
 }

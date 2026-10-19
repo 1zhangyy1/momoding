@@ -119,4 +119,14 @@
     <string name="mo_composer_placeholder">有什么事交给我…</string>
     <string name="mo_status_browser">在它的浏览器里 · %1$s</string>
     <string name="mo_status_browser_plain">在它的浏览器里</string>
+    <string name="mo_handoff_login">登录</string>
+    <string name="mo_handoff_title">需要你在「%1$s」%2$s一下</string>
+    <string name="mo_handoff_title_plain">需要你%1$s一下</string>
+    <string name="mo_handoff_detail">页面已经在它的浏览器里打开了。弄好点“好了，接着做”，它从那里接着做；登录会留着，下次不用再登。</string>
+    <string name="mo_handoff_open">去登录</string>
+    <string name="mo_handoff_open_again">再打开</string>
+    <string name="mo_handoff_done">好了，接着做</string>
+    <string name="mo_handoff_done_msg">好了，接着做吧。</string>
+    <string name="mo_handoff_settled">已交回：在「%1$s」%2$s</string>
+    <string name="mo_handoff_settled_plain">已交回：%1$s</string>
 </resources>
