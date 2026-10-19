@@ -42,7 +42,7 @@ object CalendarManager {
             CalendarContract.Events.ALL_DAY,
         )
 
-        val selection = "${CalendarContract.Events.DTSTART} >= ? AND ${CalendarContract.Events.DTSTART} <= ?"
+        val selection = "${CalendarContract.Events.DTSTART} >= ? AND ${CalendarContract.Events.DTSTART} <= ? AND ${CalendarContract.Events.DELETED} = 0" // momoding: deleted events stay until a sync purges them
         val selectionArgs = arrayOf(startMs.toString(), endMs.toString())
         val sortOrder = "${CalendarContract.Events.DTSTART} ASC"
 

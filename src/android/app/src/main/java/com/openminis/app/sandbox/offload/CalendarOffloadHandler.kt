@@ -169,7 +169,9 @@ class CalendarOffloadHandler(private val context: Context) : NativeOffloadHandle
             CalendarContract.Events.CALENDAR_ID,
             CalendarContract.Events.CALENDAR_DISPLAY_NAME,
         )
-        val selection = "${CalendarContract.Events.DTSTART} >= ? AND ${CalendarContract.Events.DTSTART} <= ?"
+        // momoding: a deleted event stays in the provider (DELETED = 1) until a sync adapter purges it;
+        // a local calendar has none, so without this a deleted event keeps being listed
+        val selection = "${CalendarContract.Events.DTSTART} >= ? AND ${CalendarContract.Events.DTSTART} <= ? AND ${CalendarContract.Events.DELETED} = 0"
         // [T-android-calendar-update-all-day] One day of slack each side: an
         // all-day event's DTSTART is a UTC midnight, which is up to a day away
         // from its local date. The rows are filtered on their LOCAL start below.
@@ -549,7 +551,7 @@ class CalendarOffloadHandler(private val context: Context) : NativeOffloadHandle
             CalendarContract.Events.DTEND,
             CalendarContract.Events.ALL_DAY,
         )
-        val selection = "${CalendarContract.Events.DTSTART} < ? AND ${CalendarContract.Events.DTEND} > ?"
+        val selection = "${CalendarContract.Events.DTSTART} < ? AND ${CalendarContract.Events.DTEND} > ? AND ${CalendarContract.Events.DELETED} = 0" // momoding
         val selArgs = arrayOf(endMs.toString(), startMs.toString())
         val sort = "${CalendarContract.Events.DTSTART} ASC"
 
