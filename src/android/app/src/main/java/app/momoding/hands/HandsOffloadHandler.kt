@@ -58,6 +58,28 @@ class HandsOffloadHandler(private val context: Context) : NativeOffloadHandler {
             .put("apps", JSONArray().apply { list.forEach { put(JSONObject().put("name", it.label).put("package", it.packageName)) } })
     }
 
+    /**
+     * Debug builds (`momoding.hands.run`): run the hands on [task] the way the agent would, with an
+     * optional screen model for this run only, and return the result plus the wall time.
+     */
+    fun runForDebug(task: String, app: String?, maxSteps: Int?, modelEntryId: String?): JSONObject {
+        val previous = Hands.modelEntryId(context)
+        if (modelEntryId != null) Hands.setModelEntryId(context, modelEntryId)
+        val started = System.currentTimeMillis()
+        try {
+            val argv = buildList {
+                add("momoding-hands"); add("run"); add("--task"); add(task)
+                app?.let { add("--app"); add(it) }
+                maxSteps?.let { add("--max-steps"); add(it.toString()) }
+            }
+            val r = run(OffloadArgs(argv.drop(1)), sessionId = "debug-hands")
+            val body = runCatching { JSONObject(r.output) }.getOrElse { JSONObject().put("raw", r.output) }
+            return body.put("exit", r.exitCode).put("elapsed_ms", System.currentTimeMillis() - started)
+        } finally {
+            if (modelEntryId != null) Hands.setModelEntryId(context, previous)
+        }
+    }
+
     private fun run(args: OffloadArgs, sessionId: String?): NativeOffloadResult {
         val task = args.get("task")?.trim().orEmpty()
         if (task.isEmpty()) return NativeOffloadResult(2, "momoding-hands run: --task is required\n")

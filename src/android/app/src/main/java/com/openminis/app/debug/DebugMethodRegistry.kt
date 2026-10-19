@@ -958,6 +958,18 @@ object DebugMethodRegistry {
         ),
         // momoding
         MethodSpec(
+            name = "momoding.hands.run",
+            description = "Run the hands (screen operator) on a task directly, bypassing the chat model. Blocks until done.",
+            params = listOf(
+                ParamSpec("task", "string", required = true, description = "What the hands should do."),
+                ParamSpec("app", "string", required = false, description = "App to open first."),
+                ParamSpec("maxSteps", "int", required = false, description = "Step cap."),
+                ParamSpec("modelEntryId", "string", required = false, description = "Screen model for this run only."),
+            ),
+            returns = "{ok, outcome, steps, answer|message, run_id, trace, log, elapsed_ms}",
+            example = ex("task" to "Open Settings and read the Android version", "app" to "Settings"),
+        ),
+        MethodSpec(
             name = "momoding.reset",
             description = "Momoding's own state back to a fresh install's: routines, notes and USER.md, remembered approvals, rule hits, card states. Keeps providers, keys and system grants. Delete chats with chat.session.delete.",
             params = listOf(ParamSpec("confirm", "bool", required = true, default = false, description = "Must be true.")),

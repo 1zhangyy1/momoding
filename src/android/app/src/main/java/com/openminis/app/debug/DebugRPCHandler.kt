@@ -228,6 +228,15 @@ class DebugRPCHandler(private val context: Context) {
             }
 
             // momoding: fresh-install state for walkthroughs (keeps the provider, key and system grants)
+            "momoding.hands.run" -> {
+                val task = params.optString("task").ifBlank { throw RPCException(-32602, "task is required") }
+                app.momoding.hands.HandsOffloadHandler(context).runForDebug(
+                    task = task,
+                    app = params.optString("app").ifBlank { null },
+                    maxSteps = if (params.has("maxSteps")) params.optInt("maxSteps") else null,
+                    modelEntryId = params.optString("modelEntryId").ifBlank { null },
+                )
+            }
             "momoding.reset" -> {
                 if (!params.optBoolean("confirm", false)) throw RPCException(-32602, "confirm must be true")
                 app.momoding.debug.TestReset.reset(context)
