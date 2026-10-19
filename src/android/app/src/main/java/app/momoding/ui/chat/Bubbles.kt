@@ -18,8 +18,8 @@ import app.momoding.ui.Tones
 
 /** Grok Bot / iMessage geometry: 18dp corners, the corner nearest the speaker pulled in on a turn's last bubble. */
 object BubbleShape {
-    private val R = 18.dp
-    private val TAIL = 6.dp
+    private val R = app.momoding.ui.Design.Radius.Bubble
+    private val TAIL = app.momoding.ui.Design.Radius.Tail
     fun agent(last: Boolean) = RoundedCornerShape(topStart = R, topEnd = R, bottomEnd = R, bottomStart = if (last) TAIL else R)
     fun user(last: Boolean = true) = RoundedCornerShape(topStart = R, topEnd = R, bottomStart = R, bottomEnd = if (last) TAIL else R)
 }

@@ -32,6 +32,7 @@ import com.openminis.app.R
 import com.openminis.app.ui.chat.AssistantBlock
 import com.openminis.app.ui.chat.ToolBlockStatus
 import com.openminis.app.ui.theme.ChatColors
+import app.momoding.ui.Design
 
 /*
  * How a turn's work is shown (Grok Bot's "Steps"): one line opening the turn sums it up —
@@ -58,15 +59,15 @@ fun StepLine(block: AssistantBlock, onOpen: (String) -> Unit) {
     Row(Modifier.height(IntrinsicSize.Min).clickable { onOpen(block.id) }.padding(start = 7.dp)) {
         Box(Modifier.width(1.5.dp).fillMaxHeight().background(Tones.hairline))
         Row(Modifier.padding(start = 13.dp, top = 5.dp, bottom = 5.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (running) Text("…", fontSize = 12.sp, color = ChatColors.secondaryText)
+            if (running) Text("…", fontSize = Design.Size.Caption, color = ChatColors.secondaryText)
             else Icon(
                 if (failed) Icons.Filled.Close else Icons.Filled.Check,
                 contentDescription = null, modifier = Modifier.size(12.dp),
                 tint = if (failed) MaterialTheme.colorScheme.error else ChatColors.secondaryText,
             )
             Spacer(Modifier.width(8.dp))
-            Text(title, fontSize = 13.sp, color = ChatColors.primaryText, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-            if (block.durationMs >= 1000) Text("  " + duration((block.durationMs / 1000).toInt()), fontSize = 12.sp, color = ChatColors.secondaryText)
+            Text(title, fontSize = Design.Size.Note, color = ChatColors.primaryText, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+            if (block.durationMs >= 1000) Text("  " + duration((block.durationMs / 1000).toInt()), fontSize = Design.Size.Caption, color = ChatColors.secondaryText)
         }
     }
 }

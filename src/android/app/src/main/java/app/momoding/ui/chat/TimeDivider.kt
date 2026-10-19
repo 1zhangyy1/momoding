@@ -19,6 +19,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Locale
+import app.momoding.ui.Design
 
 /** "今天 16:30" centred above an exchange that starts after a pause (iMessage; Grok Bot's "Today {time}"). */
 @Composable
@@ -26,7 +27,7 @@ fun TimeDivider(at: Long) {
     val context = LocalContext.current
     val text = remember(at) { TimeDivider.label(at, context.getString(R.string.mo_time_today), context.getString(R.string.mo_time_yesterday)) }
     Box(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 6.dp), contentAlignment = Alignment.Center) {
-        Text(text, fontSize = 12.sp, color = ChatColors.secondaryText)
+        Text(text, fontSize = Design.Size.Caption, color = ChatColors.secondaryText)
     }
 }
 

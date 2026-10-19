@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.sp
 import app.momoding.chat.Drafts
 import app.momoding.ui.Tones
 import com.openminis.app.R
+import app.momoding.ui.Design
 
 /**
  * The draft card for a `momoding-draft` fence (Grok Bot's draft bubble): what it is and who it
@@ -51,7 +52,7 @@ fun DraftCard(code: String) {
             val sending = state.status == Drafts.Status.SENDING
             BasicTextField(
                 value = text, onValueChange = { text = it }, enabled = !sending,
-                textStyle = TextStyle(fontSize = 15.sp, lineHeight = 22.sp, color = MaterialTheme.colorScheme.onSurface),
+                textStyle = TextStyle(fontSize = Design.Size.Body, lineHeight = Design.Line.Body, color = MaterialTheme.colorScheme.onSurface),
                 cursorBrush = SolidColor(Tones.action),
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -77,7 +78,7 @@ fun DraftCard(code: String) {
 
 @Composable
 private fun Status(line: String, color: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
-    Text(line, fontSize = 13.sp, color = color)
+    Text(line, fontSize = Design.Size.Note, color = color)
 }
 
 @Composable

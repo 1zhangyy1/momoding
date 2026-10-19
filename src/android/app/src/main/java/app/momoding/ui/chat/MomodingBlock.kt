@@ -29,6 +29,7 @@ import app.momoding.ui.Tones
 import com.openminis.app.R
 import com.openminis.app.ui.theme.ChatColors
 import org.json.JSONObject
+import app.momoding.ui.Design
 
 /**
  * Every `momoding-*` fence in a reply goes through here (the way nanoMuse's NanoMuseBlock does):
@@ -100,7 +101,7 @@ private fun AskCard(o: JSONObject, code: String) {
                 }
             }
         }
-        if (chosen == null) Text(stringResource(if (expired) R.string.mo_card_expired else R.string.mo_ask_hint), fontSize = 12.sp, color = ChatColors.secondaryText)
+        if (chosen == null) Text(stringResource(if (expired) R.string.mo_card_expired else R.string.mo_ask_hint), fontSize = Design.Size.Caption, color = ChatColors.secondaryText)
     }
 }
 
@@ -118,7 +119,7 @@ private fun Chips(items: List<String>, primaryFirst: Boolean, onPick: (String) -
         items.forEachIndexed { i, s ->
             val primary = primaryFirst && i == 0
             Text(
-                s, fontSize = 14.sp,
+                s, fontSize = Design.Size.Label,
                 color = if (primary) androidx.compose.ui.graphics.Color.White else MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.clip(CircleShape).background(if (primary) Tones.action else Tones.fill)
                     .clickable { onPick(s) }.padding(horizontal = 14.dp, vertical = 8.dp),
@@ -199,7 +200,7 @@ private fun PermissionCard(o: JSONObject, code: String) {
         "declined" -> SettledLine(stringResource(R.string.mo_perm_settled_declined, label), done = false)
         else -> DecisionCard {
             CardTitle(stringResource(R.string.mo_perm_ask, label))
-            Text(stringResource(R.string.mo_perm_detail), fontSize = 13.sp, lineHeight = 19.sp, color = ChatColors.secondaryText)
+            Text(stringResource(R.string.mo_perm_detail), fontSize = Design.Size.Note, lineHeight = Design.Line.Note, color = ChatColors.secondaryText)
             CardActions {
                 if (state == "settings" || state == "hands") {
                     PillButton(stringResource(R.string.mo_perm_done), primary = true) {
@@ -241,7 +242,7 @@ private fun HandoffCard(o: JSONObject, code: String) {
     }
     DecisionCard {
         CardTitle(title)
-        Text(stringResource(R.string.mo_handoff_detail), fontSize = 13.sp, lineHeight = 19.sp, color = ChatColors.secondaryText)
+        Text(stringResource(R.string.mo_handoff_detail), fontSize = Design.Size.Note, lineHeight = Design.Line.Note, color = ChatColors.secondaryText)
         CardActions {
             if (state == "opened") PillButton(stringResource(R.string.mo_handoff_open_again), primary = false) { MomodingSend.openBrowser?.invoke() }
             PillButton(stringResource(if (state == "opened") R.string.mo_handoff_done else R.string.mo_handoff_open), primary = true) {

@@ -40,6 +40,7 @@ import com.openminis.app.ui.settings.SettingsSection
 import com.openminis.app.ui.settings.SettingsSwitchRow
 import app.momoding.hands.Hands
 import app.momoding.ui.Tones
+import app.momoding.ui.Design
 
 const val ROUTE_HANDS = "momoding/hands"
 
@@ -72,8 +73,8 @@ fun HandsScreen(onBack: () -> Unit, onOpenProviders: () -> Unit, onOpenHandsMode
     SettingsScaffold(title = stringResource(R.string.mo_hands_title), onBack = onBack) {
         Text(
             text = stringResource(R.string.mo_hands_intro),
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
+            fontSize = Design.Size.Label,
+            lineHeight = Design.Line.Label,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 16.dp).padding(top = 12.dp),
         )
@@ -192,7 +193,7 @@ private fun NeedRow(
         trailing = {
             Text(
                 text = stringResource(if (ok) R.string.mo_hands_need_ok else R.string.mo_hands_need_set_up),
-                fontSize = 14.sp,
+                fontSize = Design.Size.Label,
                 fontWeight = FontWeight.Medium,
                 color = if (ok) MaterialTheme.colorScheme.onSurfaceVariant else Tones.action,
             )

@@ -64,6 +64,7 @@ import app.momoding.guard.RiskRequest
 import app.momoding.guard.RiskText
 import app.momoding.Identity
 import app.momoding.ui.Tones
+import app.momoding.ui.Design
 
 /**
  * Muse's "Needs approval" card, sitting between the messages and the composer of the chat
@@ -111,8 +112,8 @@ private fun RiskApprovalCard(request: RiskRequest) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 8.dp)
-            .shadow(6.dp, RoundedCornerShape(22.dp), clip = false, ambientColor = Color.Black.copy(alpha = 0.12f)),
-        shape = RoundedCornerShape(22.dp),
+            .shadow(6.dp, RoundedCornerShape(Design.Radius.Card), clip = false, ambientColor = Color.Black.copy(alpha = 0.12f)),
+        shape = RoundedCornerShape(Design.Radius.Card),
         color = Tones.surface,
     ) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 16.dp)) {
@@ -126,8 +127,8 @@ private fun RiskApprovalCard(request: RiskRequest) {
                 Spacer(Modifier.width(12.dp))
                 Text(
                     RiskText.title(context, request, name),
-                    fontSize = 17.sp,
-                    lineHeight = 22.sp,
+                    fontSize = Design.Size.Title,
+                    lineHeight = Design.Line.Body,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f),
@@ -136,15 +137,15 @@ private fun RiskApprovalCard(request: RiskRequest) {
             Spacer(Modifier.height(10.dp))
             Text(
                 RiskText.description(context, request, name),
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
+                fontSize = Design.Size.Label,
+                lineHeight = Design.Line.Label,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(Modifier.height(10.dp))
             Preview(request)
             if (queued > 0) {
                 Spacer(Modifier.height(6.dp))
-                Text(stringResource(R.string.mo_risk_queued, queued), fontSize = 12.sp, color = ChatColors.secondaryText)
+                Text(stringResource(R.string.mo_risk_queued, queued), fontSize = Design.Size.Caption, color = ChatColors.secondaryText)
             }
             Spacer(Modifier.height(14.dp))
             Button(
@@ -152,7 +153,7 @@ private fun RiskApprovalCard(request: RiskRequest) {
                 modifier = Modifier.fillMaxWidth().height(46.dp),
                 shape = CircleShape,
                 colors = ButtonDefaults.buttonColors(containerColor = Tones.action, contentColor = Color.White),
-            ) { Text(stringResource(R.string.mo_risk_allow_once), fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
+            ) { Text(stringResource(R.string.mo_risk_allow_once), fontSize = Design.Size.Body, fontWeight = FontWeight.SemiBold) }
             // momoding: three choices like Grok Bot (once / always / deny); "this chat" is dropped —
             // with one main conversation it means "always" in practice and only adds a decision.
             if (request.canAlways) {
@@ -168,8 +169,8 @@ private fun RiskApprovalCard(request: RiskRequest) {
                     // not offered; the card still allows this once.
                     Text(
                         stringResource(R.string.mo_risk_remember_money_needs_lock),
-                        fontSize = 11.5.sp,
-                        lineHeight = 15.sp,
+                        fontSize = Design.Size.Caption,
+                        lineHeight = Design.Line.Caption,
                         color = ChatColors.secondaryText,
                         modifier = Modifier.padding(top = 2.dp, start = 4.dp, end = 4.dp),
                     )
@@ -183,8 +184,8 @@ private fun RiskApprovalCard(request: RiskRequest) {
                     )
                     Text(
                         stringResource(R.string.mo_risk_remember_money_note),
-                        fontSize = 11.5.sp,
-                        lineHeight = 15.sp,
+                        fontSize = Design.Size.Caption,
+                        lineHeight = Design.Line.Caption,
                         color = ChatColors.secondaryText,
                         modifier = Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp),
                     )
@@ -227,7 +228,7 @@ private fun RememberWithLockPill(label: String, title: String, subtitle: String,
     ) {
         Icon(Icons.Outlined.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
         Spacer(Modifier.width(6.dp))
-        Text(label, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(label, fontSize = Design.Size.Body, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -247,7 +248,7 @@ private fun Preview(request: RiskRequest) {
         var open by androidx.compose.runtime.saveable.rememberSaveable(request.id) { androidx.compose.runtime.mutableStateOf(false) }
         if (!open) {
             Text(
-                stringResource(R.string.mo_risk_view_command) + " ›", fontSize = 13.sp, color = ChatColors.secondaryText,
+                stringResource(R.string.mo_risk_view_command) + " ›", fontSize = Design.Size.Note, color = ChatColors.secondaryText,
                 modifier = Modifier.clickable { open = true }.padding(vertical = 2.dp),
             )
             return
@@ -256,7 +257,7 @@ private fun Preview(request: RiskRequest) {
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(Design.Radius.Row))
             .background(Tones.fill)
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
@@ -270,7 +271,7 @@ private fun Preview(request: RiskRequest) {
                     GuardKind.DEVICE -> R.string.mo_risk_preview_device
                 },
             ),
-            fontSize = 11.sp,
+            fontSize = Design.Size.Micro,
             fontWeight = FontWeight.Medium,
             color = ChatColors.secondaryText,
         )
@@ -279,17 +280,17 @@ private fun Preview(request: RiskRequest) {
             Text(
                 request.preview,
                 fontFamily = FontFamily.Monospace,
-                fontSize = 12.5.sp,
-                lineHeight = 17.sp,
+                fontSize = Design.Size.Note,
+                lineHeight = Design.Line.Note,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 8,
                 overflow = TextOverflow.Ellipsis,
             )
         } else {
-            Text(request.preview, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(request.preview, fontSize = Design.Size.Label, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
             request.pageUrl?.let {
                 Spacer(Modifier.height(2.dp))
-                Text(it, fontSize = 12.sp, color = ChatColors.secondaryText, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(it, fontSize = Design.Size.Caption, color = ChatColors.secondaryText, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         }
     }
@@ -303,7 +304,7 @@ private fun GreyPill(label: String, onClick: () -> Unit) {
         shape = CircleShape,
         colors = ButtonDefaults.buttonColors(containerColor = Tones.fill, contentColor = MaterialTheme.colorScheme.onSurface),
         elevation = null,
-    ) { Text(label, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+    ) { Text(label, fontSize = Design.Size.Body, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis) }
 }
 
 @Composable
@@ -323,7 +324,7 @@ private fun ElsewhereBanner(request: RiskRequest, onOpenSession: (String) -> Uni
     ) {
         Text(
             stringResource(R.string.mo_risk_elsewhere, Identity.name(context)),
-            fontSize = 13.sp,
+            fontSize = Design.Size.Note,
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f),
             maxLines = 1,

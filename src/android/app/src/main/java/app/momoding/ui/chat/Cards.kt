@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.momoding.ui.Tones
 import com.openminis.app.ui.theme.ChatColors
+import app.momoding.ui.Design
 
 /*
  * Grok Bot's transcript cards (card kit in its renderer, `_a` styles):
@@ -41,7 +42,7 @@ import com.openminis.app.ui.theme.ChatColors
 /** A card that waits for the person's decision. */
 @Composable
 fun DecisionCard(content: @Composable ColumnScope.() -> Unit) {
-    val shape = RoundedCornerShape(20.dp)
+    val shape = RoundedCornerShape(Design.Radius.Card)
     Column(
         Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 4.dp)
             .shadow(2.dp, shape, clip = false, ambientColor = Color.Black.copy(alpha = .06f), spotColor = Color.Black.copy(alpha = .06f))
@@ -58,7 +59,7 @@ fun DecisionCard(content: @Composable ColumnScope.() -> Unit) {
 fun QuietCard(content: @Composable ColumnScope.() -> Unit) {
     Column(
         Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 4.dp, end = 40.dp)
-            .clip(RoundedCornerShape(16.dp)).background(Tones.agentBubble)
+            .clip(RoundedCornerShape(Design.Radius.Panel)).background(Tones.agentBubble)
             .animateContentSize()
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -70,16 +71,16 @@ fun QuietCard(content: @Composable ColumnScope.() -> Unit) {
 @Composable
 fun CardTitlebar(label: String, summary: String? = null, labelColor: Color = Tones.action) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = labelColor)
+        Text(label, fontSize = Design.Size.Note, fontWeight = FontWeight.SemiBold, color = labelColor)
         if (!summary.isNullOrBlank()) {
-            Text("  ·  $summary", fontSize = 13.sp, color = ChatColors.secondaryText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("  ·  $summary", fontSize = Design.Size.Note, color = ChatColors.secondaryText, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
 
 @Composable
 fun CardTitle(text: String) {
-    Text(text, fontSize = 15.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+    Text(text, fontSize = Design.Size.Body, lineHeight = Design.Line.Body, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
 }
 
 /** What a settled card leaves behind: one [MetaLine], ✓ when it went through. */
@@ -97,7 +98,7 @@ fun CardActions(content: @Composable () -> Unit) {
 @Composable
 fun PillButton(text: String, primary: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
     Text(
-        text, fontSize = 15.sp, fontWeight = if (primary) FontWeight.SemiBold else FontWeight.Medium,
+        text, fontSize = Design.Size.Body, fontWeight = if (primary) FontWeight.SemiBold else FontWeight.Medium,
         color = when {
             !enabled -> ChatColors.secondaryText
             primary -> Color.White
@@ -115,17 +116,17 @@ fun PillButton(text: String, primary: Boolean, enabled: Boolean = true, onClick:
 fun OptionRow(index: Int, text: String, picked: Boolean, settled: Boolean, onPick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().alpha(if (settled && !picked) .4f else 1f)
-            .clip(RoundedCornerShape(12.dp)).background(Tones.surface)
+            .clip(RoundedCornerShape(Design.Radius.Row)).background(Tones.surface)
             .clickable(enabled = !settled, onClick = onPick)
             .heightIn(min = 44.dp).padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            if (picked) "✓" else "$index", fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+            if (picked) "✓" else "$index", fontSize = Design.Size.Caption, fontWeight = FontWeight.SemiBold,
             color = if (picked) Color.White else ChatColors.secondaryText,
             modifier = Modifier.clip(CircleShape).background(if (picked) Tones.action else Tones.fill)
                 .padding(horizontal = 7.dp, vertical = 2.dp),
         )
-        Text(text, fontSize = 15.sp, lineHeight = 21.sp, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(start = 10.dp))
+        Text(text, fontSize = Design.Size.Body, lineHeight = Design.Line.Body, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(start = 10.dp))
     }
 }

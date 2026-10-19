@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.momoding.ui.Tones
 import com.openminis.app.ui.theme.ChatColors
+import app.momoding.ui.Design
 
 /** What the mark slot of a [MetaLine] says. */
 enum class Mark { DONE, UNDONE, NONE }
@@ -44,7 +45,7 @@ fun MetaLine(
     chevron: Boolean? = null, // null: none; false: pointing right (folded); true: pointing down (open)
 ) {
     Row(
-        Modifier.padding(vertical = 2.dp).clip(RoundedCornerShape(8.dp))
+        Modifier.padding(vertical = 2.dp).clip(RoundedCornerShape(Design.Radius.Press))
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(top = 3.dp, bottom = 3.dp, end = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -58,10 +59,10 @@ fun MetaLine(
                 Mark.NONE -> Unit
             }
         }
-        Text(text, fontSize = 12.sp, lineHeight = 16.sp, color = ChatColors.secondaryText, maxLines = 2, overflow = TextOverflow.Ellipsis,
+        Text(text, fontSize = Design.Size.Caption, lineHeight = Design.Line.Caption, color = ChatColors.secondaryText, maxLines = 2, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(start = 6.dp).weight(1f, fill = false))
         if (action != null) Text(
-            " · $action", fontSize = 12.sp, lineHeight = 16.sp, color = Tones.action, fontWeight = FontWeight.Medium,
+            " · $action", fontSize = Design.Size.Caption, lineHeight = Design.Line.Caption, color = Tones.action, fontWeight = FontWeight.Medium,
             modifier = if (onAction != null) Modifier.clickable(onClick = onAction) else Modifier,
         )
         if (chevron != null) Icon(

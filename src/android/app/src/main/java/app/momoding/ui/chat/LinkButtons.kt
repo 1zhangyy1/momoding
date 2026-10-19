@@ -19,6 +19,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.momoding.ui.Tones
+import app.momoding.ui.Design
 
 /**
  * The prototype's result buttons ("在日历里看", "打开设置"): a line of the reply that is only
@@ -67,7 +68,7 @@ fun LinkButtons(links: List<Pair<String, String>>, onOpen: (String) -> Unit) {
             if (Works.isWork(url)) { WorkCard(label, url) { onOpen(url) }; return@forEach }
             Surface(shape = CircleShape, color = Tones.surface, border = BorderStroke(1.dp, Tones.hairline)) {
                 Text(
-                    label, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface,
+                    label, fontSize = Design.Size.Label, color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.clickable { onOpen(url) }.padding(horizontal = 14.dp, vertical = 8.dp),
                 )
             }
@@ -82,22 +83,22 @@ fun LinkButtons(links: List<Pair<String, String>>, onOpen: (String) -> Unit) {
 @Composable
 private fun WorkCard(label: String, url: String, onOpen: () -> Unit) {
     val name = url.substringAfterLast('/').substringBefore('?')
-    Surface(shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp), color = Tones.surface, border = BorderStroke(1.dp, Tones.hairline)) {
+    Surface(shape = androidx.compose.foundation.shape.RoundedCornerShape(Design.Radius.Panel), color = Tones.surface, border = BorderStroke(1.dp, Tones.hairline)) {
         androidx.compose.foundation.layout.Row(
             Modifier.clickable(onClick = onOpen).padding(start = 10.dp, end = 14.dp, top = 10.dp, bottom = 10.dp),
             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
         ) {
             androidx.compose.foundation.layout.Box(
-                Modifier.size(36.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)).background(Tones.fill),
+                Modifier.size(36.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(Design.Radius.Row)).background(Tones.fill),
                 contentAlignment = androidx.compose.ui.Alignment.Center,
             ) {
-                Text(Works.kind(name), fontSize = 11.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = Tones.action)
+                Text(Works.kind(name), fontSize = Design.Size.Micro, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = Tones.action)
             }
             androidx.compose.foundation.layout.Column(Modifier.padding(start = 10.dp).widthIn(max = 220.dp)) {
-                Text(label, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                if (name.isNotEmpty() && name != label) Text(name, fontSize = 12.sp, color = com.openminis.app.ui.theme.ChatColors.secondaryText, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                Text(label, fontSize = Design.Size.Body, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                if (name.isNotEmpty() && name != label) Text(name, fontSize = Design.Size.Caption, color = com.openminis.app.ui.theme.ChatColors.secondaryText, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
-            Text("  ›", fontSize = 15.sp, color = com.openminis.app.ui.theme.ChatColors.secondaryText)
+            Text("  ›", fontSize = Design.Size.Body, color = com.openminis.app.ui.theme.ChatColors.secondaryText)
         }
     }
 }

@@ -51,6 +51,7 @@ import app.momoding.Identity
 import app.momoding.ui.Tones
 import com.openminis.app.R
 import com.openminis.app.data.repository.ProviderRepository
+import app.momoding.ui.Design
 
 /**
  * Momoding's first run, three pages as in the prototype: connect a model → "I can work on your
@@ -162,7 +163,7 @@ fun FirstRunScreen(
 }
 
 @Composable private fun Title(text: String) {
-    Text(text, fontSize = 26.sp, lineHeight = 34.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+    Text(text, fontSize = Design.Size.Display, lineHeight = Design.Line.Display, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
     Spacer(Modifier.height(12.dp))
 }
 
@@ -175,14 +176,14 @@ fun FirstRunScreen(
     Row(Modifier.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(6.dp).clip(CircleShape).background(Tones.action))
         Spacer(Modifier.width(12.dp))
-        Text(text, fontSize = 15.sp, color = MaterialTheme.colorScheme.onBackground)
+        Text(text, fontSize = Design.Size.Body, color = MaterialTheme.colorScheme.onBackground)
     }
 }
 
 @Composable private fun Primary(text: String, onClick: () -> Unit) {
     Button(onClick = onClick, shape = CircleShape, modifier = Modifier.fillMaxWidth().height(52.dp),
         colors = ButtonDefaults.buttonColors(containerColor = Tones.action, contentColor = Color.White)) {
-        Text(text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        Text(text, fontSize = Design.Size.Title, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -194,13 +195,13 @@ fun StarterExamples(onPick: (String) -> Unit) {
         stringResource(R.string.mo_ex_train), stringResource(R.string.mo_ex_reply),
     )
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp), verticalArrangement = Arrangement.Center) {
-        Text(stringResource(R.string.mo_ex_title), fontSize = 20.sp, fontWeight = FontWeight.SemiBold,
+        Text(stringResource(R.string.mo_ex_title), fontSize = Design.Size.Display, fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onBackground, textAlign = TextAlign.Start)
         Spacer(Modifier.height(14.dp))
         examples.forEach { ex ->
             Box(Modifier.padding(vertical = 4.dp).clip(CircleShape).background(Tones.fill)
                 .then(Modifier.padding(0.dp))) {
-                TextButton(onClick = { onPick(ex) }) { Text(ex, fontSize = 14.sp, color = MaterialTheme.colorScheme.onBackground) }
+                TextButton(onClick = { onPick(ex) }) { Text(ex, fontSize = Design.Size.Label, color = MaterialTheme.colorScheme.onBackground) }
             }
         }
     }

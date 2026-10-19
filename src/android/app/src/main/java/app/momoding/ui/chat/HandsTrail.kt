@@ -22,6 +22,7 @@ import app.momoding.ui.Tones
 import coil.compose.AsyncImage
 import com.openminis.app.ui.chat.ChatLinkAction
 import com.openminis.app.ui.chat.ChatLinkResolver
+import app.momoding.ui.Design
 
 /**
  * The hands' trail under a finished screen step: every step's screenshot in order, small, and
@@ -46,8 +47,8 @@ fun HandsTrail(lastScreen: String, sessionId: String?, onOpen: (String) -> Unit)
         steps.forEach { (file, url) ->
             AsyncImage(
                 model = file, contentDescription = null, contentScale = ContentScale.Crop,
-                modifier = Modifier.width(54.dp).height(120.dp).clip(RoundedCornerShape(8.dp))
-                    .border(BorderStroke(1.dp, Tones.hairline), RoundedCornerShape(8.dp))
+                modifier = Modifier.width(54.dp).height(120.dp).clip(RoundedCornerShape(Design.Radius.Press))
+                    .border(BorderStroke(1.dp, Tones.hairline), RoundedCornerShape(Design.Radius.Press))
                     .clickable { onOpen(url) },
             )
         }

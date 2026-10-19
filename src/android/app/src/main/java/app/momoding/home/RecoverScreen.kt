@@ -28,6 +28,7 @@ import app.momoding.Identity
 import app.momoding.ui.chat.PillButton
 import com.openminis.app.R
 import com.openminis.app.ui.theme.ChatColors
+import app.momoding.ui.Design
 
 const val ROUTE_RECOVER = "momoding/recover"
 
@@ -46,9 +47,9 @@ fun RecoverScreen(onBackToChat: () -> Unit, onFreshChat: () -> Unit) {
     ) {
         if (face != null) Image(face, contentDescription = null, modifier = Modifier.size(72.dp).clip(CircleShape))
         Spacer(Modifier.height(20.dp))
-        Text(stringResource(R.string.mo_recover_title), fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+        Text(stringResource(R.string.mo_recover_title), fontSize = Design.Size.Display, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
         Spacer(Modifier.height(8.dp))
-        Text(stringResource(R.string.mo_recover_body), fontSize = 15.sp, lineHeight = 22.sp, color = ChatColors.secondaryText, textAlign = TextAlign.Center)
+        Text(stringResource(R.string.mo_recover_body), fontSize = Design.Size.Body, lineHeight = Design.Line.Body, color = ChatColors.secondaryText, textAlign = TextAlign.Center)
         Spacer(Modifier.height(24.dp))
         PillButton(stringResource(R.string.mo_recover_back), primary = true, onClick = onBackToChat)
         Spacer(Modifier.height(10.dp))

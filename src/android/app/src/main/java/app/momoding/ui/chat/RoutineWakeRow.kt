@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.openminis.app.R
 import app.momoding.chat.RoutineWakes
+import app.momoding.ui.Design
 
 /**
  * A user row that a routine sent (`RoutineWakes`) is one quiet line on the person's side,
@@ -33,7 +34,7 @@ fun RoutineWakeRow(messageId: String, bubble: @Composable () -> Unit) {
     Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
         Text(
             text = stringResource(R.string.mo_routine_wake_caption, wake.label, wake.time),
-            fontSize = 12.sp,
+            fontSize = Design.Size.Caption,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.align(Alignment.CenterEnd),
         )
@@ -47,7 +48,7 @@ fun RoutineLine(label: String, time: String?) {
         Text(
             text = if (time != null) stringResource(R.string.mo_routine_wake_caption, label, time)
             else stringResource(R.string.mo_routine_wake_caption_no_time, label),
-            fontSize = 12.sp,
+            fontSize = Design.Size.Caption,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }

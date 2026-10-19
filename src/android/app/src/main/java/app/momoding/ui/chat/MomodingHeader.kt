@@ -35,6 +35,7 @@ import com.openminis.app.R
 import com.openminis.app.agent.SoulStore
 import com.openminis.app.service.SessionActivityTracker
 import com.openminis.app.ui.theme.ChatColors
+import app.momoding.ui.Design
 
 /**
  * The main chat's header: Momoding's face, its name, and one line of what it is doing. Idle, the
@@ -56,7 +57,7 @@ fun MomodingHeader(isStreaming: Boolean, replying: Boolean, request: String?, on
         Column {
             Text(
                 soul.name.ifBlank { stringResource(R.string.app_name) },
-                fontSize = 16.sp, lineHeight = 19.sp, fontWeight = FontWeight.SemiBold, color = ChatColors.primaryText, maxLines = 1,
+                fontSize = Design.Size.Title, lineHeight = Design.Line.Note, fontWeight = FontWeight.SemiBold, color = ChatColors.primaryText, maxLines = 1,
                 style = NO_FONT_PAD,
             )
             // always reserved, so the header does not jump when the line comes and goes
@@ -64,7 +65,7 @@ fun MomodingHeader(isStreaming: Boolean, replying: Boolean, request: String?, on
                 if (status != null) Text(
                     // in its browser the line opens the page it is on, to watch or take over (Grok's computer preview)
                     if (watchable) status.text + "  ›" else status.text,
-                    fontSize = 12.sp, lineHeight = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, style = NO_FONT_PAD,
+                    fontSize = Design.Size.Caption, lineHeight = Design.Line.Micro, maxLines = 1, overflow = TextOverflow.Ellipsis, style = NO_FONT_PAD,
                     color = if (waiting || watchable) Tones.action else ChatColors.secondaryText,
                     fontWeight = if (waiting || watchable) FontWeight.Medium else FontWeight.Normal,
                     modifier = if (watchable) Modifier.clickable { onOpenBrowser?.invoke() } else Modifier,
