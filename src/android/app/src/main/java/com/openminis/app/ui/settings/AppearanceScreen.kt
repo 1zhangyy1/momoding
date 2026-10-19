@@ -285,6 +285,7 @@ fun AppearanceScreen(
 
         // momoding: the conversation shows what was said; how it was done is one switch away
         var showSteps by remember { mutableStateOf(app.momoding.ui.chat.ShowSteps.get(context)) }
+        val momodingAdvanced = showSteps // momoding: the upstream switches below show with the steps
         SettingsSection(
             header = stringResource(R.string.mo_appearance_section_conversation),
             footer = stringResource(R.string.mo_appearance_show_steps_footer),
@@ -342,7 +343,8 @@ fun AppearanceScreen(
         // Same per-row icon treatment as the Theme section. Bolt = Auto
         // (system picks), History = Last Session (revisit), ChatBubble =
         // New Chat (compose), Home = Home screen.
-        SettingsSection(
+        // momoding: one conversation, the app always opens it — no launch choice (Home would be upstream's list)
+        if (!app.momoding.home.MainChat.ALWAYS_OPENS) SettingsSection(
             header = stringResource(R.string.appearance_section_launch),
             footer = stringResource(R.string.appearance_launch_footer),
         ) {
@@ -419,7 +421,7 @@ fun AppearanceScreen(
         // has an active task (mirrors iOS UIApplication.isIdleTimerDisabled
         // pattern in KeepScreenAwakeController). Default off — battery cost
         // is real and most users don't need it.
-        SettingsSection(
+        if (momodingAdvanced) SettingsSection( // momoding: for the steps-shown view
             header = stringResource(R.string.appearance_section_keep_awake),
             footer = stringResource(R.string.appearance_keep_awake_footer),
         ) {
@@ -437,7 +439,7 @@ fun AppearanceScreen(
         }
 
         // -- Tool Status Bar --
-        SettingsSection(
+        if (momodingAdvanced) SettingsSection( // momoding: for the steps-shown view
             header = stringResource(R.string.appearance_section_tool_preview),
             footer = stringResource(R.string.appearance_tool_preview_footer),
         ) {
@@ -459,7 +461,7 @@ fun AppearanceScreen(
         // behavior, default ON) or stays collapsed. Only affects the streaming
         // auto-expand; manual taps always work either way. Mirrors iOS
         // AppearanceSettingsView "Deep Thinking" section.
-        SettingsSection(
+        if (momodingAdvanced) SettingsSection( // momoding: for the steps-shown view
             header = stringResource(R.string.appearance_section_deep_thinking),
             footer = stringResource(R.string.appearance_auto_expand_thinking_footer),
         ) {
@@ -479,7 +481,7 @@ fun AppearanceScreen(
         // [T-keyboard-auto-pop default flip] -- Auto-Focus After Reply --
         // Default ON — most users want the composer ready for a follow-up
         // immediately after the model finishes.
-        SettingsSection(
+        if (momodingAdvanced) SettingsSection( // momoding: for the steps-shown view
             header = stringResource(R.string.appearance_section_auto_focus_after_reply),
             footer = stringResource(R.string.appearance_auto_focus_after_reply_footer),
         ) {
@@ -500,7 +502,7 @@ fun AppearanceScreen(
         // Sticky session-title pill that appears at the top of the chat
         // when the user scrolls back through history. Default ON; toggle
         // also reachable via `minis-config set appearance.show_chat_title`.
-        SettingsSection(
+        if (momodingAdvanced) SettingsSection( // momoding: for the steps-shown view
             header = stringResource(R.string.appearance_section_chat_title),
             footer = stringResource(R.string.appearance_show_chat_title_footer),
         ) {
@@ -521,7 +523,7 @@ fun AppearanceScreen(
         // -- Auto-Grouping (T-android-auto-grouping) --
         // Rides the title-generation call, so enabling it costs no extra
         // request. Port of iOS ContentView's "Grouping" section.
-        SettingsSection(
+        if (momodingAdvanced) SettingsSection( // momoding: for the steps-shown view
             header = stringResource(R.string.appearance_section_grouping),
             footer = stringResource(R.string.appearance_auto_grouping_footer),
         ) {
@@ -610,7 +612,7 @@ fun AppearanceScreen(
         // top-right corner. Tapping a tile flips the corresponding
         // activity-alias enabled state via PackageManager — the launcher
         // refreshes its icon cache within a few seconds.
-        SettingsSection(
+        if (momodingAdvanced) SettingsSection( // momoding: for the steps-shown view
             header = stringResource(R.string.appearance_section_app_icon),
             footer = stringResource(R.string.appearance_app_icon_footer),
         ) {

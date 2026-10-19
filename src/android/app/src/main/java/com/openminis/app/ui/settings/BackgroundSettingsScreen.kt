@@ -230,6 +230,8 @@ fun BackgroundSettingsScreen(onBack: () -> Unit) {
             // overlay — the mutual-exclusion guard lives in
             // AgentForegroundService.applyOverlayState. Disabled + explained on
             // devices/versions that don't support it.
+            // momoding: a switch that can never be turned on is noise — shown only where it works
+            if (dynamicIslandCapable) {
             Spacer(Modifier.size(8.dp))
             BgToggleRow(
                 icon = Icons.Outlined.Bolt,
@@ -246,6 +248,7 @@ fun BackgroundSettingsScreen(onBack: () -> Unit) {
                     stringResource(R.string.settings_dynamic_island_footer)
                 },
             )
+            }
 
             Spacer(Modifier.size(16.dp))
             BgSectionTitle(stringResource(R.string.battery_opt_section_title))

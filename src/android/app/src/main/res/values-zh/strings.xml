@@ -85,7 +85,7 @@
     <string name="bg_overlay_nudge_channel_name">后台浮窗权限</string>
     <string name="bg_overlay_nudge_channel_description">提醒你授予系统悬浮窗权限，让后台任务浮窗可以正常显示。</string>
     <string name="bg_overlay_nudge_title">启用后台浮窗</string>
-    <string name="bg_overlay_nudge_body">需要授予"显示在其他应用上层"权限，切换到其他应用时 Momoding 才能显示当前工具。点击进入授权页面。</string>
+    <string name="bg_overlay_nudge_body">需要“显示在其他应用上层”权限，Momoding 在后台干活时才能显示小胶囊。点这里去打开。</string>
     <string name="overlay_dismiss">关闭</string>
     <string name="overlay_task_index">%1$d/%2$d</string>
     <string name="restore_stop_title">停止恢复</string>
@@ -1180,7 +1180,7 @@
     <string name="provider_list_models_count">%1$d 个模型</string>
     <string name="settings_section_notifications">通知</string>
     <string name="settings_task_notifications">任务通知</string>
-    <string name="settings_task_notifications_footer">应用进入后台时，Agent 任务完成会通过通知中心和锁屏提醒你。</string>
+    <string name="settings_task_notifications_footer">你交代的事在后台办完、或者需要你决定时，用通知告诉你。</string>
     <string name="notif_one_task_running">1 个任务执行中</string>
     <string name="notif_n_tasks_running">%1$d 个任务执行中</string>
     <string name="notif_in_session">会话中</string>
@@ -1214,7 +1214,7 @@
     <string name="markdown_table_image_copied_toast">已复制表格图片</string>
     <string name="markdown_table_image_copy_failed_toast">复制表格图片失败</string>
     <string name="settings_bg_overlay">后台任务悬浮窗</string>
-    <string name="settings_bg_overlay_footer">Momoding 处于后台时，显示一个小型悬浮胶囊展示当前工具。需要"显示在其他应用上层"权限。点击悬浮窗回到 Momoding；拖拽可移动位置。</string>
+    <string name="settings_bg_overlay_footer">Momoding 在后台干活时，屏幕边上显示一个小胶囊，点一下回到对话，可以拖动。需要“显示在其他应用上层”权限。</string>
     <string name="settings_bg_overlay_permission_needed">需先授予"显示在其他应用上层"权限</string>
     <string name="settings_dynamic_island">灵动岛（实时更新）</string>
     <string name="settings_dynamic_island_footer">在 Android 16 状态胶囊上显示实时的助手状态。开启后将取代悬浮窗，避免同时出现两个状态指示。</string>

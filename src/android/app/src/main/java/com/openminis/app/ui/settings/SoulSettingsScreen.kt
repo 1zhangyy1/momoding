@@ -92,6 +92,7 @@ import kotlinx.coroutines.withContext
 @Composable
 fun SoulSettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
+    val momodingAdvanced by app.momoding.ui.chat.ShowSteps.remember() // momoding: the prompt editor is for the steps-shown view
     val scope = rememberCoroutineScope()
 
     var name by remember { mutableStateOf(SoulMetadata.DEFAULT.name) }
@@ -229,7 +230,7 @@ fun SoulSettingsScreen(onBack: () -> Unit) {
     BackHandler(enabled = isDirty) { showDiscardDialog = true }
 
     SettingsScaffold(
-        title = stringResource(R.string.soul_settings_title),
+        title = stringResource(if (momodingAdvanced) R.string.soul_settings_title else R.string.mo_settings_about_bot), // momoding
         onBack = attemptBack,
         actions = {
             // Save lives in the app bar, where a top-level commit action
@@ -241,7 +242,19 @@ fun SoulSettingsScreen(onBack: () -> Unit) {
             ) { Text(stringResource(R.string.soul_save)) }
         },
     ) {
-        SettingsSection(
+        // momoding: Momoding's face is its app icon and its manner is in the prompt; editing either
+        // is for the steps-shown (developer) view. The person sees who it is and sets its name and language.
+        if (!momodingAdvanced) SettingsSection {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                val face = remember { app.momoding.Identity.face(context)?.asImageBitmap() }
+                if (face != null) androidx.compose.foundation.Image(face, contentDescription = null, modifier = Modifier.size(44.dp).clip(CircleShape))
+                Column(Modifier.padding(start = 12.dp)) {
+                    Text(name.ifBlank { stringResource(R.string.app_name) }, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                    Text(stringResource(R.string.mo_status_idle), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        if (momodingAdvanced) SettingsSection(
             header = stringResource(R.string.soul_section_preview),
         ) {
             Row(
@@ -331,22 +344,21 @@ fun SoulSettingsScreen(onBack: () -> Unit) {
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Spacer(Modifier.height(8.dp))
                 // Emoji field intentionally removed — identity emoji is
                 // locked to ✨; only name / style / lang are editable.
-                OutlinedTextField(
+                if (momodingAdvanced) { Spacer(Modifier.height(8.dp)); OutlinedTextField(
                     value = style,
                     onValueChange = { style = it },
                     label = { Text(stringResource(R.string.soul_field_style)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                )
+                ) }
                 Spacer(Modifier.height(8.dp))
                 LangPicker(lang = lang, onLangChange = { lang = it })
             }
         }
 
-        SettingsSection(
+        if (momodingAdvanced) SettingsSection(
             header = stringResource(R.string.soul_section_personality),
             footer = stringResource(R.string.soul_personality_footer),
         ) {
@@ -389,7 +401,7 @@ fun SoulSettingsScreen(onBack: () -> Unit) {
             }
         }
 
-        SettingsSection {
+        if (momodingAdvanced) SettingsSection {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

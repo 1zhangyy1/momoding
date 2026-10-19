@@ -13,6 +13,9 @@ import java.util.UUID
  * without its sync and feed exclusions.
  */
 object MainChat {
+    /** The app always opens this conversation; upstream's launch choices (last chat, new chat, Home) do not apply. */
+    const val ALWAYS_OPENS = true
+
     private const val PREFS = "momoding"
     private const val KEY_SESSION = "main_chat.session"
 

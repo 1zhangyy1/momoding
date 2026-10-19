@@ -5,7 +5,7 @@
     <string name="mo_routine_paused_body">Its last %2$d results went unread, so it stopped to save usage. Tell me to resume anytime.</string>
     <string name="mo_appearance_section_conversation">Conversation</string>
     <string name="mo_appearance_show_steps">Show how the work is done</string>
-    <string name="mo_appearance_show_steps_footer">Steps, reasoning and the live tool bar. Off: the chat shows only what you and Momoding said, and the cards.</string>
+    <string name="mo_appearance_show_steps_footer">On: every step, the thinking and usage sit in the chat, with the developer menus and settings. Off: the steps fold into the line opening each turn, one tap away.</string>
     <string name="mo_status_needs_approval">Needs your say</string>
     <string name="mo_status_hands_in">On your screen · %1$s · step %2$d</string>
     <string name="mo_status_hands">On your screen · step %1$d</string>

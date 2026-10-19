@@ -85,7 +85,7 @@
     <string name="bg_overlay_nudge_channel_name">背景浮層權限</string>
     <string name="bg_overlay_nudge_channel_description">提醒您授予系統浮層權限，好讓背景工作浮層能夠顯示。</string>
     <string name="bg_overlay_nudge_title">啟用背景浮層</string>
-    <string name="bg_overlay_nudge_body">請授予「顯示在其他應用程式上層」，讓您切換到其他應用程式時，Momoding 仍能顯示目前的工具。點擊即可開啟權限畫面。</string>
+    <string name="bg_overlay_nudge_body">需要「顯示在其他應用程式上層」權限，Momoding 在背景幹活時才能顯示小膠囊。點這裡去打開。</string>
     <string name="overlay_dismiss">關閉</string>
     <string name="overlay_task_index">%1$d/%2$d</string>
     <string name="restore_stop_title">停止還原</string>
@@ -1179,7 +1179,7 @@
     <string name="provider_list_models_count">%1$d 個模型</string>
     <string name="settings_section_notifications">通知</string>
     <string name="settings_task_notifications">工作通知</string>
-    <string name="settings_task_notifications_footer">當應用程式在背景時，Agent 工作完成後發出通知。會在通知欄與鎖定畫面上顯示進度。</string>
+    <string name="settings_task_notifications_footer">你交代的事在背景辦完、或者需要你決定時，用通知告訴你。</string>
     <string name="notif_one_task_running">1 項工作執行中</string>
     <string name="notif_n_tasks_running">%1$d 項工作執行中</string>
     <string name="notif_in_session">工作階段中</string>
@@ -1213,7 +1213,7 @@
     <string name="markdown_table_image_copied_toast">已複製表格圖片</string>
     <string name="markdown_table_image_copy_failed_toast">複製表格圖片失敗</string>
     <string name="settings_bg_overlay">背景工作浮層</string>
-    <string name="settings_bg_overlay_footer">當 Momoding 位於背景時，以小型浮動膠囊顯示目前的工具。需要「顯示在其他應用程式上層」權限。點擊膠囊可把 Momoding 帶回前景；拖曳則可移動位置。</string>
+    <string name="settings_bg_overlay_footer">Momoding 在背景幹活時，螢幕邊上顯示一個小膠囊，點一下回到對話，可以拖動。需要「顯示在其他應用程式上層」權限。</string>
     <string name="settings_bg_overlay_permission_needed">請允許顯示在其他應用程式上層以啟用</string>
     <string name="settings_dynamic_island">靈動島（即時更新）</string>
     <string name="settings_dynamic_island_footer">在 Android 16 狀態膠囊上顯示即時的助手狀態。開啟後將取代懸浮視窗，避免同時出現兩個狀態指示。</string>

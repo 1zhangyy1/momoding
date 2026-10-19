@@ -5,7 +5,7 @@
     <string name="mo_routine_paused_body">最近 %2$d 次结果都没人看，先停下来省点用量。想继续，跟我说一声。</string>
     <string name="mo_appearance_section_conversation">对话</string>
     <string name="mo_appearance_show_steps">显示做事过程</string>
-    <string name="mo_appearance_show_steps_footer">工具步骤、思考过程和底部的工具条。关闭时对话里只有你和 Momoding 说的话，以及各种卡片。</string>
+    <string name="mo_appearance_show_steps_footer">打开后每一步、思考过程和用量都直接摆在对话里，并多出开发用的菜单和设置。关着时，步骤收在每轮开头的“做了几步”里，点开就能看。</string>
     <string name="mo_status_needs_approval">需要你决定</string>
     <string name="mo_status_hands_in">在你的屏幕上 · %1$s · 第 %2$d 步</string>
     <string name="mo_status_hands">在你的屏幕上 · 第 %1$d 步</string>
