@@ -28,7 +28,7 @@
     <string name="mo_settings_routines">Routines</string>
     <string name="mo_settings_routines_sub">Things done on a schedule</string>
     <string name="mo_settings_about_bot">About Momoding</string>
-    <string name="mo_settings_about_bot_sub">Name, look, and how it works for you</string>
+    <string name="mo_settings_about_bot_sub">Name and language</string>
     <string name="mo_settings_appearance_sub">Show how the work is done, theme</string>
     <string name="mo_settings_advanced">Advanced</string>
     <string name="mo_settings_advanced_sub">Tools, skills, storage, logs and more</string>

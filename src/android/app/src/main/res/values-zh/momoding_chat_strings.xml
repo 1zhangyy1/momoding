@@ -28,7 +28,7 @@
     <string name="mo_settings_routines">例行任务</string>
     <string name="mo_settings_routines_sub">到点自动做的事</string>
     <string name="mo_settings_about_bot">关于 Momoding</string>
-    <string name="mo_settings_about_bot_sub">名字、形象、它怎么为你做事</string>
+    <string name="mo_settings_about_bot_sub">名字和语言</string>
     <string name="mo_settings_appearance_sub">显示做事过程、主题</string>
     <string name="mo_settings_advanced">高级</string>
     <string name="mo_settings_advanced_sub">工具、技能、存储、日志等</string>
