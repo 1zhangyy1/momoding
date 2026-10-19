@@ -492,6 +492,12 @@ internal sealed class FlatChatItem {
      * assistant turn. Emitted last so the flat path ends a turn exactly the way
      * AssistantMessageView does, keeping the two renderers in step.
      */
+    /** momoding: the screenshots of one hands run, under its step (the trail the person can look back at). */
+    data class MomodingHandsTrail(val messageId: String, val blockId: String, val lastScreen: String) : FlatChatItem() {
+        override val key = "trail:$messageId:$blockId"
+        override val contentType = "trail"
+    }
+
     /** momoding: "看过程 / 收起" under a finished turn that did something (keyed by the turn's last message). */
     data class MomodingStepsToggle(val messageId: String, val expanded: Boolean) : FlatChatItem() {
         override val key = "steps:$messageId"
@@ -714,6 +720,7 @@ internal fun buildFlatChatItems(
             is FlatChatItem.AssistantUsage -> item.copy(messageId = "${item.messageId}#$n")
             is FlatChatItem.MomodingRuleNotice -> item.copy(messageId = "${item.messageId}#$n")
             is FlatChatItem.MomodingStepsToggle -> item.copy(messageId = "${item.messageId}#$n")
+            is FlatChatItem.MomodingHandsTrail -> item.copy(messageId = "${item.messageId}#$n")
             is FlatChatItem.AssistantLegacyContent -> FlatChatItem.AssistantLegacyContent(
                 messageId = "${item.messageId}#$n",
                 content = item.content,
@@ -966,12 +973,16 @@ internal fun buildFlatChatItems(
                     messageId = message.id,
                     block = block,
                 )))
-                else -> if (showSteps) out.add(dedupe(FlatChatItem.AssistantToolUse( // momoding: a step
-                    messageId = message.id,
-                    block = block,
-                    allToolBlocks = toolPillBlocks,
-                    isLastCancelled = block.id == lastCancelledToolId,
-                )))
+                else -> if (showSteps) {
+                    out.add(dedupe(FlatChatItem.AssistantToolUse( // momoding: a step
+                        messageId = message.id,
+                        block = block,
+                        allToolBlocks = toolPillBlocks,
+                        isLastCancelled = block.id == lastCancelledToolId,
+                    )))
+                    // momoding: a hands run leaves its screenshots under the step
+                    handsLastScreen(block)?.let { out.add(dedupe(FlatChatItem.MomodingHandsTrail(message.id, block.id, it))) }
+                }
             }
         }
 
@@ -1054,3 +1065,12 @@ private fun stepsOnlyTurn(m: ChatMessage): Boolean =
         m.toolBlocks.isNotEmpty() && m.toolBlocks.all {
             it.kind == "tool_use" || it.kind == "thinking" || it.kind == "info" || (it.kind == "text" && it.content.isEmpty())
         }
+
+/** momoding: the last screenshot of a finished `momoding-hands run` step, from its JSON result. */
+internal fun handsLastScreen(block: AssistantBlock): String? {
+    if (block.toolStatus == ToolBlockStatus.RUNNING || block.toolStatus == ToolBlockStatus.STREAMING) return null
+    if (!block.toolArgs.contains("momoding-hands") || !block.content.contains("last_screen")) return null
+    return Regex(""""last_screen"\s*:\s*"([^"]+)"""").find(block.content)?.groupValues?.get(1)?.replace("\\/", "/")
+        ?.takeIf { it.startsWith("minis://") }
+}
+

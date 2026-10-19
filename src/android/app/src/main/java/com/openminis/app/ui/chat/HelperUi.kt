@@ -1462,6 +1462,7 @@ internal fun HelperTranscript(
                 is FlatChatItem.AssistantError -> InlineErrorBanner(item.error)
                 is FlatChatItem.MomodingRuleNotice -> app.momoding.ui.chat.RuleNoticeRow(item.labels) // momoding
                 is FlatChatItem.MomodingStepsToggle -> Unit // momoding: sub agent transcripts show their steps
+                is FlatChatItem.MomodingHandsTrail -> Unit // momoding
                 is FlatChatItem.AssistantUsage -> {
                     // Strip the "#n" the flattener appends to keep duplicate
                     // keys unique (ChatFlatItems dedupe): the toggle is keyed
