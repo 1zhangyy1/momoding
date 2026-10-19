@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -80,4 +81,30 @@ fun PopIn(id: String, fromStart: Boolean, content: @Composable () -> Unit) {
             transformOrigin = androidx.compose.ui.graphics.TransformOrigin(if (fromStart) 0f else 1f, .5f)
         },
     ) { content() }
+}
+
+/** iMessage's typing bubble: three dots taking turns to rise, in an agent-grey bubble. */
+@Composable
+fun TypingBubble() {
+    val tick = com.openminis.app.ui.components.rememberDecorativeTick()
+    val dot = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .55f)
+    Box(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp), contentAlignment = Alignment.TopStart) {
+        androidx.compose.foundation.layout.Row(
+            Modifier.clip(BubbleShape.agent(last = true)).background(Tones.agentBubble)
+                .padding(horizontal = 14.dp, vertical = 14.dp),
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(5.dp),
+        ) {
+            repeat(3) { i ->
+                Box(
+                    Modifier.graphicsLayer {
+                        val p = com.openminis.app.ui.components.decorativePingPong(
+                            com.openminis.app.ui.components.decorativePhase(tick.value, 900, i * 150),
+                        )
+                        translationY = -3.dp.toPx() * p
+                        alpha = .5f + .5f * p
+                    }.size(7.dp).clip(androidx.compose.foundation.shape.CircleShape).background(dot),
+                )
+            }
+        }
+    }
 }

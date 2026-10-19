@@ -4779,7 +4779,7 @@ fun ChatScreen(
                                     { viewModel.revertCompact() }
                                 } else null,
                             )
-                            is FlatChatItem.AssistantTyping -> TypingIndicator()
+                            is FlatChatItem.AssistantTyping -> app.momoding.ui.chat.TypingBubble() // momoding: iMessage-style dots
                             // [T-android-usage-capsule-time] Same composable the
                             // classic renderer uses, so the two paths cannot drift.
                             // [T-android-usage-capsule-style] Hidden until the
