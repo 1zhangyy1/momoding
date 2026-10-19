@@ -116,4 +116,5 @@
     <string name="mo_perm_settled_declined">沒有允許使用%1$s</string>
     <string name="mo_time_today">今天 %1$s</string>
     <string name="mo_time_yesterday">昨天 %1$s</string>
+    <string name="mo_composer_placeholder">有什麼事交給我…</string>
 </resources>

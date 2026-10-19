@@ -6777,10 +6777,8 @@ fun ChatScreen(
                                                 )
                                             } else {
                                                 Text(
-                                                    composerPlaceholderText(
-                                                        key.coerceAtLeast(0),
-                                                        soulName.name,
-                                                    ),
+                                                    // momoding: one plain line instead of upstream's rotating tips (@-mentions, the Return key)
+                                                    stringResource(R.string.mo_composer_placeholder),
                                                     color = MaterialTheme.colorScheme.onSurface
                                                         .copy(alpha = 0.25f),
                                                     fontSize = 16.5.sp * chatInputFontScale,
@@ -6887,6 +6885,8 @@ fun ChatScreen(
                             }
                         }
 
+                        // momoding: slash commands are a power tool (typing "/" still opens them); the button shows with the steps
+                        if (momodingShowSteps) {
                         Spacer(modifier = Modifier.width(8.dp))
 
                         // Left: "/" slash command button (iOS: italic /, bold)
@@ -6904,6 +6904,7 @@ fun ChatScreen(
                                 fontStyle = FontStyle.Italic,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                        }
                         }
 
                         // T187: Exit Edit Mode pill, only while editingMessageId
