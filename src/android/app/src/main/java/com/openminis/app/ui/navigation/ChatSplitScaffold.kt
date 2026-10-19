@@ -408,7 +408,9 @@ fun ChatSplitScaffold(
             // why the session id is used raw rather than wrapped in a data
             // class that would need its own Parcelize.
             initialDestinationHistory = buildList {
-                add(
+                // momoding: no list under the chat — Back from the one conversation leaves the app
+                // (AppNavigation's chat route) instead of stepping back to upstream's session list
+                if (selectedSessionId == null) add(
                     ThreePaneScaffoldDestinationItem(
                         ListDetailPaneScaffoldRole.List,
                         null,

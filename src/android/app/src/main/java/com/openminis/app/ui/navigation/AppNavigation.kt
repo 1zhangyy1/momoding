@@ -559,6 +559,14 @@ fun AppNavigation(
             arguments = listOf(navArgument("sessionId") { type = NavType.StringType }),
         ) { backStackEntry ->
             val sessionId = backStackEntry.arguments?.getString("sessionId") ?: return@composable
+            // momoding: the main chat sits on top of upstream's session list; Back there leaves the
+            // app (like Home) instead of uncovering a page Momoding has no use for. Registered here,
+            // after the NavHost's own handler and before the chat's sheets and menus, which still
+            // take Back first.
+            val momodingActivity = LocalContext.current as? android.app.Activity
+            androidx.activity.compose.BackHandler(
+                enabled = navController.previousBackStackEntry?.destination?.route == Routes.SESSION_LIST,
+            ) { momodingActivity?.moveTaskToBack(true) }
             ChatSplitScaffoldRoute(
                 initialSessionId = sessionId,
                 navController = navController,
