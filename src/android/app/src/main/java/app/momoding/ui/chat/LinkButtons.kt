@@ -62,7 +62,7 @@ fun LinkButtons(links: List<Pair<String, String>>, onOpen: (String) -> Unit) {
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
+        modifier = Modifier.padding(top = 6.dp, bottom = 6.dp),
     ) {
         links.forEach { (label, url) ->
             if (Works.isWork(url)) { WorkCard(label, url) { onOpen(url) }; return@forEach }

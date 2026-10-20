@@ -2835,7 +2835,7 @@ fun ChatScreen(
                 title = {
                   // momoding: face + name + one status line; the title and model rows only with steps shown
                   if (!momodingShowSteps) {
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Box(Modifier.fillMaxWidth().padding(start = 4.dp), contentAlignment = Alignment.CenterStart) {
                         app.momoding.ui.chat.MomodingHeader() // momoding: the live status is in the chat, opening the turn
                     }
                   } else {

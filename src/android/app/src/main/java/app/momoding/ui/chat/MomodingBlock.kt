@@ -115,7 +115,7 @@ private fun NextSteps(o: JSONObject) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Chips(items: List<String>, onPick: (String) -> Unit) {
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(Design.Space.Gap), verticalArrangement = Arrangement.spacedBy(Design.Space.Gap)) {
+    FlowRow(Modifier.padding(top = 2.dp), horizontalArrangement = Arrangement.spacedBy(Design.Space.Gap), verticalArrangement = Arrangement.spacedBy(Design.Space.Gap)) {
         items.forEach { s -> Pill(s, PillKind.SUGGEST) { onPick(s) } }
     }
 }

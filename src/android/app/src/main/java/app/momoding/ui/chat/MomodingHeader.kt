@@ -53,7 +53,10 @@ fun MomodingHeader() {
     val soul by SoulStore.cachedMetadata.collectAsState()
     val face = remember(soul.name) { Identity.face(context)?.asImageBitmap() }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (face != null) Image(face, contentDescription = null, modifier = Modifier.size(34.dp).clip(CircleShape))
+        // A fixed slot, so the name never shifts while the face loads
+        Box(Modifier.size(34.dp).clip(CircleShape)) {
+            if (face != null) Image(face, contentDescription = null, modifier = Modifier.size(34.dp))
+        }
         Column {
             Text(
                 soul.name.ifBlank { stringResource(R.string.app_name) },

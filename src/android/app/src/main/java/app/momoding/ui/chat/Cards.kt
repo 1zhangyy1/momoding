@@ -62,7 +62,8 @@ fun DecisionCard(content: @Composable ColumnScope.() -> Unit) {
 fun QuietCard(content: @Composable ColumnScope.() -> Unit) {
     Column(
         Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 4.dp, end = 40.dp)
-            .clip(RoundedCornerShape(Design.Radius.Panel)).background(Tones.agentBubble)
+            .clip(RoundedCornerShape(Design.Radius.Panel)).background(Tones.surface)
+            .border(1.dp, Tones.hairline, RoundedCornerShape(Design.Radius.Panel)) // outlined, not filled like a bubble
             .animateContentSize()
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -119,13 +120,13 @@ fun PillButton(text: String, primary: Boolean, enabled: Boolean = true, onClick:
 fun OptionRow(index: Int, text: String, picked: Boolean, settled: Boolean, onPick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().alpha(if (settled && !picked) .4f else 1f)
-            .clip(RoundedCornerShape(Design.Radius.Row)).background(Tones.surface)
+            .clip(RoundedCornerShape(Design.Radius.Row)).background(Tones.fill)
             .clickable(enabled = !settled, onClick = onPick)
             .heightIn(min = 44.dp).padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            Modifier.size(22.dp).clip(CircleShape).background(if (picked) Tones.action else Tones.fill),
+            Modifier.size(22.dp).clip(CircleShape).background(if (picked) Tones.action else Tones.surface),
             contentAlignment = Alignment.Center,
         ) {
             if (picked) androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
