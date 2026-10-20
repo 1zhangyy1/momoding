@@ -31,6 +31,10 @@ object Tones {
     /** The primary action: Momoding's deep green, readable with white text. */
     val action: Color = Color(0xFF2E7A12)
 
+    /** Green text and outlines on the page (next-step pills, live status): deep green, bright on dark. */
+    val actionText: Color
+        @Composable @ReadOnlyComposable get() = if (dark) Color(0xFF6CC24A) else Color(0xFF2E7A12)
+
     /** The person's bubble: Momoding green, a step stronger than the prototype's brand-soft so the turns read apart. */
     val userBubble: Color
         @Composable @ReadOnlyComposable get() = if (dark) Color(0xFF2A3D1F) else Color(0xFFDFF2CF)

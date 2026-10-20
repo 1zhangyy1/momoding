@@ -53,7 +53,7 @@ fun MetaLine(
         Box(Modifier.size(16.dp), contentAlignment = Alignment.Center) {
             when (mark) {
                 Mark.DONE -> Box(Modifier.size(14.dp).clip(CircleShape).background(Tones.action.copy(alpha = .14f)), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Filled.Check, contentDescription = null, tint = Tones.action, modifier = Modifier.size(10.dp))
+                    Icon(Icons.Filled.Check, contentDescription = null, tint = Tones.actionText, modifier = Modifier.size(10.dp))
                 }
                 Mark.UNDONE -> Box(Modifier.size(width = 8.dp, height = 1.5.dp).background(ChatColors.secondaryText))
                 Mark.NONE -> Unit
@@ -62,7 +62,7 @@ fun MetaLine(
         Text(text, fontSize = Design.Size.Caption, lineHeight = Design.Line.Caption, color = ChatColors.secondaryText, maxLines = 2, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(start = 6.dp).weight(1f, fill = false))
         if (action != null) Text(
-            " · $action", fontSize = Design.Size.Caption, lineHeight = Design.Line.Caption, color = Tones.action, fontWeight = FontWeight.Medium,
+            " · $action", fontSize = Design.Size.Caption, lineHeight = Design.Line.Caption, color = Tones.actionText, fontWeight = FontWeight.Medium,
             modifier = if (onAction != null) Modifier.clickable(onClick = onAction) else Modifier,
         )
         if (chevron != null) Chevron(open = chevron)

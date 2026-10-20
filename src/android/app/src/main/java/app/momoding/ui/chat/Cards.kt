@@ -73,7 +73,7 @@ fun QuietCard(content: @Composable ColumnScope.() -> Unit) {
 
 /** "Draft · to 张阿姨 · SMS": what the card is, then what it is about. */
 @Composable
-fun CardTitlebar(label: String, summary: String? = null, labelColor: Color = Tones.action) {
+fun CardTitlebar(label: String, summary: String? = null, labelColor: Color = Tones.actionText) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(label, fontSize = Design.Size.Note, fontWeight = FontWeight.SemiBold, color = labelColor)
         if (!summary.isNullOrBlank()) {

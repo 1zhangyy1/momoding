@@ -189,4 +189,5 @@
     <string name="mo_adv_permissions_sub">What the phone lets Momoding do</string>
     <string name="mo_adv_about">About</string>
     <string name="mo_adv_version_sub">Version and open-source licences</string>
+    <string name="mo_about_tagline">Momoding lives on your phone and gets things done for you.</string>
 </resources>

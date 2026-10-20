@@ -189,4 +189,5 @@
     <string name="mo_adv_permissions_sub">手机给 Momoding 的各项权限</string>
     <string name="mo_adv_about">关于</string>
     <string name="mo_adv_version_sub">版本号和开源许可</string>
+    <string name="mo_about_tagline">Momoding 住在你的手机上，替你把事情办完。</string>
 </resources>

@@ -98,7 +98,9 @@ object LaunchCycleBeacon {
 
         // Inspect previous record to classify the prior cycle.
         val previousVerdict = classifyPrevious(previousTail, context, now)
-        lastCycleWasCrash = previousVerdict.startsWith("crash_or_stall")
+        // momoding: only a real crash sends the next launch to the recovery page; a stall log alone
+        // (a slow frame earlier that day, then the system or an update ending the process) is not one
+        lastCycleWasCrash = previousVerdict.startsWith("crash_or_stall") && "crash-" in previousVerdict
         AppLogger.info(TAG, "launch verdict for previous cycle: $previousVerdict")
 
         // [T-android-perf-logging] When the previous cycle ended in

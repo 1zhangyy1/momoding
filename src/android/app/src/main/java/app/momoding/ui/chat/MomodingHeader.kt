@@ -51,7 +51,8 @@ import app.momoding.ui.Design
 fun MomodingHeader() {
     val context = LocalContext.current
     val soul by SoulStore.cachedMetadata.collectAsState()
-    val face = remember(soul.name) { Identity.face(context)?.asImageBitmap() }
+    val uiMode = androidx.compose.ui.platform.LocalConfiguration.current.uiMode
+    val face = remember(soul.name, uiMode) { Identity.face(context)?.asImageBitmap() }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         // A fixed slot, so the name never shifts while the face loads
         Box(Modifier.size(34.dp).clip(CircleShape)) {
@@ -90,14 +91,14 @@ fun LiveStatusLine(isStreaming: Boolean, replying: Boolean, request: String?, on
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(16.dp), contentAlignment = Alignment.Center) {
-            Box(Modifier.size(7.dp).graphicsLayer { alpha = pulse.value }.clip(CircleShape).background(Tones.action))
+            Box(Modifier.size(7.dp).graphicsLayer { alpha = pulse.value }.clip(CircleShape).background(Tones.actionText))
         }
         Text(
             status.text, fontSize = Design.Size.Caption, lineHeight = Design.Line.Caption, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            color = if (accent) Tones.action else ChatColors.secondaryText, fontWeight = if (accent) FontWeight.Medium else FontWeight.Normal,
+            color = if (accent) Tones.actionText else ChatColors.secondaryText, fontWeight = if (accent) FontWeight.Medium else FontWeight.Normal,
             modifier = Modifier.padding(start = 6.dp).weight(1f, fill = false),
         )
-        if (status.inBrowser) Chevron(tint = Tones.action)
+        if (status.inBrowser) Chevron(tint = Tones.actionText)
     }
 }
 

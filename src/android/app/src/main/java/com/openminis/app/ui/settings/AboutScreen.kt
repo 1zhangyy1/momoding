@@ -100,7 +100,7 @@ fun AboutScreen(onBack: () -> Unit) {
                 )
             }
             Text(
-                stringResource(R.string.about_minis_tagline),
+                stringResource(R.string.mo_about_tagline), // momoding: it talks to a cloud model, so not "fully local"
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,

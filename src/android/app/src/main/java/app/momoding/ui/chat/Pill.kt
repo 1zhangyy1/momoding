@@ -38,7 +38,7 @@ fun Pill(text: String, kind: PillKind, onClick: () -> Unit) {
     val link = kind == PillKind.LINK
     Row(
         Modifier.clip(shape).background(Tones.surface)
-            .border(BorderStroke(1.dp, if (link) Tones.hairline else Tones.action.copy(alpha = .45f)), shape)
+            .border(BorderStroke(1.dp, if (link) Tones.hairline else Tones.actionText.copy(alpha = .45f)), shape)
             .clickable(onClick = onClick)
             .heightIn(min = 34.dp)
             .padding(start = 12.dp, end = if (link) 10.dp else 12.dp, top = 6.dp, bottom = 6.dp),
@@ -48,7 +48,7 @@ fun Pill(text: String, kind: PillKind, onClick: () -> Unit) {
         Text(
             text, fontSize = Design.Size.Note, lineHeight = Design.Line.Note,
             fontWeight = if (link) FontWeight.Normal else FontWeight.Medium,
-            color = if (link) MaterialTheme.colorScheme.onSurface else Tones.action,
+            color = if (link) MaterialTheme.colorScheme.onSurface else Tones.actionText,
         )
         if (link) Icon(Icons.AutoMirrored.Filled.OpenInNew, null, Modifier.size(13.dp), tint = ChatColors.secondaryText)
     }
