@@ -60,6 +60,34 @@ object LocaleWrap {
     }
 
     /**
+     * The language the app's screens are shown in: the per-app language on Android 13+,
+     * the saved setting before that, else the system's. Services and overlays (the hands
+     * capsule) do not get it from an Activity, so they ask here.
+     */
+    fun uiLocale(base: Context): Locale {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val app = runCatching {
+                base.getSystemService(android.app.LocaleManager::class.java)?.applicationLocales
+            }.getOrNull()
+            if (app != null && !app.isEmpty) return app[0]
+        } else {
+            val code = base.getSharedPreferences(PREF_APPEARANCE, Context.MODE_PRIVATE)
+                .getString(KEY_LANGUAGE, "").orEmpty()
+            parseLocale(code)?.let { return it }
+        }
+        return android.content.res.Resources.getSystem().configuration.locales[0] ?: Locale.getDefault()
+    }
+
+    /** [base] with its strings in [uiLocale], for code that runs outside an Activity. */
+    fun uiContext(base: Context): Context {
+        val locale = uiLocale(base)
+        if (base.resources.configuration.locales[0] == locale) return base
+        val config = Configuration(base.resources.configuration)
+        config.setLocales(LocaleList(locale))
+        return base.createConfigurationContext(config)
+    }
+
+    /**
      * Parse a BCP-47-ish language tag the way our settings screen stores
      * it (just `en`, `zh`, `ja`, etc). For `zh-Hant` style tags we fall
      * back to `Locale.forLanguageTag`.

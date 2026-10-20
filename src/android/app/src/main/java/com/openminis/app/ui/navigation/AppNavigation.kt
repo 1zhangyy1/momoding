@@ -340,7 +340,9 @@ fun AppNavigation(
     // regardless of mode 1 / 2 / 0. Wait for the start destination to
     // settle into RESUMED before navigating; for mode 3 (Home) we don't
     // need to navigate at all so we can skip the wait entirely.
+    remember { app.momoding.home.LaunchGate.reset() } // momoding: a new Activity, a new launch decision
     LaunchedEffect(Unit) {
+        try {
         val hasDeepLink = initialDeepLink != null && initialDeepLink !is DeepLinkAction.Unknown
         if (hasDeepLink) return@LaunchedEffect
         val hasPendingShare =
@@ -423,7 +425,10 @@ fun AppNavigation(
             navController.navigate(target) {
                 popUpTo(Routes.SESSION_LIST) { inclusive = false }
             }
+            // momoding: keep the list blank until the transition to the chat has covered it
+            kotlinx.coroutines.delay(900)
         }
+        } finally { app.momoding.home.LaunchGate.decide() } // momoding
     }
 
     // T185: warm-share fallback — if a share lands while the user is sitting
@@ -550,6 +555,13 @@ fun AppNavigation(
         // them keeps working unchanged. On a phone the scaffold resolves to a
         // single pane, so those pushes look and behave exactly as before.
         composable(Routes.SESSION_LIST) {
+            // momoding: blank until the launch dispatcher has chosen; it nearly always leaves for the
+            // main chat, and upstream's list or its "add a provider" landing must not flash first
+            val launchDecided by app.momoding.home.LaunchGate.decided.collectAsState()
+            if (!launchDecided) {
+                androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
+                return@composable
+            }
             ChatSplitScaffoldRoute(
                 initialSessionId = null,
                 navController = navController,

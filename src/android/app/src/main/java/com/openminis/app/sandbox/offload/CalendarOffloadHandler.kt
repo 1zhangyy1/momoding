@@ -149,6 +149,16 @@ class CalendarOffloadHandler(private val context: Context) : NativeOffloadHandle
             args = args,
         )?.let { return it }
 
+        // momoding: an option list does not know (--from, --to…) used to be ignored, and the
+        // default range (the last 24 hours) came back as "no events" — reported as an empty day
+        val unknown = args.optionNames - LIST_OPTIONS - OffloadOutput.OUTPUT_FLAGS
+        if (unknown.isNotEmpty()) {
+            return NativeOffloadResult(
+                2,
+                "android-calendar list: unknown option ${unknown.joinToString { "--$it" }}. " +
+                    "Use --today, --next N (today and the days after), --days N (the past N days) or --start S --end E.\n",
+            )
+        }
         val (startMs, endMs) = resolveDateRange(args)
             ?: return NativeOffloadResult(
                 2,
@@ -669,6 +679,17 @@ class CalendarOffloadHandler(private val context: Context) : NativeOffloadHandle
             val s = cal.timeInMillis
             return s to (s + 24 * 60 * 60 * 1000L)
         }
+        // momoding: --next N is what an assistant usually wants: today and the N-1 days after it
+        args.getInt("next")?.let { days ->
+            val n = if (days <= 0) 1 else days
+            val cal = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+            }
+            val s = cal.timeInMillis
+            cal.add(Calendar.DAY_OF_MONTH, n)
+            return s to cal.timeInMillis
+        }
         args.getInt("days")?.let { days ->
             val n = if (days <= 0) 7 else days
             val cal = Calendar.getInstance().apply {
@@ -1113,13 +1134,17 @@ class CalendarOffloadHandler(private val context: Context) : NativeOffloadHandle
 
         private const val TAG = "CalendarOffload"
         private const val DEFAULT_LIMIT = 50
+        private val LIST_OPTIONS = setOf("today", "next", "days", "start", "end", "limit", "max", "calendar", "help", "h")
+
         private const val HELP = """android-calendar — list, create, update, delete events; query free/busy
                                     (mirrors apple-calendar)
 
 Usage:
   android-calendar                  Same as `list` (default subcommand)
-  android-calendar list [--today | --days N | --start S --end E]
+  android-calendar list [--today | --next N | --days N | --start S --end E]
                         [--limit N] [--calendar NAME]
+      --next N: today and the N-1 days after it (--next 2 = today and tomorrow)
+      --days N: the PAST N days, through now
   android-calendar create --title T --start S [--end E]
                          [--notes N] [--location L] [--all-day]
                          [--alarm <minutes>] [--calendar NAME | --calendar-id ID]

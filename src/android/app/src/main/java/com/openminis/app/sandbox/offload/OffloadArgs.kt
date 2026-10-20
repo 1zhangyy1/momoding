@@ -61,6 +61,9 @@ internal class OffloadArgs(argv: List<String>, booleanFlags: Set<String> = empty
         values = vs
     }
 
+    /** Every option given (flags and --key value), without the dashes. */
+    val optionNames: Set<String> get() = flags + values.keys
+
     fun hasFlag(vararg names: String): Boolean = names.any { it in flags }
     fun get(vararg names: String): String? = names.firstNotNullOfOrNull { values[it] }
     fun getInt(vararg names: String): Int? = get(*names)?.toIntOrNull()

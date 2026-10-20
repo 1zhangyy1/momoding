@@ -54,6 +54,8 @@ import java.util.concurrent.TimeUnit
  * second, full-screen window that never takes a touch, added first so the capsule stays on top.
  */
 class HandsCapsule(private val context: Context) {
+    /** Strings in the app's own language: this runs in a service, outside any Activity. */
+    private val ui: Context by lazy { com.openminis.app.i18n.LocaleWrap.uiContext(context) }
     private val main = Handler(Looper.getMainLooper())
     private val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private var root: LinearLayout? = null
@@ -88,7 +90,7 @@ class HandsCapsule(private val context: Context) {
         stage.mood(HandsStage.Mood.WORKING)
         ring?.turning(true)
         bars?.visibility = View.VISIBLE
-        titleView?.text = context.getString(R.string.mo_hands_step, step)
+        titleView?.text = ui.getString(R.string.mo_hands_step, step)
         detailView?.text = detail
         continueBtn?.visibility = View.GONE
         openBtn?.visibility = View.GONE
@@ -103,8 +105,8 @@ class HandsCapsule(private val context: Context) {
         stage.clear()
         ring?.turning(false)
         bars?.visibility = View.GONE
-        titleView?.text = context.getString(R.string.mo_hands_your_turn)
-        detailView?.text = reason.ifBlank { context.getString(R.string.mo_hands_your_turn_detail) }
+        titleView?.text = ui.getString(R.string.mo_hands_your_turn)
+        detailView?.text = reason.ifBlank { ui.getString(R.string.mo_hands_your_turn_detail) }
         continueBtn?.visibility = View.VISIBLE
         openBtn?.visibility = View.GONE
         allowBtn?.visibility = View.GONE
@@ -121,7 +123,7 @@ class HandsCapsule(private val context: Context) {
         stage.mood(HandsStage.Mood.WAITING)
         ring?.turning(false)
         bars?.visibility = View.GONE
-        titleView?.text = context.getString(R.string.mo_hands_approval_title)
+        titleView?.text = ui.getString(R.string.mo_hands_approval_title)
         detailView?.text = what
         continueBtn?.visibility = View.GONE
         openBtn?.visibility = if (decidable) View.GONE else View.VISIBLE
@@ -302,19 +304,19 @@ class HandsCapsule(private val context: Context) {
             maxLines = 2
         }
         texts.addView(title); texts.addView(detail)
-        val cont = button(context.getString(R.string.mo_hands_continue), ACCENT) { onContinue?.invoke() }.apply { visibility = View.GONE }
-        val open = button(context.getString(R.string.mo_hands_open), ACCENT) { onOpenApp?.invoke() }.apply { visibility = View.GONE }
-        val allow = button(context.getString(R.string.mo_hands_allow_once), ACCENT) { onAllow?.invoke() }.apply { visibility = View.GONE }
-        val deny = button(context.getString(R.string.mo_hands_deny), STOP_RED) { onDeny?.invoke() }.apply { visibility = View.GONE }
+        val cont = button(ui.getString(R.string.mo_hands_continue), ACCENT) { onContinue?.invoke() }.apply { visibility = View.GONE }
+        val open = button(ui.getString(R.string.mo_hands_open), ACCENT) { onOpenApp?.invoke() }.apply { visibility = View.GONE }
+        val allow = button(ui.getString(R.string.mo_hands_allow_once), ACCENT) { onAllow?.invoke() }.apply { visibility = View.GONE }
+        val deny = button(ui.getString(R.string.mo_hands_deny), STOP_RED) { onDeny?.invoke() }.apply { visibility = View.GONE }
         stopping = false
-        val stop = button(context.getString(R.string.mo_hands_stop), STOP_RED) {
+        val stop = button(ui.getString(R.string.mo_hands_stop), STOP_RED) {
             if (!stopping) {
                 stopping = true
                 onStop?.invoke()
                 // at once, not after the step in flight: the glow goes and the capsule says it is stopping
                 stage.setVisible(false)
                 ring?.turning(false); bars?.stop()
-                titleView?.text = context.getString(R.string.mo_hands_stopping)
+                titleView?.text = ui.getString(R.string.mo_hands_stopping)
                 detailView?.text = ""
                 it.visibility = View.GONE
             }

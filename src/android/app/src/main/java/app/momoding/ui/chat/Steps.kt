@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -43,7 +44,7 @@ import app.momoding.ui.Design
 @Composable
 fun StepsToggle(expanded: Boolean, steps: Int, seconds: Int, onToggle: () -> Unit) {
     val what = buildString {
-        append(stringResource(R.string.mo_steps_count, steps))
+        append(pluralStringResource(R.plurals.mo_steps_count, steps, steps))
         if (seconds > 0) append(" · ").append(duration(seconds))
     }
     MetaLine(what, Mark.NONE, onClick = onToggle, chevron = expanded) // no check: it is just what happened

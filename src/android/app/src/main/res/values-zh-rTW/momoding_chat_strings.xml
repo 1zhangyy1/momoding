@@ -149,7 +149,10 @@
     <string name="mo_computer_clear_files_detail">刪除它在這個對話裡做出來的檔案。對話本身不受影響。</string>
     <string name="mo_computer_confirm">清空</string>
     <string name="mo_computer_sign_out_confirm">登出</string>
-    <string name="mo_steps_count">做了 %1$d 步</string>
+    <plurals name="mo_steps_count">
+        <item quantity="one">做了 %1$d 步</item>
+        <item quantity="other">做了 %1$d 步</item>
+    </plurals>
     <string name="mo_steps_one">一個步驟</string>
     <string name="mo_steps_seconds">%1$d 秒</string>
     <string name="mo_steps_minutes">%1$d 分 %2$d 秒</string>
