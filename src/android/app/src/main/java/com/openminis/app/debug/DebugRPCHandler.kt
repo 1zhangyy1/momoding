@@ -239,6 +239,22 @@ class DebugRPCHandler(private val context: Context) {
                     textSteps = params.optBoolean("textSteps", false),
                 )
             }
+            // momoding: the hands' hidden display, for trying the background screen by hand (create / shot / release)
+            "momoding.display" -> {
+                when (params.optString("action", "create")) {
+                    "release" -> { app.momoding.hands.HandsDisplay.release(); JSONObject().put("ok", true) }
+                    "shot" -> {
+                        val id = app.momoding.hands.HandsDisplay.id ?: throw RPCException(-32602, "no display; create it first")
+                        val svc = com.openminis.app.accessibility.MinisAccessibilityService.getInstance() ?: throw RPCException(-32603, "accessibility service is off")
+                        val shot = svc.captureScreenshot(id)
+                        val bmp = shot.bitmap ?: return JSONObject().put("ok", false).put("error", shot.toString())
+                        val f = java.io.File(context.cacheDir, "hands-display.png")
+                        f.outputStream().use { bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+                        JSONObject().put("ok", true).put("path", f.absolutePath).put("w", bmp.width).put("h", bmp.height)
+                    }
+                    else -> JSONObject().put("displayId", app.momoding.hands.HandsDisplay.ensure(context) ?: -1)
+                }
+            }
             "momoding.reset" -> {
                 if (!params.optBoolean("confirm", false)) throw RPCException(-32602, "confirm must be true")
                 app.momoding.debug.TestReset.reset(context)
