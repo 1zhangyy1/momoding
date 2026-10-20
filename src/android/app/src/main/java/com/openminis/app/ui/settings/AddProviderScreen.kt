@@ -295,6 +295,7 @@ private fun ChooseProviderScreen(
                     subtitle = template.note.ifBlank { template.baseURL.removePrefix("https://") }, // momoding: what you get, not the address
                     icon = icon,
                     iconColor = iconColor,
+                    logo = app.momoding.providers.ProviderLogos.forTemplate(template.id), // momoding
                     onClick = { onSelectChatTemplate(template) },
                     showDivider = index < chatTemplates.size - 1,
                 )
@@ -345,6 +346,7 @@ private fun ChooseProviderScreen(
                     subtitle = stringResource(subtitleRes),
                     icon = icon,
                     iconColor = iconColor,
+                    logo = app.momoding.providers.ProviderLogos.forType(type), // momoding
                     onClick = { onSelect(type) },
                     showDivider = index < offeredTypes.size - 1,
                 )
@@ -375,6 +377,7 @@ private fun ChooseProviderScreen(
                     title = template.name,
                     subtitle = stringResource(capabilityRes),
                     icon = Icons.Outlined.GraphicEq,
+                    logo = app.momoding.providers.ProviderLogos.forVoice(template.id), // momoding
                     onClick = { onSelectVoiceTemplate(template) },
                     showDivider = index < templates.size - 1,
                 )

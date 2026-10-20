@@ -1,6 +1,7 @@
 package com.openminis.app.ui.settings
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -284,6 +285,7 @@ fun SettingsRow(
     iconColor: Color = MaterialTheme.colorScheme.primary,
     onClick: (() -> Unit)? = null,
     showChevron: Boolean = onClick != null,
+    logo: Int? = null, // momoding: a service's own logo on a white tile, in place of the coloured icon
     showDivider: Boolean = true,
     titleColor: Color = MaterialTheme.colorScheme.onSurface,
     trailing: (@Composable () -> Unit)? = null,
@@ -309,7 +311,16 @@ fun SettingsRow(
             // against the title — already centered, kept explicit.
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (icon != null) {
+            if (logo != null) { // momoding
+                Box(
+                    Modifier.size(30.dp).background(Color.White, RoundedCornerShape(8.dp))
+                        .border(0.5.dp, Color.Black.copy(alpha = .08f), RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(logo), null, Modifier.size(20.dp))
+                }
+                Spacer(Modifier.width(14.dp))
+            } else if (icon != null) {
                 Box(
                     modifier = Modifier
                         .size(30.dp)
