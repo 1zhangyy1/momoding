@@ -11,5 +11,5 @@
             android:inset="15%" />
     </foreground>
     <!-- T-android-themed-icons: monochrome layer (see day variant). -->
-    <monochrome android:drawable="@drawable/ic_launcher_monochrome" />
+    <!-- momoding: no monochrome layer, so launchers with Themed Icons still show Momoding in its own colours -->
 </adaptive-icon>

@@ -53,7 +53,7 @@ class AgentNotificationContentTest {
         assertEquals(R.drawable.ic_tool_globe, notificationSmallIconFor(AgentPhase.TOOL, "browser_use"))
         assertEquals(R.drawable.ic_tool_build, notificationSmallIconFor(AgentPhase.TOOL, "some_new_tool"))
         assertEquals(R.drawable.ic_tool_psychology, notificationSmallIconFor(AgentPhase.THINKING, null))
-        assertEquals(R.drawable.ic_launcher_monochrome, notificationSmallIconFor(AgentPhase.GENERATING, null))
+        assertEquals(R.drawable.ic_stat_momoding, notificationSmallIconFor(AgentPhase.GENERATING, null))
         assertEquals(R.drawable.ic_notification_completed, notificationSmallIconFor(AgentPhase.COMPLETED, "shell_execute"))
     }
 
