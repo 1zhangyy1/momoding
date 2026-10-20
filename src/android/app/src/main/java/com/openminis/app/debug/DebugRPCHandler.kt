@@ -236,7 +236,7 @@ class DebugRPCHandler(private val context: Context) {
                     maxSteps = if (params.has("maxSteps")) params.optInt("maxSteps") else null,
                     modelEntryId = params.optString("modelEntryId").ifBlank { null },
                     mode = params.optString("mode").ifBlank { null }, // momoding: vision | tree | hybrid, for comparing
-                    textSteps = params.optBoolean("textSteps", true),
+                    textSteps = params.optBoolean("textSteps", false),
                 )
             }
             "momoding.reset" -> {

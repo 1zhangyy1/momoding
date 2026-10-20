@@ -68,8 +68,12 @@ class HandsOperator(private val context: Context) {
          * the model asks) was the fastest and most accurate in the 2026-10-20 comparison, so it is the default.
          */
         val mode: HandsPrompt.Mode = HandsPrompt.Mode.TREE,
-        /** Steps without a screenshot go to the chat's text model (faster); false keeps every step on the screen model. */
-        val textSteps: Boolean = true,
+        /**
+         * Steps without a screenshot go to the chat's text model. Off by default: in the 2026-10-20
+         * comparison the chat model (DeepSeek, which thinks first) was slower per step than the screen
+         * model reading the same list, and sometimes answered nothing.
+         */
+        val textSteps: Boolean = false,
     )
 
     sealed class Outcome(val code: String) {
@@ -639,7 +643,16 @@ class HandsOperator(private val context: Context) {
         if (node.isPassword) return HANDOFF
         val hint = listOfNotNull(node.hintText?.toString(), node.contentDescription?.toString()).joinToString(" ")
         if (hint.isNotBlank() && TapWords.looksSecret(hint)) return HANDOFF
-        val ok = svc.setNodeText(node, action.text) || pasteInto(node, action.text) // momoding: paste when SET_TEXT is refused
+        if (svc.setNodeText(node, action.text)) return "typed “${action.text.take(60)}” into the field."
+        // A search bar that is only a button until tapped (the Phone app's "Search contacts"): tap it,
+        // then write into the real field that opens — what a person does, in one step instead of five.
+        if (el != null && clickNode(node, long = false)) {
+            Thread.sleep(700)
+            focusedField(svc)?.takeIf { !it.isPassword }?.let { real ->
+                if (svc.setNodeText(real, action.text) || pasteInto(real, action.text)) return "tapped the field and typed “${action.text.take(60)}” into it."
+            }
+        }
+        val ok = pasteInto(node, action.text) // momoding: paste when SET_TEXT is refused
         return if (ok) "typed “${action.text.take(60)}” into the field." else "the field did not accept text (ACTION_SET_TEXT failed); tap it and try again."
     }
 
