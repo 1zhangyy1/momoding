@@ -109,7 +109,15 @@ sealed class HandsAction {
         fun parse(reply: String): Parsed {
             val text = reply.trim()
             val idx = text.lastIndexOf("Action:")
-            if (idx < 0) throw FormatError("no `Action:` line")
+            if (idx < 0) {
+                // a model that answers with the JSON alone (no `Action:` label): take the last object or array in the reply
+                val obj = text.lastIndexOf("{\"action_type\"")
+                val arr = text.lastIndexOf("[{\"action_type\"")
+                // the array that holds the last object, else that object
+                val at = if (arr >= 0 && text.indexOf(']', obj) > obj) arr else obj
+                if (at < 0) throw FormatError("no `Action:` line")
+                return parse(text.substring(0, at) + "\nAction: " + text.substring(at))
+            }
             var thought = text.substring(0, idx).replace(Regex("<think>[\\s\\S]*?</think>"), "").trim()
             if (thought.startsWith("Thought:")) thought = thought.removePrefix("Thought:").trim()
             val tail = text.substring(idx + "Action:".length)

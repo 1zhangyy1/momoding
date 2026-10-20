@@ -17,7 +17,7 @@ object HandsPrompt {
             append("You see the screen only as a screenshot — there is no accessibility tree, no DOM — and you act on it with taps, swipes and typed text, like a careful person would.\n\n")
         } else {
             append("You see the screen as a numbered list of its elements, read from the accessibility tree — [12] button “Send”, [5] input “Message” = “current text”, [3] list — ")
-            append(if (mode == Mode.HYBRID) "and a screenshot when the list alone may not show enough. " else "and a screenshot only when you ask for one with look. ")
+            append(if (mode == Mode.HYBRID) "and a screenshot when the list alone may not show enough. " else "and a screenshot when the list is nearly empty or when you ask for one with look. ")
             append("Act on elements by their number: it is exact and fast. Use coordinates only for something that is on the screenshot but not in the list (a game, a map, a picture).\n\n")
         }
         append("## Task\n").append(task.trim()).append("\n\n")

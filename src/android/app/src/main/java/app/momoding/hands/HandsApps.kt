@@ -48,6 +48,22 @@ object HandsApps {
             ?: apps.firstOrNull { it.label.lowercase().contains(lower) }
             ?: apps.firstOrNull { lower.contains(it.label.lowercase()) && it.label.length >= 2 }
             ?: alias(lower)?.let { pkgs -> apps.firstOrNull { it.packageName in pkgs } }
+            // the phone's own apps go by different labels per maker and language ("Clock", "时钟"); their packages agree
+            ?: SYSTEM[lower]?.let { keys -> apps.firstOrNull { a -> keys.any { a.packageName.lowercase().contains(it) } } }
+    }
+
+    /** Names of the phone's own apps, in English and Chinese, to the words their package names carry. */
+    private val SYSTEM: Map<String, List<String>> = buildMap {
+        fun put(keys: List<String>, vararg names: String) = names.forEach { put(it, keys) }
+        put(listOf("deskclock", "clock", "alarm"), "clock", "alarm", "alarms", "时钟", "闹钟")
+        put(listOf("contacts"), "contacts", "contact", "people", "通讯录", "联系人")
+        put(listOf("messaging", "mms", "message"), "messages", "message", "sms", "短信", "信息", "简讯")
+        put(listOf("dialer", "phone", "incallui"), "phone", "dialer", "电话", "拨号")
+        put(listOf("calendar"), "calendar", "日历")
+        put(listOf("camera"), "camera", "相机")
+        put(listOf("gallery", "photos", "album"), "gallery", "photos", "相册", "图库")
+        put(listOf("calculator"), "calculator", "计算器")
+        put(listOf("files", "documentsui", "filemanager"), "files", "file manager", "文件", "文件管理")
     }
 
     /** A few names people use that are not the label on the icon. */

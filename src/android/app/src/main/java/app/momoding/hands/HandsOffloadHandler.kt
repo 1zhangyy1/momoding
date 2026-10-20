@@ -106,7 +106,7 @@ class HandsOffloadHandler(private val context: Context) : NativeOffloadHandler {
             sessionId = sessionId,
             agentName = Identity.name(context),
             language = context.resources.configuration.locales[0].getDisplayLanguage(Locale.ENGLISH).ifBlank { "the user's language" }, // momoding: the app's language, not the system's
-            mode = args.get("mode")?.let { m -> HandsPrompt.Mode.entries.firstOrNull { it.name.equals(m, ignoreCase = true) } } ?: HandsPrompt.Mode.HYBRID,
+            mode = args.get("mode")?.let { m -> HandsPrompt.Mode.entries.firstOrNull { it.name.equals(m, ignoreCase = true) } } ?: HandsPrompt.Mode.TREE,
             textSteps = args.get("text-steps") != "false",
         )
         // Taken atomically, so two runs arriving together cannot both start; given back when the run ends.

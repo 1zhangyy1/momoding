@@ -63,8 +63,11 @@ class HandsOperator(private val context: Context) {
         val sessionId: String? = null,
         val agentName: String = "nanoMuse",
         val language: String = "the user's language",
-        /** How the hands see the screen; HYBRID (element list, screenshot when it helps) unless a test asks otherwise. */
-        val mode: HandsPrompt.Mode = HandsPrompt.Mode.HYBRID,
+        /**
+         * How the hands see the screen. TREE (the element list; the screenshot when the list is thin or
+         * the model asks) was the fastest and most accurate in the 2026-10-20 comparison, so it is the default.
+         */
+        val mode: HandsPrompt.Mode = HandsPrompt.Mode.TREE,
         /** Steps without a screenshot go to the chat's text model (faster); false keeps every step on the screen model. */
         val textSteps: Boolean = true,
     )
@@ -192,7 +195,9 @@ class HandsOperator(private val context: Context) {
                 // too little in it, the last action went wrong, or the model asked to look
                 val tree = if (treeMode) ScreenTree.read(svc, context.packageName, screenRect) else null
                 val failedLast = lastResult?.let { r -> FAILED_WORDS.any { r.contains(it) } } == true
-                val wantShot = !treeMode || wantLook || (opts.mode == HandsPrompt.Mode.HYBRID && (tree!!.actionable < MIN_TREE_ELEMENTS || steps == 1 || failedLast))
+                // a thin list (a game, a canvas, an unlabelled app) always gets the picture; HYBRID also on the first look and after a miss
+                val wantShot = !treeMode || wantLook || tree!!.actionable < MIN_TREE_ELEMENTS ||
+                    (opts.mode == HandsPrompt.Mode.HYBRID && (steps == 1 || failedLast))
                 wantLook = false
                 var screenW = screenRect.width()
                 var screenH = screenRect.height()
@@ -220,17 +225,24 @@ class HandsOperator(private val context: Context) {
                 // no picture this step: the fast text model reads the list (earlier pictures are left out for it)
                 val stepProvider = if (jpeg == null && textProvider != null) textProvider else provider
                 val messages = buildMessages(turns, HandsPrompt.turnText(steps, lastResult, tree?.render(), jpeg != null), jpeg?.bytes, images = stepProvider === provider)
-                val reply = try {
-                    runBlocking {
-                        // Stop cancels the call in flight instead of waiting seconds for the model's answer
-                        val call = async(kotlinx.coroutines.Dispatchers.IO) {
-                            withTimeout(MODEL_TIMEOUT_MS) {
-                                stepProvider.sendMessage(messages, system, maxTokens = 1024, temperature = 0.0, thinkingLevel = ThinkingLevel.OFF).text
-                            }
+                // Stop cancels the call in flight instead of waiting seconds for the model's answer
+                fun ask(p: com.openminis.app.provider.LLMProvider, msgs: List<LLMMessage>): String? = runBlocking {
+                    val call = async(kotlinx.coroutines.Dispatchers.IO) {
+                        withTimeout(MODEL_TIMEOUT_MS) {
+                            p.sendMessage(msgs, system, maxTokens = 1024, temperature = 0.0, thinkingLevel = ThinkingLevel.OFF).text
                         }
-                        while (call.isActive && !stop.get()) kotlinx.coroutines.delay(100)
-                        if (stop.get()) { call.cancel(); null } else call.await()
-                    } ?: return finish(Outcome.Stopped(stopReason.get() ?: "stopped"), steps, runId, lastScreen, traceDir, log, model.label)
+                    }
+                    while (call.isActive && !stop.get()) kotlinx.coroutines.delay(100)
+                    if (stop.get()) { call.cancel(); null } else call.await()
+                }
+                val reply = try {
+                    val first = ask(stepProvider, messages) ?: return finish(Outcome.Stopped(stopReason.get() ?: "stopped"), steps, runId, lastScreen, traceDir, log, model.label)
+                    // the text model sometimes answers nothing at all: this step goes to the screen model instead
+                    if (first.isBlank() && stepProvider !== provider) {
+                        log += "step $steps: the text model gave no answer; asked the screen model"
+                        ask(provider, buildMessages(turns, HandsPrompt.turnText(steps, lastResult, tree?.render(), jpeg != null), jpeg?.bytes))
+                            ?: return finish(Outcome.Stopped(stopReason.get() ?: "stopped"), steps, runId, lastScreen, traceDir, log, model.label)
+                    } else first
                 } catch (t: Throwable) {
                     modelErrors++
                     AppLogger.warning(TAG, "model call failed: ${t.message}")

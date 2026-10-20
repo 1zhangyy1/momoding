@@ -138,4 +138,9 @@ Action: [{"action_type":"input_text","element":5,"text":"pizza"},{"action_type":
         val many = (1..9).joinToString(",") { """{"action_type":"navigate_back"}""" }
         assertEquals(HandsAction.MAX_BATCH, HandsAction.parse("Action: [$many]").actions.size)
     }
+
+    @Test fun `a bare JSON reply without the Action label is still read`() {
+        assertEquals(HandsAction.ElementTap(4, "OK"), HandsAction.parse("""I will confirm. {"action_type":"click","element":4,"target":"OK"}""").action)
+        assertEquals(2, HandsAction.parse("""[{"action_type":"input_text","element":1,"text":"a"},{"action_type":"keyboard_enter"}]""").actions.size)
+    }
 }
