@@ -11,11 +11,11 @@ class MomodingPromptTest {
         assertTrue(line, line.contains("2026-10-17 Saturday 23:12"))
     }
 
-    /** momoding: an English app with Chinese examples in the prompt replied in Chinese; the line names the app's language. */
-    @Test fun `now names the app language and asks to follow the person's`() {
-        val line = MomodingPrompt.now(LocalDateTime.of(2026, 10, 20, 9, 0), language = "English")
-        assertTrue(line, line.contains("The app's screens are in English"))
-        assertTrue(line, line.contains("language of the person's latest message"))
+    /** momoding: with Chinese examples in the prompt, English questions got Chinese replies; the line says to follow the person. */
+    @Test fun `now asks to reply in the person's language`() {
+        val line = MomodingPrompt.now(LocalDateTime.of(2026, 10, 20, 9, 0))
+        assertTrue(line, line.contains("Reply in the language the person writes in"))
         assertTrue(line, line.contains("link labels"))
+        assertTrue(line, line.contains("show the form, not the language"))
     }
 }

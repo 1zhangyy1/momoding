@@ -58,19 +58,18 @@ object MomodingPrompt {
             append("Before you tell the person how something stands now, check it again.\n")
             append(it.trim()).append("\n")
         }
-        append("\n").append(now(language = com.openminis.app.i18n.LocaleWrap.uiLocale(context).getDisplayLanguage(Locale.ENGLISH))).append("\n")
+        append("\n").append(now()).append("\n")
         append("\n").append(i.ladder.trim())
         i.addenda?.takeIf { it.isNotBlank() }?.let { append("\n\n").append(it.trim()) }
         if (i.askName) append("\n\n").append(app.momoding.memory.UserFile.ASK_NAME_ADDENDUM)
     }
 
     /** Date, weekday and time, so "today", "tomorrow" and "yesterday" come out right. */
-    internal fun now(at: LocalDateTime = LocalDateTime.now(), language: String = "English"): String {
+    internal fun now(at: LocalDateTime = LocalDateTime.now()): String {
         val tz = TimeZone.getDefault().id
         val day = at.format(DateTimeFormatter.ofPattern("yyyy-MM-dd EEEE HH:mm", Locale.ENGLISH))
         return "## Now\nIt is $day ($tz). Work out today, tomorrow and yesterday from this, not from your notes.\n" +
-            "The app's screens are in $language. Reply in the language of the person's latest message; if it is too short to tell, in $language. " +
-            "Everything you write is in that language: the reply, link labels, options, next steps and routine labels. " +
+            "Reply in the language the person writes in: the reply, link labels, options, next steps and routine labels. " +
             "The examples in these instructions are mostly Chinese; they show the form, not the language."
     }
 
