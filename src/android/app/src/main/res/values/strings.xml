@@ -1831,9 +1831,9 @@
     <string name="system_permissions_a11y_restricted_shizuku_sub">One tap — clears the flag without leaving Momoding</string>
     <string name="system_permissions_a11y_restricted_working">Allowing…</string>
     <string name="system_permissions_a11y_restricted_failed">Failed — use the manual steps below</string>
-    <string name="a11y_service_label">Momoding Accessibility</string>
-    <string name="a11y_service_description">Lets Momoding read on-screen UI structure, perform taps and gestures, and receive system events on behalf of Agents invoking android-a11y-cli.</string>
-    <string name="a11y_service_summary">UI-layer automation backend for Momoding</string>
+    <string name="a11y_service_label">Momoding · Use the screen</string>
+    <string name="a11y_service_description">Lets Momoding use other apps for you when a task needs them: it sees what is on the screen and taps, swipes and types. A capsule at the top shows each step with a Stop button. Sign-ins, passwords and codes are always left to you. You can turn this off here at any time.</string>
+    <string name="a11y_service_summary">Sees the screen and taps for you in other apps</string>
     <string name="back">Back</string>
 
     <!-- Welcome / onboarding (T332) -->

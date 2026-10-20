@@ -177,8 +177,14 @@ private fun PermissionCard(o: JSONObject, code: String) {
             AskState.choose(context, "perm.$id", "declined"); state = "declined"
             MomodingSend.send(context.getString(R.string.mo_perm_no_msg))
         } else if (need == "hands") {
-            runCatching { context.startActivity(app.momoding.deeplink.OwnScheme.intent(context, android.net.Uri.parse("minis://settings/hands"), 0)) }
-            AskState.choose(context, "perm.$id", "hands"); state = "hands"
+            // straight to the system switch that is missing (Momoding's own accessibility page where the phone allows)
+            val step = app.momoding.hands.HandsSetup.next(context)
+            if (step == app.momoding.hands.HandsSetup.Step.NONE) {
+                AskState.choose(context, "perm.$id", "granted"); state = "granted"; MomodingSend.send(carryOn)
+            } else {
+                app.momoding.hands.HandsSetup.open(context, step)
+                AskState.choose(context, "perm.$id", "hands"); state = "hands"
+            }
         } else {
             launcher.launch(permissions)
         }
@@ -187,14 +193,44 @@ private fun PermissionCard(o: JSONObject, code: String) {
         SettledLine(stringResource(R.string.mo_card_expired_line, stringResource(R.string.mo_perm_ask, label)), done = false)
         return
     }
+    // hands: back from the system page — carry on by itself once everything is on, else say what is left
+    var handsStep by remember(id) { mutableStateOf(if (need == "hands") app.momoding.hands.HandsSetup.next(context) else null) }
+    if (need == "hands" && state != "granted" && state != "declined") {
+        val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+        androidx.compose.runtime.DisposableEffect(owner, id) {
+            val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
+                if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                    handsStep = app.momoding.hands.HandsSetup.next(context)
+                    if (state == "hands" && handsStep == app.momoding.hands.HandsSetup.Step.NONE) {
+                        AskState.choose(context, "perm.$id", "granted"); state = "granted"; MomodingSend.send(carryOn)
+                    }
+                }
+            }
+            owner.lifecycle.addObserver(obs)
+            onDispose { owner.lifecycle.removeObserver(obs) }
+        }
+    }
     when (state) {
         "granted" -> SettledLine(stringResource(R.string.mo_perm_settled_granted, label))
         "declined" -> SettledLine(stringResource(R.string.mo_perm_settled_declined, label), done = false)
         else -> DecisionCard {
             CardTitle(stringResource(R.string.mo_perm_ask, label))
-            Text(stringResource(R.string.mo_perm_detail), fontSize = Design.Size.Note, lineHeight = Design.Line.Note, color = ChatColors.secondaryText)
+            val detail = when (handsStep) {
+                app.momoding.hands.HandsSetup.Step.ACCESSIBILITY -> stringResource(R.string.mo_perm_hands_a11y)
+                app.momoding.hands.HandsSetup.Step.UNLOCK -> stringResource(R.string.mo_perm_hands_unlock)
+                app.momoding.hands.HandsSetup.Step.OVERLAY -> stringResource(R.string.mo_perm_hands_overlay)
+                else -> stringResource(R.string.mo_perm_detail)
+            }
+            Text(detail, fontSize = Design.Size.Note, lineHeight = Design.Line.Note, color = ChatColors.secondaryText)
             CardActions {
-                if (state == "settings" || state == "hands") {
+                val left = handsStep
+                if (state == "hands" && left != null && left != app.momoding.hands.HandsSetup.Step.NONE) {
+                    // one more system page to go; the done button stays for phones where the check cannot see it
+                    PillButton(stringResource(R.string.mo_perm_done), primary = false) {
+                        AskState.choose(context, "perm.$id", "granted"); state = "granted"; MomodingSend.send(carryOn)
+                    }
+                    PillButton(stringResource(R.string.mo_perm_open), primary = true) { app.momoding.hands.HandsSetup.open(context, left) }
+                } else if (state == "settings" || state == "hands") {
                     PillButton(stringResource(R.string.mo_perm_done), primary = true) {
                         AskState.choose(context, "perm.$id", "granted"); state = "granted"; MomodingSend.send(carryOn)
                     }

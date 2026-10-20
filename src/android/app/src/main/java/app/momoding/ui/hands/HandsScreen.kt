@@ -167,7 +167,7 @@ fun HandsScreen(onBack: () -> Unit, onOpenProviders: () -> Unit, onOpenHandsMode
                     subtitle = stringResource(R.string.system_permissions_a11y_restricted_manual_sub),
                     icon = Icons.Outlined.Accessibility,
                     iconColor = Color(0xFFFF9500),
-                    onClick = { (context as? android.app.Activity)?.let { com.openminis.app.power.PowerOptimizationManager.openAppDetailsSettings(it) } },
+                    onClick = { app.momoding.hands.HandsSetup.openAppDetails(context) },
                     showDivider = false,
                 )
             }
@@ -236,13 +236,7 @@ private fun RuleRow(text: String, last: Boolean = false) {
     SettingsRow(title = text, showDivider = !last, minHeight = 48.dp)
 }
 
-private fun openAccessibilitySettings(context: Context) {
-    try {
-        context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-    } catch (_: Throwable) {
-        runCatching { context.startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-    }
-}
+private fun openAccessibilitySettings(context: Context) = app.momoding.hands.HandsSetup.openAccessibility(context)
 
 /** The sentence for how the screen model was arrived at ([Hands.screenModel]). */
 private fun whyText(why: Hands.Why): Int = when (why) {
@@ -254,15 +248,7 @@ private fun whyText(why: Hands.Why): Int = when (why) {
     Hands.Why.ANY -> R.string.mo_hands_why_any
 }
 
-private fun openOverlaySettings(context: Context) {
-    try {
-        context.startActivity(
-            Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-        )
-    } catch (_: Throwable) {
-        runCatching { context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-    }
-}
+private fun openOverlaySettings(context: Context) = app.momoding.hands.HandsSetup.openOverlay(context)
 
 
 /** Choose the screen model: automatic, or one of the few that do well on screens (one per family). */

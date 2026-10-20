@@ -1666,9 +1666,9 @@
     <string name="system_permissions_a11y_restricted_shizuku_sub">一鍵解除，無需離開 Momoding</string>
     <string name="system_permissions_a11y_restricted_working">正在解除…</string>
     <string name="system_permissions_a11y_restricted_failed">解除失敗 — 請依下方步驟手動操作</string>
-    <string name="a11y_service_label">Momoding 無障礙</string>
-    <string name="a11y_service_description">讓 Momoding 代表呼叫 android-a11y-cli 的 Agent 讀取螢幕上的 UI 結構、執行點擊與手勢，並接收系統事件。</string>
-    <string name="a11y_service_summary">Momoding 的 UI 層自動化後端</string>
+    <string name="a11y_service_label">Momoding 操作螢幕</string>
+    <string name="a11y_service_description">開啟後，你交代的事需要用到別的 App 時，Momoding 能看到螢幕上的內容，替你點按、滑動和輸入。操作時螢幕頂部有個膠囊，顯示每一步和「停止」按鈕；登入、密碼、驗證碼永遠留給你自己輸入。隨時可以在這裡關掉。</string>
+    <string name="a11y_service_summary">替你在其他 App 裡看螢幕、點按和輸入</string>
     <string name="back">返回</string>
     <string name="sessionlist_welcome_title">歡迎使用 Momoding</string>
     <string name="sessionlist_welcome_subtitle">你的第一個端側 Agent 即將就緒。</string>
