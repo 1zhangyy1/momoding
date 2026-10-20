@@ -629,6 +629,13 @@ fun ChatScreen(
     val revealedUsageIds by viewModel.revealedUsageIds.collectAsState()
     val hasOlderMessages by viewModel.hasOlderMessages.collectAsState()
     val isStreaming by viewModel.isStreaming.collectAsState()
+    // momoding: what the live status line opening a running turn says (app.momoding.ui.chat.LiveStatusLine)
+    val momodingReplying by remember(viewModel) {
+        viewModel.streamingById.map { stream ->
+            stream.values.any { d -> !d.isAwaitingModelResponse && d.toolBlocks.lastOrNull()?.let { it.kind == "text" && it.content.isNotEmpty() } == true }
+        }.distinctUntilChanged()
+    }.collectAsState(initial = false)
+    val momodingRequest = remember(messages) { app.momoding.ui.chat.requestBrief(messages.lastOrNull { it.role == "user" }?.content) }
     val canResume by viewModel.canResume.collectAsState()
     // [T-android-context-usage-hint] Context-window pressure. `contextUsage`
     // is live (drives the glow on every usage chunk); `contextUsageHint` is
@@ -2828,14 +2835,8 @@ fun ChatScreen(
                 title = {
                   // momoding: face + name + one status line; the title and model rows only with steps shown
                   if (!momodingShowSteps) {
-                    val replying by remember(viewModel) {
-                        viewModel.streamingById.map { stream ->
-                            stream.values.any { d -> !d.isAwaitingModelResponse && d.toolBlocks.lastOrNull()?.let { it.kind == "text" && it.content.isNotEmpty() } == true }
-                        }.distinctUntilChanged()
-                    }.collectAsState(initial = false)
-                    val request = remember(messages) { app.momoding.ui.chat.requestBrief(messages.lastOrNull { it.role == "user" }?.content) }
                     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        app.momoding.ui.chat.MomodingHeader(isStreaming = isStreaming, replying = replying, request = request, onOpenBrowser = { viewModel.toggleBrowserSheet() })
+                        app.momoding.ui.chat.MomodingHeader() // momoding: the live status is in the chat, opening the turn
                     }
                   } else {
                     // iOS-style centered layout: "Minis" + group row + provider·model row
@@ -4840,7 +4841,10 @@ fun ChatScreen(
                             is FlatChatItem.MomodingRuleNotice -> app.momoding.ui.chat.RuleNoticeRow(item.labels) // momoding
                             is FlatChatItem.MomodingTimeDivider -> app.momoding.ui.chat.TimeDivider(item.at) // momoding
                             is FlatChatItem.MomodingHandsTrail -> app.momoding.ui.chat.HandsTrail(item.lastScreen, viewModel.currentSessionId, onOpen = urlClickHandler) // momoding
-                            is FlatChatItem.MomodingStepsToggle -> app.momoding.ui.chat.StepsToggle(item.expanded, item.steps, item.seconds) { // momoding
+                            is FlatChatItem.MomodingStepsToggle -> if (item.live) app.momoding.ui.chat.LiveStatusLine( // momoding: the running turn's status, in place
+                                isStreaming = isStreaming, replying = momodingReplying, request = momodingRequest,
+                                onOpenBrowser = { viewModel.toggleBrowserSheet() },
+                            ) else app.momoding.ui.chat.StepsToggle(item.expanded, item.steps, item.seconds) { // momoding
                                 val id = item.messageId.substringBefore('#')
                                 momodingExpandedTurns = if (id in momodingExpandedTurns) momodingExpandedTurns - id else momodingExpandedTurns + id
                             }

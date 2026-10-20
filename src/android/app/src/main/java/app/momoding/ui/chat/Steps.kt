@@ -46,7 +46,7 @@ fun StepsToggle(expanded: Boolean, steps: Int, seconds: Int, onToggle: () -> Uni
         append(stringResource(R.string.mo_steps_count, steps))
         if (seconds > 0) append(" · ").append(duration(seconds))
     }
-    MetaLine(what, Mark.DONE, onClick = onToggle, chevron = expanded)
+    MetaLine(what, Mark.NONE, onClick = onToggle, chevron = expanded) // no check: it is just what happened
 }
 
 /** One step, in the words the model gave it, on the rail under the summary. Read-only: no detail viewer (kept simple). */

@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.dp
 import app.momoding.ui.Design
 import app.momoding.ui.Tones
 
-/** Grey: something to say next (a suggested step, an example). Outlined: somewhere to go (在日历里看). */
+/** Green-outlined: something to say next (a suggested step, an example). Grey-outlined: somewhere to go (在日历里看). */
 enum class PillKind { SUGGEST, LINK }
 
 /** The one pill button in the chat; the same height, padding and type everywhere it appears. */
@@ -25,9 +25,12 @@ enum class PillKind { SUGGEST, LINK }
 fun Pill(text: String, kind: PillKind, onClick: () -> Unit) {
     val shape = CircleShape
     Text(
-        text, fontSize = Design.Size.Label, lineHeight = Design.Line.Label, color = MaterialTheme.colorScheme.onSurface,
+        text, fontSize = Design.Size.Label, lineHeight = Design.Line.Label,
+        color = if (kind == PillKind.SUGGEST) Tones.action else MaterialTheme.colorScheme.onSurface,
         modifier = Modifier.clip(shape)
-            .then(if (kind == PillKind.LINK) Modifier.background(Tones.surface).border(BorderStroke(1.dp, Tones.hairline), shape) else Modifier.background(Tones.fill))
+            // a suggestion is green-outlined so it never reads as one of Momoding's grey bubbles
+            .then(if (kind == PillKind.LINK) Modifier.background(Tones.surface).border(BorderStroke(1.dp, Tones.hairline), shape)
+                else Modifier.background(Tones.surface).border(BorderStroke(1.dp, Tones.action.copy(alpha = .45f)), shape))
             .clickable(onClick = onClick)
             .heightIn(min = 38.dp).wrapContentHeight()
             .padding(horizontal = Design.Space.Gutter, vertical = 9.dp),

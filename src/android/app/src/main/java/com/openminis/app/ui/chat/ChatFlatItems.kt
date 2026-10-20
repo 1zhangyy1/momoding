@@ -499,7 +499,7 @@ internal sealed class FlatChatItem {
     }
 
     /** momoding: "✓ 做了 3 步 · 18 秒" opening a finished turn that did something (keyed by the turn's last message). */
-    data class MomodingStepsToggle(val messageId: String, val expanded: Boolean, val steps: Int = 0, val seconds: Int = 0) : FlatChatItem() {
+    data class MomodingStepsToggle(val messageId: String, val expanded: Boolean, val steps: Int = 0, val seconds: Int = 0, val live: Boolean = false) : FlatChatItem() {
         override val key = "steps:$messageId"
         override val contentType = "steps"
     }
@@ -808,7 +808,10 @@ internal fun buildFlatChatItems(
         // tapped, the steps unfold right under it, in order, before the reply
         if (!showStepsAll && message.role == "assistant" && (idx == 0 || messages[idx - 1].role != "assistant")) {
             val last = turnLast[idx]
-            if (last >= 0 && !messages[last].isStreaming && turnHasSteps(last)) {
+            if (last >= 0 && messages[last].isStreaming) {
+                // still running: the same line, live — what it is doing now (it folds into the summary)
+                out.add(dedupe(FlatChatItem.MomodingStepsToggle(messages[last].id, expanded = false, live = true)))
+            } else if (last >= 0 && turnHasSteps(last)) {
                 val blocks = (idx..last).flatMap { messages[it].toolBlocks }.filter { it.kind == "tool_use" }
                 val started = messages.getOrNull(idx - 1)?.sentAt ?: blocks.minOfOrNull { it.startTimeMs }?.takeIf { it > 0 }
                 val seconds = ((messages[last].completedAt ?: 0L) - (started ?: 0L)).takeIf { started != null && it > 0 }?.div(1000)?.toInt() ?: 0
@@ -1024,7 +1027,8 @@ internal fun buildFlatChatItems(
                 else -> showSteps // tool_use pills render immediately — when steps are shown (momoding)
             }
         }
-        if (message.isStreaming && (!hasVisibleContent || message.isAwaitingModelResponse)) {
+        // momoding: with the steps hidden the live status line opening the turn says it is working
+        if (showStepsAll && message.isStreaming && (!hasVisibleContent || message.isAwaitingModelResponse)) {
             out.add(dedupe(FlatChatItem.AssistantTyping(message.id)))
         }
 
