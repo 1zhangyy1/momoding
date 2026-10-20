@@ -291,7 +291,7 @@
     <string name="settings_feedback_telegram">Feedback (Telegram)</string>
     <string name="settings_feedback_email">Feedback (Email)</string>
     <string name="about_title">Tungkol Dito</string>
-    <string name="about_minis_tagline">Ang Momoding ay Agent sa iyong device na ganap na lokal at ganap na pribado.</string>
+    <string name="about_minis_tagline">Nakatira ang Momoding sa iyong phone: nananatili sa device ang iyong data, at tanging kailangan ng isang gawain ang ipinapadala sa modelong pinili mo.</string>
     <string name="about_links">Mga Link</string>
     <string name="about_github_repository">GitHub Repository</string>
     <string name="about_version_format">Bersyon %1$s (%2$s)</string>

@@ -561,9 +561,7 @@ object CrashFrequencyDetector {
             column.addView(tv)
         }
 
-        addRow(R.string.crash_freq_method_email) {
-            dispatchZippedShare(activity, files, emailOnly = true, onClosed)
-        }
+        // momoding: no email row; share and save leave the destination to the user
         addRow(R.string.crash_freq_method_share) {
             dispatchZippedShare(activity, files, emailOnly = false, onClosed)
         }
@@ -639,15 +637,9 @@ object CrashFrequencyDetector {
             val uri = FileProvider.getUriForFile(ctx, authority, zip)
             val date = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date())
             val subject = ctx.getString(R.string.crash_freq_email_subject, date)
-            // Project crash-report inbox — a public alias, safe to ship in
-            // open-source builds (replaced the maintainer's personal email).
-            val recipient = "dev@openminis.app"
-
-            val launched: Boolean = if (emailOnly) {
-                tryLaunchMailto(ctx, recipient, subject, uri)
-            } else {
-                tryLaunchShare(ctx, uri, subject)
-            }
+            // momoding: no crash inbox of our own, and upstream's (dev@openminis.app) is not where
+            // Momoding reports belong, so always share: the user picks where the logs go.
+            val launched: Boolean = tryLaunchShare(ctx, uri, subject)
             if (!launched) {
                 // Fallback path: generic ACTION_SEND chooser. Works
                 // everywhere even if no email app is installed (file

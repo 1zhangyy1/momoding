@@ -193,4 +193,5 @@
     <string name="mo_perm_hands_a11y">下一步：在打开的系统页里把 Momoding 的开关打开，再回来。</string>
     <string name="mo_perm_hands_unlock">开关是灰的：在打开的应用详情页，点右上角 ⋮ → 允许受限设置，再回来。</string>
     <string name="mo_perm_hands_overlay">还差一步：允许 Momoding 显示在其他应用上层，再回来。</string>
+    <string name="mo_feedback_discussions">到 GitHub 讨论区聊聊</string>
 </resources>

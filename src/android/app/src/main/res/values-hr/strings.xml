@@ -330,7 +330,7 @@
     <string name="settings_feedback_telegram">Povratne informacije (Telegram)</string>
     <string name="settings_feedback_email">Povratne informacije (e-pošta)</string>
     <string name="about_title">O aplikaciji</string>
-    <string name="about_minis_tagline">Momoding je vaš potpuno lokalni, potpuno privatni Agent na uređaju.</string>
+    <string name="about_minis_tagline">Momoding živi na vašem telefonu: podaci ostaju na uređaju, a modelu koji odaberete šalje se samo ono što zadatak treba.</string>
     <string name="about_links">Poveznice</string>
     <string name="about_github_repository">GitHub repozitorij</string>
     <string name="about_version_format">Verzija %1$s (%2$s)</string>

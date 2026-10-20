@@ -302,7 +302,7 @@
     <string name="settings_feedback_telegram">意見回饋（Telegram）</string>
     <string name="settings_feedback_email">意見回饋（電子郵件）</string>
     <string name="about_title">關於</string>
-    <string name="about_minis_tagline">Momoding 是完全在本機執行、完全私密的裝置端 Agent。</string>
+    <string name="about_minis_tagline">Momoding 住在你的手機上：資料留在手機裡，只把辦事需要的內容傳給你選的模型。</string>
     <string name="about_links">連結</string>
     <string name="about_github_repository">GitHub 儲存庫</string>
     <string name="about_version_format">版本 %1$s（%2$s）</string>

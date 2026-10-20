@@ -292,7 +292,7 @@
     <string name="settings_feedback_telegram">Feedback (Telegram)</string>
     <string name="settings_feedback_email">Feedback (e-mail)</string>
     <string name="about_title">Despre</string>
-    <string name="about_minis_tagline">Momoding este Agentul tău complet local și complet privat, care rulează pe dispozitiv.</string>
+    <string name="about_minis_tagline">Momoding locuiește în telefonul tău: datele rămân pe dispozitiv și doar ce are nevoie o sarcină ajunge la modelul ales de tine.</string>
     <string name="about_links">Linkuri</string>
     <string name="about_github_repository">Depozit GitHub</string>
     <string name="about_version_format">Versiunea %1$s (%2$s)</string>

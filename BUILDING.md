@@ -1,4 +1,6 @@
-# Building Minis
+# Building Momoding
+
+> Momoding is a fork of [OpenMinis](https://github.com/OpenMinis/OpenMinis); this guide is upstream's, kept close to it. Momoding ships Android only, so the iOS sections describe upstream's app. The debug build installs as `app.momoding.dev`, beside a release build.
 
 Minis ships a full Linux sandbox inside the app, so a first build is not just
 "open the project and press Run": the native dependencies (iSH on iOS, PRoot on
@@ -18,8 +20,8 @@ Clone with submodules — the iSH and PRoot forks are submodules, and a clone
 without them will fail at the native build step:
 
 ```sh
-git clone --recurse-submodules https://github.com/OpenMinis/OpenMinis.git
-cd OpenMinis
+git clone --recurse-submodules https://github.com/1zhangyy1/momoding.git
+cd momoding
 
 # Already cloned without --recurse-submodules?
 git submodule update --init --recursive

@@ -193,4 +193,5 @@
     <string name="mo_perm_hands_a11y">Next: turn on Momoding\'s switch in the system page that opens, then come back.</string>
     <string name="mo_perm_hands_unlock">The switch is greyed out: on the app page that opens, tap ⋮ (top right) → Allow restricted settings, then come back.</string>
     <string name="mo_perm_hands_overlay">One more: allow Momoding to display over other apps, then come back.</string>
+    <string name="mo_feedback_discussions">GitHub Discussions</string>
 </resources>

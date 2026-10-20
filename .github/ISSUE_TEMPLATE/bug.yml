@@ -1,0 +1,43 @@
+name: 🐛 它没办好 / Something went wrong
+description: 办错了、卡住了、闪退了、说的话不对劲
+labels: ["bug"]
+body:
+  - type: textarea
+    id: asked
+    attributes:
+      label: 你交代了什么 / What you asked
+      placeholder: 例：明天下午 3 点提醒我给王总回电话
+    validations:
+      required: true
+  - type: textarea
+    id: happened
+    attributes:
+      label: 它做了什么，你期望它做什么 / What happened vs. what you expected
+      description: 截图或录屏最有用。点回复上方的"做了 N 步"可以看到它的过程，也可以截进来。
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Momoding 版本 / App version
+      description: 设置 → 关于
+      placeholder: 1.0.0-preview.1
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: 手机型号和 Android 版本 / Device & Android version
+      placeholder: 小米 14，HyperOS 2 / Android 15
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: 用的模型 / Model provider
+      placeholder: DeepSeek V4.1 Flash
+  - type: textarea
+    id: more
+    attributes:
+      label: 还有什么 / Anything else
+      description: 能稳定复现吗？是不是开了"动手操作屏幕"？

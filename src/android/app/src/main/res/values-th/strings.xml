@@ -292,7 +292,7 @@
     <string name="settings_feedback_telegram">ข้อเสนอแนะ (Telegram)</string>
     <string name="settings_feedback_email">ข้อเสนอแนะ (อีเมล)</string>
     <string name="about_title">เกี่ยวกับ</string>
-    <string name="about_minis_tagline">Momoding คือ Agent บนอุปกรณ์ของคุณที่ทำงานในเครื่องทั้งหมดและเป็นส่วนตัวอย่างสมบูรณ์</string>
+    <string name="about_minis_tagline">Momoding อยู่ในโทรศัพท์ของคุณ ข้อมูลอยู่บนเครื่อง และส่งเฉพาะสิ่งที่งานต้องใช้ไปยังโมเดลที่คุณเลือก</string>
     <string name="about_links">ลิงก์</string>
     <string name="about_github_repository">GitHub Repository</string>
     <string name="about_version_format">เวอร์ชัน %1$s (%2$s)</string>

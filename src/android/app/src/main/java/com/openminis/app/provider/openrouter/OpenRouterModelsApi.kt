@@ -101,8 +101,8 @@ object OpenRouterModelsApi {
         val request = Request.Builder()
             .url(url)
             .header("Authorization", "Bearer $apiKey")
-            .header("HTTP-Referer", "https://github.com/OpenMinis/OpenMinis")
-            .header("X-Title", "Minis App")
+            .header("HTTP-Referer", "https://github.com/1zhangyy1/momoding")
+            .header("X-Title", "Momoding")
             // [T-android-default-ua] brand outbound /api/v1/models request.
             .applyUserAgentOverride(null)
             .build()

@@ -296,7 +296,7 @@
     <string name="settings_feedback_telegram">Masukan (Telegram)</string>
     <string name="settings_feedback_email">Masukan (Email)</string>
     <string name="about_title">Tentang</string>
-    <string name="about_minis_tagline">Momoding adalah Agen di perangkat Anda yang sepenuhnya lokal dan sepenuhnya privat.</string>
+    <string name="about_minis_tagline">Momoding tinggal di ponsel Anda: data Anda tetap di perangkat, dan hanya yang dibutuhkan tugas yang dikirim ke model pilihan Anda.</string>
     <string name="about_links">Tautan</string>
     <string name="about_github_repository">Repositori GitHub</string>
     <string name="about_version_format">Versi %1$s (%2$s)</string>

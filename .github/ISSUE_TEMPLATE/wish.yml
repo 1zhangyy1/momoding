@@ -1,0 +1,21 @@
+name: ✨ 希望它能办 / I wish it could…
+description: 你希望交给它的一件事，或者一处可以更好的地方
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: task
+    attributes:
+      label: 你想交代给它的事 / What you'd like to hand off
+      description: 越具体越好：在什么场景下、你现在是怎么做的、哪里麻烦。
+      placeholder: 例：每次收到快递取件码短信，我都要自己记下来……
+    validations:
+      required: true
+  - type: textarea
+    id: ideal
+    attributes:
+      label: 理想中它怎么做 / How it would ideally work
+  - type: dropdown
+    id: freq
+    attributes:
+      label: 这件事多常发生 / How often
+      options: ["每天好几次 / Several times a day", "每天 / Daily", "每周 / Weekly", "偶尔 / Occasionally"]

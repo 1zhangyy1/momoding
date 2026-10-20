@@ -983,8 +983,8 @@ class OpenRouterVoiceProvider(providerId: String, baseURL: String, apiKey: Strin
     /** Same attribution headers the models request already sends. */
     override fun applyVoiceAuth(builder: Request.Builder) {
         super.applyVoiceAuth(builder)
-        builder.header("HTTP-Referer", "https://github.com/OpenMinis/OpenMinis")
-        builder.header("X-Title", "Minis App")
+        builder.header("HTTP-Referer", "https://github.com/1zhangyy1/momoding")
+        builder.header("X-Title", "Momoding")
     }
 
     // -- ASR ------------------------------------------------------------------

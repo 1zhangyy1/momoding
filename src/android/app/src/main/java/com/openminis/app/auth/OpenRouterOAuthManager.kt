@@ -166,8 +166,8 @@ object OpenRouterOAuthManager {
             .url(KEYS_URL)
             .post(body.toString().toRequestBody("application/json".toMediaType()))
             .header("Content-Type", "application/json")
-            .header("HTTP-Referer", "https://github.com/OpenMinis/OpenMinis")
-            .header("X-Title", "Minis App")
+            .header("HTTP-Referer", "https://github.com/1zhangyy1/momoding")
+            .header("X-Title", "Momoding")
             .build()
 
         val response = client.newCall(request).execute()

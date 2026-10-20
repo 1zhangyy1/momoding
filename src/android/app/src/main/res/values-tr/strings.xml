@@ -291,7 +291,7 @@
     <string name="settings_feedback_telegram">Geri Bildirim (Telegram)</string>
     <string name="settings_feedback_email">Geri Bildirim (E-posta)</string>
     <string name="about_title">Hakkında</string>
-    <string name="about_minis_tagline">Momoding, cihazınızda çalışan tamamen yerel ve tamamen gizli Agent\'ınızdır.</string>
+    <string name="about_minis_tagline">Momoding telefonunda yaşar: verilerin cihazda kalır, seçtiğin modele yalnızca görevin gerektirdiği içerik gönderilir.</string>
     <string name="about_links">Bağlantılar</string>
     <string name="about_github_repository">GitHub Deposu</string>
     <string name="about_version_format">Sürüm %1$s (%2$s)</string>

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 想法、用法、提问 / Ideas & questions
+    url: https://github.com/1zhangyy1/momoding/discussions
+    about: 不确定是不是 bug，或者想分享你怎么用 Momoding，来这里聊。
+  - name: 🔒 安全问题 / Security issue
+    url: https://github.com/1zhangyy1/momoding/security/advisories/new
+    about: 请私密报告，不要公开提 Issue。

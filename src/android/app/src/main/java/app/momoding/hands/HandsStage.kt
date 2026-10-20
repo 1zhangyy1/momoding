@@ -138,6 +138,11 @@ class HandsStage(private val context: Context) {
             gravity = Gravity.TOP or Gravity.START
             x = 0
             y = 0
+            // Android 12+ drops every touch that passes through another app's full-screen window
+            // whose opacity is above the "maximum obscuring opacity" (0.8), even a NOT_TOUCHABLE,
+            // see-through one: at 1.0 the person's fingers do nothing anywhere while the glow is up
+            // and the phone feels frozen. At 0.8 their touches go through to the app below.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) alpha = 0.8f
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 fitInsetsTypes = 0
                 layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS

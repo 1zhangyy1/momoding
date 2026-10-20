@@ -1,48 +1,38 @@
-# Contributing
+# 参与 Momoding / Contributing
 
-Thanks for your interest in Minis.
+谢谢你愿意帮 Momoding 变得更好。English below.
 
-## We do not accept pull requests
+## 最有用的：反馈
 
-This repository is a **mirror**. Development happens in a private tree and is
-published here on each release, so a pull request opened against this
-repository has nowhere to land — merging it would be overwritten by the next
-sync, and we cannot merge it upstream either.
+Momoding 是在和用户的来回里长出来的。一份清楚的反馈，往往比一段代码更有用：
 
-Please do not spend your time preparing one. If you have already opened a PR,
-we will close it with a pointer back to this document; that is not a judgement
-on the work.
+- **[提 Issue](https://github.com/1zhangyy1/momoding/issues/new/choose)**：哪里坏了、哪里别扭、你希望它能办什么事。
+- **[Discussions](https://github.com/1zhangyy1/momoding/discussions)**：分享你的用法、聊想法、问问题。
 
-## What we do want
+好的反馈包括：你交代了什么、它做了什么、你期望它做什么；手机型号和 Android 版本；用的哪家模型；设置 → 关于 里的版本号。截图或录屏最好。
 
-Everything else. The product is shaped by what people report:
+## 提交代码
 
-- **[Open an issue](https://github.com/OpenMinis/OpenMinis/issues)** — bugs,
-  crashes, papercuts, feature requests, questions about behaviour. A clear
-  report is worth more to us than a patch, because it tells us what to build.
-- **Share what you have built** — real workflows and use cases go in
-  **[AwesomeMinis](https://github.com/OpenMinis/AwesomeMinis)**, which does
-  take contributions.
-- **Write a skill** — **[MinisSkills](https://github.com/OpenMinis/MinisSkills)**
-  also takes contributions, and skills are how most people extend Minis
-  without touching the app at all.
-- **Talk to us** — the [Telegram group](https://t.me/+2NzhOJuzRyI1YmM1) is
-  where most day-to-day discussion happens.
+欢迎 PR。几个约定：
 
-## Filing a good issue
+1. **改动大的先开 Issue 聊一下**，免得白做。
+2. **Momoding 自己的代码放在 `src/android/app/src/main/java/app/momoding/`**。改上游代码（`com.openminis.app`）时尽量小，并加一行 `// momoding:` 注释说明为什么，方便以后合并上游。
+3. **上游本身的 bug** 也可以顺手报给 [OpenMinis](https://github.com/OpenMinis/OpenMinis/issues)。
+4. **界面文字**：中文优先，用 Momoding 的口吻：说人话，不出现 Agent、Shell、token 这类词。新文字要同时加中文和英文。
+5. 提交前跑一下单元测试：`cd src/android && ./gradlew :app:testDebugUnitTest`。
 
-The more of this you can give us, the faster it gets fixed:
+提交的代码以 GPLv3 授权，和项目一致。
 
-- Platform and version (Settings → About shows both)
-- What you expected, what happened instead
-- Steps to reproduce, or the prompt that triggered it
-- Which model / provider was selected, if relevant
-- Logs, if the app produced any (Settings → Logs)
+## 安全问题
 
-## Using the source
+请不要公开提 Issue，见 [SECURITY.md](SECURITY.md)。
 
-The code is GPLv3. You are free to fork it, modify it and run your own build —
-see [BUILDING.md](BUILDING.md). The licence obliges you to publish the source
-of anything you distribute, and to keep it under GPLv3.
+---
 
-We simply do not merge changes back through this repository.
+## English
+
+**Feedback first.** A clear [issue](https://github.com/1zhangyy1/momoding/issues/new/choose) is often worth more than a patch: say what you asked for, what it did and what you expected, plus your device, Android version, model provider and app version. Use [Discussions](https://github.com/1zhangyy1/momoding/discussions) for ideas and use cases.
+
+**Pull requests are welcome.** For anything large, open an issue first. Momoding's own code lives in `src/android/app/src/main/java/app/momoding/`. Keep edits to upstream code (`com.openminis.app`) small and mark them with a `// momoding:` comment so that upstream merges stay easy. Add new UI text in both Chinese and English. Run `./gradlew :app:testDebugUnitTest` in `src/android` before you submit. Contributions are licensed under GPLv3.
+
+**Security issues:** please don't file a public issue. See [SECURITY.md](SECURITY.md).

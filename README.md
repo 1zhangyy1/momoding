@@ -1,222 +1,158 @@
-# OpenMinis
+<p align="center">
+  <img src="docs/assets/logo.png" width="96" alt="Momoding" />
+</p>
 
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Platforms](https://img.shields.io/badge/Platforms-iOS%20%7C%20Android-lightgrey.svg)](#beta-programme)
+<h1 align="center">Momoding</h1>
 
-**Your private, on-device AI agent.**
+<p align="center"><strong>住在你手机里的办事员。</strong><br/>
+看到什么、想到什么，交代一句，它用手机上的东西帮你办好，记住你的习惯，替你盯着后续。</p>
 
-OpenMinis brings leading models — Claude, GPT, Gemini and more — into a native
-mobile experience, and gives them a real computer to work with: a full Linux
-shell running on your device, browser automation, extensible skills, persistent
-memory, and deep system integration.
+<p align="center">
+  <a href="https://github.com/1zhangyy1/momoding/releases/latest"><strong>下载 APK</strong></a>
+  · <a href="#三分钟上手">三分钟上手</a>
+  · <a href="README.en.md">English</a>
+</p>
 
-It is free, and fully open source.
+<p align="center">
+  <a href="https://github.com/1zhangyy1/momoding/releases"><img alt="release" src="https://img.shields.io/github/v/release/1zhangyy1/momoding?include_prereleases&label=%E7%89%88%E6%9C%AC" /></a>
+  <a href="LICENSE"><img alt="GPLv3" src="https://img.shields.io/badge/%E8%AE%B8%E5%8F%AF%E8%AF%81-GPLv3-blue" /></a>
+  <img alt="Android 8+" src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white" />
+  <a href="https://github.com/1zhangyy1/momoding/stargazers"><img alt="stars" src="https://img.shields.io/github/stars/1zhangyy1/momoding?style=social" /></a>
+</p>
 
-**We believe that in the age of AI, technical design and code are no longer
-where a product's advantage lies. The best agent emerges from a tight feedback
-loop with the people who use it — their expectations and their reports are
-what converge on the product.**
+<p align="center">
+  <img src="docs/assets/hero-zh.png" alt="Momoding：记住你、替你办、先给你看、替你盯着" width="960" />
+</p>
 
-Official website: **[openminis.app](https://openminis.app)**
+<p align="center"><sub>以上都是模拟器上的真实运行截图，模型为 DeepSeek V4.1 Flash。</sub></p>
 
-<a href="https://apps.apple.com/app/id6759188481">
-  <img alt="Download on the App Store" height="48" src="assets/badge-appstore.svg" />
-</a>
-&nbsp;
-<a href="https://github.com/OpenMinis/OpenMinis/releases">
-  <img alt="Get the APK on GitHub" height="48" src="assets/badge-android.svg" />
-</a>
-
-![Minis on iOS — deep research, chat, agent runtime, integrations, iCloud sync and granular permissions](assets/screenshots.png)
-
----
-
-## What it does
-
-| | |
-|---|---|
-| **Bring your own model** | Claude, GPT, Gemini and other providers, via your own API keys or account sign-in. |
-| **A real Linux shell** | A sandboxed Alpine Linux environment runs on-device — the agent can install packages, run scripts, and work with real files. |
-| **Device integration** | Health, Calendar, Reminders, Contacts, HomeKit, Bluetooth, Clipboard, Media, Alarms and more, exposed to the agent as tools. |
-| **Browser automation** | The agent can browse and interact with the web on your behalf. |
-| **Skills & memory** | Extensible skills plus persistent memory across sessions. |
-| **Workspaces** | Organise work into separate contexts, addressable via `minis://workspace/`. |
-| **Native offloads** | Heavy or platform-specific work is handed to native code instead of the sandbox. |
+> **1.0 预览版。** 可以日常试用，但还在快速迭代；目前主要在模拟器和少数真机上打磨，国产系统的后台保活还在测。遇到问题请[提 Issue](https://github.com/1zhangyy1/momoding/issues/new/choose)。
 
 ---
 
-## What you can do with Minis
+## 为什么做它
 
-A few things people actually use it for:
+AI 聊天已经很会回答问题，但手机上的事还是要靠自己**记、搬、盯**：
 
-- **Photograph a meal, log the nutrition** — Minis identifies the dishes, estimates
-  calories and macros, and writes them to Apple Health.
-- **Wake up to your timeline** — Shortcuts triggers Minis to fetch your X timeline,
-  summarise it, synthesise speech, and play it as your alarm.
-- **Turn group chatter into tasks** — pull messages from a Telegram group, extract
-  bugs and action items, deduplicate them, and file them into Apple Reminders.
-- **Mount your Obsidian vault** — research, clean up and write Markdown notes back
-  into the vault as a normal workspace.
-- **Share anything into a calendar event** — send a page or message to Minis via the
-  iOS Share Sheet and it creates the event, time and place included.
+- 群里一张会议通知截图，要自己切到日历、敲时间地点、再设个提醒；
+- 跟 AI 说"帮我记一下"，下次它就忘了；
+- 想知道票什么时候有、价格什么时候降，只能隔三差五自己去看。
 
-**→ [OpenMinis/AwesomeMinis](https://github.com/OpenMinis/AwesomeMinis)** — a curated,
-community-contributed collection of use cases and workflows across health,
-productivity, research, finance and developer tooling.
+Momoding 想把这三件事接过来：
 
----
+| | 它替你做的 |
+| - | - |
+| **少搬** | 截图、通知、文件交给它，日程、提醒、闹钟、草稿就建好了，回你一句结果和一个"在日历里看"。 |
+| **少记** | "会议尽量放下午""提醒提前一小时"，说一次就记住，以后办事自动用上；记错了一句话就能改。 |
+| **少盯** | "每天早上 8 点告诉我今天要注意的事""盯着这个页面，变了告诉我"，有变化才找你，没变化就安静。 |
 
-## Skills
+## 它和别的有什么不一样
 
-A **skill** is a folder with a `SKILL.md` file — instructions, and optionally scripts,
-references and assets — that the agent loads on demand when a request matches it.
-Metadata stays in context for triggering; the body and bundled resources load only
-when the skill is actually used.
+| | AI 聊天 App | 手机自带助手 | 云端 Agent | **Momoding** |
+| - | :-: | :-: | :-: | :-: |
+| 能用手机上的东西（日历、闹钟、通讯录、照片、通知、屏幕） | ✗ | ✓ | ✗ | **✓** |
+| 记得你，而且你能查看、修改 | 弱 | 弱 | ✓ | **✓** |
+| 接手一件事，持续跟进 | ✗ | ✗ | ✓ | **✓** |
+| 数据在哪 | 厂商云端 | 厂商云端 | 厂商云端 | **你的手机** |
+| 开源、自带模型 Key | ✗ | ✗ | ✗ | **✓** |
 
-Minis has its own tool system, but it does not require skills written specifically
-for it: **skills built for Claude, Codex, OpenClaw or Hermes Agent generally run in
-Minis as-is.** Skills that have been adapted to Minis' tools simply run better —
-they can reach the Linux shell, device integrations and native offloads directly.
+## 现在能做什么
 
-**→ [OpenMinis/MinisSkills](https://github.com/OpenMinis/MinisSkills)** — skills
-adapted for Minis alongside ones built for it from scratch, covering TTS, search,
-media downloads, health analysis, cloud APIs and more.
+**对话里交代一句就办：**
 
----
+- **提醒、日程、闹钟**："明天下午 3 点提醒我给王总回电话" → 建好，附"在日历里看"。
+- **记住偏好**："以后开会尽量放下午" → 一行小字"记住了"，以后排日程自动照办。
+- **缺信息只问一个问题**："帮我订个闹钟" → "几点响？"，不乱猜。
+- **替你写、你点了才发**："发短信给张阿姨：房租下周一转" → 草稿卡，可以改，点"发送"才真的发出去。
+- **上网查**："帮我查明天上海到杭州最早的高铁" → 结果和下一步按钮（"订这班""加到日历"）。
+- **例行任务**："每天早上 8 点告诉我今天要注意的事" → 先试跑一次给你看，之后按时汇报，没要紧事不推通知。
+- **在手机屏幕上操作其他 App**（实验性）：打开无障碍权限后，它可以替你点、滑、输入；手机上会出现一个胶囊提示它正在操作，随时能停。
 
-## Press
+**你始终说了算：**
 
-> "the most impressive indie app I've seen in a while"
->
-> — Federico Viticci, [**Open Minis Is the iOS Agent I Wish Siri AI Could Be**](https://www.macstories.net/reviews/open-minis-is-the-ios-agent-i-wish-siri-ai-could-be/),
-> MacStories (July 2026)
+- **先问你**：删除、对外发送、付款这类事，执行前出一张审批卡；选"始终允许"会变成一条规则，在 设置 → 先问你 → 允许规则 里随时能删。
+- **看过程**：每条回复上方的"做了 N 步"点开就是它做了什么。
+- **权限就地申请**：需要日历、位置、无障碍时，在对话里出一张卡片说明用途，打开后自动接着做。
 
-> "在很大程度上实现甚至局部超越了 Apple Intelligence"
->
-> — Ye Han, [**这可能是 iPhone 最强 Agent 软件，没有之一 丨Open Minis 入门指南**](https://zhuanlan.zhihu.com/p/2045570157783807562),
-> 知乎 / Zhihu (June 2026)
+## 隐私：说清楚"本地"是什么意思
 
-> "可能是 iOS 端最强 AI Agent"
->
-> — [**Open Minis：可能是 iOS 端最强 AI Agent**](https://www.appinn.com/open-minis/),
-> 小众软件 / Appinn (March 2026)
+- **没有 Momoding 账号，没有 Momoding 服务器。** 对话、记忆、规则、例行任务都存在你的手机上。
+- **模型 Key 加密存在手机上**，只用来调用你自己选的模型服务。
+- **但它不是离线的**：要让模型理解你的请求，对话内容和它办事时读到的内容（比如一条日程、一个网页）会发给**你选的那家模型服务**。选哪家、发给谁，由你决定。
+- **没有统计、广告或第三方追踪 SDK。**
 
----
+## 三分钟上手
 
-## Beta programme
+1. 手机需要 **Android 8.0 或更高版本**。到 [Releases](https://github.com/1zhangyy1/momoding/releases/latest) 下载最新的 `.apk`，允许浏览器安装应用。
+2. 打开 Momoding，选一家模型服务，填入你的 API Key。首次使用预设了：
+   **DeepSeek**（好用不贵）、**Kimi**、**通义千问**、**智谱 GLM**、**豆包**、**硅基流动**；也支持 OpenRouter、OpenAI、Claude、Gemini 等。
+   选一家就会自动配好对话模型和看图模型。
+3. 在对话框里交代第一件事，或者点空白页上的例子试试。
+4. 想让它替你操作其他 App：设置 → 手机权限 → **动手操作屏幕**，按提示打开无障碍和悬浮窗。不开也能用其他功能。
 
-App Store releases can lag behind: every update waits on review, and we hold
-builds back when stability warrants it. The TestFlight build is where fixes
-and new features land first.
+> 以前装过 Momoding 0.1.0-alpha 版的话，请先卸载旧版再装 1.0。新版换了底座和签名，不能直接覆盖升级。
 
-**→ [Join the TestFlight beta](https://testflight.apple.com/join/3BdkA5c3)**
+## 常见问题
 
-On Android, the [releases page](https://github.com/OpenMinis/OpenMinis/releases)
-always carries the latest APK.
+<details>
+<summary><b>要花钱吗？</b></summary>
 
----
+App 免费、开源。模型调用由你选的服务商按用量收费，费用直接付给服务商，Momoding 不经手。DeepSeek 这类服务日常用下来花费不多。
+</details>
 
-## Building from source
+<details>
+<summary><b>为什么不上应用商店？</b></summary>
 
-Minis ships a Linux sandbox inside the app, so the native dependencies (iSH on
-iOS, PRoot on Android, FFmpeg, LAME, rclone) and the Alpine rootfs are **built
-from source** rather than committed as binaries.
+它要用无障碍、悬浮窗、后台常驻这些能力替你办事，应用商店对这类 App 审核很严。现阶段先在 GitHub 发布，所有代码都可以审查。
+</details>
 
-**→ See [BUILDING.md](BUILDING.md) for the full first-build guide.**
+<details>
+<summary><b>它会不会乱操作我的手机？</b></summary>
 
-The short version:
+不开无障碍权限，它就碰不到其他 App。开了以后，删除、发送、付款这类事都会先问你；操作时屏幕上有胶囊提示，随时能停；每一步都能在"看过程"里查到。
+</details>
+
+<details>
+<summary><b>有 iOS 版吗？</b></summary>
+
+目前只做 Android。仓库里的 `src/ios/` 是上游 OpenMinis 的 iOS 代码，Momoding 没有维护。
+</details>
+
+## 从源码构建
+
+Momoding 带一个运行在手机上的 Linux 沙箱，原生依赖（PRoot、FFmpeg、LAME、rclone）和 Alpine rootfs 都要从源码构建：
 
 ```sh
-git clone --recurse-submodules https://github.com/OpenMinis/OpenMinis.git
-cd OpenMinis
+git clone --recurse-submodules https://github.com/1zhangyy1/momoding.git
+cd momoding
 
-# iOS  — needs Go 1.25+ and Xcode's Metal Toolchain
-#        (xcodebuild -downloadComponent MetalToolchain)
-#        order matters: FFmpeg links against LAME
-./deps/build_lame.sh && ./deps/build_ffmpeg.sh
-./deps/build_ish.sh && ./deps/prepare_alpine_rootfs.sh
-./deps/build_rclone_ios.sh
-open src/ios/Minis.xcodeproj
-
-# Android — needs NDK r28+, Go 1.25+ and gomobile
+# 需要 Android NDK r28+、Go 1.25+ 和 gomobile
 ./deps/build_proot.sh && ./scripts/prepare_android_sandbox.sh
 ./deps/build_rclone_android.sh
 mkdir -p src/android/app/libs && cp deps/build/rclone/rclone.aar src/android/app/libs/
 cd src/android && ./gradlew :app:assembleDebug
 ```
 
-`BUILDING.md` covers the toolchain requirements per platform, the build-time
-customization templates, and a troubleshooting section for the failure modes
-you are most likely to hit.
+工具链要求和常见构建错误见 [BUILDING.md](BUILDING.md)。
 
----
+**代码在哪：** Momoding 自己的界面和逻辑在 `src/android/app/src/main/java/app/momoding/`（对话里的卡片、首次使用、权限、例行任务、提示词等）；其余基本保持上游原样，方便持续合并 OpenMinis 的更新。
 
-## Repository layout
+## 站在 OpenMinis 的肩膀上
 
-```
-src/ios/          iOS app (Swift / SwiftUI) + share, widget and file-provider extensions
-src/android/      Android app (Kotlin / Compose) + JNI native code
-src/shared/       Assets shared by both platforms
-deps/             Native dependency build scripts and vendored sources
-docs/specs/       Architecture and interface specifications
-scripts/          Rootfs preparation and developer tooling
-```
+Momoding 是 **[OpenMinis](https://github.com/OpenMinis/OpenMinis)** 的一个 fork。OpenMinis 是一款很出色的开源手机端 AI Agent，智能体循环、Linux 沙箱、设备能力、浏览器自动化、技能和记忆，都来自它。
 
----
+Momoding 在此之上做的是**产品形态**：单一的"办事员"对话、中文优先的说话方式、对话里的结果卡/草稿卡/审批卡/权限卡、例行任务、国内模型预设，以及一整套视觉设计。感谢 OpenMinis 团队，也感谢他们依赖的 [iSH](https://github.com/ish-app/ish)、[PRoot](https://github.com/termux/proot)、[Alpine Linux](https://alpinelinux.org)、FFmpeg 等项目。完整的第三方许可清单见 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)。
 
-## Acknowledgements
+Momoding 和 OpenMinis 官方没有隶属关系。
 
-OpenMinis stands on a great deal of open-source work. Our thanks to the
-maintainers of these projects — the full inventory, with versions and license
-terms, is in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
+## 参与进来
 
-**The sandbox** — the heart of the product:
+- **反馈问题、提需求**：[GitHub Issues](https://github.com/1zhangyy1/momoding/issues/new/choose)。说清楚你想让它办什么、它实际做了什么，比什么都有用。
+- **聊想法、分享用法**：[Discussions](https://github.com/1zhangyy1/momoding/discussions)
+- **提交代码**：欢迎 PR，先看 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
-- **[iSH](https://github.com/ish-app/ish)** (GPLv3) — Linux usermode emulation on
-  iOS. We run [an ARM64 fork](https://github.com/OpenMinis/ish-arm64).
-- **[PRoot](https://github.com/termux/proot)** (GPLv2) — user-space chroot for the
-  Android sandbox, via [our fork](https://github.com/OpenMinis/proot);
-  **[talloc](https://talloc.samba.org)** (LGPLv3+) underpins it.
-- **[Alpine Linux](https://alpinelinux.org)** — the minirootfs the sandbox boots.
+如果 Momoding 帮你少搬、少记、少盯了一点，给个 ⭐ 是对我们最大的鼓励。
 
-**Media & text** — [FFmpeg](https://ffmpeg.org) (LGPL-2.1+),
-[LAME](https://lame.sourceforge.io) (LGPL), [cppjieba](https://github.com/yanyiwu/cppjieba) (MIT),
-[KaTeX](https://katex.org) (MIT).
+## 许可证
 
-**iOS** — [SwiftAnthropic](https://github.com/jamesrochabrun/SwiftAnthropic),
-[SwiftMath](https://github.com/mgriebling/SwiftMath),
-[RealTimeCutVADLibrary](https://github.com/helloooideeeeea/RealTimeCutVADLibrary) (all MIT),
-[swift-cmark](https://github.com/swiftlang/swift-cmark) (BSD-2-Clause), and the
-Apple / Swift Server Workgroup packages (Apache-2.0).
-
-**Android** — [AndroidX & Jetpack Compose](https://developer.android.com/jetpack),
-[OkHttp](https://square.github.io/okhttp/), [Coil](https://coil-kt.github.io/coil/),
-[kotlinx](https://github.com/Kotlin) serialization & coroutines,
-[multiplatform-markdown-renderer](https://github.com/mikepenz/multiplatform-markdown-renderer),
-[Reorderable](https://github.com/Calvin-LL/Reorderable), [ACRA](https://github.com/ACRA/acra)
-(all Apache-2.0), and [Shizuku](https://github.com/RikkaApps/Shizuku-API) (MIT).
-
----
-
-## License
-
-OpenMinis is licensed under the **[GNU General Public License v3.0](LICENSE)**.
-
-The app links GPL-licensed components — [iSH](https://github.com/OpenMinis/ish-arm64)
-(GPLv3) and [PRoot](https://github.com/OpenMinis/proot) (GPLv2) — so the combined
-work is distributed under GPLv3. Bundled third-party licenses are listed in
-[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
-
----
-
-## Community
-
-- **Telegram**: [Join the group](https://t.me/+2NzhOJuzRyI1YmM1)
-- **Issues**: Bug reports, feature requests and discussion via
-  [GitHub Issues](https://github.com/OpenMinis/OpenMinis/issues)
-
-This repository is a mirror of a private development tree, so it **does not
-accept pull requests** — there is nowhere for them to land. Issues are the way
-to shape the product, and [AwesomeMinis](https://github.com/OpenMinis/AwesomeMinis)
-and [MinisSkills](https://github.com/OpenMinis/MinisSkills) both do take
-contributions. See [CONTRIBUTING.md](CONTRIBUTING.md).
+[GNU General Public License v3.0](LICENSE)。Momoding 基于 GPLv3 的 OpenMinis，并链接了 GPL 组件（PRoot 为 GPLv2），因此整体以 GPLv3 发布。

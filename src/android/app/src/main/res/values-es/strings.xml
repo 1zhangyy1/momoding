@@ -291,7 +291,7 @@
     <string name="settings_feedback_telegram">Comentarios (Telegram)</string>
     <string name="settings_feedback_email">Comentarios (correo)</string>
     <string name="about_title">Acerca de</string>
-    <string name="about_minis_tagline">Momoding es tu Agent en el dispositivo, totalmente local y totalmente privado.</string>
+    <string name="about_minis_tagline">Momoding vive en tu teléfono: tus datos se quedan en el dispositivo y solo lo que una tarea necesita se envía al modelo que elijas.</string>
     <string name="about_links">Enlaces</string>
     <string name="about_github_repository">Repositorio de GitHub</string>
     <string name="about_version_format">Versión %1$s (%2$s)</string>

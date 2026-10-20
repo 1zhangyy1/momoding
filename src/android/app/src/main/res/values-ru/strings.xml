@@ -293,7 +293,7 @@
     <string name="settings_feedback_telegram">Обратная связь (Telegram)</string>
     <string name="settings_feedback_email">Обратная связь (Email)</string>
     <string name="about_title">О приложении</string>
-    <string name="about_minis_tagline">Momoding — ваш полностью локальный и приватный Agent прямо на устройстве.</string>
+    <string name="about_minis_tagline">Momoding живёт в вашем телефоне: данные остаются на устройстве, а выбранной вами модели отправляется только то, что нужно для задачи.</string>
     <string name="about_links">Ссылки</string>
     <string name="about_github_repository">Репозиторий GitHub</string>
     <string name="about_version_format">Версия %1$s (%2$s)</string>

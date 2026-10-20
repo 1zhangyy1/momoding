@@ -291,7 +291,7 @@
     <string name="settings_feedback_telegram">Maklum Balas (Telegram)</string>
     <string name="settings_feedback_email">Maklum Balas (E-mel)</string>
     <string name="about_title">Perihal</string>
-    <string name="about_minis_tagline">Momoding ialah Ejen atas peranti anda yang sepenuhnya setempat dan sepenuhnya peribadi.</string>
+    <string name="about_minis_tagline">Momoding tinggal di telefon anda: data anda kekal pada peranti, dan hanya apa yang diperlukan oleh tugasan dihantar kepada model pilihan anda.</string>
     <string name="about_links">Pautan</string>
     <string name="about_github_repository">Repositori GitHub</string>
     <string name="about_version_format">Versi %1$s (%2$s)</string>

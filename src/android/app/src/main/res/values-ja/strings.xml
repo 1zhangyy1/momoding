@@ -292,7 +292,7 @@
     <string name="settings_feedback_telegram">フィードバック (Telegram)</string>
     <string name="settings_feedback_email">フィードバック (メール)</string>
     <string name="about_title">情報</string>
-    <string name="about_minis_tagline">Momoding は完全にローカルで完全にプライベートなオンデバイス Agent です。</string>
+    <string name="about_minis_tagline">Momoding はあなたのスマホに住んでいます。データは端末に残り、用事に必要な内容だけをあなたが選んだモデルに送ります。</string>
     <string name="about_links">リンク</string>
     <string name="about_github_repository">GitHub リポジトリ</string>
     <string name="about_version_format">バージョン %1$s (%2$s)</string>

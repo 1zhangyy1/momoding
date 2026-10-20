@@ -36,8 +36,9 @@ android {
         applicationId = "app.momoding" // momoding: own id; the Kotlin namespace stays com.openminis.app to keep upstream merges small
         minSdk = 26
         targetSdk = 35
-        versionCode = 28
-        versionName = "1.14"
+        // momoding: own numbering from 1.0.0 (1.0 preview); the update check compares x.y.z only
+        versionCode = 100
+        versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

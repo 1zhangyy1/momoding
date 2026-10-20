@@ -34,13 +34,15 @@ import java.util.concurrent.TimeUnit
 object UpdateChecker {
 
     private const val TAG = "UpdateChecker"
-    private const val OWNER = "OpenMinis"
+    // momoding: check Momoding's own releases. Upstream's would offer the Minis APK (another
+    // app, a higher version number) as an "update".
+    private const val OWNER = "1zhangyy1"
     // T133: the public repo is OpenMinis/OpenMinis (org + repo share a name).
     // Previously pointed at OpenMinis/MinisApp, which is the private dev
     // mirror — every API call 404'd, which we mistranslated as "no release
     // published". The 0.1-preview release is published as a prerelease on
     // OpenMinis/OpenMinis with a MinisApp-*.apk asset attached.
-    private const val REPO = "OpenMinis"
+    private const val REPO = "momoding"
     private const val DOWNLOAD_FILENAME = "minis-update.apk"
     /**
      * Sub-directory of `filesDir` where we stage downloaded update APKs. We
@@ -258,7 +260,7 @@ object UpdateChecker {
     }
 
     /** Public so UI can deep-link users to manual download when GitHub is blocked. */
-    const val RELEASES_URL: String = "https://github.com/OpenMinis/OpenMinis/releases"
+    const val RELEASES_URL: String = "https://github.com/1zhangyy1/momoding/releases"
 
     /** Returns (downloadUrl, sizeBytes) for the first .apk asset, or (null, 0). */
     private fun findApkAsset(assets: JSONArray?): Pair<String?, Long> {
