@@ -22,9 +22,14 @@ sealed class HandsAction {
     data class DoubleTap(val at: Point, val target: String) : HandsAction()
     data class LongPress(val at: Point, val target: String) : HandsAction()
     data class Swipe(val from: Point, val to: Point) : HandsAction()
-    /** Scroll the content in [direction]: `down` reveals what is below. */
-    data class Scroll(val direction: String) : HandsAction()
-    data class InputText(val text: String, val field: String) : HandsAction()
+    /** Scroll the content in [direction]: `down` reveals what is below; [element]: that list, else the middle of the screen. */
+    data class Scroll(val direction: String, val element: Int? = null) : HandsAction()
+    /** [element]: the input from the element list, written directly; else the field with the cursor. */
+    data class InputText(val text: String, val field: String, val element: Int? = null) : HandsAction()
+    /** A tap on element [index] of the element list (a long press with [long]). */
+    data class ElementTap(val index: Int, val target: String, val long: Boolean = false) : HandsAction()
+    /** The model wants the screenshot as well as the element list next turn. */
+    object Look : HandsAction()
     object KeyboardEnter : HandsAction()
     data class OpenApp(val appName: String) : HandsAction()
     object Back : HandsAction()
@@ -40,6 +45,7 @@ sealed class HandsAction {
     val tapTarget: String?
         get() = when (this) {
             is Click -> target
+            is ElementTap -> target
             is DoubleTap -> target
             is LongPress -> target
             else -> null
@@ -50,6 +56,8 @@ sealed class HandsAction {
         is Click -> if (target.isNotBlank()) "tap “${target.take(40)}”" else "tap"
         is DoubleTap -> if (target.isNotBlank()) "double-tap “${target.take(40)}”" else "double-tap"
         is LongPress -> if (target.isNotBlank()) "hold “${target.take(40)}”" else "long press"
+        is ElementTap -> (if (long) "hold" else "tap") + if (target.isNotBlank()) " “${target.take(40)}”" else " #$index"
+        Look -> "look at the screen"
         is Swipe -> "swipe"
         is Scroll -> "scroll $direction"
         is InputText -> if (field.isNotBlank()) "type into ${field.take(40)}" else "type"
@@ -66,8 +74,13 @@ sealed class HandsAction {
     companion object {
         const val GRID = 1000
 
-        /** `Thought:` and `Action:` pulled out of a reply. */
-        data class Parsed(val thought: String, val action: HandsAction, val raw: String)
+        /** `Thought:` and `Action:` pulled out of a reply; [actions] has several when the model batched them (a JSON array). */
+        data class Parsed(val thought: String, val actions: List<HandsAction>, val raw: String) {
+            val action: HandsAction get() = actions.first()
+        }
+
+        /** At most this many actions in one reply: a form filled and sent, not a whole task blind. */
+        const val MAX_BATCH = 4
 
         class FormatError(message: String) : Exception(message)
 
@@ -83,6 +96,7 @@ sealed class HandsAction {
             "navigate_back" to "navigate_back", "back" to "navigate_back",
             "navigate_home" to "navigate_home", "home" to "navigate_home",
             "wait" to "wait",
+            "look" to "look", "screenshot" to "look", "see" to "look",
             "take_over" to "take_over", "takeover" to "take_over", "handoff" to "take_over", "hand_over" to "take_over",
             "ask_user" to "ask_user", "ask" to "ask_user",
             "status" to "status", "answer" to "status", "finish" to "status", "done" to "status", "complete" to "status", "terminate" to "status",
@@ -98,9 +112,22 @@ sealed class HandsAction {
             if (idx < 0) throw FormatError("no `Action:` line")
             var thought = text.substring(0, idx).replace(Regex("<think>[\\s\\S]*?</think>"), "").trim()
             if (thought.startsWith("Thought:")) thought = thought.removePrefix("Thought:").trim()
-            val json = extractJson(text.substring(idx + "Action:".length))
-                ?: throw FormatError("the action is not a JSON object")
-            return Parsed(thought, fromJson(json), text)
+            val tail = text.substring(idx + "Action:".length)
+            extractArray(tail)?.let { arr ->
+                val list = (0 until arr.length()).mapNotNull { arr.optJSONObject(it) }.take(MAX_BATCH).map { fromJson(it) }
+                if (list.isEmpty()) throw FormatError("the action list is empty")
+                return Parsed(thought, list, text)
+            }
+            val json = extractJson(tail) ?: throw FormatError("the action is not a JSON object")
+            return Parsed(thought, listOf(fromJson(json)), text)
+        }
+
+        /** A JSON array right after `Action:` (several actions), or null. */
+        internal fun extractArray(tail: String): JSONArray? {
+            val s = tail.trim().removePrefix("```json").removePrefix("```").trim()
+            if (!s.startsWith("[")) return null
+            val end = s.lastIndexOf(']')
+            return if (end > 0) runCatching { JSONArray(s.substring(0, end + 1)) }.getOrNull() else null
         }
 
         internal fun extractJson(tail: String): JSONObject? {
@@ -144,6 +171,10 @@ sealed class HandsAction {
                 return Point(clampGrid(arr.optDouble(0)), clampGrid(arr.optDouble(1)))
             }
             val target = o.optString("target").ifBlank { o.optString("element_description") }.ifBlank { o.optString("label") }.trim()
+            // an element number from the list ("element": 12, or "index")
+            val element: Int? = (o.opt("element") as? Number)?.toInt() ?: (o.opt("index") as? Number)?.toInt()
+                ?: o.optString("element").removePrefix("#").toIntOrNull()
+            if (element != null && type in setOf("click", "double_tap", "long_press")) return ElementTap(element, target, long = type == "long_press")
             return when (type) {
                 "click" -> Click(point("coordinate"), target)
                 "double_tap" -> DoubleTap(point("coordinate"), target)
@@ -163,9 +194,10 @@ sealed class HandsAction {
                 "scroll" -> {
                     val dir = o.optString("direction", "down").lowercase()
                     if (dir !in setOf("up", "down", "left", "right")) throw FormatError("scroll direction must be up|down|left|right")
-                    Scroll(dir)
+                    Scroll(dir, element)
                 }
-                "input_text" -> InputText(o.optString("text"), o.optString("field").ifBlank { target })
+                "input_text" -> InputText(o.optString("text"), o.optString("field").ifBlank { target }, element)
+                "look" -> Look
                 "keyboard_enter" -> KeyboardEnter
                 "open_app" -> OpenApp(o.optString("app_name").ifBlank { o.optString("app") }.ifBlank { o.optString("name") }.trim())
                 "navigate_back" -> Back

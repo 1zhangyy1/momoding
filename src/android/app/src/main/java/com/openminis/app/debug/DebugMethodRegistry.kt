@@ -965,6 +965,7 @@ object DebugMethodRegistry {
                 ParamSpec("app", "string", required = false, description = "App to open first."),
                 ParamSpec("maxSteps", "int", required = false, description = "Step cap."),
                 ParamSpec("modelEntryId", "string", required = false, description = "Screen model for this run only."),
+                ParamSpec("mode", "string", required = false, description = "How the hands see: vision (screenshot only), tree (element list), hybrid (default)."),
             ),
             returns = "{ok, outcome, steps, answer|message, run_id, trace, log, elapsed_ms}",
             example = ex("task" to "Open Settings and read the Android version", "app" to "Settings"),

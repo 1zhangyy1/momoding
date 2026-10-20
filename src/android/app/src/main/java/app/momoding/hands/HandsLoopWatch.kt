@@ -82,7 +82,9 @@ class HandsLoopWatch(private val noteAt: Int = NOTE_AT, private val stopAt: Int 
             is HandsAction.InputText -> b is HandsAction.InputText && a.text == b.text
             is HandsAction.OpenApp -> b is HandsAction.OpenApp && a.appName.equals(b.appName, ignoreCase = true)
             is HandsAction.Wait -> b is HandsAction.Wait
-            HandsAction.KeyboardEnter, HandsAction.Back, HandsAction.Home -> a === b
+            // the same number on the same screen is the same element
+            is HandsAction.ElementTap -> b is HandsAction.ElementTap && a.index == b.index && a.long == b.long
+            HandsAction.KeyboardEnter, HandsAction.Back, HandsAction.Home, HandsAction.Look -> a === b
             is HandsAction.TakeOver, is HandsAction.AskUser, is HandsAction.Status -> false
         }
 

@@ -112,4 +112,30 @@ class HandsActionTest {
         assertEquals("open 12306", HandsAction.OpenApp("12306").describe())
         assertEquals("done", HandsAction.Status(true, "x").describe())
     }
+
+    @Test fun `an element number makes a tap on that element`() {
+        val a = HandsAction.parse("""Thought: send it.
+Action: {"action_type":"click","element":12,"target":"Send"}""").action
+        assertEquals(HandsAction.ElementTap(12, "Send"), a)
+        assertEquals(HandsAction.ElementTap(3, "", long = true), HandsAction.parse("""Action: {"action_type":"long_press","element":"#3"}""").action)
+    }
+
+    @Test fun `coordinates still work beside elements`() {
+        assertTrue(HandsAction.parse("""Action: {"action_type":"click","coordinate":[500,500]}""").action is HandsAction.Click)
+    }
+
+    @Test fun `input and scroll can name their element`() {
+        assertEquals(HandsAction.InputText("hi", "", 5), HandsAction.parse("""Action: {"action_type":"input_text","element":5,"text":"hi"}""").action)
+        assertEquals(HandsAction.Scroll("down", 2), HandsAction.parse("""Action: {"action_type":"scroll","element":2,"direction":"down"}""").action)
+        assertEquals(HandsAction.Look, HandsAction.parse("""Action: {"action_type":"look"}""").action)
+    }
+
+    @Test fun `a batch is read in order and capped`() {
+        val p = HandsAction.parse("""Thought: fill and search.
+Action: [{"action_type":"input_text","element":5,"text":"pizza"},{"action_type":"click","element":7,"target":"Search"}]""")
+        assertEquals(2, p.actions.size)
+        assertTrue(p.actions[0] is HandsAction.InputText); assertEquals(HandsAction.ElementTap(7, "Search"), p.actions[1])
+        val many = (1..9).joinToString(",") { """{"action_type":"navigate_back"}""" }
+        assertEquals(HandsAction.MAX_BATCH, HandsAction.parse("Action: [$many]").actions.size)
+    }
 }

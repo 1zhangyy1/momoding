@@ -62,7 +62,7 @@ class HandsOffloadHandler(private val context: Context) : NativeOffloadHandler {
      * Debug builds (`momoding.hands.run`): run the hands on [task] the way the agent would, with an
      * optional screen model for this run only, and return the result plus the wall time.
      */
-    fun runForDebug(task: String, app: String?, maxSteps: Int?, modelEntryId: String?): JSONObject {
+    fun runForDebug(task: String, app: String?, maxSteps: Int?, modelEntryId: String?, mode: String? = null, textSteps: Boolean = true): JSONObject {
         val previous = Hands.modelEntryId(context)
         if (modelEntryId != null) Hands.setModelEntryId(context, modelEntryId)
         val started = System.currentTimeMillis()
@@ -71,6 +71,8 @@ class HandsOffloadHandler(private val context: Context) : NativeOffloadHandler {
                 add("momoding-hands"); add("run"); add("--task"); add(task)
                 app?.let { add("--app"); add(it) }
                 maxSteps?.let { add("--max-steps"); add(it.toString()) }
+                mode?.let { add("--mode"); add(it) }
+                if (!textSteps) { add("--text-steps"); add("false") }
             }
             val r = run(OffloadArgs(argv.drop(1)), sessionId = "debug-hands")
             val body = runCatching { JSONObject(r.output) }.getOrElse { JSONObject().put("raw", r.output) }
@@ -104,6 +106,8 @@ class HandsOffloadHandler(private val context: Context) : NativeOffloadHandler {
             sessionId = sessionId,
             agentName = Identity.name(context),
             language = context.resources.configuration.locales[0].getDisplayLanguage(Locale.ENGLISH).ifBlank { "the user's language" }, // momoding: the app's language, not the system's
+            mode = args.get("mode")?.let { m -> HandsPrompt.Mode.entries.firstOrNull { it.name.equals(m, ignoreCase = true) } } ?: HandsPrompt.Mode.HYBRID,
+            textSteps = args.get("text-steps") != "false",
         )
         // Taken atomically, so two runs arriving together cannot both start; given back when the run ends.
         if (!Hands.claim()) return refused("busy", "The hands are already working on something; wait for it to finish or stop it.")

@@ -155,6 +155,18 @@ object Hands {
         return all.firstOrNull { Regex("vl|vision", RegexOption.IGNORE_CASE).containsMatchIn(it.modelId) } ?: all.firstOrNull()
     }
 
+    /**
+     * The chat's own model, for the hands' steps that read only the element list: no picture to
+     * look at, so the fast text model answers instead of waiting on the screen model.
+     */
+    fun textModel(context: Context): ScreenModel? {
+        val repo = repo(context) ?: return null
+        val entry = repo.lastUsedVisibleEntry() ?: return null
+        val inst = repo.config.value.instances.firstOrNull { it.id == entry.providerInstanceId }?.takeIf { it.isEnabled } ?: return null
+        val key = repo.usableApiKey(inst) ?: return null
+        return ScreenModel(inst, entry, key, Why.CHAT)
+    }
+
     private fun repo(context: Context): ProviderRepository? = (context.applicationContext as? MinisApp)?.providerRepositoryOrNull
 
     // ── a run in progress ──────────────────────────────────────────────────
@@ -193,11 +205,13 @@ object Hands {
     fun promptParagraph(context: Context): String {
         val on = enabled(context)
         val r = readiness(context)
+        val handsName = com.openminis.app.i18n.LocaleWrap.uiContext(context).getString(com.openminis.app.R.string.mo_hands_title)
         return buildString {
             append("## Apps without an API — the ladder (Momoding)\n")
             append("Most everyday apps here (12306, 微信, 支付宝, 美团, 淘宝, 京东…) have no API. Climb in this order (never mention the order, rungs or levels to the person): ")
             append("(1) a skill, a CLI or an MCP server; (2) the page fetched with the user's login or `browser_use`; (3) the phone's own screen, last. ")
-            append("A task is rarely all screen: find the number with a command, the button with the screen, and ask before it is pressed.\n")
+            append("A task is rarely all screen: find the number with a command, the button with the screen, and ask before it is pressed. ")
+            append("Use the screen only for a step that needs an app's screen; never to look around the phone or for a routine's trial run. When the person asks you to open an app or a page and look, open it with the screen and answer from what it shows.\n")
             if (on && r.ready) {
                 append("The screen is available: `momoding-hands run --task \"<one clear task, with every detail the hands need>\" [--app \"<app name>\"]` ")
                 append("(screen model: ${r.model?.label}). It looks at screenshots — never the accessibility tree — and taps, types and swipes; a capsule with Stop shows the user what it does. ")
@@ -211,9 +225,9 @@ object Hands {
                     if (!r.overlayOk) add("no permission to draw over other apps")
                     if (r.model == null) add("no model that can see pictures")
                 }.joinToString(", ")
-                append("The screen is switched on but not usable yet ($missing). If a task needs it, say so in one line and give the link [Hands]($DEEP_LINK) — it opens the setting; do not try android-a11y-cli instead.")
+                append("The screen is switched on but not usable yet ($missing). If a task needs it, say so in one line and give the link [$handsName]($DEEP_LINK) (label in the person's language) — it opens the setting; do not try android-a11y-cli instead.")
             } else {
-                append("Operating the phone's screen is switched off (the default). If a task can only be done on the screen, say so in one line and give the link [Hands]($DEEP_LINK) so the user can switch it on; do not try android-a11y-cli instead, and do not pretend.")
+                append("Operating the phone's screen is switched off (the default). If a task can only be done on the screen, say so in one line and give the link [$handsName]($DEEP_LINK) (label in the person's language) so the user can switch it on; do not try android-a11y-cli instead, and do not pretend.")
             }
         }
     }
