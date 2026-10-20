@@ -210,7 +210,7 @@ class HandsOperator(private val context: Context) {
                 val shot = screenshot(svc) ?: return finish(Outcome.Failed("could not take a screenshot"), steps, runId, lastScreen, traceDir, log, model.label)
                 screenW = shot.width
                 screenH = shot.height
-                jpeg = encode(shot)
+                jpeg = encode(shot, tree)
                 shot.recycle()
                 lastScreen = save(traceDir, steps, jpeg, runId)
                 if (jpeg.black) {
@@ -702,13 +702,16 @@ class HandsOperator(private val context: Context) {
     private class Jpeg(val bytes: ByteArray, val black: Boolean, val print: IntArray)
 
     /** Down to [SHOT_WIDTH] px wide (the grid is relative, so nothing is lost for tapping) and JPEG. */
-    private fun encode(shot: Bitmap): Jpeg {
+    private fun encode(shot: Bitmap, tree: ScreenTree? = null): Jpeg {
         val scale = SHOT_WIDTH.toFloat() / shot.width
         val scaled = if (scale < 1f) Bitmap.createScaledBitmap(shot, SHOT_WIDTH, (shot.height * scale).toInt().coerceAtLeast(1), true) else shot
-        val print = sample(scaled)
+        val print = sample(scaled) // from the bare screen: the marks must not hide a black frame or a change
         val black = looksBlack(print)
+        // the element numbers drawn on the picture (Mobilerun's numbered boxes): the model points by number there too
+        val marked = if (tree != null && tree.elements.isNotEmpty() && !black) ScreenTree.mark(scaled, tree, minOf(1f, scale)) else scaled
         val out = ByteArrayOutputStream()
-        scaled.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
+        marked.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
+        if (marked !== scaled) marked.recycle()
         if (scaled !== shot) scaled.recycle()
         return Jpeg(out.toByteArray(), black, print)
     }

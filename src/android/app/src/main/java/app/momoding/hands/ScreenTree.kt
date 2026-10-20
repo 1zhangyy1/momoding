@@ -1,6 +1,12 @@
 package app.momoding.hands
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.Rect
+import android.graphics.RectF
+import android.graphics.Typeface
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
 import com.openminis.app.accessibility.MinisAccessibilityService
@@ -146,6 +152,25 @@ class ScreenTree private constructor(
                 cls.contains("Tab") -> "tab"
                 else -> "item"
             }
+        }
+
+        /** A copy of [shot] with each element's box and number, scaled by [scale] from screen pixels. */
+        fun mark(shot: Bitmap, tree: ScreenTree, scale: Float): Bitmap {
+            val out = shot.copy(Bitmap.Config.ARGB_8888, true)
+            val c = Canvas(out)
+            val box = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 2f; color = Color.rgb(46, 122, 18) }
+            val tag = Paint().apply { color = Color.rgb(46, 122, 18) }
+            val num = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; textSize = 15f; typeface = Typeface.DEFAULT_BOLD }
+            for (e in tree.elements) {
+                if (e.scrollable) continue // a list's box would cover its rows' numbers
+                val r = RectF(e.bounds.left * scale, e.bounds.top * scale, e.bounds.right * scale, e.bounds.bottom * scale)
+                c.drawRect(r, box)
+                val label = e.index.toString()
+                val w = num.measureText(label) + 6f
+                c.drawRect(r.left, r.top, r.left + w, r.top + 18f, tag)
+                c.drawText(label, r.left + 3f, r.top + 14f, num)
+            }
+            return out
         }
 
         private fun String.clip(): String = replace('\n', ' ').trim().let { if (it.length > MAX_LABEL) it.take(MAX_LABEL) + "…" else it }

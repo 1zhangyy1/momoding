@@ -18,7 +18,7 @@ object HandsPrompt {
         } else {
             append("You see the screen as a numbered list of its elements, read from the accessibility tree — [12] button “Send”, [5] input “Message” = “current text”, [3] list — ")
             append(if (mode == Mode.HYBRID) "and a screenshot when the list alone may not show enough. " else "and a screenshot when the list is nearly empty or when you ask for one with look. ")
-            append("Act on elements by their number: it is exact and fast. Use coordinates only for something that is on the screenshot but not in the list (a game, a map, a picture).\n\n")
+            append("Act on elements by their number: it is exact and fast. On the screenshot each element has a green box with its number in the corner, so what you see and what you tap match. Use coordinates only for something that is on the screenshot but not in the list (a game, a map, a picture).\n\n")
         }
         append("## Task\n").append(task.trim()).append("\n\n")
         append("## How each turn works\n")
