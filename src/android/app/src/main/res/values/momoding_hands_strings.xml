@@ -75,4 +75,5 @@
     <string name="mo_hands_off">Off</string>
     <string name="mo_hands_pick_auto">Automatic</string>
     <string name="mo_hands_pick_auto_sub">The best one you have</string>
+    <string name="mo_hands_stopping">Stopping…</string>
 </resources>

@@ -75,4 +75,5 @@
     <string name="mo_hands_off">已关闭</string>
     <string name="mo_hands_pick_auto">自动挑</string>
     <string name="mo_hands_pick_auto_sub">从你能用的里挑最合适的</string>
+    <string name="mo_hands_stopping">正在停下…</string>
 </resources>

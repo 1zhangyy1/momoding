@@ -19,4 +19,7 @@
     <string name="mo_draft_settled_sent">已傳送至 %1$s：「%2$s」</string>
     <string name="mo_draft_settled_sent_plain">已傳送：「%1$s」</string>
     <string name="mo_draft_settled_discarded">已丟棄草稿：「%1$s」</string>
+    <string name="mo_draft_settled_opened">已在簡訊裡填好，到那邊點傳送：「%1$s」</string>
+    <string name="mo_draft_failed_sms">可能沒訊號或沒插卡</string>
+    <string name="mo_draft_ambiguous">這個名字下有 %1$s 個號碼，告訴我傳哪個。</string>
 </resources>

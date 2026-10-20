@@ -59,6 +59,8 @@ class HandsCapsule(private val context: Context) {
     private var root: LinearLayout? = null
     private var params: WindowManager.LayoutParams? = null
     private var titleView: TextView? = null
+    /** Stop was tapped: the capsule says so at once and later step updates no longer overwrite it. */
+    @Volatile private var stopping = false
     private var detailView: TextView? = null
     private var continueBtn: TextView? = null
     private var openBtn: TextView? = null
@@ -81,6 +83,7 @@ class HandsCapsule(private val context: Context) {
 
     /** Shows (or updates) the working state. */
     fun working(step: Int, detail: String) = onMain {
+        if (stopping) return@onMain
         ensure()
         stage.mood(HandsStage.Mood.WORKING)
         ring?.turning(true)
@@ -303,7 +306,19 @@ class HandsCapsule(private val context: Context) {
         val open = button(context.getString(R.string.mo_hands_open), ACCENT) { onOpenApp?.invoke() }.apply { visibility = View.GONE }
         val allow = button(context.getString(R.string.mo_hands_allow_once), ACCENT) { onAllow?.invoke() }.apply { visibility = View.GONE }
         val deny = button(context.getString(R.string.mo_hands_deny), STOP_RED) { onDeny?.invoke() }.apply { visibility = View.GONE }
-        val stop = button(context.getString(R.string.mo_hands_stop), STOP_RED) { onStop?.invoke() }
+        stopping = false
+        val stop = button(context.getString(R.string.mo_hands_stop), STOP_RED) {
+            if (!stopping) {
+                stopping = true
+                onStop?.invoke()
+                // at once, not after the step in flight: the glow goes and the capsule says it is stopping
+                stage.setVisible(false)
+                ring?.turning(false); bars?.stop()
+                titleView?.text = context.getString(R.string.mo_hands_stopping)
+                detailView?.text = ""
+                it.visibility = View.GONE
+            }
+        }
         pill.addView(faceBox); pill.addView(barsView); pill.addView(texts); pill.addView(cont); pill.addView(open); pill.addView(allow); pill.addView(deny); pill.addView(stop)
 
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -338,15 +353,15 @@ class HandsCapsule(private val context: Context) {
         return if (id > 0) context.resources.getDimensionPixelSize(id) else dp(48)
     }
 
-    private fun button(text: String, color: Int, onClick: () -> Unit): TextView = TextView(context).apply {
+    private fun button(text: String, color: Int, onClick: (View) -> Unit): TextView = TextView(context).apply {
         this.text = text
         setTextColor(Color.WHITE)
         setTextSize(TypedValue.COMPLEX_UNIT_SP, app.momoding.ui.Design.Size.Note.value)
         typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        setPadding(dp(12), dp(7), dp(12), dp(7))
+        setPadding(dp(14), dp(10), dp(14), dp(10)) // a finger-sized target: Stop must land on the first try
         background = GradientDrawable().apply { cornerRadius = dp(app.momoding.ui.Design.Radius.Panel.value.toInt()).toFloat(); setColor(color) }
         layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(6) }
-        setOnClickListener { onClick() }
+        setOnClickListener { onClick(it) }
     }
 
     /**

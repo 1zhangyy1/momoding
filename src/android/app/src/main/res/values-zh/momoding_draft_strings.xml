@@ -19,4 +19,7 @@
     <string name="mo_draft_settled_sent">已发送至 %1$s：“%2$s”</string>
     <string name="mo_draft_settled_sent_plain">已发送：“%1$s”</string>
     <string name="mo_draft_settled_discarded">已丢弃草稿：“%1$s”</string>
+    <string name="mo_draft_settled_opened">已在短信里填好，到那边点发送：“%1$s”</string>
+    <string name="mo_draft_failed_sms">可能没信号或没插卡</string>
+    <string name="mo_draft_ambiguous">这个名字下有 %1$s 个号码，告诉我发哪个。</string>
 </resources>

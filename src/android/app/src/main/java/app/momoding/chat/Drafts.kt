@@ -33,19 +33,21 @@ import java.util.Locale
 object Drafts {
     const val BLOCK = "momoding-draft"
 
-    data class Draft(val to: String, val app: String, val text: String) {
+    /** [number]: the phone number for an SMS, when the Bot looked it up; [to] keeps the name the person used. */
+    data class Draft(val to: String, val app: String, val text: String, val number: String = "") {
         /** Stable per draft content, so the card's state survives recomposition and restarts. */
         val id: String get() = Integer.toHexString("$app\u0000$to\u0000$text".hashCode())
     }
 
-    enum class Status { PENDING, SENDING, SENT, FAILED, DISCARDED }
+    /** OPENED: the SMS app is open with the message filled in, for the person to tap Send there. */
+    enum class Status { PENDING, SENDING, SENT, FAILED, DISCARDED, OPENED }
 
     data class State(val status: Status, val text: String? = null, val note: String? = null)
 
     fun parse(code: String): Draft? = runCatching {
         val o = JSONObject(code.trim())
         val text = o.optString("text").trim()
-        if (text.isEmpty()) null else Draft(o.optString("to").trim(), o.optString("app").trim(), text)
+        if (text.isEmpty()) null else Draft(o.optString("to").trim(), o.optString("app").trim(), text, o.optString("number").trim())
     }.getOrNull()
 
     private const val PREFS = "momoding"
@@ -95,8 +97,13 @@ object Drafts {
     }
 
     private val SMS_APPS = setOf("短信", "简讯", "簡訊", "信息", "sms", "messages", "message", "text")
+    private val NUMBER = Regex("""^\+?[0-9][0-9 \-]{4,}$""")
     internal fun isSmsToNumber(d: Draft): Boolean =
-        d.app.trim().lowercase() in SMS_APPS && Regex("""^\+?[0-9][0-9 \-]{4,}$""").matches(d.to.trim())
+        d.app.trim().lowercase() in SMS_APPS && NUMBER.matches(d.to.trim())
+
+    /** An SMS goes out through the phone's own SMS service, never through the screen. */
+    fun isSms(d: Draft): Boolean = d.app.trim().lowercase() in SMS_APPS ||
+        (d.app.isBlank() && (NUMBER.matches(d.number) || NUMBER.matches(d.to.trim())))
 
     private fun openSmsPrefilled(context: Context, number: String, text: String): Boolean = runCatching {
         val i = android.content.Intent(android.content.Intent.ACTION_SENDTO, android.net.Uri.parse("smsto:" + number.replace(" ", "")))
@@ -111,6 +118,7 @@ object Drafts {
 
     /** Runs the send. Returns the state to show; never throws. */
     private suspend fun send(context: Context, d: Draft, text: String): State = withContext(Dispatchers.IO) {
+        if (isSms(d)) return@withContext sendSms(context, d, text)
         if (!Hands.enabled(context) || !Hands.readiness(context).ready) {
             return@withContext State(Status.FAILED, text, "hands_off")
         }
@@ -142,5 +150,20 @@ object Drafts {
             Grants.clearSession(runSession)
             Hands.setActive(false)
         }
+    }
+
+    // ── SMS: straight through the phone's SMS service; the person's Send on the card is the approval ──
+
+    private fun sendSms(context: Context, d: Draft, text: String): State {
+        val number = when (val r = SmsSend.resolve(context, d)) {
+            is SmsSend.Resolved.One -> r.number
+            is SmsSend.Resolved.Several -> return State(Status.FAILED, text, "ambiguous:" + r.count)
+            SmsSend.Resolved.None -> null
+        }
+        if (number != null && SmsSend.canSend(context)) {
+            return if (SmsSend.send(context, number, text)) State(Status.SENT, text) else State(Status.FAILED, text, "sms_failed")
+        }
+        // no permission, or nobody by that name: the SMS app opens with it filled in, the person sends it there
+        return if (SmsSend.openPrefilled(context, number, text)) State(Status.OPENED, text) else State(Status.FAILED, text, "sms_failed")
     }
 }

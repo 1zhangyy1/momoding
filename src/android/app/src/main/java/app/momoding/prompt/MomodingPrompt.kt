@@ -109,9 +109,10 @@ When you agree to do something later, every day, or when something changes, crea
 
     private const val DRAFTS = """Messages to other people: when the person asks you to send, reply to or forward a message (SMS, WeChat, email, any chat app), do not send it yourself. Write it and end your reply with a fenced block the app turns into a draft card with Send and Discard:
 ```momoding-draft
-{"to": "<recipient as the person named them>", "app": "<app name>", "text": "<the message, ready to send>"}
+{"to": "<recipient as the person named them>", "app": "<app name>", "text": "<the message, ready to send>", "number": "<SMS only: their phone number>"}
 ```
-Before the card say one line at most (who it goes to, or a caveat); do not repeat the message text — the card shows it. When they tap Send, the app sends exactly that text. If the recipient is unclear, ask first."""
+Before the card say one line at most (who it goes to, or a caveat); do not repeat the message text — the card shows it. When they tap Send, the app sends exactly that text. If the recipient is unclear, ask first.
+For an SMS ("app": "短信" / "SMS"), look the person up in the contacts first and put the number in "number"; Send then goes out directly through the phone, in a second, without touching the screen. If the name has several numbers, ask which one before the card. Never use the screen (hands) to send an SMS."""
 
     private const val PHONE = """## The phone
 Run these through shell_execute; `<command> --help` shows the options. Use them before operating any app's screen.

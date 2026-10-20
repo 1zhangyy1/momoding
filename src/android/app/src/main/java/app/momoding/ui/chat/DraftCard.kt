@@ -34,6 +34,11 @@ fun DraftCard(code: String) {
     val states by Drafts.all.collectAsState()
     val state = states[draft.id] ?: remember(draft.id) { Drafts.state(context, draft.id) }
     var text by remember(draft.id) { mutableStateOf(state.text ?: draft.text) }
+    // an SMS goes out through the phone's SMS service: ask for it once, right as Send is tapped;
+    // refused, the card still works — the Messages app opens with the text filled in
+    val smsAsk = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+    ) { Drafts.start(context, draft, text.trim()) }
     val firstLine = text.trim().lineSequence().firstOrNull().orEmpty().let { if (it.length > 40) it.take(40) + "…" else it }
 
     when (state.status) {
@@ -42,6 +47,7 @@ fun DraftCard(code: String) {
             else stringResource(R.string.mo_draft_settled_sent_plain, firstLine),
         )
         Drafts.Status.DISCARDED -> SettledLine(stringResource(R.string.mo_draft_settled_discarded, firstLine), done = false)
+        Drafts.Status.OPENED -> SettledLine(stringResource(R.string.mo_draft_settled_opened, firstLine), done = false)
         else -> DecisionCard {
             val who = when {
                 draft.to.isNotBlank() && draft.app.isNotBlank() -> stringResource(R.string.mo_draft_to_in, draft.to, draft.app)
@@ -70,7 +76,10 @@ fun DraftCard(code: String) {
                         },
                     ),
                     primary = true, enabled = !sending && text.isNotBlank(),
-                ) { Drafts.start(context, draft, text.trim()) }
+                ) {
+                    if (Drafts.isSms(draft) && !app.momoding.chat.SmsSend.canSend(context)) smsAsk.launch(android.Manifest.permission.SEND_SMS)
+                    else Drafts.start(context, draft, text.trim())
+                }
             }
         }
     }
@@ -82,10 +91,12 @@ private fun Status(line: String, color: Color = MaterialTheme.colorScheme.onSurf
 }
 
 @Composable
-private fun failedLine(note: String?): String = when (note) {
-    null, "" -> stringResource(R.string.mo_draft_failed_plain)
-    "hands_off" -> stringResource(R.string.mo_draft_failed, stringResource(R.string.mo_draft_failed_hands))
-    "busy" -> stringResource(R.string.mo_draft_failed, stringResource(R.string.mo_draft_failed_busy))
-    "stopped" -> stringResource(R.string.mo_draft_failed, stringResource(R.string.mo_draft_failed_stopped))
+private fun failedLine(note: String?): String = when {
+    note.isNullOrEmpty() -> stringResource(R.string.mo_draft_failed_plain)
+    note == "hands_off" -> stringResource(R.string.mo_draft_failed, stringResource(R.string.mo_draft_failed_hands))
+    note == "busy" -> stringResource(R.string.mo_draft_failed, stringResource(R.string.mo_draft_failed_busy))
+    note == "stopped" -> stringResource(R.string.mo_draft_failed, stringResource(R.string.mo_draft_failed_stopped))
+    note == "sms_failed" -> stringResource(R.string.mo_draft_failed, stringResource(R.string.mo_draft_failed_sms))
+    note.startsWith("ambiguous:") -> stringResource(R.string.mo_draft_ambiguous, note.removePrefix("ambiguous:"))
     else -> stringResource(R.string.mo_draft_failed, note.take(120))
 }

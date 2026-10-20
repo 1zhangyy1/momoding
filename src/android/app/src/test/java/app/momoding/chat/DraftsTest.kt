@@ -36,4 +36,19 @@ class DraftsTest {
         assertTrue(!Drafts.isSmsToNumber(Drafts.Draft("+15551234567", "微信", "hi")))
         assertTrue(Drafts.prefilledSmsTask(Drafts.Draft("+15551234567", "短信", "x"), "new words").contains("new words"))
     }
+
+    @Test fun `an sms goes straight through the phone, any other app through the screen`() {
+        assertTrue(Drafts.isSms(Drafts.Draft("张阿姨", "短信", "hi")))
+        assertTrue(Drafts.isSms(Drafts.Draft("Mom", "SMS", "hi")))
+        assertTrue(Drafts.isSms(Drafts.Draft("10086", "", "hi")))
+        assertTrue(Drafts.isSms(Drafts.Draft("张阿姨", "", "hi", number = "138 0000 0000")))
+        assertTrue(!Drafts.isSms(Drafts.Draft("张阿姨", "微信", "hi", number = "13800000000")))
+        assertTrue(!Drafts.isSms(Drafts.Draft("张阿姨", "", "hi")))
+    }
+
+    @Test fun `the number rides along in the draft block`() {
+        val d = Drafts.parse("""{"to":"张阿姨","app":"短信","text":"晚点到","number":"13800000000"}""")!!
+        assertEquals("13800000000", d.number)
+        assertEquals(Drafts.Draft("张阿姨", "短信", "晚点到").id, d.id)
+    }
 }

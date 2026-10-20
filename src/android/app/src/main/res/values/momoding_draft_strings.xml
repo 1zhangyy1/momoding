@@ -19,4 +19,7 @@
     <string name="mo_draft_settled_sent">Sent to %1$s — “%2$s”</string>
     <string name="mo_draft_settled_sent_plain">Sent — “%1$s”</string>
     <string name="mo_draft_settled_discarded">Draft discarded — “%1$s”</string>
+    <string name="mo_draft_settled_opened">Filled in in Messages — tap Send there: “%1$s”</string>
+    <string name="mo_draft_failed_sms">maybe no signal or no SIM</string>
+    <string name="mo_draft_ambiguous">There are %1$s numbers under that name; tell me which one.</string>
 </resources>

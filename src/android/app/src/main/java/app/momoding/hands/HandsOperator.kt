@@ -26,6 +26,7 @@ import app.momoding.guard.RiskGate
 import app.momoding.guard.RiskRequest
 import app.momoding.guard.TapWords
 import app.momoding.status.KeepAwake
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
@@ -195,10 +196,15 @@ class HandsOperator(private val context: Context) {
                 val messages = buildMessages(turns, HandsPrompt.turnText(steps, lastResult), jpeg.bytes)
                 val reply = try {
                     runBlocking {
-                        withTimeout(MODEL_TIMEOUT_MS) {
-                            provider.sendMessage(messages, system, maxTokens = 1024, temperature = 0.0, thinkingLevel = ThinkingLevel.OFF).text
+                        // Stop cancels the call in flight instead of waiting seconds for the model's answer
+                        val call = async(kotlinx.coroutines.Dispatchers.IO) {
+                            withTimeout(MODEL_TIMEOUT_MS) {
+                                provider.sendMessage(messages, system, maxTokens = 1024, temperature = 0.0, thinkingLevel = ThinkingLevel.OFF).text
+                            }
                         }
-                    }
+                        while (call.isActive && !stop.get()) kotlinx.coroutines.delay(100)
+                        if (stop.get()) { call.cancel(); null } else call.await()
+                    } ?: return finish(Outcome.Stopped(stopReason.get() ?: "stopped"), steps, runId, lastScreen, traceDir, log, model.label)
                 } catch (t: Throwable) {
                     modelErrors++
                     AppLogger.warning(TAG, "model call failed: ${t.message}")
