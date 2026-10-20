@@ -13,12 +13,14 @@ import androidx.compose.ui.platform.LocalContext
 /**
  * Whether the chat shows how the work was done — tool steps, reasoning, model-switch notes, the
  * live tool bar over the composer, token usage. Off by default: the chat is what the person and
- * Momoding said, plus the cards (Grok Bot keeps the process in a separate "full conversation";
- * here it is one switch in Settings). nanoMuse ships the same switch on by default.
+ * Momoding said, plus the cards; each turn's "做了 3 步 ›" line is how the steps are seen. There is
+ * no switch for this in the app; nanoMuse ships the same view on by default.
  */
 object ShowSteps {
     private const val PREFS = "momoding"
-    private const val KEY = "chat.showSteps"
+    // Not a setting any more (the person asked to keep it simple; its full step views could hang):
+    // a fresh key, so a switch flipped on earlier no longer applies. Development only.
+    private const val KEY = "dev.showSteps"
 
     fun get(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY, false)

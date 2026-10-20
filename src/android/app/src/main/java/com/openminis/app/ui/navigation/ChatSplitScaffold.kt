@@ -331,6 +331,7 @@ fun ChatSplitScaffold(
     // See the long note at its former position further down for why the
     // selection is hoisted here at all.
     var selectedSessionId by rememberSaveable { mutableStateOf(initialSessionId) }
+    val momodingActivity = androidx.compose.ui.platform.LocalContext.current as? android.app.Activity
 
     // [T-android-tablet-sidebar-collapse] Whether the list pane is hidden.
     //
@@ -547,6 +548,9 @@ fun ChatSplitScaffold(
                 val sessionId = navigator.currentDestination
                     ?.takeIf { it.pane == ListDetailPaneScaffoldRole.Detail }
                     ?.contentKey
+                    // momoding: on a phone there is one conversation and no list to choose from —
+                    // never the "pick a conversation" placeholder, which had no way out
+                    ?: if (!twoPane) selectedSessionId ?: initialSessionId else null
                 Row(Modifier.fillMaxSize()) {
                     // [T-android-tablet-sidebar-collapse] No seam to draw when
                     // the list is collapsed — the chat then owns the full width
@@ -601,8 +605,11 @@ fun ChatSplitScaffold(
                     detailPane(
                         sessionId,
                         {
-                            selectedSessionId = null
-                            scope.launch { navigator.navigateBack() }
+                            // momoding: on a phone, leaving the one conversation leaves the app
+                            if (!twoPane) momodingActivity?.moveTaskToBack(true) else {
+                                selectedSessionId = null
+                                scope.launch { navigator.navigateBack() }
+                            }
                         },
                         // "New Chat" swaps the DETAIL pane to a fresh draft and
                         // leaves the list pane standing. Routing this through

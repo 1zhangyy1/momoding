@@ -29,7 +29,7 @@
     <string name="mo_settings_routines_sub">到點自動做的事</string>
     <string name="mo_settings_about_bot">關於 Momoding</string>
     <string name="mo_settings_about_bot_sub">名字和語言</string>
-    <string name="mo_settings_appearance_sub">顯示做事過程、主題</string>
+    <string name="mo_settings_appearance_sub">主題、字級、語言</string>
     <string name="mo_settings_advanced">進階</string>
     <string name="mo_settings_advanced_sub">工具、技能、儲存、日誌等</string>
     <string name="mo_settings_advanced_hide">收起進階</string>

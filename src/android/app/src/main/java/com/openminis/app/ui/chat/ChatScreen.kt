@@ -4733,9 +4733,7 @@ fun ChatScreen(
                                     }
                                     outcome != ChatViewModel.CardResume.REFUSED
                                 },
-                            ) else if (!momodingShowSteps) app.momoding.ui.chat.StepLine( // momoding: a step in plain words
-                                item.block, onOpen = { viewModel.openToolDetail(it) },
-                            ) else ToolCallPill(
+                            ) else if (!momodingShowSteps) /* momoding: a step in plain words */ app.momoding.ui.chat.StepLine(item.block) else ToolCallPill(
                                 block = item.block,
                                 allToolBlocks = item.allToolBlocks,
                                 onRetry = if (item.isLastCancelled && !isStreaming && !canResume) ({ safeMutate { viewModel.retryLast() } }) else null,

@@ -283,25 +283,8 @@ fun AppearanceScreen(
 
     SettingsScaffold(title = stringResource(R.string.appearance_title), onBack = onBack) {
 
-        // momoding: the conversation shows what was said; how it was done is one switch away
-        var showSteps by remember { mutableStateOf(app.momoding.ui.chat.ShowSteps.get(context)) }
-        val momodingAdvanced = showSteps // momoding: the upstream switches below show with the steps
-        SettingsSection(
-            header = stringResource(R.string.mo_appearance_section_conversation),
-            footer = stringResource(R.string.mo_appearance_show_steps_footer),
-        ) {
-            SettingsSwitchRow(
-                icon = Icons.Outlined.ChatBubbleOutline,
-                iconColor = tileGreen,
-                title = stringResource(R.string.mo_appearance_show_steps),
-                checked = showSteps,
-                onCheckedChange = {
-                    showSteps = it
-                    app.momoding.ui.chat.ShowSteps.set(context, it)
-                },
-                showDivider = false,
-            )
-        }
+        // momoding: no "show the steps" switch — each turn's 做了 3 步 line shows them (kept simple)
+        val momodingAdvanced = app.momoding.ui.chat.ShowSteps.get(context) // the upstream switches below stay hidden
 
         // -- Theme --
         // Each row carries its own leading icon + tile colour, mirroring the

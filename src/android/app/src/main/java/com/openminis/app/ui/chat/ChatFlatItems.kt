@@ -1059,7 +1059,7 @@ internal fun buildFlatChatItems(
         // showing that mid-stream would report a finish time for a turn that has
         // not finished.
         message.tokenUsage?.let { u ->
-            if (!message.isStreaming && showSteps) { // momoding: usage is about the work, not the answer
+            if (!message.isStreaming && showStepsAll) { // momoding: usage is developer detail — not even an opened turn shows it
                 out.add(dedupe(FlatChatItem.AssistantUsage(message.id, u, message.completedAt)))
             }
         }

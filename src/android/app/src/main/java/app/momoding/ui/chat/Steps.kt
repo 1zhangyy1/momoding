@@ -1,7 +1,6 @@
 package app.momoding.ui.chat
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -37,7 +36,7 @@ import app.momoding.ui.Design
 /*
  * How a turn's work is shown (Grok Bot's "Steps"): one line opening the turn sums it up —
  * "✓ 做了 3 步 · 18 秒 ›"; tapped, the steps unfold right under it in order, one plain line each,
- * on a thin rail, and the reply follows. Tap a step for its detail.
+ * on a thin rail, and the reply follows.
  */
 
 /** The line that opens a finished turn's steps. */
@@ -50,13 +49,13 @@ fun StepsToggle(expanded: Boolean, steps: Int, seconds: Int, onToggle: () -> Uni
     MetaLine(what, Mark.DONE, onClick = onToggle, chevron = expanded)
 }
 
-/** One step, in the words the model gave it, on the rail under the summary. */
+/** One step, in the words the model gave it, on the rail under the summary. Read-only: no detail viewer (kept simple). */
 @Composable
-fun StepLine(block: AssistantBlock, onOpen: (String) -> Unit) {
+fun StepLine(block: AssistantBlock) {
     val failed = block.toolStatus == ToolBlockStatus.FAILED || block.toolStatus == ToolBlockStatus.TIMEOUT || block.toolStatus == ToolBlockStatus.CANCELLED
     val running = block.toolStatus == ToolBlockStatus.RUNNING || block.toolStatus == ToolBlockStatus.STREAMING || block.toolStatus == ToolBlockStatus.PENDING
     val title = block.toolTitle.takeIf { it.isNotBlank() && it != block.toolName } ?: stringResource(R.string.mo_steps_one)
-    Row(Modifier.height(IntrinsicSize.Min).clickable { onOpen(block.id) }.padding(start = 7.dp)) {
+    Row(Modifier.height(IntrinsicSize.Min).padding(start = 7.dp)) {
         Box(Modifier.width(1.5.dp).fillMaxHeight().background(Tones.hairline))
         Row(Modifier.padding(start = 13.dp, top = 5.dp, bottom = 5.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             if (running) Text("…", fontSize = Design.Size.Caption, color = ChatColors.secondaryText)
