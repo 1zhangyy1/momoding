@@ -48,7 +48,7 @@ internal fun notificationSmallIconFor(phase: AgentPhase, toolName: String?): Int
     AgentPhase.COMPLETED -> R.drawable.ic_notification_completed
     AgentPhase.TOOL -> toolIconResFor(toolName)
     AgentPhase.THINKING -> R.drawable.ic_tool_psychology
-    AgentPhase.GENERATING, AgentPhase.IDLE -> R.drawable.ic_launcher_monochrome
+    AgentPhase.GENERATING, AgentPhase.IDLE -> R.drawable.ic_stat_momoding // momoding: its silhouette, edge to edge
 }
 
 /**

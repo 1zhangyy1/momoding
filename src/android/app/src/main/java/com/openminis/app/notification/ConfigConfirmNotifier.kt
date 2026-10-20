@@ -84,7 +84,7 @@ class ConfigConfirmNotifier(
         )
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_stat_momoding)
             .setContentTitle(context.getString(R.string.notif_config_confirm_title))
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))

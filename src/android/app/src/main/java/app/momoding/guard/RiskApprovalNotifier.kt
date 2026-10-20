@@ -55,7 +55,7 @@ class RiskApprovalNotifier(
         )
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_stat_momoding)
             .setLargeIcon(Identity.face(context))
             .setContentTitle(title)
             .setContentText(body.lines().first())
