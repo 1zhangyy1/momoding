@@ -29,6 +29,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -148,6 +149,25 @@ fun HandsScreen(onBack: () -> Unit, onOpenProviders: () -> Unit, onOpenHandsMode
                 SettingsRow(
                     title = stringResource(R.string.mo_hands_need_android),
                     subtitle = stringResource(R.string.mo_hands_need_android_sub),
+                    showDivider = false,
+                )
+            }
+        }
+
+        // ── a greyed-out switch ── Android locks accessibility for apps installed from an APK
+        // ("restricted setting"); as Minis does, say why and open the app page where it is unlocked
+        val restricted = remember(tick) { !readiness.serviceOn && com.openminis.app.accessibility.RestrictedSettingsManager.isRestricted(context) }
+        if (restricted) {
+            SettingsSection(
+                header = stringResource(R.string.system_permissions_a11y_restricted_header),
+                footer = stringResource(R.string.system_permissions_a11y_restricted_footer),
+            ) {
+                SettingsRow(
+                    title = stringResource(R.string.system_permissions_a11y_restricted_manual),
+                    subtitle = stringResource(R.string.system_permissions_a11y_restricted_manual_sub),
+                    icon = Icons.Outlined.Accessibility,
+                    iconColor = Color(0xFFFF9500),
+                    onClick = { (context as? android.app.Activity)?.let { com.openminis.app.power.PowerOptimizationManager.openAppDetailsSettings(it) } },
                     showDivider = false,
                 )
             }
