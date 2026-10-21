@@ -70,7 +70,7 @@ fun HandsScreen(onBack: () -> Unit, onOpenProviders: () -> Unit, onOpenHandsMode
     // Permissions are granted in other apps; re-read when the user comes back.
     val owner = LocalLifecycleOwner.current
     DisposableEffect(owner) {
-        val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) tick++ }
+        val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) { tick++; com.openminis.app.offload.ShizukuManager.refresh() } }
         owner.lifecycle.addObserver(obs)
         onDispose { owner.lifecycle.removeObserver(obs) }
     }
@@ -223,7 +223,7 @@ fun HandsScreen(onBack: () -> Unit, onOpenProviders: () -> Unit, onOpenHandsMode
                     title = stringResource(R.string.mo_hands_background),
                     subtitle = stringResource(R.string.mo_hands_background_not_installed),
                     icon = Icons.Outlined.Layers,
-                    onClick = { com.openminis.app.offload.ShizukuManager.openInstallPage(context) },
+                    onClick = { app.momoding.hands.ShizukuInstall.start(context) },
                     showDivider = false,
                 )
             }

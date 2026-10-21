@@ -82,6 +82,6 @@
     <string name="mo_hands_background_off">關：在你的螢幕上操作，和以前一樣</string>
     <string name="mo_hands_background_need_permission">點一下，允許 Momoding 使用 Shizuku</string>
     <string name="mo_hands_background_not_running">Shizuku 已安裝但沒啟動：點這裡打開並啟動它</string>
-    <string name="mo_hands_background_not_installed">需要免費的 Shizuku：點這裡去下載</string>
+    <string name="mo_hands_background_not_installed">需要免費的 Shizuku：點一下就裝</string>
     <string name="mo_hands_background_footer">有 Shizuku 時，Momoding 把 App 開在一塊你看不見的螢幕上操作，不佔你的螢幕；要登入、或不該它自己決定的事，仍會交給你。沒有 Shizuku 就在你的螢幕上操作。</string>
 </resources>

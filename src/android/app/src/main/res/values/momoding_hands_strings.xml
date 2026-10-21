@@ -82,6 +82,6 @@
     <string name="mo_hands_background_off">Off: it works on your screen, as before</string>
     <string name="mo_hands_background_need_permission">Tap to let Momoding use Shizuku</string>
     <string name="mo_hands_background_not_running">Shizuku is installed but not running: tap to open it and start it</string>
-    <string name="mo_hands_background_not_installed">Needs the free Shizuku app: tap to get it</string>
+    <string name="mo_hands_background_not_installed">Needs the free Shizuku app: tap to install it</string>
     <string name="mo_hands_background_footer">With Shizuku, Momoding opens apps on a screen you don\'t see and works there, so your screen stays yours. Logins and anything it shouldn\'t do alone still come to you. Without Shizuku it works on your screen.</string>
 </resources>
