@@ -111,6 +111,12 @@
     <!-- Package visibility for speech recognition services + Custom Tabs
          (Android 11+ scoped queries). -->
     <queries>
+        <!-- momoding: the hands open apps by name; without this, Android 11+ hides most installed apps
+             (the Phone app, WeChat, Meituan…) from the launcher query and open_app finds nothing -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
         <!-- momoding: the calendar result button opens the calendar app itself, not a chooser -->
         <intent>
             <action android:name="android.intent.action.VIEW" />

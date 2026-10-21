@@ -204,10 +204,13 @@ class HandsOperator(private val context: Context) {
                 // ── look ── the element list from the tree; the screenshot when there is no tree to read,
                 // too little in it, the last action went wrong, or the model asked to look
                 val tree = if (treeMode) ScreenTree.read(svc, context.packageName, screenRect, bg) else null
+                // the hidden display before any app is opened there is empty (and would look like a black, protected screen)
+                val emptyHidden = bg != null && tree != null && tree.app == null && tree.elements.isEmpty()
+                if (emptyHidden) lastResult = listOfNotNull(lastResult, "No app is open yet on the screen you work on; open the one you need with open_app.").joinToString(" ")
                 val failedLast = lastResult?.let { r -> FAILED_WORDS.any { r.contains(it) } } == true
                 // a thin list (a game, a canvas, an unlabelled app) always gets the picture; HYBRID also on the first look and after a miss
-                val wantShot = !treeMode || wantLook || tree!!.actionable < MIN_TREE_ELEMENTS ||
-                    (opts.mode == HandsPrompt.Mode.HYBRID && (steps == 1 || failedLast))
+                val wantShot = !emptyHidden && (!treeMode || wantLook || tree!!.actionable < MIN_TREE_ELEMENTS ||
+                    (opts.mode == HandsPrompt.Mode.HYBRID && (steps == 1 || failedLast)))
                 wantLook = false
                 var screenW = screenRect.width()
                 var screenH = screenRect.height()
@@ -223,6 +226,7 @@ class HandsOperator(private val context: Context) {
                     blackScreens++
                     if (blackScreens > 2) return finish(Outcome.Infeasible("the screen stays protected (black screenshot); the app does not allow it to be read"), steps, runId, lastScreen, traceDir, log, model.label)
                     log += "step $steps: protected screen — handed to the user"
+                    handToPersonScreen()
                     val cont = waitForUser(ui.getString(com.openminis.app.R.string.mo_hands_protected_screen))
                     if (!cont) return finish(Outcome.Stopped(stopReason.get() ?: "stopped"), steps, runId, lastScreen, traceDir, log, model.label)
                     lastResult = "the screen was protected (payment or banking); the user did that part and says to continue."
@@ -320,6 +324,7 @@ class HandsOperator(private val context: Context) {
                         return finish(Outcome.NeedsUser(action.question.ifBlank { parsed.thought }), steps, runId, lastScreen, traceDir, log, model.label)
                     }
                     is HandsAction.TakeOver -> {
+                        handToPersonScreen()
                         val cont = waitForUser(action.reason.ifBlank { parsed.thought })
                         if (!cont) return finish(Outcome.Stopped(stopReason.get() ?: "stopped"), steps, runId, lastScreen, traceDir, log, model.label)
                         lastResult = "the user did it themselves and says to continue; look at the screen as it is now."
@@ -589,6 +594,19 @@ class HandsOperator(private val context: Context) {
             n = runCatching { n.parent }.getOrNull(); depth++
         }
         return false
+    }
+
+    /**
+     * The person has to do a part (a login, a code, a protected page): what is on the hidden display
+     * comes to their screen — releasing the display moves its apps to the main one — and the rest
+     * of the run carries on there.
+     */
+    private fun handToPersonScreen() {
+        if (bg == null) return
+        HandsDisplay.release()
+        bg = null
+        capsule.background = false
+        Thread.sleep(600)
     }
 
     /** The display this run works on: the hands' hidden one, or null for the person's screen. */

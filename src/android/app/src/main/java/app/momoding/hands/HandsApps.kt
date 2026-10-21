@@ -56,7 +56,7 @@ object HandsApps {
     private val SYSTEM: Map<String, List<String>> = buildMap {
         fun put(keys: List<String>, vararg names: String) = names.forEach { put(it, keys) }
         put(listOf("deskclock", "clock", "alarm"), "clock", "alarm", "alarms", "时钟", "闹钟")
-        put(listOf("contacts"), "contacts", "contact", "people", "通讯录", "联系人")
+        put(listOf("contacts", "dialer"), "contacts", "contact", "people", "通讯录", "联系人") // no Contacts app: the Phone app has them
         put(listOf("messaging", "mms", "message"), "messages", "message", "sms", "短信", "信息", "简讯")
         put(listOf("dialer", "phone", "incallui"), "phone", "dialer", "电话", "拨号")
         put(listOf("calendar"), "calendar", "日历")
