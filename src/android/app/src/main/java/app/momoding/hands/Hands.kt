@@ -1,6 +1,7 @@
 // Ported from nanoMuse (GPL-3.0): io/github/nanomuse/hands/Hands.kt
 package app.momoding.hands
 
+import kotlinx.coroutines.launch
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Build
@@ -236,6 +237,13 @@ object Hands {
                 append("The screen is switched on but not usable yet ($missing). If a task needs it, say so in one line and give the link [$handsName]($DEEP_LINK) (label in the person's language) — it opens the setting; do not try android-a11y-cli instead.")
             } else {
                 append("Operating the phone's screen is switched off (the default). If a task can only be done on the screen, say so in one line and give the link [$handsName]($DEEP_LINK) (label in the person's language) so the user can switch it on; do not try android-a11y-cli instead, and do not pretend.")
+            }
+            // the phone's own files: one switch away; once on, the whole storage is mounted for the shell
+            if (app.momoding.files.PhoneFiles.allowed()) {
+                kotlinx.coroutines.MainScope().launch { app.momoding.files.PhoneFiles.ensureMounted(context) }
+                append("\nThe phone's own files (Download, Documents, DCIM, Pictures…) are at /var/minis/mounts/phone.")
+            } else {
+                append("\nThe phone's own files (Download, Documents, photos) are not open to you yet: when a task needs them, ask with the permission card, need \"files\" (one switch, nothing to mount by hand).")
             }
             // working on after the person leaves: the phone's battery saver freezes apps that are not let off
             if (!com.openminis.app.power.PowerOptimizationManager.isIgnoringBatteryOptimizations(context)) {
