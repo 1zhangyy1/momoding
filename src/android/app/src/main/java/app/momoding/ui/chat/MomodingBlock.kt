@@ -347,8 +347,10 @@ private fun HandoffCard(o: JSONObject, code: String) {
         while (state != "done" && System.currentTimeMillis() < until) {
             val now = QrWatch.look(pool)
             if (now != null) {
-                val start = first ?: now.also { first = it }
+                // only a page that shows the code counts as the start: a browser still reopening is not a scan
+                val start = first ?: now.takeIf { it.key != null }?.also { first = it }
                 gone = if (now.key == null) gone + 1 else 0
+                if (start == null) { kotlinx.coroutines.delay(2000); continue }
                 if (QrWatch.signedIn(start, now, gone)) {
                     AskState.choose(context, "handoff.$id", "done"); state = "done"; MomodingSend.send(signedInMsg)
                     break

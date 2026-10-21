@@ -54,8 +54,13 @@ internal object QrWatch {
         val box = look.box ?: return null
         if (look.viewportWidth <= 0f) return null
         val shot = runCatching { pool.execute(BrowserActionInput(action = BrowserAction.SCREENSHOT)) }.getOrNull()?.imageFilePath ?: return null
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { cut(context, shot, box, look.viewportWidth) }
+    }
+
+    // decoding and encoding a screenful is too slow for the main thread
+    private fun cut(context: Context, shot: String, box: FloatArray, viewportWidth: Float): File? {
         val full = BitmapFactory.decodeFile(shot) ?: return null
-        val scale = full.width / look.viewportWidth
+        val scale = full.width / viewportWidth
         val pad = box[2] * 0.08f
         val left = ((box[0] - pad) * scale).toInt().coerceIn(0, full.width - 1)
         val top = ((box[1] - pad) * scale).toInt().coerceIn(0, full.height - 1)
@@ -67,7 +72,7 @@ internal object QrWatch {
         return File(dir, "qr-${System.currentTimeMillis()}.jpg").also { f -> f.outputStream().use { cut.compress(Bitmap.CompressFormat.JPEG, 92, it) } }
     }
 
-    /** The page has moved on from the code: another address, or the code gone for a few looks. */
+    /** The page has moved on from [first], the look that showed the code: another address, or the code gone for a few looks. */
     fun signedIn(first: Look, now: Look, goneLooks: Int): Boolean =
-        now.url.substringBefore('#') != first.url.substringBefore('#') || (first.key != null && now.key == null && goneLooks >= 3)
+        now.url.substringBefore('#') != first.url.substringBefore('#') || (now.key == null && goneLooks >= 3)
 }
