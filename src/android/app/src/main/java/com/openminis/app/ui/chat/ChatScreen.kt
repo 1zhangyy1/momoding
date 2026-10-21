@@ -4552,6 +4552,9 @@ fun ChatScreen(
                                     }
                                 },
                             )
+                            // momoding: 👀 the moment its turn starts (the cached list catches up only when the turn ends)
+                            val liveReaction = if (isStreaming && messages.lastOrNull { it.role == "user" }?.id == item.message.id.substringBefore('#')) "👀" else item.reaction
+                            liveReaction?.let { app.momoding.ui.chat.MessageReaction(it) }
                             }} // momoding: close RoutineWakeRow
                             } // close UserBubble SideEffect + UserMessageBubble block
                             is FlatChatItem.AssistantHeader -> AssistantHeader()

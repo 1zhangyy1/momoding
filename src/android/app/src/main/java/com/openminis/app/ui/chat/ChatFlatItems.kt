@@ -293,6 +293,8 @@ internal sealed class FlatChatItem {
     class UserBubble(
         val message: ChatMessage,
         val precededByUser: Boolean = false,
+        /** momoding: a small reaction on the person's message — 👀 while its turn works, ✅ once a turn that did something is done. */
+        val reaction: String? = null,
     ) : FlatChatItem() {
         override val key = "user:${message.id}"
         override val contentType = "user"
@@ -301,9 +303,9 @@ internal sealed class FlatChatItem {
             if (other !is UserBubble) return false
             // ChatMessage is a data class; reuse its equals (cheap for user
             // bubbles which carry short content and small attachment lists).
-            return message == other.message && precededByUser == other.precededByUser
+            return message == other.message && precededByUser == other.precededByUser && reaction == other.reaction
         }
-        override fun hashCode(): Int = message.hashCode() * 31 + precededByUser.hashCode()
+        override fun hashCode(): Int = (message.hashCode() * 31 + precededByUser.hashCode()) * 31 + (reaction?.hashCode() ?: 0)
     }
 
     data class AssistantHeader(val messageId: String) : FlatChatItem() {
@@ -796,7 +798,15 @@ internal fun buildFlatChatItems(
             if (app.momoding.ui.chat.TimeDivider.shows(sentAt, previousTime(messages, idx))) {
                 out.add(dedupe(FlatChatItem.MomodingTimeDivider(message.id, sentAt)))
             }
-            out.add(dedupe(FlatChatItem.UserBubble(message, precededByUser = prevIsUser)))
+            // momoding: the reaction comes from the turn this message started (Instinct reacts first, ✅ when done)
+            val turnEnd = messages.getOrNull(idx + 1)?.takeIf { it.role == "assistant" }?.let { turnLast[idx + 1] } ?: -1
+            val reaction = when {
+                turnEnd < 0 -> null
+                messages[turnEnd].isStreaming -> "👀"
+                turnHasSteps(turnEnd) -> "✅"
+                else -> null
+            }
+            out.add(dedupe(FlatChatItem.UserBubble(message, precededByUser = prevIsUser, reaction = reaction)))
             continue
         }
         // System messages (slash-command notices, compact divider, etc.) render
