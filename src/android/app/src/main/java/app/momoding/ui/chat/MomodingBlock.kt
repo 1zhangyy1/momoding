@@ -300,9 +300,13 @@ private fun HandoffCard(o: JSONObject, code: String) {
     // a login by QR code: the code itself in the card — saved to the album, scanned from there in the app that reads it
     val sessionId = com.openminis.app.ui.chat.LocalMarkdownSessionId.current
     val qrFile = remember(code, sessionId) {
-        o.optString("qr").trim().removePrefix("minis://browser/").takeIf { it.isNotEmpty() && !it.contains('/') && sessionId != null }
-            ?.let { java.io.File(com.openminis.app.sandbox.SessionMounts.sessionDir(context.filesDir, sessionId!!, "browser"), it) }
-            ?.takeIf { it.isFile }
+        o.optString("qr").trim().removePrefix("minis://browser/").takeIf { it.isNotEmpty() && !it.contains('/') }?.let { name ->
+            // this chat's browser folder; a chat just started may not know its id here yet, and the
+            // name carries a timestamp, so any chat's folder with that name is the one
+            sessionId?.let { java.io.File(com.openminis.app.sandbox.SessionMounts.sessionDir(context.filesDir, it, "browser"), name) }?.takeIf { it.isFile }
+                ?: java.io.File(context.filesDir, "minis-sessions").listFiles()?.asSequence()
+                    ?.map { java.io.File(it, "browser/$name") }?.firstOrNull { it.isFile }
+        }
     }
     val scanApp = o.optString("app").trim()
     if (state == null && !LocalMomodingLive.current) {
