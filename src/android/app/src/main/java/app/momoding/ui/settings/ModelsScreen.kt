@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import app.momoding.providers.AutoSetup
+import kotlinx.coroutines.launch
 import com.openminis.app.MinisApp
 import com.openminis.app.R
 import com.openminis.app.data.model.ModelEntry
@@ -54,7 +55,7 @@ fun ModelsScreen(onBack: () -> Unit, onOpenHands: () -> Unit, onOpenProviders: (
                     title = Models.label(e),
                     subtitle = listOfNotNull(Models.provider(cfg.instances.firstOrNull { it.id == e.providerInstanceId }?.label),
                         if (fallback) stringResource(R.string.mo_models_fallback) else null).joinToString(" · "),
-                    onClick = if (current || group == null) null else ({ Models.choose(repo, group.id, e.id) }),
+                    onClick = if (current || group == null) null else ({ Models.choose(context, repo, group.id, e.id) }),
                     showChevron = false, showDivider = i < offered.lastIndex,
                     trailing = if (current) ({ Icon(Icons.Outlined.Check, contentDescription = null, tint = Color(0xFF2E7A12)) }) else null,
                 )
@@ -82,10 +83,21 @@ internal object Models {
     fun label(e: ModelEntry): String = e.model.displayName.ifBlank { e.model.id }.substringAfter(": ")
     fun provider(label: String?): String? = label?.takeIf { it.isNotBlank() }
 
-    /** [entryId] thinks from now on; the one it replaces stays as the fallback. */
-    fun choose(repo: com.openminis.app.data.repository.ProviderRepository, groupId: String, entryId: String) {
+    /**
+     * [entryId] thinks from now on; the one it replaces stays as the fallback. The main chat
+     * remembers the model it last used, so it is rebound too, or the choice would only reach
+     * chats started after it.
+     */
+    fun choose(context: Context, repo: com.openminis.app.data.repository.ProviderRepository, groupId: String, entryId: String) {
         val group = repo.config.value.modelGroups.firstOrNull { it.id == groupId } ?: return
         val members = (listOf(entryId) + group.memberEntryIds.filter { it != entryId }).take(2)
         repo.updateGroup(group.copy(memberEntryIds = members.toMutableList()))
+        val chats = (context.applicationContext as? MinisApp)?.chatRepositoryOrNull ?: return
+        val modelId = repo.config.value.modelEntries.firstOrNull { it.id == entryId }?.model?.id ?: return
+        kotlinx.coroutines.MainScope().launch {
+            val sid = app.momoding.home.MainChat.resolve(context, chats)
+            com.openminis.app.ui.chat.ChatViewModelStore.existing(sid)?.selectGroup(groupId)
+                ?: runCatching { chats.updateSessionBinding(sid, """{"type":"group","groupId":"$groupId"}""", modelId) }
+        }
     }
 }
