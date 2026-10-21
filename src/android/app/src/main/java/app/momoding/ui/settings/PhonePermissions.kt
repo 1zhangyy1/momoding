@@ -68,11 +68,27 @@ fun openAppPermissionSettings(context: Context, p: PhonePermission) {
         val power = com.openminis.app.power.PowerOptimizationManager
         if (!p.granted) power.requestBatteryOptimizationExemption(activity)
         else if (!power.openOemAutostartSettings(activity)) power.openAppDetailsSettings(activity)
+        backgroundHint(activity)
         return
     }
     val intent = if (p.key == "notifications") Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
     else Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
     runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+}
+
+/**
+ * Where the switch is on phones whose own page cannot be opened from an app (OPPO / OnePlus keep
+ * "耗电管理" unexported): said once as the page opens, so nobody has to look for it.
+ */
+fun backgroundHint(context: Context) {
+    val res = when (com.openminis.app.power.PowerOptimizationManager.Vendor.current()) {
+        com.openminis.app.power.PowerOptimizationManager.Vendor.OPPO -> R.string.mo_background_hint_oppo
+        com.openminis.app.power.PowerOptimizationManager.Vendor.XIAOMI -> R.string.mo_background_hint_xiaomi
+        com.openminis.app.power.PowerOptimizationManager.Vendor.VIVO -> R.string.mo_background_hint_vivo
+        com.openminis.app.power.PowerOptimizationManager.Vendor.HUAWEI -> R.string.mo_background_hint_huawei
+        else -> return
+    }
+    android.widget.Toast.makeText(context, res, android.widget.Toast.LENGTH_LONG).show()
 }
 
 /** "DeepSeek V4.1 Flash · OpenRouter": the default group's first model and its provider. */

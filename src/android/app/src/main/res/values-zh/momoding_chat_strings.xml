@@ -207,4 +207,8 @@
     <string name="mo_perm_background_ask">让 Momoding 在你离开后也接着干活？</string>
     <string name="mo_perm_row_background">后台运行</string>
     <string name="mo_perm_purpose_background">离开 App 后也接着干活</string>
+    <string name="mo_background_hint_oppo">点「耗电管理」，打开「允许完全后台行为」。</string>
+    <string name="mo_background_hint_xiaomi">打开「自启动」，省电策略选「无限制」。</string>
+    <string name="mo_background_hint_vivo">在「后台耗电管理」里允许 Momoding 后台高耗电。</string>
+    <string name="mo_background_hint_huawei">在「应用启动管理」里把 Momoding 改为手动管理，允许后台活动。</string>
 </resources>

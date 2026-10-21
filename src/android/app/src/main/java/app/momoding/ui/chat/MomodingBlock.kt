@@ -182,7 +182,8 @@ private fun PermissionCard(o: JSONObject, code: String) {
             val activity = context as? android.app.Activity
             val power = com.openminis.app.power.PowerOptimizationManager
             if (activity != null && !power.isIgnoringBatteryOptimizations(context)) power.requestBatteryOptimizationExemption(activity)
-            else if (activity != null && power.needsOemAutostartGuidance()) power.openOemAutostartSettings(activity)
+            else if (activity != null && power.needsOemAutostartGuidance() && !power.openOemAutostartSettings(activity)) power.openAppDetailsSettings(activity)
+            app.momoding.ui.settings.backgroundHint(context)
             AskState.choose(context, "perm.$id", "background"); state = "background"
         } else if (need == "hands") {
             // straight to the system switch that is missing (Momoding's own accessibility page where the phone allows)

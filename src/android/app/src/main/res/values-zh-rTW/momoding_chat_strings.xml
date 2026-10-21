@@ -207,4 +207,8 @@
     <string name="mo_perm_background_ask">讓 Momoding 在你離開後也接著做事？</string>
     <string name="mo_perm_row_background">背景執行</string>
     <string name="mo_perm_purpose_background">離開 App 後也接著做事</string>
+    <string name="mo_background_hint_oppo">點「耗電管理」，打開「允許完全背景行為」。</string>
+    <string name="mo_background_hint_xiaomi">打開「自啟動」，省電策略選「無限制」。</string>
+    <string name="mo_background_hint_vivo">在「背景耗電管理」裡允許 Momoding 背景高耗電。</string>
+    <string name="mo_background_hint_huawei">在「應用啟動管理」裡把 Momoding 改為手動管理，允許背景活動。</string>
 </resources>

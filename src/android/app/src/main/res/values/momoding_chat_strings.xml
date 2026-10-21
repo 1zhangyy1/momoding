@@ -207,4 +207,8 @@
     <string name="mo_perm_background_ask">Let Momoding keep working after you leave the app?</string>
     <string name="mo_perm_row_background">Background</string>
     <string name="mo_perm_purpose_background">Keeps working when you leave the app</string>
+    <string name="mo_background_hint_oppo">Tap “Battery usage”, then turn on “Allow full background activity”.</string>
+    <string name="mo_background_hint_xiaomi">Turn on “Autostart”, and set Battery saver to “No restrictions”.</string>
+    <string name="mo_background_hint_vivo">Allow “Background power consumption” for Momoding.</string>
+    <string name="mo_background_hint_huawei">Under “App launch”, set Momoding to manage manually and allow running in background.</string>
 </resources>
