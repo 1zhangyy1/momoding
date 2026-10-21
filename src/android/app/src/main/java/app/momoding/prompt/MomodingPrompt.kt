@@ -38,6 +38,8 @@ object MomodingPrompt {
         val addenda: String?,
         /** First conversation: end this turn by asking how to call the person. */
         val askName: Boolean = false,
+        /** The person's latest message, to name the language of this reply (last line of the prompt). */
+        val lastUserText: String? = null,
     )
 
     fun build(context: Context, i: Inputs): String = buildString {
@@ -62,6 +64,33 @@ object MomodingPrompt {
         append("\n").append(i.ladder.trim())
         i.addenda?.takeIf { it.isNotBlank() }?.let { append("\n\n").append(it.trim()) }
         if (i.askName) append("\n\n").append(app.momoding.memory.UserFile.ASK_NAME_ADDENDUM)
+        languageLine(i.lastUserText)?.let { append("\n\n").append(it) }
+    }
+
+    /**
+     * The language of this reply, said last, where the model weighs it most. The prompt's Chinese
+     * examples, notes and USER.md pulled English questions back to Chinese replies (a routine, a
+     * remembered preference, next-step buttons), so the person's own script decides, in code.
+     */
+    internal fun languageLine(text: String?): String? {
+        if (text.isNullOrBlank()) return null
+        var han = 0; var kana = 0; var hangul = 0; var latin = 0
+        for (c in text) when (c) {
+            in '\u4e00'..'\u9fff' -> han++
+            in '\u3040'..'\u30ff' -> kana++
+            in '\uac00'..'\ud7af' -> hangul++
+            in 'a'..'z', in 'A'..'Z' -> latin++
+        }
+        val language = when {
+            kana > 0 -> "Japanese"
+            hangul > 0 -> "Korean"
+            han >= 2 && han * 2 >= latin -> "Chinese"
+            latin >= 3 -> null
+            else -> return null
+        }
+        val what = "everything you write — the reply, link labels, options, next steps, routine labels and the remembered line"
+        return if (language != null) "## Language\nThe person's latest message is in $language: write $what in $language."
+        else "## Language\nThe person's latest message is not in Chinese: write $what in the language of that message (English if unsure), not in Chinese, whatever language the examples, notes or files above are in."
     }
 
     /** Date, weekday and time, so "today", "tomorrow" and "yesterday" come out right. */
@@ -84,7 +113,7 @@ object MomodingPrompt {
 ```momoding-next
 {"steps": ["接着做", "算了"]}
 ```
-(in the person's language)
+(in the person's language, like every option and next step)
 - When you can do it, do it now, and carry it to done or to a real blocker.
 - Missing one detail you cannot reasonably infer, or the request could mean very different things: ask that one question and stop — do not pick one and act on it. When the answer is one of a few choices, end with a fenced block the app shows as tappable options:
 ```momoding-ask

@@ -1773,7 +1773,7 @@
     <string name="scheduled_task_save">保存</string>
     <string name="scheduled_task_delete">删除</string>
     <string name="scheduled_task_delete_title">删除例行任务？</string>
-    <string name="scheduled_task_delete_body">将「%1$s」从定时列表中移除。它已经创建的聊天会话会保留。</string>
+    <string name="scheduled_task_delete_body">将「%1$s」从例行任务中移除。它已经发到对话里的内容会保留。</string>
     <string name="scheduled_task_delete_confirm">删除</string>
     <string name="scheduled_task_run_now_done">任务已完成</string>
     <string name="scheduled_task_run_now_done_body">例行任务已运行并生成了回复。</string>

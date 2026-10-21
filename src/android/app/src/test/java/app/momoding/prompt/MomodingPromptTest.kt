@@ -18,4 +18,16 @@ class MomodingPromptTest {
         assertTrue(line, line.contains("link labels"))
         assertTrue(line, line.contains("show the form, not the language"))
     }
+
+    /** momoding: Chinese examples and notes pulled English questions back to Chinese; the person's script decides. */
+    @Test fun `language line follows the person's latest message`() {
+        val en = MomodingPrompt.languageLine("Every morning at 8, tell me what to watch out for today")!!
+        assertTrue(en, en.contains("not in Chinese") && en.contains("remembered line"))
+        val zh = MomodingPrompt.languageLine("每天早上 8 点告诉我今天要注意的事")!!
+        assertTrue(zh, zh.contains("is in Chinese"))
+        val mixed = MomodingPrompt.languageLine("帮我查一下 Z175 的时刻")!!
+        assertTrue(mixed, mixed.contains("is in Chinese"))
+        assertTrue(MomodingPrompt.languageLine("ok") == null)
+        assertTrue(MomodingPrompt.languageLine("") == null)
+    }
 }

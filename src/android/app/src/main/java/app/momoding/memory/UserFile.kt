@@ -66,7 +66,7 @@ object UserFile {
         append("newest wins, date a preference as (YYYY-MM-DD); when a preference changes, replace the old line) and end your reply with ")
         appendLine("a fenced block the app shows as one quiet line:")
         appendLine("```momoding-remember")
-        appendLine("{\"text\": \"<just the fact, e.g. 开会尽量放下午>\"}")
+        appendLine("{\"text\": \"<just the fact, in the person's language, e.g. 开会尽量放下午 / meetings in the afternoon>\"}")
         appendLine("```")
         appendLine("Never write secrets, passwords or codes into it.")
         if (text.isEmpty()) {

@@ -65,7 +65,7 @@ object RiskText {
             return context.getString(R.string.mo_risk_desc_device, request.pageUrl ?: "", request.elementText ?: "")
         }
         // momoding: the model's own words for the step say what it is ("删除下周一转房租的日程")
-        request.summary?.trim()?.takeIf { it.isNotEmpty() && request.kind == GuardKind.SHELL }?.let { return it.trimEnd('。', '.') + "。" }
+        request.summary?.trim()?.takeIf { it.isNotEmpty() && request.kind == GuardKind.SHELL }?.let { val t = it.trimEnd('。', '.'); return t + if (t.any { c -> c in '\u4e00'..'\u9fff' }) "。" else "." }
         val target = targetLabel(context, a.target)
         val shell = when (a.riskClass) {
             RiskClass.DESTRUCTIVE -> if (target != null) context.getString(R.string.mo_risk_desc_shell_destructive, agentName, target)

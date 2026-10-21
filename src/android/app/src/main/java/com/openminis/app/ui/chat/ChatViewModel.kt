@@ -15205,6 +15205,7 @@ Memory system (currently DISABLED):
                     ladder = app.momoding.hands.Hands.promptParagraph(context),
                     addenda = app.momoding.chat.SessionAddenda.forPrompt(realSessionId.ifEmpty { sessionId }),
                     askName = memoryOn && app.momoding.memory.UserFile.shouldAskName(context),
+                    lastUserText = _messages.value.lastOrNull { it.role == "user" }?.content, // momoding
                 ),
             ).let(app.momoding.prompt.MomodingRules::rebrand)
                 .also { app.momoding.prompt.PromptDump.write(context, it) }

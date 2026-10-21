@@ -1953,8 +1953,8 @@
     <string name="scheduled_task_run_now">Run now</string>
     <string name="scheduled_task_save">Save</string>
     <string name="scheduled_task_delete">Delete</string>
-    <string name="scheduled_task_delete_title">Delete scheduled task?</string>
-    <string name="scheduled_task_delete_body">Remove \"%1$s\" from the scheduled list. The chat sessions it has already created will stay.</string>
+    <string name="scheduled_task_delete_title">Delete this routine?</string>
+    <string name="scheduled_task_delete_body">Remove \"%1$s\" from your routines. What it already posted stays in the chat.</string>
     <string name="scheduled_task_delete_confirm">Delete</string>
     <string name="scheduled_task_run_now_done">Task finished</string>
     <string name="scheduled_task_run_now_done_body">The scheduled task ran and produced a response.</string>

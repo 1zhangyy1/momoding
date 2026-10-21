@@ -1770,8 +1770,8 @@
     <string name="scheduled_task_run_now">立即執行</string>
     <string name="scheduled_task_save">儲存</string>
     <string name="scheduled_task_delete">刪除</string>
-    <string name="scheduled_task_delete_title">要刪除排程工作嗎？</string>
-    <string name="scheduled_task_delete_body">從排程清單中移除「%1$s」。它先前已建立的對話工作階段會保留。</string>
+    <string name="scheduled_task_delete_title">要刪除例行任務嗎？</string>
+    <string name="scheduled_task_delete_body">將「%1$s」從例行任務中移除。它已經發到對話裡的內容會保留。</string>
     <string name="scheduled_task_delete_confirm">刪除</string>
     <string name="scheduled_task_run_now_done">工作已結束</string>
     <string name="scheduled_task_run_now_done_body">排程工作已執行完畢並產生回覆。</string>
