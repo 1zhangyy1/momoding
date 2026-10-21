@@ -154,6 +154,7 @@ private fun PermissionCard(o: JSONObject, code: String) {
         "photos" -> stringResource(R.string.mo_risk_target_photos)
         "notifications" -> stringResource(R.string.mo_risk_target_notifications)
         "location" -> stringResource(R.string.mo_perm_location)
+        "background" -> stringResource(R.string.mo_perm_background)
         else -> return
     }
     val permissions = PermissionNeeds.androidPermissions(need)
@@ -176,6 +177,13 @@ private fun PermissionCard(o: JSONObject, code: String) {
         if (pick == context.getString(R.string.mo_perm_no)) {
             AskState.choose(context, "perm.$id", "declined"); state = "declined"
             MomodingSend.send(context.getString(R.string.mo_perm_no_msg))
+        } else if (need == "background") {
+            // let off the battery saver (a system dialog, one tap); the makers' own "background" page after, where there is one
+            val activity = context as? android.app.Activity
+            val power = com.openminis.app.power.PowerOptimizationManager
+            if (activity != null && !power.isIgnoringBatteryOptimizations(context)) power.requestBatteryOptimizationExemption(activity)
+            else if (activity != null && power.needsOemAutostartGuidance()) power.openOemAutostartSettings(activity)
+            AskState.choose(context, "perm.$id", "background"); state = "background"
         } else if (need == "hands") {
             // straight to the system switch that is missing (Momoding's own accessibility page where the phone allows)
             val step = app.momoding.hands.HandsSetup.next(context)
@@ -214,7 +222,7 @@ private fun PermissionCard(o: JSONObject, code: String) {
         "granted" -> SettledLine(stringResource(R.string.mo_perm_settled_granted, label))
         "declined" -> SettledLine(stringResource(R.string.mo_perm_settled_declined, label), done = false)
         else -> DecisionCard {
-            CardTitle(stringResource(R.string.mo_perm_ask, label))
+            CardTitle(if (need == "background") stringResource(R.string.mo_perm_background_ask) else stringResource(R.string.mo_perm_ask, label))
             val detail = when (handsStep) {
                 app.momoding.hands.HandsSetup.Step.ACCESSIBILITY -> stringResource(R.string.mo_perm_hands_a11y)
                 app.momoding.hands.HandsSetup.Step.UNLOCK -> stringResource(R.string.mo_perm_hands_unlock)
@@ -230,7 +238,15 @@ private fun PermissionCard(o: JSONObject, code: String) {
                         AskState.choose(context, "perm.$id", "granted"); state = "granted"; MomodingSend.send(carryOn)
                     }
                     PillButton(stringResource(R.string.mo_perm_open), primary = true) { app.momoding.hands.HandsSetup.open(context, left) }
-                } else if (state == "settings" || state == "hands") {
+                } else if (state == "background" && com.openminis.app.power.PowerOptimizationManager.needsOemAutostartGuidance()) {
+                    // the phone maker's page cannot be checked from here: the person says when it is done
+                    PillButton(stringResource(R.string.mo_perm_background_oem), primary = false) {
+                        (context as? android.app.Activity)?.let { com.openminis.app.power.PowerOptimizationManager.openOemAutostartSettings(it) }
+                    }
+                    PillButton(stringResource(R.string.mo_perm_done), primary = true) {
+                        AskState.choose(context, "perm.$id", "granted"); state = "granted"; MomodingSend.send(carryOn)
+                    }
+                } else if (state == "settings" || state == "hands" || state == "background") {
                     PillButton(stringResource(R.string.mo_perm_done), primary = true) {
                         AskState.choose(context, "perm.$id", "granted"); state = "granted"; MomodingSend.send(carryOn)
                     }

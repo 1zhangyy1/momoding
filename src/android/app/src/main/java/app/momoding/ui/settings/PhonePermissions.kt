@@ -10,6 +10,7 @@ import androidx.annotation.StringRes
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Contacts
+import androidx.compose.material.icons.outlined.BatteryFull
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.runtime.Composable
@@ -52,12 +53,23 @@ fun rememberPhonePermissions(): List<PhonePermission> {
                 has(Manifest.permission.READ_CONTACTS)),
             PhonePermission("location", R.string.mo_perm_row_location, R.string.mo_perm_purpose_location, Icons.Outlined.LocationOn,
                 has(Manifest.permission.ACCESS_COARSE_LOCATION) || has(Manifest.permission.ACCESS_FINE_LOCATION)),
+            // not a runtime permission, but the one that decides whether it keeps working when you leave
+            PhonePermission("background", R.string.mo_perm_row_background, R.string.mo_perm_purpose_background, Icons.Outlined.BatteryFull,
+                com.openminis.app.power.PowerOptimizationManager.isIgnoringBatteryOptimizations(context)),
         )
     }
 }
 
 /** Opens the system page where this permission is switched (the person decides there). */
 fun openAppPermissionSettings(context: Context, p: PhonePermission) {
+    if (p.key == "background") {
+        // the battery saver's one-tap dialog first; once let off, the phone maker's own background page (OPPO, Xiaomi…)
+        val activity = context as? android.app.Activity ?: return
+        val power = com.openminis.app.power.PowerOptimizationManager
+        if (!p.granted) power.requestBatteryOptimizationExemption(activity)
+        else if (!power.openOemAutostartSettings(activity)) power.openAppDetailsSettings(activity)
+        return
+    }
     val intent = if (p.key == "notifications") Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
     else Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
     runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }

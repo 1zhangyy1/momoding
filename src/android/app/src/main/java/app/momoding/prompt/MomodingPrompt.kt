@@ -164,7 +164,7 @@ When one of these says access is off (or the hands say they are off or not ready
 ```momoding-permission
 {"need": "location"}
 ```
-("need" is one of: calendar, contacts, location, photos, notifications, hands.)
+("need" is one of: calendar, contacts, location, photos, notifications, hands, background.)
 When the person answers that it is on, carry on with the task."""
 
     private fun tools(i: Inputs): String = buildString {

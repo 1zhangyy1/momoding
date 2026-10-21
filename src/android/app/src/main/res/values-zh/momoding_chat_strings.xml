@@ -202,4 +202,9 @@
     <string name="mo_status_hands_bg">在后台 · 第 %1$d 步</string>
     <string name="mo_resume_stopped">停下了，后面的没做</string>
     <string name="mo_resume_action">接着做</string>
+    <string name="mo_perm_background">在你离开后接着干活</string>
+    <string name="mo_perm_background_oem">再去打开“允许后台行为”</string>
+    <string name="mo_perm_background_ask">让 Momoding 在你离开后也接着干活？</string>
+    <string name="mo_perm_row_background">后台运行</string>
+    <string name="mo_perm_purpose_background">离开 App 后也接着干活</string>
 </resources>

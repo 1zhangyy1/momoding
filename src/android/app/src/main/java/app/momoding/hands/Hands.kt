@@ -222,7 +222,7 @@ object Hands {
             append("Use the screen only for a step that needs an app's screen; never to look around the phone or for a routine's trial run. When the person asks you to open an app or a page and look, open it with the screen and answer from what it shows.\n")
             if (on && r.ready) {
                 append("The screen is available: `momoding-hands run --task \"<one clear task, with every detail the hands need>\" [--app \"<app name>\"]` ")
-                append("(screen model: ${r.model?.label}). It looks at screenshots — never the accessibility tree — and taps, types and swipes; a capsule with Stop shows the user what it does. ")
+                append("(screen model: ${r.model?.label}). It reads the screen's elements (a screenshot when they are not enough) and taps, types and swipes; a capsule with Stop shows the user what it does. ")
                 append("It never types passwords, codes or card numbers: for a login or a code it hands the phone to the user and waits. Taps that pay, send, post or delete go through the same approval card as the shell and the browser. ")
                 append("It returns JSON: `outcome` is done (with `answer`), stopped (the user tapped Stop — do not restart it), needs_user (`question` — relay it and wait), infeasible or failed (with `message`); `last_screen` is a picture you can show with `![screen](<last_screen>)`; `done` lists the taps that paid, sent or deleted and went through — report those as done whatever the outcome. ")
                 append("Tell the user in one line that you are about to use the screen and which app, then run it; give one task per run, and never a payment as the task. `momoding-hands apps` lists the installed apps; `momoding-hands status` says what is set up.")
@@ -236,6 +236,10 @@ object Hands {
                 append("The screen is switched on but not usable yet ($missing). If a task needs it, say so in one line and give the link [$handsName]($DEEP_LINK) (label in the person's language) — it opens the setting; do not try android-a11y-cli instead.")
             } else {
                 append("Operating the phone's screen is switched off (the default). If a task can only be done on the screen, say so in one line and give the link [$handsName]($DEEP_LINK) (label in the person's language) so the user can switch it on; do not try android-a11y-cli instead, and do not pretend.")
+            }
+            // working on after the person leaves: the phone's battery saver freezes apps that are not let off
+            if (!com.openminis.app.power.PowerOptimizationManager.isIgnoringBatteryOptimizations(context)) {
+                append("\nWorking on after the person leaves the app is not allowed yet: the phone may freeze you as soon as they switch away. When a task will keep going (the screen, a long job) or the last one stopped when they left, ask for it with the permission card, need \"background\".")
             }
         }
     }
