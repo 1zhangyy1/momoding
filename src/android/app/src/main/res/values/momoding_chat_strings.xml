@@ -211,4 +211,10 @@
     <string name="mo_background_hint_xiaomi">Turn on “Autostart”, and set Battery saver to “No restrictions”.</string>
     <string name="mo_background_hint_vivo">Allow “Background power consumption” for Momoding.</string>
     <string name="mo_background_hint_huawei">Under “App launch”, set Momoding to manage manually and allow running in background.</string>
+    <string name="mo_handoff_qr_detail">Save the code, then in %1$s tap Scan and pick it from your photos. Tell me when you are in.</string>
+    <string name="mo_handoff_qr_detail_plain">Save the code, then scan it from your photos in the app it is for. Tell me when you are in.</string>
+    <string name="mo_handoff_qr_save">Save to photos</string>
+    <string name="mo_handoff_qr_open">Open %1$s</string>
+    <string name="mo_handoff_qr_saved">Saved to photos</string>
+    <string name="mo_handoff_qr_save_failed">Could not save it</string>
 </resources>

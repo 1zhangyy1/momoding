@@ -20,6 +20,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -78,6 +80,20 @@ object MomodingSend {
     /** Opens Momoding's own browser on the page it left, with the controls handed to the person. */
     @Volatile var openBrowser: (() -> Unit)? = null
     fun send(text: String) { handler?.invoke(text) }
+
+    /** Puts [file] (a login QR code) in the album, where the app that scans it can pick it up. */
+    fun saveToAlbum(context: android.content.Context, file: java.io.File) {
+        val ok = runCatching {
+            val values = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, "momoding-qr-${System.currentTimeMillis()}.jpg")
+                put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Momoding")
+            }
+            val uri = context.contentResolver.insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)!!
+            context.contentResolver.openOutputStream(uri)!!.use { out -> file.inputStream().use { it.copyTo(out) } }
+        }.isSuccess
+        android.widget.Toast.makeText(context, if (ok) R.string.mo_handoff_qr_saved else R.string.mo_handoff_qr_save_failed, android.widget.Toast.LENGTH_SHORT).show()
+    }
 }
 
 private fun options(o: JSONObject, key: String): List<String> =
@@ -281,12 +297,41 @@ private fun HandoffCard(o: JSONObject, code: String) {
         return
     }
     val title = if (site.isNotEmpty()) stringResource(R.string.mo_handoff_title, site, what) else stringResource(R.string.mo_handoff_title_plain, what)
+    // a login by QR code: the code itself in the card — saved to the album, scanned from there in the app that reads it
+    val sessionId = com.openminis.app.ui.chat.LocalMarkdownSessionId.current
+    val qrFile = remember(code, sessionId) {
+        o.optString("qr").trim().removePrefix("minis://browser/").takeIf { it.isNotEmpty() && !it.contains('/') && sessionId != null }
+            ?.let { java.io.File(com.openminis.app.sandbox.SessionMounts.sessionDir(context.filesDir, sessionId!!, "browser"), it) }
+            ?.takeIf { it.isFile }
+    }
+    val scanApp = o.optString("app").trim()
     if (state == null && !LocalMomodingLive.current) {
         SettledLine(stringResource(R.string.mo_card_expired_line, title), done = false)
         return
     }
     DecisionCard {
         CardTitle(title)
+        if (qrFile != null) {
+            val bmp = remember(qrFile) { runCatching { android.graphics.BitmapFactory.decodeFile(qrFile.absolutePath)?.asImageBitmap() }.getOrNull() }
+            bmp?.let {
+                androidx.compose.foundation.Image(it, contentDescription = null,
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(Design.Radius.Row)))
+            }
+            Text(
+                if (scanApp.isNotEmpty()) stringResource(R.string.mo_handoff_qr_detail, scanApp) else stringResource(R.string.mo_handoff_qr_detail_plain),
+                fontSize = Design.Size.Note, lineHeight = Design.Line.Note, color = ChatColors.secondaryText,
+            )
+            CardActions {
+                PillButton(stringResource(R.string.mo_handoff_qr_save), primary = false) { MomodingSend.saveToAlbum(context, qrFile) }
+                app.momoding.hands.HandsApps.resolve(context, scanApp)?.let { a ->
+                    PillButton(stringResource(R.string.mo_handoff_qr_open, a.label), primary = false) { app.momoding.hands.HandsApps.open(context, a) }
+                }
+                PillButton(stringResource(R.string.mo_handoff_done), primary = true) {
+                    AskState.choose(context, "handoff.$id", "done"); state = "done"; MomodingSend.send(carryOn)
+                }
+            }
+            return@DecisionCard
+        }
         Text(stringResource(R.string.mo_handoff_detail), fontSize = Design.Size.Note, lineHeight = Design.Line.Note, color = ChatColors.secondaryText)
         CardActions {
             if (state == "opened") PillButton(stringResource(R.string.mo_handoff_open_again), primary = false) { MomodingSend.openBrowser?.invoke() }

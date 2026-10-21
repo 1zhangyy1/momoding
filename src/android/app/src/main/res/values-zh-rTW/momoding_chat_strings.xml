@@ -211,4 +211,10 @@
     <string name="mo_background_hint_xiaomi">打開「自啟動」，省電策略選「無限制」。</string>
     <string name="mo_background_hint_vivo">在「背景耗電管理」裡允許 Momoding 背景高耗電。</string>
     <string name="mo_background_hint_huawei">在「應用啟動管理」裡把 Momoding 改為手動管理，允許背景活動。</string>
+    <string name="mo_handoff_qr_detail">儲存這張碼，在%1$s裡點「掃一掃」，從相簿選它。登好了跟我說一聲。</string>
+    <string name="mo_handoff_qr_detail_plain">儲存這張碼，到對應的 App 裡掃一掃，從相簿選它。登好了跟我說一聲。</string>
+    <string name="mo_handoff_qr_save">儲存到相簿</string>
+    <string name="mo_handoff_qr_open">打開%1$s</string>
+    <string name="mo_handoff_qr_saved">已儲存到相簿</string>
+    <string name="mo_handoff_qr_save_failed">沒儲存成功</string>
 </resources>
