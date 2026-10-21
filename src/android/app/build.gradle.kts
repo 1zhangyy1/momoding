@@ -76,6 +76,21 @@ android {
         }
     }
 
+    // momoding: release builds are signed with Momoding's own key when its properties are found —
+    // MOMODING_SIGNING (a path) or ~/.momoding-signing/keystore.properties, kept outside the repo.
+    // Without them (a fresh clone) release falls back to the debug key, as before.
+    val momodingSigning = (System.getenv("MOMODING_SIGNING")?.let { file(it) }
+        ?: file(System.getProperty("user.home") + "/.momoding-signing/keystore.properties")).takeIf { it.isFile }
+        ?.let { f -> Properties().apply { f.inputStream().use { load(it) } } }
+    signingConfigs {
+        if (momodingSigning != null) create("momoding") {
+            storeFile = file(momodingSigning.getProperty("storeFile"))
+            storePassword = momodingSigning.getProperty("storePassword")
+            keyAlias = momodingSigning.getProperty("keyAlias")
+            keyPassword = momodingSigning.getProperty("keyPassword")
+        }
+    }
+
     buildTypes {
         getByName("debug") {
             buildConfigField("boolean", "DEV_TOOLS", "true")
@@ -120,7 +135,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("momoding") ?: signingConfigs.getByName("debug")
         }
     }
 
