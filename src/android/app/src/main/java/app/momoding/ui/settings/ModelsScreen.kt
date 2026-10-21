@@ -42,6 +42,10 @@ fun ModelsScreen(onBack: () -> Unit, onOpenHands: () -> Unit, onOpenProviders: (
         val offered = AutoSetup.recommended(visible.map { it.model.id }).mapNotNull { id -> visible.firstOrNull { it.model.id == id } }
             .distinctBy { AutoSetup.family(it.model.id) } // one per family, not five DeepSeek variants
             .let { list ->
+                // providers off the list (OpenAI, Anthropic…): their own chat models, newest first, so there is a choice
+                if (list.size >= 3) list else (list + AutoSetup.ranked(cfg, visible).filter { e -> list.none { it.id == e.id } }).take(6)
+            }
+            .let { list ->
                 // a steady order (best first) whatever is chosen; the current and fallback are always there
                 val extra = members.filter { m -> list.none { it.id == m.id } }
                 list.take(6 - extra.size) + extra

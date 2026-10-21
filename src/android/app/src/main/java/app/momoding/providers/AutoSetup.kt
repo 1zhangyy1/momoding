@@ -46,13 +46,32 @@ object AutoSetup {
         return listOfNotNull(first, ranked.firstOrNull { family(it) != family(first) })
     }
 
+    /**
+     * A provider none of whose models is on the list (OpenAI, Anthropic, a relay): its chat models,
+     * newest first (upstream's release ranking — a stale model off the top of a list is the trap
+     * OpenMinis#83 describes). A ChatGPT-account login only answers Codex models, so those lead.
+     */
+    internal fun ranked(cfg: com.openminis.app.data.model.ProviderConfig, entries: List<ModelEntry>): List<ModelEntry> {
+        val rank = com.openminis.app.provider.ModelReleaseIndex
+        return entries.filterNot { SKIP.containsMatchIn(it.model.id) }
+            .sortedWith(compareBy<ModelEntry> { e ->
+                val inst = cfg.instances.firstOrNull { it.id == e.providerInstanceId }
+                val chatgptLogin = inst?.credentialType == com.openminis.app.data.model.ProviderCredential.oauth &&
+                    inst.providerType == com.openminis.app.data.model.ProviderType.openAI
+                if (chatgptLogin && !e.model.id.contains("codex", ignoreCase = true)) 1 else 0
+            }.then(compareBy(rank.comparator) { e -> rank.rank(e.model.id, e.model.displayName, e.model.contextWindow) }))
+    }
+
     /** Creates the default group when there is none and the provider's models are in. True when it did. */
     fun ensureDefaultGroup(repo: ProviderRepository): Boolean {
         val cfg = repo.config.value
         if (cfg.modelGroups.isNotEmpty() || cfg.instances.isEmpty()) return false
         val entries: List<ModelEntry> = cfg.modelEntries.filter { !it.isHidden }
         if (entries.isEmpty()) return false
-        val chosen = pick(entries.map { it.model.id }).mapNotNull { id -> entries.firstOrNull { it.model.id == id }?.id }
+        val known = recommended(entries.map { it.model.id }).isNotEmpty()
+        // a model and a fallback: when the first is refused, the second answers
+        val chosen = if (known) pick(entries.map { it.model.id }).mapNotNull { id -> entries.firstOrNull { it.model.id == id }?.id }
+        else ranked(cfg, entries).take(2).map { it.id }
         if (chosen.isEmpty()) return false
         val group = ModelGroup(name = "Momoding", memberEntryIds = chosen.toMutableList())
         repo.addGroup(group)
