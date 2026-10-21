@@ -599,7 +599,8 @@ fun ChatScreen(
     DisposableEffect(viewModel) {
         app.momoding.ui.chat.MomodingSend.handler = { viewModel.sendMessage(it) }
         app.momoding.ui.chat.MomodingSend.openBrowser = { viewModel.handBrowserToUser() }
-        onDispose { app.momoding.ui.chat.MomodingSend.handler = null; app.momoding.ui.chat.MomodingSend.openBrowser = null }
+        app.momoding.ui.chat.MomodingSend.browser = { viewModel.browserTabPool }
+        onDispose { app.momoding.ui.chat.MomodingSend.handler = null; app.momoding.ui.chat.MomodingSend.openBrowser = null; app.momoding.ui.chat.MomodingSend.browser = null }
     }
     // momoding: rows already there when the chat opens never pop in (only new ones do)
     run {

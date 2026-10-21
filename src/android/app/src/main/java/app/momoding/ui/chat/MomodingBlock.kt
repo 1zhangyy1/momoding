@@ -15,6 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -79,6 +80,8 @@ object MomodingSend {
     @Volatile var handler: ((String) -> Unit)? = null
     /** Opens Momoding's own browser on the page it left, with the controls handed to the person. */
     @Volatile var openBrowser: (() -> Unit)? = null
+    /** The browser of the chat on screen, for a card that watches its page. */
+    @Volatile var browser: (() -> com.openminis.app.browser.BrowserTabPool)? = null
     fun send(text: String) { handler?.invoke(text) }
 
     /** Puts [file] (a login QR code) in the album, where the app that scans it can pick it up. */
@@ -313,10 +316,34 @@ private fun HandoffCard(o: JSONObject, code: String) {
         SettledLine(stringResource(R.string.mo_card_expired_line, title), done = false)
         return
     }
+    // while the code is up, watch the page: the code cut out and kept current, and carry on once it has been scanned
+    val signedInMsg = stringResource(R.string.mo_handoff_qr_signed_in_msg)
+    var liveQr by remember(id) { mutableStateOf<java.io.File?>(null) }
+    if (qrFile != null) LaunchedEffect(id) {
+        val pool = MomodingSend.browser?.invoke() ?: return@LaunchedEffect
+        var first: QrWatch.Look? = null
+        var shownKey: String? = null
+        var gone = 0
+        val until = System.currentTimeMillis() + 10 * 60_000
+        while (state != "done" && System.currentTimeMillis() < until) {
+            val now = QrWatch.look(pool)
+            if (now != null) {
+                val start = first ?: now.also { first = it }
+                gone = if (now.key == null) gone + 1 else 0
+                if (QrWatch.signedIn(start, now, gone)) {
+                    AskState.choose(context, "handoff.$id", "done"); state = "done"; MomodingSend.send(signedInMsg)
+                    break
+                }
+                if (now.key != null && now.key != shownKey) QrWatch.crop(context, pool, now)?.let { liveQr = it; shownKey = now.key }
+            }
+            kotlinx.coroutines.delay(2000)
+        }
+    }
     DecisionCard {
         CardTitle(title)
         if (qrFile != null) {
-            val bmp = remember(qrFile) { runCatching { android.graphics.BitmapFactory.decodeFile(qrFile.absolutePath)?.asImageBitmap() }.getOrNull() }
+            val shown = liveQr ?: qrFile
+            val bmp = remember(shown) { runCatching { android.graphics.BitmapFactory.decodeFile(shown.absolutePath)?.asImageBitmap() }.getOrNull() }
             bmp?.let {
                 androidx.compose.foundation.Image(it, contentDescription = null,
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(Design.Radius.Row)))
@@ -326,7 +353,7 @@ private fun HandoffCard(o: JSONObject, code: String) {
                 fontSize = Design.Size.Note, lineHeight = Design.Line.Note, color = ChatColors.secondaryText,
             )
             CardActions {
-                PillButton(stringResource(R.string.mo_handoff_qr_save), primary = false) { MomodingSend.saveToAlbum(context, qrFile) }
+                PillButton(stringResource(R.string.mo_handoff_qr_save), primary = false) { MomodingSend.saveToAlbum(context, shown) }
                 app.momoding.hands.HandsApps.resolve(context, scanApp)?.let { a ->
                     PillButton(stringResource(R.string.mo_handoff_qr_open, a.label), primary = false) { app.momoding.hands.HandsApps.open(context, a) }
                 }
