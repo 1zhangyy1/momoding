@@ -39,11 +39,13 @@ fun ModelsScreen(onBack: () -> Unit, onOpenHands: () -> Unit, onOpenProviders: (
         val group = cfg.modelGroups.firstOrNull { it.id == cfg.defaultPrimaryGroupId } ?: cfg.modelGroups.firstOrNull()
         val members = group?.memberEntryIds?.mapNotNull { id -> cfg.modelEntries.firstOrNull { it.id == id } }.orEmpty()
         val visible = cfg.modelEntries.filter { !it.isHidden }
+        // ranked once per change of the list, not on every frame (a device can carry hundreds of models)
+        val rankedAll = androidx.compose.runtime.remember(cfg.modelEntries) { AutoSetup.ranked(visible) }
         val offered = AutoSetup.recommended(visible.map { it.model.id }).mapNotNull { id -> visible.firstOrNull { it.model.id == id } }
             .distinctBy { AutoSetup.family(it.model.id) } // one per family, not five DeepSeek variants
             .let { list ->
                 // providers off the list (OpenAI, Anthropic…): their own chat models, newest first, so there is a choice
-                if (list.size >= 3) list else (list + AutoSetup.ranked(cfg, visible).filter { e -> list.none { it.id == e.id } }).take(6)
+                if (list.size >= 3) list else (list + rankedAll.filter { e -> list.none { it.id == e.id } }).take(6)
             }
             .let { list ->
                 // a steady order (best first) whatever is chosen; the current and fallback are always there
