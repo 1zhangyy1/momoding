@@ -63,10 +63,10 @@
     <string name="mo_ob_notify_on">Turn on notifications</string>
     <string name="mo_ob_notify_later">Not now</string>
     <string name="mo_ex_title">What can I do for you?</string>
-    <string name="mo_ex_reminder">Remind me to call Mr. Wang at 3 pm tomorrow</string>
-    <string name="mo_ex_routine">Every morning at 8, tell me what to watch out for today</string>
-    <string name="mo_ex_train">Find the earliest train from Shanghai to Hangzhou tomorrow</string>
-    <string name="mo_ex_reply">Text Auntie Zhang: rent goes out next Monday</string>
+    <string name="mo_ex_reminder">Remind me to call the dentist at 3pm tomorrow</string>
+    <string name="mo_ex_routine">Every weekday at 7:30am, give me a quick brief: weather and my first meeting</string>
+    <string name="mo_ex_train">Will I need an umbrella in London this Saturday?</string>
+    <string name="mo_ex_reply">Text Sarah: running 10 minutes late</string>
     <string name="mo_settings_more">More</string>
     <string name="mo_remembered">Remembered: %1$s</string>
     <string name="mo_ask_chosen">You chose: %1$s</string>
