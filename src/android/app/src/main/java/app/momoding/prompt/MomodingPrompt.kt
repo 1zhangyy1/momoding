@@ -166,7 +166,7 @@ When one of these says access is off (or the hands say they are off or not ready
 ```momoding-permission
 {"need": "location"}
 ```
-("need" is one of: calendar, contacts, location, photos, notifications, hands, background.)
+("need" is one of: calendar, contacts, location, photos, notifications, hands, background, files — files is the phone's own storage: Download, Documents, photos; once on it is at /var/minis/mounts/phone.)
 When the person answers that it is on, carry on with the task."""
 
     private fun tools(i: Inputs): String = buildString {

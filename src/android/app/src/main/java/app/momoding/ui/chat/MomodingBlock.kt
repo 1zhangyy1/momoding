@@ -1,5 +1,6 @@
 package app.momoding.ui.chat
 
+import kotlinx.coroutines.launch
 import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -174,6 +175,7 @@ private fun PermissionCard(o: JSONObject, code: String) {
         "notifications" -> stringResource(R.string.mo_risk_target_notifications)
         "location" -> stringResource(R.string.mo_perm_location)
         "background" -> stringResource(R.string.mo_perm_background)
+        "files" -> stringResource(R.string.mo_perm_files)
         else -> return
     }
     val permissions = PermissionNeeds.androidPermissions(need)
@@ -196,6 +198,10 @@ private fun PermissionCard(o: JSONObject, code: String) {
         if (pick == context.getString(R.string.mo_perm_no)) {
             AskState.choose(context, "perm.$id", "declined"); state = "declined"
             MomodingSend.send(context.getString(R.string.mo_perm_no_msg))
+        } else if (need == "files") {
+            // one switch, then the whole storage is mounted by itself on the way back
+            app.momoding.files.PhoneFiles.openSwitch(context)
+            AskState.choose(context, "perm.$id", "files"); state = "files"
         } else if (need == "background") {
             // let off the battery saver (a system dialog, one tap); the makers' own "background" page after, where there is one
             val activity = context as? android.app.Activity
@@ -223,14 +229,23 @@ private fun PermissionCard(o: JSONObject, code: String) {
     }
     // hands: back from the system page — carry on by itself once everything is on, else say what is left
     var handsStep by remember(id) { mutableStateOf(if (need == "hands") app.momoding.hands.HandsSetup.next(context) else null) }
-    if (need == "hands" && state != "granted" && state != "declined") {
+    if ((need == "hands" || need == "files") && state != "granted" && state != "declined") {
         val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
         androidx.compose.runtime.DisposableEffect(owner, id) {
             val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
                 if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                    if (need == "files") {
+                        if (state == "files" && app.momoding.files.PhoneFiles.allowed()) {
+                            kotlinx.coroutines.MainScope().launch {
+                                app.momoding.files.PhoneFiles.ensureMounted(context)
+                                AskState.choose(context, "perm.$id", "granted"); state = "granted"; MomodingSend.send(carryOn)
+                            }
+                        }
+                    } else {
                     handsStep = app.momoding.hands.HandsSetup.next(context)
                     if (state == "hands" && handsStep == app.momoding.hands.HandsSetup.Step.NONE) {
                         AskState.choose(context, "perm.$id", "granted"); state = "granted"; MomodingSend.send(carryOn)
+                    }
                     }
                 }
             }
@@ -242,7 +257,11 @@ private fun PermissionCard(o: JSONObject, code: String) {
         "granted" -> SettledLine(stringResource(R.string.mo_perm_settled_granted, label))
         "declined" -> SettledLine(stringResource(R.string.mo_perm_settled_declined, label), done = false)
         else -> DecisionCard {
-            CardTitle(if (need == "background") stringResource(R.string.mo_perm_background_ask) else stringResource(R.string.mo_perm_ask, label))
+            CardTitle(when (need) {
+                "background" -> stringResource(R.string.mo_perm_background_ask)
+                "files" -> stringResource(R.string.mo_perm_files_ask)
+                else -> stringResource(R.string.mo_perm_ask, label)
+            })
             val detail = when (handsStep) {
                 app.momoding.hands.HandsSetup.Step.ACCESSIBILITY -> stringResource(R.string.mo_perm_hands_a11y)
                 app.momoding.hands.HandsSetup.Step.UNLOCK -> stringResource(R.string.mo_perm_hands_unlock)
@@ -266,7 +285,7 @@ private fun PermissionCard(o: JSONObject, code: String) {
                     PillButton(stringResource(R.string.mo_perm_done), primary = true) {
                         AskState.choose(context, "perm.$id", "granted"); state = "granted"; MomodingSend.send(carryOn)
                     }
-                } else if (state == "settings" || state == "hands" || state == "background") {
+                } else if (state == "settings" || state == "hands" || state == "background" || state == "files") {
                     PillButton(stringResource(R.string.mo_perm_done), primary = true) {
                         AskState.choose(context, "perm.$id", "granted"); state = "granted"; MomodingSend.send(carryOn)
                     }

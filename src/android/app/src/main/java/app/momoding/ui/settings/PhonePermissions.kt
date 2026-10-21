@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Contacts
 import androidx.compose.material.icons.outlined.BatteryFull
+import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.runtime.Composable
@@ -53,6 +54,8 @@ fun rememberPhonePermissions(): List<PhonePermission> {
                 has(Manifest.permission.READ_CONTACTS)),
             PhonePermission("location", R.string.mo_perm_row_location, R.string.mo_perm_purpose_location, Icons.Outlined.LocationOn,
                 has(Manifest.permission.ACCESS_COARSE_LOCATION) || has(Manifest.permission.ACCESS_FINE_LOCATION)),
+            PhonePermission("files", R.string.mo_perm_row_files, R.string.mo_perm_purpose_files, Icons.Outlined.Folder,
+                app.momoding.files.PhoneFiles.allowed()),
             // not a runtime permission, but the one that decides whether it keeps working when you leave
             PhonePermission("background", R.string.mo_perm_row_background, R.string.mo_perm_purpose_background, Icons.Outlined.BatteryFull,
                 com.openminis.app.power.PowerOptimizationManager.isIgnoringBatteryOptimizations(context)),
@@ -62,6 +65,7 @@ fun rememberPhonePermissions(): List<PhonePermission> {
 
 /** Opens the system page where this permission is switched (the person decides there). */
 fun openAppPermissionSettings(context: Context, p: PhonePermission) {
+    if (p.key == "files") { app.momoding.files.PhoneFiles.openSwitch(context); return }
     if (p.key == "background") {
         // the battery saver's one-tap dialog first; once let off, the phone maker's own background page (OPPO, Xiaomi…)
         val activity = context as? android.app.Activity ?: return

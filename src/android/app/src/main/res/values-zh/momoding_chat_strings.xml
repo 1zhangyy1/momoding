@@ -218,4 +218,8 @@
     <string name="mo_handoff_qr_saved">已保存到相册</string>
     <string name="mo_handoff_qr_save_failed">没保存成功</string>
     <string name="mo_handoff_qr_signed_in_msg">扫码登好了，接着做吧。</string>
+    <string name="mo_perm_files">手机里的文件</string>
+    <string name="mo_perm_files_ask">允许 Momoding 查看和整理你手机里的文件？</string>
+    <string name="mo_perm_row_files">文件</string>
+    <string name="mo_perm_purpose_files">查看和整理手机里的文件</string>
 </resources>
