@@ -237,6 +237,7 @@ class DebugRPCHandler(private val context: Context) {
                     modelEntryId = params.optString("modelEntryId").ifBlank { null },
                     mode = params.optString("mode").ifBlank { null }, // momoding: vision | tree | hybrid, for comparing
                     textSteps = params.optBoolean("textSteps", false),
+                    background = params.optBoolean("background", true),
                 )
             }
             // momoding: the hands' hidden display, for trying the background screen by hand (create / shot / release)

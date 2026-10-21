@@ -40,6 +40,24 @@ object HandsDisplay {
 
     val id: Int? get() = display?.display?.displayId
 
+    /** Whether a run can work in the background now: switched on, and Shizuku running with our permission. */
+    fun available(context: Context): Boolean =
+        Hands.background(context) && com.openminis.app.offload.ShizukuManager.isReady()
+
+    /** Starts [pkg]'s launcher activity on display [displayId]. */
+    fun launch(context: Context, displayId: Int, pkg: String): Boolean {
+        val comp = context.packageManager.getLaunchIntentForPackage(pkg)?.component ?: return false
+        val r = shell("am", "start", "--display", displayId.toString(), "-n", comp.flattenToShortString())
+        val ok = r.exitCode == 0 && !r.stdout.contains("Error") && !r.stderr.contains("Error")
+        if (!ok) AppLogger.warning(TAG, "launch $pkg on $displayId failed: ${r.stdout.take(200)} ${r.stderr.take(200)}")
+        return ok
+    }
+
+    /** `input -d <display> …`: tap x y | swipe x1 y1 x2 y2 ms | keyevent CODE. */
+    fun input(displayId: Int, vararg args: String): Boolean = shell("input", "-d", displayId.toString(), *args).exitCode == 0
+
+    private fun shell(vararg argv: String) = com.openminis.app.offload.ShizukuManager.runProcess(arrayOf(*argv), timeoutMs = 8_000)
+
     @Synchronized
     fun release() {
         display?.release(); display = null

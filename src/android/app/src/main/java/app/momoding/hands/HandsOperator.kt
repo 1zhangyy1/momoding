@@ -68,6 +68,8 @@ class HandsOperator(private val context: Context) {
          * the model asks) was the fastest and most accurate in the 2026-10-20 comparison, so it is the default.
          */
         val mode: HandsPrompt.Mode = HandsPrompt.Mode.TREE,
+        /** Work on the hands' hidden display when Shizuku allows it; false keeps the run on the person's screen. */
+        val background: Boolean = true,
         /**
          * Steps without a screenshot go to the chat's text model. Off by default: in the 2026-10-20
          * comparison the chat model (DeepSeek, which thinks first) was slower per step than the screen
@@ -165,7 +167,11 @@ class HandsOperator(private val context: Context) {
             val treeMode = opts.mode != HandsPrompt.Mode.VISION
             var wantLook = false
             // after an action: a fixed pause the old way; with the tree, as soon as the screen stops changing
-            fun pause(ms: Long) = if (treeMode) ScreenTree.settle(svc, context.packageName, screenRect, maxMs = ms + 600) else Thread.sleep(ms)
+            // the hidden display, when this run can work in the background (Shizuku); else the person's screen
+            bg = if (opts.background && treeMode && HandsDisplay.available(context)) HandsDisplay.ensure(context) else null
+            capsule.background = bg != null
+            if (bg != null) log += "working on the hidden display ${bg} (the person's screen stays theirs)"
+            fun pause(ms: Long) = if (treeMode) ScreenTree.settle(svc, context.packageName, screenRect, maxMs = ms + 600, displayId = bg) else Thread.sleep(ms)
             val turns = mutableListOf<Turn>()
             var lastResult: String? = null
             var formatErrors = 0
@@ -178,7 +184,7 @@ class HandsOperator(private val context: Context) {
             // The app the caller named comes first, before the model looks.
             opts.appHint?.takeIf { it.isNotBlank() }?.let { hint ->
                 val app = HandsApps.resolve(context, hint)
-                lastResult = if (app != null && HandsApps.open(context, app)) {
+                lastResult = if (app != null && openApp(app)) {
                     pause(OPEN_APP_SETTLE_MS); "opened ${app.label}."
                 } else "no installed app matches “$hint”; open the one you need yourself."
                 log += "open $hint → $lastResult"
@@ -197,7 +203,7 @@ class HandsOperator(private val context: Context) {
 
                 // ── look ── the element list from the tree; the screenshot when there is no tree to read,
                 // too little in it, the last action went wrong, or the model asked to look
-                val tree = if (treeMode) ScreenTree.read(svc, context.packageName, screenRect) else null
+                val tree = if (treeMode) ScreenTree.read(svc, context.packageName, screenRect, bg) else null
                 val failedLast = lastResult?.let { r -> FAILED_WORDS.any { r.contains(it) } } == true
                 // a thin list (a game, a canvas, an unlabelled app) always gets the picture; HYBRID also on the first look and after a miss
                 val wantShot = !treeMode || wantLook || tree!!.actionable < MIN_TREE_ELEMENTS ||
@@ -293,7 +299,7 @@ class HandsOperator(private val context: Context) {
                 batch@ for ((bi, action) in parsed.actions.withIndex()) {
                 if (bi > 0) {
                     if (stop.get()) return finish(Outcome.Stopped(stopReason.get() ?: "stopped"), steps, runId, lastScreen, traceDir, log, model.label)
-                    val now = ScreenTree.read(svc, context.packageName, screenRect)
+                    val now = ScreenTree.read(svc, context.packageName, screenRect, bg)
                     if (tree != null && now.signature != tree.signature) {
                         lastResult = listOfNotNull(lastResult, "The screen changed, so the remaining ${parsed.actions.size - bi} batched action(s) were not run; read the new list.").joinToString(" ")
                         break@batch
@@ -447,7 +453,7 @@ class HandsOperator(private val context: Context) {
                     }
                     is HandsAction.OpenApp -> {
                         val app = HandsApps.resolve(context, action.appName)
-                        lastResult = if (app != null && HandsApps.open(context, app)) {
+                        lastResult = if (app != null && openApp(app)) {
                             capsule.stage.say(ui.getString(com.openminis.app.R.string.mo_hands_fx_open, app.label))
                             pause(OPEN_APP_SETTLE_MS); "opened ${app.label}."
                         } else {
@@ -456,13 +462,13 @@ class HandsOperator(private val context: Context) {
                     }
                     HandsAction.Back -> {
                         capsule.stage.say(fxLabel(action))
-                        svc.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
+                        bg?.let { HandsDisplay.input(it, "keyevent", "4") } ?: svc.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
                         lastResult = "pressed Back."
                         pause(TAP_SETTLE_MS)
                     }
                     HandsAction.Home -> {
                         capsule.stage.say(fxLabel(action))
-                        svc.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME)
+                        bg?.let { HandsDisplay.input(it, "keyevent", "3") } ?: svc.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME)
                         lastResult = "went to the home screen."
                         pause(TAP_SETTLE_MS)
                     }
@@ -532,7 +538,7 @@ class HandsOperator(private val context: Context) {
         // The user may have opened nanoMuse to answer; put the operated app back in front.
         val (nowPkg, _) = svc.foregroundPackage()
         if (nowPkg == context.packageName && pkg != null && pkg != context.packageName) {
-            HandsApps.launchable(context).firstOrNull { it.packageName == pkg }?.let { HandsApps.open(context, it) }
+            if (bg == null) HandsApps.launchable(context).firstOrNull { it.packageName == pkg }?.let { HandsApps.open(context, it) }
             Thread.sleep(OPEN_APP_SETTLE_MS)
         }
         capsule.working(0, ui.getString(com.openminis.app.R.string.mo_hands_looking))
@@ -561,7 +567,7 @@ class HandsOperator(private val context: Context) {
         }
         val (nowPkg, _) = svc.foregroundPackage()
         if (nowPkg == context.packageName && pkg != null && pkg != context.packageName) {
-            HandsApps.launchable(context).firstOrNull { it.packageName == pkg }?.let { HandsApps.open(context, it) }
+            if (bg == null) HandsApps.launchable(context).firstOrNull { it.packageName == pkg }?.let { HandsApps.open(context, it) }
             Thread.sleep(OPEN_APP_SETTLE_MS)
         }
         capsule.working(0, ui.getString(com.openminis.app.R.string.mo_hands_looking))
@@ -585,12 +591,19 @@ class HandsOperator(private val context: Context) {
         return false
     }
 
+    /** The display this run works on: the hands' hidden one, or null for the person's screen. */
+    @Volatile private var bg: Int? = null
+
+    private fun openApp(app: HandsApps.App): Boolean = bg?.let { HandsDisplay.launch(context, it, app.packageName) } ?: HandsApps.open(context, app)
+
     private fun tap(svc: MinisAccessibilityService, x: Int, y: Int, durationMs: Long): Boolean {
+        bg?.let { d -> return if (durationMs >= 500) HandsDisplay.input(d, "swipe", "$x", "$y", "$x", "$y", "$durationMs") else HandsDisplay.input(d, "tap", "$x", "$y") }
         val path = Path().apply { moveTo(x.toFloat(), y.toFloat()); lineTo(x + 0.5f, y + 0.5f) }
         return svc.dispatchSimpleGesture(path, 0L, durationMs)
     }
 
     private fun swipe(svc: MinisAccessibilityService, x1: Int, y1: Int, x2: Int, y2: Int, durationMs: Long): Boolean {
+        bg?.let { d -> return HandsDisplay.input(d, "swipe", "$x1", "$y1", "$x2", "$y2", "$durationMs") }
         val path = Path().apply { moveTo(x1.toFloat(), y1.toFloat()); lineTo(x2.toFloat(), y2.toFloat()) }
         return svc.dispatchSimpleGesture(path, 0L, durationMs)
     }
@@ -682,6 +695,8 @@ class HandsOperator(private val context: Context) {
     // ── the eyes ───────────────────────────────────────────────────────────
 
     private fun screenshot(svc: MinisAccessibilityService): Bitmap? {
+        // the hidden display has nothing of ours on it: no need to hide the capsule
+        bg?.let { d -> return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) svc.captureScreenshot(d, timeoutMs = 6_000).bitmap else null }
         capsule.hideForCapture()
         try {
             repeat(2) { attempt ->

@@ -26,7 +26,7 @@
     <string name="mo_hands_fx_wait">Wait %1$d s</string>
     <string name="mo_hands_intro">Some apps cannot be reached directly, so it uses the phone the way you do: a look at the screen, then a tap, some typing, a swipe. What the phone itself and its own computer can do comes first; borrowing your screen comes last. Off by default.</string>
     <string name="mo_hands_looking">Looking at the screen…</string>
-    <string name="mo_hands_model_footer">Every step sends one screenshot to this model; it is a setting apart from the chat model. Smaller vision models are fine here and cost less.</string>
+    <string name="mo_hands_model_footer">Each step sends this model the list of what is on the screen (buttons, fields, text), and a screenshot when the list is not enough. It is a setting apart from the chat model.</string>
     <string name="mo_hands_need_a11y">Accessibility service</string>
     <string name="mo_hands_need_a11y_fix">Turn on Momoding under Installed apps in the accessibility settings</string>
     <string name="mo_hands_need_android">Android 11 or newer</string>
@@ -39,7 +39,7 @@
     <string name="mo_hands_need_overlay">Display over other apps</string>
     <string name="mo_hands_need_overlay_fix">Allow it, so the capsule with Stop can be shown</string>
     <string name="mo_hands_need_set_up">Set up</string>
-    <string name="mo_hands_needs_footer">The accessibility service takes the screenshot and performs the gestures; it does not read the screen\'s contents. Drawing over other apps is for the capsule.</string>
+    <string name="mo_hands_needs_footer">While it works, the accessibility service reads what is on the screen (buttons, fields, text) and taps for it; only during a task you gave it. Drawing over other apps is for the capsule.</string>
     <string name="mo_hands_open">Open</string>
     <string name="mo_hands_protected_screen">This screen is protected and cannot be read. Finish this part yourself, then tap Continue.</string>
     <string name="mo_hands_rule_approvals">It asks before paying, sending, posting or deleting.</string>
@@ -76,4 +76,12 @@
     <string name="mo_hands_pick_auto">Automatic</string>
     <string name="mo_hands_pick_auto_sub">The best one you have</string>
     <string name="mo_hands_stopping">Stopping…</string>
+    <string name="mo_hands_section_background">In the background (recommended)</string>
+    <string name="mo_hands_background">Work in the background</string>
+    <string name="mo_hands_background_on">On: it works on a hidden screen of its own; you keep using your phone</string>
+    <string name="mo_hands_background_off">Off: it works on your screen, as before</string>
+    <string name="mo_hands_background_need_permission">Tap to let Momoding use Shizuku</string>
+    <string name="mo_hands_background_not_running">Shizuku is installed but not running: tap to open it and start it</string>
+    <string name="mo_hands_background_not_installed">Needs the free Shizuku app: tap to get it</string>
+    <string name="mo_hands_background_footer">With Shizuku, Momoding opens apps on a screen you don\'t see and works there, so your screen stays yours. Logins and anything it shouldn\'t do alone still come to you. Without Shizuku it works on your screen.</string>
 </resources>

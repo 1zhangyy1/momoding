@@ -160,8 +160,12 @@ class HandsCapsule(private val context: Context) {
 
     fun restore() = onMain {
         root?.visibility = View.VISIBLE
-        stage.setVisible(true)
+        stage.setVisible(!background)
     }
+
+    /** The hands work on their own hidden display: no glow or finger on the person's screen, only the capsule. */
+    @Volatile var background: Boolean = false
+        set(on) { field = on; onMain { stage.setVisible(!on) } }
 
     /**
      * Runs [gesture] with the capsule letting touches through, so an injected tap or swipe that
@@ -242,7 +246,8 @@ class HandsCapsule(private val context: Context) {
 
     private fun ensure() {
         if (root != null) return
-        stage.show() // first, so the capsule's window sits above it
+        // no glow on the person's screen while the hands work on their hidden display
+        if (!background) stage.show() // first, so the capsule's window sits above it
         val radius = dp(26).toFloat()
         val pill = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL

@@ -68,10 +68,12 @@ class ScreenTree private constructor(
         private const val MAX_LABEL = 80
 
         /** Reads the windows the person sees, leaving out Momoding's own overlays and the system bars. */
-        fun read(svc: MinisAccessibilityService, ownPackage: String, screen: Rect): ScreenTree {
+        fun read(svc: MinisAccessibilityService, ownPackage: String, screen: Rect, displayId: Int? = null): ScreenTree {
             val roots = ArrayList<AccessibilityNodeInfo>()
             runCatching {
-                for (w in svc.windows ?: emptyList()) {
+                // the hands' hidden display has its own windows; the phone's screen is display 0
+                val windows = if (displayId != null && android.os.Build.VERSION.SDK_INT >= 30) svc.windowsOnAllDisplays.get(displayId) else svc.windows
+                for (w in windows ?: emptyList()) {
                     val root = w.root ?: continue
                     val pkg = root.packageName?.toString()
                     if (pkg == ownPackage || pkg == "com.android.systemui") continue
@@ -79,11 +81,12 @@ class ScreenTree private constructor(
                     roots += root
                 }
             }
-            if (roots.isEmpty()) runCatching { svc.rootInActiveWindow }.getOrNull()?.let { roots += it }
+            if (roots.isEmpty() && displayId == null) runCatching { svc.rootInActiveWindow }.getOrNull()?.let { roots += it }
             val elements = ArrayList<Element>()
             val texts = ArrayList<String>()
             for (root in roots) walk(root, false, screen, elements, texts)
-            val app = svc.foregroundPackage().first?.takeIf { it != ownPackage }?.let { HandsApps.labelOf(svc, it) }
+            val front = if (displayId != null) roots.firstOrNull()?.packageName?.toString() else svc.foregroundPackage().first
+            val app = front?.takeIf { it != ownPackage }?.let { HandsApps.labelOf(svc, it) }
             return ScreenTree(elements, texts.distinct().take(MAX_TEXTS), app)
         }
 
@@ -179,13 +182,13 @@ class ScreenTree private constructor(
          * Waits until the screen stops changing (the same structure twice, 150 ms apart) or
          * [maxMs] runs out, instead of a fixed pause after every action.
          */
-        fun settle(svc: MinisAccessibilityService, ownPackage: String, screen: Rect, minMs: Long = 150, maxMs: Long = 1500) {
+        fun settle(svc: MinisAccessibilityService, ownPackage: String, screen: Rect, minMs: Long = 150, maxMs: Long = 1500, displayId: Int? = null) {
             val start = System.currentTimeMillis()
             Thread.sleep(minMs)
-            var last = runCatching { read(svc, ownPackage, screen).signature }.getOrNull()
+            var last = runCatching { read(svc, ownPackage, screen, displayId).signature }.getOrNull()
             while (System.currentTimeMillis() - start < maxMs) {
                 Thread.sleep(150)
-                val now = runCatching { read(svc, ownPackage, screen).signature }.getOrNull()
+                val now = runCatching { read(svc, ownPackage, screen, displayId).signature }.getOrNull()
                 if (now != null && now == last) return
                 last = now
             }

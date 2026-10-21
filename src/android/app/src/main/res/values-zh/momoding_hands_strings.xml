@@ -26,7 +26,7 @@
     <string name="mo_hands_fx_wait">等 %1$d 秒</string>
     <string name="mo_hands_intro">有些 App 没法直接办，它就像你一样用手机：看一眼屏幕，然后点、输、滑。手机能力和它自己的电脑能办的先办，借你的屏幕放在最后。默认关闭。</string>
     <string name="mo_hands_looking">正在看屏幕…</string>
-    <string name="mo_hands_model_footer">每一步都会把一张截图发给这个模型，它和对话模型是两个独立的设置。小一点的视觉模型就够用，也更省钱。</string>
+    <string name="mo_hands_model_footer">每一步把屏幕上的内容列表（按钮、输入框、文字）发给这个模型，列表不够时再加一张截图。它和对话模型是两个独立的设置。</string>
     <string name="mo_hands_need_a11y">无障碍服务</string>
     <string name="mo_hands_need_a11y_fix">到无障碍设置里「已安装的应用」中打开 Momoding</string>
     <string name="mo_hands_need_android">Android 11 或更新</string>
@@ -39,7 +39,7 @@
     <string name="mo_hands_need_overlay">显示在其他应用上层</string>
     <string name="mo_hands_need_overlay_fix">允许后才能显示带「停止」按钮的胶囊</string>
     <string name="mo_hands_need_set_up">去设置</string>
-    <string name="mo_hands_needs_footer">无障碍服务只负责截图和手势，不读取屏幕内容。悬浮窗权限用来显示胶囊。</string>
+    <string name="mo_hands_needs_footer">干活时，无障碍服务会读取屏幕上的按钮、输入框和文字，并替你点按；只在你交代的任务进行时。悬浮窗权限用来显示胶囊。</string>
     <string name="mo_hands_open">打开</string>
     <string name="mo_hands_protected_screen">这个页面受保护，读不到内容。请你自己完成这一步，然后点「继续」。</string>
     <string name="mo_hands_rule_approvals">付款、发送、发布、删除之前先问你。</string>
@@ -76,4 +76,12 @@
     <string name="mo_hands_pick_auto">自动挑</string>
     <string name="mo_hands_pick_auto_sub">从你能用的里挑最合适的</string>
     <string name="mo_hands_stopping">正在停下…</string>
+    <string name="mo_hands_section_background">后台操作（推荐）</string>
+    <string name="mo_hands_background">在后台操作</string>
+    <string name="mo_hands_background_on">开：它在自己看不见的屏幕上干活，你照常用手机</string>
+    <string name="mo_hands_background_off">关：在你的屏幕上操作，和以前一样</string>
+    <string name="mo_hands_background_need_permission">点一下，允许 Momoding 使用 Shizuku</string>
+    <string name="mo_hands_background_not_running">Shizuku 已安装但没启动：点这里打开并启动它</string>
+    <string name="mo_hands_background_not_installed">需要免费的 Shizuku：点这里去下载</string>
+    <string name="mo_hands_background_footer">有 Shizuku 时，Momoding 把 App 开在一块你看不见的屏上操作，不占你的屏幕；要登录、或不该它自己决定的事，仍会交给你。没有 Shizuku 就在你的屏幕上操作。</string>
 </resources>

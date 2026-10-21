@@ -190,6 +190,45 @@ fun HandsScreen(onBack: () -> Unit, onOpenProviders: () -> Unit, onOpenHandsMode
         }
 
         // ── the rules ──
+        // ── in the background ── the recommended way when Shizuku is there: the hands get their own
+        // hidden screen and the person keeps theirs (RikkaHub's virtual display, through Shizuku)
+        val shizuku by com.openminis.app.offload.ShizukuManager.snapshot.collectAsState()
+        var background by remember { mutableStateOf(Hands.background(context)) }
+        SettingsSection(header = stringResource(R.string.mo_hands_section_background), footer = stringResource(R.string.mo_hands_background_footer)) {
+            when (shizuku.state) {
+                com.openminis.app.offload.ShizukuManager.State.READY -> SettingsSwitchRow(
+                    title = stringResource(R.string.mo_hands_background),
+                    subtitle = stringResource(if (background) R.string.mo_hands_background_on else R.string.mo_hands_background_off),
+                    checked = background,
+                    onCheckedChange = { Hands.setBackground(context, it); background = it },
+                    icon = Icons.Outlined.Layers,
+                    iconColor = if (background) Tones.action else MaterialTheme.colorScheme.onSurfaceVariant,
+                    showDivider = false,
+                )
+                com.openminis.app.offload.ShizukuManager.State.NEED_PERMISSION -> SettingsRow(
+                    title = stringResource(R.string.mo_hands_background),
+                    subtitle = stringResource(R.string.mo_hands_background_need_permission),
+                    icon = Icons.Outlined.Layers,
+                    onClick = { com.openminis.app.offload.ShizukuManager.requestPermission() },
+                    showDivider = false,
+                )
+                com.openminis.app.offload.ShizukuManager.State.NOT_RUNNING -> SettingsRow(
+                    title = stringResource(R.string.mo_hands_background),
+                    subtitle = stringResource(R.string.mo_hands_background_not_running),
+                    icon = Icons.Outlined.Layers,
+                    onClick = { com.openminis.app.offload.ShizukuManager.openShizukuApp(context) },
+                    showDivider = false,
+                )
+                else -> SettingsRow(
+                    title = stringResource(R.string.mo_hands_background),
+                    subtitle = stringResource(R.string.mo_hands_background_not_installed),
+                    icon = Icons.Outlined.Layers,
+                    onClick = { com.openminis.app.offload.ShizukuManager.openInstallPage(context) },
+                    showDivider = false,
+                )
+            }
+        }
+
         SettingsSection(header = stringResource(R.string.mo_hands_section_rules)) {
             RuleRow(stringResource(R.string.mo_hands_rule_ladder))
             RuleRow(stringResource(R.string.mo_hands_rule_secrets))
