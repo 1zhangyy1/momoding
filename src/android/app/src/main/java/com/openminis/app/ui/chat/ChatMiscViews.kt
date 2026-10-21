@@ -931,6 +931,14 @@ internal fun ResumeBanner(onResume: () -> Unit) {
     // the first tap only armed the warning and a second tap was required; that
     // extra confirm was friction on an already-explicit gesture.)
     val showCrashWarning = com.openminis.app.diagnostics.LaunchCycleBeacon.lastCycleWasCrash
+    // momoding: an interrupted turn reads like the chat's other notes — "停下了，后面的没做 · 接着做"
+    if (!showCrashWarning) {
+        app.momoding.ui.chat.MetaLine(
+            stringResource(R.string.mo_resume_stopped), app.momoding.ui.chat.Mark.UNDONE,
+            action = stringResource(R.string.mo_resume_action), onAction = onResume,
+        )
+        return
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()

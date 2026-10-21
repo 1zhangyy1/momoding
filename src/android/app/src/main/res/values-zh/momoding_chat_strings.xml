@@ -197,4 +197,9 @@
     <string name="mo_perm_hands_unlock">开关是灰的：在打开的应用详情页，点右上角 ⋮ → 允许受限设置，再回来。</string>
     <string name="mo_perm_hands_overlay">还差一步：允许 Momoding 显示在其他应用上层，再回来。</string>
     <string name="mo_feedback_discussions">到 GitHub 讨论区聊聊</string>
+    <string name="mo_status_hands_waiting">等你：%1$s</string>
+    <string name="mo_status_hands_bg_in">在后台 · %1$s · 第 %2$d 步</string>
+    <string name="mo_status_hands_bg">在后台 · 第 %1$d 步</string>
+    <string name="mo_resume_stopped">停下了，后面的没做</string>
+    <string name="mo_resume_action">接着做</string>
 </resources>

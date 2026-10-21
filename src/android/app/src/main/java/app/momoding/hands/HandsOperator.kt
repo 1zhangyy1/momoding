@@ -166,6 +166,7 @@ class HandsOperator(private val context: Context) {
             val screenRect = android.graphics.Rect(0, 0, bounds.width(), bounds.height())
             val treeMode = opts.mode != HandsPrompt.Mode.VISION
             var wantLook = false
+            var lastApp: String? = null
             // after an action: a fixed pause the old way; with the tree, as soon as the screen stops changing
             // the hidden display, when this run can work in the background (Shizuku); else the person's screen
             bg = if (opts.background && treeMode && HandsDisplay.available(context)) HandsDisplay.ensure(context) else null
@@ -199,11 +200,14 @@ class HandsOperator(private val context: Context) {
                 KeepAwake.a11yTouched()
                 capsule.working(steps, ui.getString(com.openminis.app.R.string.mo_hands_looking))
                 // momoding: the chat's status line ("in Messages · step 2"): the app in front, else the hint
-                Hands.reportStep(svc.foregroundPackage().first?.takeIf { it != context.packageName }?.let { HandsApps.labelOf(context, it) } ?: opts.appHint, steps)
+                // the app being worked: on the hidden display it is the one the last look found there
+                val frontApp = if (bg != null) lastApp else svc.foregroundPackage().first?.takeIf { it != context.packageName }?.let { HandsApps.labelOf(context, it) }
+                Hands.reportStep(frontApp ?: opts.appHint, steps, background = bg != null)
 
                 // ── look ── the element list from the tree; the screenshot when there is no tree to read,
                 // too little in it, the last action went wrong, or the model asked to look
                 val tree = if (treeMode) ScreenTree.read(svc, context.packageName, screenRect, bg) else null
+                tree?.app?.let { lastApp = it }
                 // the hidden display before any app is opened there is empty (and would look like a black, protected screen)
                 val emptyHidden = bg != null && tree != null && tree.app == null && tree.elements.isEmpty()
                 if (emptyHidden) lastResult = listOfNotNull(lastResult, "No app is open yet on the screen you work on; open the one you need with open_app.").joinToString(" ")
@@ -510,8 +514,10 @@ class HandsOperator(private val context: Context) {
         val latch = CountDownLatch(1)
         userSignal.set(latch)
         capsule.takeOver(reason)
+        Hands.reportWaiting(reason) // the chat says what is asked, not only the step
         val came = latch.await(TAKE_OVER_TIMEOUT_MS, TimeUnit.MILLISECONDS)
         userSignal.set(null)
+        Hands.reportWaiting(null)
         if (!came) requestStop("nobody continued within ${TAKE_OVER_TIMEOUT_MS / 60_000} minutes")
         if (stop.get()) return false
         capsule.working(0, ui.getString(com.openminis.app.R.string.mo_hands_looking))
@@ -732,7 +738,8 @@ class HandsOperator(private val context: Context) {
     }
 
     /** [print]: the grey level of each sampled cell, the fingerprint [HandsLoopWatch] compares. */
-    private class Jpeg(val bytes: ByteArray, val black: Boolean, val print: IntArray)
+    /** [bytes] is what the model sees (numbered boxes when there is a list); [plain] is the screen as it was, for the trace and the chat. */
+    private class Jpeg(val bytes: ByteArray, val black: Boolean, val print: IntArray, val plain: ByteArray = bytes)
 
     /** Down to [SHOT_WIDTH] px wide (the grid is relative, so nothing is lost for tapping) and JPEG. */
     private fun encode(shot: Bitmap, tree: ScreenTree? = null): Jpeg {
@@ -742,11 +749,13 @@ class HandsOperator(private val context: Context) {
         val black = looksBlack(print)
         // the element numbers drawn on the picture (Mobilerun's numbered boxes): the model points by number there too
         val marked = if (tree != null && tree.elements.isNotEmpty() && !black) ScreenTree.mark(scaled, tree, minOf(1f, scale)) else scaled
-        val out = ByteArrayOutputStream()
-        marked.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
+        fun jpeg(b: Bitmap) = ByteArrayOutputStream().also { b.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, it) }.toByteArray()
+        val forModel = jpeg(marked)
+        // the person never sees the boxes: the saved screen (shown in the chat) is the plain one
+        val plain = if (marked !== scaled) jpeg(scaled) else forModel
         if (marked !== scaled) marked.recycle()
         if (scaled !== shot) scaled.recycle()
-        return Jpeg(out.toByteArray(), black, print)
+        return Jpeg(forModel, black, print, plain)
     }
 
     /** A grid of 12 × 20 pixels, each as a grey level 0–255: enough to tell a black frame and an unchanged screen. */
@@ -806,7 +815,7 @@ class HandsOperator(private val context: Context) {
     private fun save(dir: File?, step: Int, jpeg: Jpeg, runId: String): String? {
         dir ?: return null
         return runCatching {
-            File(dir, "step-$step.jpg").writeBytes(jpeg.bytes)
+            File(dir, "step-$step.jpg").writeBytes(jpeg.plain)
             "minis://attachments/hands/$runId/step-$step.jpg"
         }.getOrNull()
     }

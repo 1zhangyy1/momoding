@@ -197,4 +197,9 @@
     <string name="mo_perm_hands_unlock">The switch is greyed out: on the app page that opens, tap ⋮ (top right) → Allow restricted settings, then come back.</string>
     <string name="mo_perm_hands_overlay">One more: allow Momoding to display over other apps, then come back.</string>
     <string name="mo_feedback_discussions">GitHub Discussions</string>
+    <string name="mo_status_hands_waiting">Your turn: %1$s</string>
+    <string name="mo_status_hands_bg_in">In the background · %1$s · step %2$d</string>
+    <string name="mo_status_hands_bg">In the background · step %1$d</string>
+    <string name="mo_resume_stopped">Stopped; the rest was not done</string>
+    <string name="mo_resume_action">Carry on</string>
 </resources>

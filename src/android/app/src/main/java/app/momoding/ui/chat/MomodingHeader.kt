@@ -121,6 +121,8 @@ private fun rememberStatusLine(isStreaming: Boolean, replying: Boolean, request:
     if (!isStreaming && pendingRisk == null && hands == null) return null
     return when {
         pendingRisk != null -> StatusLine(stringResource(R.string.mo_status_needs_approval), waiting = true)
+        h?.waiting != null -> StatusLine(stringResource(R.string.mo_status_hands_waiting, h.waiting), waiting = true)
+        h != null && h.background -> StatusLine(if (h.app != null) stringResource(R.string.mo_status_hands_bg_in, h.app, h.step) else stringResource(R.string.mo_status_hands_bg, h.step))
         h != null -> StatusLine(if (h.app != null) stringResource(R.string.mo_status_hands_in, h.app, h.step) else stringResource(R.string.mo_status_hands, h.step))
         browsing && !replying -> StatusLine(
             (if (toolRunning) toolTitle else lastToolTitle)?.takeIf { it.isNotBlank() }?.let { stringResource(R.string.mo_status_browser, it) }

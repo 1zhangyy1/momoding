@@ -183,10 +183,12 @@ object Hands {
     internal fun setActive(on: Boolean) { _active.value = on; if (!on) _progress.value = null }
 
     /** Where a run is: the app it is in and the step, for the chat's status line. Null when idle. */
-    data class Progress(val app: String?, val step: Int)
+    /** [background]: on the hands' hidden display; [waiting]: what the person is asked to do (a login, a check), while they are. */
+    data class Progress(val app: String?, val step: Int, val background: Boolean = false, val waiting: String? = null)
     private val _progress = MutableStateFlow<Progress?>(null)
     val progress: StateFlow<Progress?> = _progress.asStateFlow()
-    internal fun reportStep(app: String?, step: Int) { _progress.value = Progress(app?.takeIf { it.isNotBlank() }, step) }
+    internal fun reportStep(app: String?, step: Int, background: Boolean = false) { _progress.value = Progress(app?.takeIf { it.isNotBlank() }, step, background) }
+    internal fun reportWaiting(reason: String?) { _progress.value = _progress.value?.copy(waiting = reason?.takeIf { it.isNotBlank() }) }
 
     /**
      * Takes the hands for a run: true when they were free, false when another run holds them.
