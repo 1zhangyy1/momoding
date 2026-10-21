@@ -237,8 +237,8 @@ class OpenRouterVoiceRoutingTest {
                 VoiceOutputRequest(input = "hi", model = "fish-audio/s1", voice = voice),
             )
             assertTrue(req.url.toString().endsWith("/api/v1/audio/speech"))
-            assertEquals("https://github.com/OpenMinis/OpenMinis", req.header("HTTP-Referer"))
-            assertEquals("Minis App", req.header("X-Title"))
+            assertEquals("https://github.com/1zhangyy1/momoding", req.header("HTTP-Referer"))
+            assertEquals("Momoding", req.header("X-Title"))
             assertEquals("Bearer sk-test", req.header("Authorization"))
             val buf = Buffer()
             req.body!!.writeTo(buf)

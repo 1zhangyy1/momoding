@@ -24,7 +24,7 @@ Tell it what you saw or thought of. It uses what's on your phone to handle it, r
   <img src="docs/assets/hero-en.png" alt="Momoding remembers you, gets things done, shows you drafts first, and keeps watch" width="960" />
 </p>
 
-<p align="center"><sub>Real screenshots from an Android emulator, running DeepSeek V4.1 Flash. The app's interface is Chinese-first; English is supported.</sub></p>
+<p align="center"><sub>Real screenshots from an Android emulator with the English interface, running DeepSeek V4.1 Flash.</sub></p>
 
 > **1.0 preview.** Good for everyday trial use, but it is moving fast. Most polishing so far happened on an emulator and a few real phones, and background reliability on heavily customised Android builds is still being tested. Please [open an issue](https://github.com/1zhangyy1/momoding/issues/new/choose) when something goes wrong.
 
@@ -34,7 +34,7 @@ Tell it what you saw or thought of. It uses what's on your phone to handle it, r
 
 AI chat apps are great at answering questions. The small chores on your phone still fall to you, though: you **re-type** things, **remember** them, and **keep checking** on them.
 
-- A meeting notice arrives as a screenshot, and you copy the time and place into your calendar by hand, then set a reminder.
+- The school emails a trip notice, and you copy the date into your calendar by hand, then set a reminder.
 - You tell a chatbot to "remember this", and next time it has forgotten.
 - You want to know when tickets become available or a price drops, so you check again every few hours.
 
@@ -42,9 +42,9 @@ Momoding takes those three jobs off your hands:
 
 | | What it does for you |
 | - | - |
-| **Less re-typing** | Hand it a screenshot, a notification or a file, and the event, reminder, alarm or draft gets created. You get a one-line result plus a "View in Calendar" button. |
-| **Less remembering** | Say "keep meetings in the afternoon" once and it applies that from then on. If it got something wrong, one sentence fixes it. |
-| **Less watching** | "Every morning at 8, tell me what to look out for today." "Watch this page and tell me when it changes." It only reaches out when something actually changed. |
+| **Less re-typing** | Hand it a screenshot, a notification or a file, and the event, reminder, alarm or draft gets created. You get a one-line result plus a "See in Calendar" button. |
+| **Less remembering** | Say "no meetings before 10am, I do school drop-off" once and it applies that from then on. If it got something wrong, one sentence fixes it. |
+| **Less watching** | "Every weekday at 7:30am, give me a quick brief." "Watch this page and tell me when it changes." It only reaches out when something actually changed. |
 
 ## How it's different
 
@@ -58,14 +58,16 @@ Momoding takes those three jobs off your hands:
 
 ## What it can do today
 
+<p align="center"><img src="docs/assets/features-en.png" alt="Reminders and events, remembering you, drafts, web lookups, step view, approval cards, routines and screen operation" width="880" /></p>
+
 **Say it once, in the chat:**
 
-- **Reminders, events and alarms**: "Remind me tomorrow at 3pm to call Mr. Wang back" creates the reminder and shows a "View in Calendar" button.
-- **Preferences**: "Keep meetings in the afternoon from now on" adds a small "Remembered" note, and future scheduling follows it.
+- **Reminders, events and alarms**: "Remind me to call the dentist at 3pm tomorrow" creates the reminder and shows a "See in Calendar" button.
+- **Preferences**: "From now on, no meetings before 10am, I do school drop-off" adds a small "Remembered" note, and future scheduling follows it.
 - **One question when it needs one**: "Set an alarm for me" gets a reply of "What time?" instead of a guess.
-- **Drafts you approve**: "Text Auntie Zhang: rent goes out next Monday" produces an editable draft card. Nothing is sent until you tap Send.
-- **Web lookups**: "Find the earliest train from Shanghai to Hangzhou tomorrow" brings back the answer with next-step buttons such as "Book this one" and "Add to calendar".
-- **Routines**: "Every morning at 8, tell me what to look out for today" does a trial run first, then reports on schedule, and stays quiet when there's nothing that matters.
+- **Drafts you approve**: "Text Sarah: running 10 minutes late" produces an editable draft card. Nothing is sent until you tap Send.
+- **Web lookups**: "Will I need an umbrella in London this Saturday?" checks the forecast and answers in a sentence, with next-step buttons when there is something to do.
+- **Routines**: "Every weekday at 7:30am, give me a quick brief: weather and my first meeting" does a trial run first, then reports on schedule, and stays quiet when there's nothing that matters.
 - **Operating other apps on your screen** (experimental): with the Accessibility permission on, it can tap, scroll and type for you. A capsule on screen shows that it's working, and you can stop it at any time.
 
 **You stay in charge:**
@@ -88,7 +90,7 @@ Momoding takes those three jobs off your hands:
 3. Type your first request, or tap one of the examples on the empty chat.
 4. To let it operate other apps, go to Settings → Phone permissions → **Hands** and follow the prompts to turn on Accessibility and the overlay permission. Everything else works without it.
 
-> If you installed a Momoding 0.1.0-alpha build, uninstall it first. Version 1.0 is a new codebase with a different signing key, so it can't update the old app in place.
+> If you installed any earlier Momoding build (including 0.1.0-alpha and test builds), uninstall it first. Version 1.0 is a new codebase with a new signing key, so it can't update the old app in place. From 1.0 on the key stays the same, so later versions update in place.
 
 ## Build from source
 
