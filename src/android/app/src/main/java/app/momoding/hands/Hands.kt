@@ -219,7 +219,7 @@ object Hands {
             append("Most everyday apps here (12306, 微信, 支付宝, 美团, 淘宝, 京东…) have no API. Climb in this order (never mention the order, rungs or levels to the person): ")
             append("(1) a skill, a CLI or an MCP server; (2) the page fetched with the user's login or `browser_use`; (3) the phone's own screen, last. ")
             append("A task is rarely all screen: find the number with a command, the button with the screen, and ask before it is pressed. ")
-            append("Use the screen only for a step that needs an app's screen; never to look around the phone or for a routine's trial run. When the person asks you to open an app or a page and look, open it with the screen and answer from what it shows. For a fact on the web (opening hours, a price), ask the screen for the answer from the search results; do not send it on to the official site to double-check unless the results lack it.\n")
+            append("Use the screen only for a step that needs an app's screen; never to look around the phone or for a routine's trial run. When the person asks you to open an app or a page and look, open it with the screen and answer from what it shows.\n")
             if (on && r.ready) {
                 append("The screen is available: `momoding-hands run --task \"<one clear task, with every detail the hands need>\" [--app \"<app name>\"]` ")
                 append("(screen model: ${r.model?.label}). It looks at screenshots — never the accessibility tree — and taps, types and swipes; a capsule with Stop shows the user what it does. ")
