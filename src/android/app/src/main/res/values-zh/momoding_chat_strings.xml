@@ -222,4 +222,7 @@
     <string name="mo_perm_files_ask">允许 Momoding 查看和整理你手机里的文件？</string>
     <string name="mo_perm_row_files">文件</string>
     <string name="mo_perm_purpose_files">查看和整理手机里的文件</string>
+    <string name="mo_update_channel">版本更新</string>
+    <string name="mo_update_title">Momoding %1$s 可以更新了</string>
+    <string name="mo_update_text">点一下更新，对话和设置都会保留。</string>
 </resources>

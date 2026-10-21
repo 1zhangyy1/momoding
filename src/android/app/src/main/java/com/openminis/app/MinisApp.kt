@@ -536,6 +536,7 @@ class MinisApp : Application(), ImageLoaderFactory {
                     skillRepository.requestReload("foreground")
                     // momoding: the person is here; routines' results count as seen
                     app.momoding.chat.RoutineAttention.onSeen(this@MinisApp)
+                    app.momoding.update.AutoUpdate.onForeground(this@MinisApp) // momoding: a new version is announced once a day at most
                 }
             }
         )

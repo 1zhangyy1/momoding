@@ -43,6 +43,8 @@ object UpdateChecker {
     // published". The 0.1-preview release is published as a prerelease on
     // OpenMinis/OpenMinis with a MinisApp-*.apk asset attached.
     private const val REPO = "momoding"
+    /** momoding: the mainland mirror of the same releases. */
+    private const val GITEE_OWNER = "nuomijizhangyy"
     private const val DOWNLOAD_FILENAME = "minis-update.apk"
     /**
      * Sub-directory of `filesDir` where we stage downloaded update APKs. We
@@ -104,14 +106,20 @@ object UpdateChecker {
      * All network work happens on [Dispatchers.IO]; safe to call from any
      * coroutine scope.
      */
-    suspend fun check(): CheckResult = withContext(Dispatchers.IO) {
-        val url = "https://api.github.com/repos/$OWNER/$REPO/releases?per_page=30"
+    suspend fun check(): CheckResult {
+        // momoding: Gitee first (reachable in mainland China, same release format), GitHub when Gitee
+        // cannot answer. The APK is safe from either: Android refuses one signed by another key.
+        val gitee = checkSource("https://gitee.com/api/v5/repos/$GITEE_OWNER/$REPO/releases?per_page=30", github = false)
+        if (gitee is CheckResult.UpdateAvailable || gitee is CheckResult.UpToDate) return gitee
+        return checkSource("https://api.github.com/repos/$OWNER/$REPO/releases?per_page=30", github = true)
+    }
+
+    private suspend fun checkSource(url: String, github: Boolean): CheckResult = withContext(Dispatchers.IO) {
         AppLogger.info(TAG, "GET $url (local=${BuildConfig.VERSION_NAME})")
         try {
             val req = Request.Builder()
                 .url(url)
-                .header("Accept", "application/vnd.github+json")
-                .header("X-GitHub-Api-Version", "2022-11-28")
+                .apply { if (github) header("Accept", "application/vnd.github+json").header("X-GitHub-Api-Version", "2022-11-28") }
                 .build()
             client.newCall(req).execute().use { resp ->
                 AppLogger.info(TAG, "HTTP ${resp.code}")
@@ -131,7 +139,10 @@ object UpdateChecker {
                     return@withContext CheckResult.Error(msg)
                 }
                 val body = resp.body?.string() ?: return@withContext CheckResult.Error("empty body")
-                val arr = runCatching { JSONArray(body) }.getOrNull()
+                // momoding: Gitee leaves raw line breaks inside the release notes (invalid JSON); its answer is
+                // one compact line, so every break is inside a string and can be escaped
+                val json = if (github) body else body.replace("\r", "").replace("\n", "\\n").replace("\t", "\\t")
+                val arr = runCatching { JSONArray(json) }.getOrNull()
                 if (arr == null || arr.length() == 0) {
                     AppLogger.info(TAG, "releases list empty")
                     return@withContext CheckResult.NoReleaseAvailable

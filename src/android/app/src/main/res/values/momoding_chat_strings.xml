@@ -222,4 +222,7 @@
     <string name="mo_perm_files_ask">Let Momoding see and tidy the files on your phone?</string>
     <string name="mo_perm_row_files">Files</string>
     <string name="mo_perm_purpose_files">See and tidy the files on your phone</string>
+    <string name="mo_update_channel">Updates</string>
+    <string name="mo_update_title">Momoding %1$s is ready</string>
+    <string name="mo_update_text">Tap to update; your chats and settings stay.</string>
 </resources>
