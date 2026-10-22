@@ -36,6 +36,7 @@
     <string name="mo_routines_empty">No routines yet. Tell me in the chat, for example: “every morning at 8, tell me what to watch out for today”.</string>
     <string name="mo_routine_every">Every %1$s</string>
     <string name="mo_routine_on_notification">On a notification: %1$s</string>
+    <string name="mo_routine_skipped">Skipped: the condition did not hold</string>
     <string name="mo_routine_once">Once</string>
     <string name="mo_routine_daily">Every day around %1$s</string>
     <string name="mo_routine_weekdays">Weekdays around %1$s</string>

@@ -29,6 +29,7 @@ import java.util.Calendar
  *                          | [--time HH:MM [--repeat once|daily|weekdays|custom --days mon,tue,...]]
  *                          | [--trigger on-completion --of <taskId|jobId>]
  *                          | [--app <name|sms>] [--match "<words>"]      (on-notification, Momoding)
+ *                          [--if "<condition>"]   checked at each fire; skipped when it does not hold (Momoding)
  *                          [--target new|follow-up|rerun]
  *                          [--session <id>] [--message <id>]
  *                          [--model <modelId>] [--thinking off|low|medium|high|xhigh|max|ultra]
@@ -153,6 +154,7 @@ class ScheduledTaskOffloadHandler(private val context: Context) : NativeOffloadH
                 onCompletionOf = trigger.onCompletionOf,
                 onNotificationApp = trigger.onNotificationApp,
                 onNotificationMatch = trigger.onNotificationMatch,
+                fireIf = args.get("if")?.trim()?.takeIf { it.isNotEmpty() },
             ),
         )
         val destination = when (target) {
@@ -303,6 +305,7 @@ class ScheduledTaskOffloadHandler(private val context: Context) : NativeOffloadH
         t.onCompletionOf?.let { put("of", it) }
         t.onNotificationApp?.let { put("app", it) }
         t.onNotificationMatch?.let { put("match", it) }
+        t.fireIf?.let { put("if", it) }
         if (t.usesAnchor) put("firedCount", t.triggeredCount ?: 0)
         t.thinkingLevel?.let { put("thinking", it.name.lowercase()) }
         if (t.modelId != null) put("model", t.modelId)
@@ -566,6 +569,10 @@ class ScheduledTaskOffloadHandler(private val context: Context) : NativeOffloadH
                                                              flag alone works. {{notification}} in
                                                              --prompt becomes it. Needs notification
                                                              access (`create` says when it is off)
+                   [--if "<condition>"]                      checked each time it fires (not on `run`);
+                                                             when it clearly does not hold — e.g.
+                                                             "unless I said it is paid" — the fire is
+                                                             skipped silently and recorded as skipped
                    [--trigger once|loop|cron|on-completion|on-notification]
                                                              optional; inferred from the flags above
                    [--target follow-up|new|rerun --session <id> --message <id>]

@@ -201,6 +201,11 @@ data class ScheduledTask(
     /** [ScheduledTriggerKind.ON_NOTIFICATION]: words the notification's title or text contains. */
     val onNotificationMatch: String? = null,
     /**
+     * Momoding: a condition checked when the task fires, any trigger ("unless I said it is paid");
+     * when it does not hold the run is skipped. null = always run. See [app.momoding.chat.FireIf].
+     */
+    val fireIf: String? = null,
+    /**
      * AFTER / INTERVAL: when the current countdown started — creation, the
      * last alarm fire (INTERVAL), or re-enabling. Absolute, so a reboot or a
      * killed process resumes the same schedule instead of restarting it.
@@ -359,6 +364,7 @@ data class ScheduledTask(
         if (onCompletionOf != null) put("onCompletionOf", onCompletionOf)
         if (onNotificationApp != null) put("onNotificationApp", onNotificationApp)
         if (onNotificationMatch != null) put("onNotificationMatch", onNotificationMatch)
+        if (fireIf != null) put("fireIf", fireIf)
         if (anchorMs != null) put("anchorMs", anchorMs)
         if (triggeredCount != null) put("triggeredCount", triggeredCount)
     }
@@ -412,6 +418,7 @@ data class ScheduledTask(
             onCompletionOf = if (o.has("onCompletionOf")) o.optString("onCompletionOf", null) else null,
             onNotificationApp = if (o.has("onNotificationApp")) o.optString("onNotificationApp", null) else null,
             onNotificationMatch = if (o.has("onNotificationMatch")) o.optString("onNotificationMatch", null) else null,
+            fireIf = if (o.has("fireIf")) o.optString("fireIf", null) else null,
             anchorMs = if (o.has("anchorMs")) o.optLong("anchorMs") else null,
             triggeredCount = if (o.has("triggeredCount")) o.optInt("triggeredCount") else null,
         )

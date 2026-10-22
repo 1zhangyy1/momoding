@@ -36,6 +36,7 @@
     <string name="mo_routines_empty">还没有例行任务。在对话里跟我说就行，比如“每天早上 8 点告诉我今天要注意的事”。</string>
     <string name="mo_routine_every">每 %1$s</string>
     <string name="mo_routine_on_notification">收到通知时：%1$s</string>
+    <string name="mo_routine_skipped">条件不满足，跳过了</string>
     <string name="mo_routine_once">一次</string>
     <string name="mo_routine_daily">每天 %1$s 左右</string>
     <string name="mo_routine_weekdays">工作日 %1$s 左右</string>

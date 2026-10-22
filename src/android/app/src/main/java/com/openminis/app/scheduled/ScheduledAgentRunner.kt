@@ -1,5 +1,6 @@
 package com.openminis.app.scheduled
 
+import app.momoding.chat.FireIf
 import app.momoding.chat.NotifyDecision
 import app.momoding.chat.RoutineAttention
 import app.momoding.chat.RoutineWakes // momoding (a local `app` shadows the package root here)
@@ -75,6 +76,8 @@ object ScheduledAgentRunner {
         task: ScheduledTask,
         waitForCompletion: Boolean = true,
         scheduledFire: Boolean = false,
+        /** momoding: the task's --if was already checked for this fire. */
+        conditionChecked: Boolean = false,
     ): String? {
         // [T-android-scheduled-lateinit-crash-156] `as? MinisApp` only rules out
         // a null / wrong-type Application — it does NOT mean the Application is
@@ -102,6 +105,25 @@ object ScheduledAgentRunner {
                 TAG,
                 "MinisApp subsystems not initialized (safe-mode or failed init) — skipping task ${task.id}",
             )
+            return null
+        }
+
+        // momoding: a routine's --if, checked before anything runs (manual "Run now" is not). It is a
+        // model call, so a caller that does not wait (the alarm's few-second handoff) gets it on the
+        // background scope; a fire whose condition does not hold is recorded as skipped, says nothing.
+        val condition = task.fireIf?.takeIf { it.isNotBlank() }
+        if (scheduledFire && condition != null && !conditionChecked) {
+            val checked: suspend () -> String? = {
+                if (FireIf.holds(app, condition, task.targetMode.sessionIdOrNull)) {
+                    run(app, task, waitForCompletion, scheduledFire = true, conditionChecked = true)
+                } else {
+                    ScheduledTaskManager(app).markFired(task.id, task.targetMode.sessionIdOrNull, app.getString(com.openminis.app.R.string.mo_routine_skipped), ok = true)
+                    ScheduledCompletionTriggers.onScheduledRunFinished(app, task.id, null)
+                    null
+                }
+            }
+            if (waitForCompletion) return checked()
+            bgScope.launch { checked() }
             return null
         }
 
