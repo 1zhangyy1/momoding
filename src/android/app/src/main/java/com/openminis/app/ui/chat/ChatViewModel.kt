@@ -5263,10 +5263,10 @@ class ChatViewModel(
             append(conversationText)
             append("\n\n---\nEND OF CONVERSATION TO COMPACT.\n\n")
             append(
-                "Now generate a structured context summary following the system prompt " +
-                    "instructions. Do NOT continue the conversation above — summarize it. " +
-                    "Write everything in past tense, framed as \"what was discussed / what " +
-                    "was done\", NOT as an ongoing goal or todo list."
+                "Now generate the structured context summary the system prompt describes. " +
+                    "Do NOT continue the conversation above — summarize it. Record events in " +
+                    "past tense; what was still open is a record of how things stood, not a " +
+                    "work order."
             )
         }
         val model = currentModel
@@ -5701,29 +5701,25 @@ class ChatViewModel(
         }
 
     /**
-     * System prompt for the single-shot summarisation call. Matches iOS
-     * wording so cross-device summaries stay stylistically aligned.
+     * System prompt for the single-shot summarisation call.
+     *
+     * Momoding: one long-running conversation with one person, so the summary is a state
+     * table (after Instinct's compaction, 调研/M18): what was left open has to survive, or a
+     * question asked and a promise made are forgotten at the first compaction. It stays a
+     * record, not an order — the <context-summary> wrapper says the newest message wins.
      */
     private val compactSummarySystemPrompt: String = """
-        You are a context compaction engine. Your summary will REPLACE the original messages in the conversation context window. The agent will read your summary as past context, then proceed based on the user's NEXT message — your summary is background, not a standing work order. Write the summary in the same language the user used in the conversation.
+        You are a context compaction engine. Your summary will REPLACE the original messages in the conversation context window. The agent will read it as background, then act on the person's NEXT message — the summary is a record of how things stood, not a standing work order. Write it in the language the person used.
 
-        MUST PRESERVE (never omit or shorten):
-        - All file paths, directory names, URLs, UUIDs, and identifiers — copy verbatim
-        - Commands executed and their outcomes (success/failure/output)
-        - What was requested and what was done (record as past events, not as ongoing goals)
-        - Key decisions made and their rationale
-        - Errors encountered and how they were resolved
-        - Important constraints, rules, or user preferences mentioned
-        - Any tool calls and their results that affect current state
+        Write these sections, in this order, with these headings; leave out a section that has nothing:
+        1. Where things stand — one or two lines: what the conversation was about and where it had got to.
+        2. Left open — questions the agent asked that were not answered, choices offered and not made, things the agent said it would do and had not yet done or confirmed, blockers waiting on the person. One line each, as of the end of this conversation. Do not turn them into tasks; the person's next message decides whether any of them still matters.
+        3. Running or scheduled — routines and reminders created (label, time, id), work still running when the conversation ended.
+        4. Verbatim — file paths, URLs, ids, numbers, names that later turns may need, copied exactly.
+        5. Learned — preferences, rules and corrections the person stated ("always…", "never…", "not like that"), and how they like replies.
+        6. Done — what was requested and done, with the result and where the person can see it; what failed and why. Past tense.
 
-        STRUCTURE:
-        1. Start with a one-line description of what the conversation was about (use past tense — "User asked X, agent did Y", NOT "Goal: X").
-        2. Then a concise narrative of what happened, preserving technical details.
-        3. End with a "What had been done so far" section listing completed work — NOT a "todo" or "pending" list. Do not invent ongoing objectives or carry-over tasks from old turns; if the user wants to continue, they will say so in their next message.
-
-        PRIORITIZE recent context over older history — recent decisions and recent file/path references are most useful for continuity.
-
-        Do NOT translate or alter code snippets, file paths, identifiers, or error messages. Be concise but never lose information the agent needs.
+        Prioritize recent context over older history. Drop chatter, retries that changed nothing and tool output that no longer matters. Do NOT translate or alter code, paths, identifiers or error messages. Be concise but never lose what the agent needs.
     """.trimIndent()
 
     // T203 part 2: these MUST be declared before `init { loadSession() }` below.

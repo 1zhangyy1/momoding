@@ -197,15 +197,16 @@ class CompactLoopFramingTest {
     // ── drift guard ────────────────────────────────────────────────────────
 
     @Test
-    fun `drift guard - framing, past-tense prompt and summary wrapper still in production`() {
+    fun `drift guard - framing, record-not-order prompt and summary wrapper still in production`() {
         val vm = ProductionSources.read("ui/chat/ChatViewModel.kt")
         assertTrue(vm.contains("append(\"Compact this conversation into a context summary:\\n\\n\")"))
         assertTrue(vm.contains("append(\"\\n\\n---\\nEND OF CONVERSATION TO COMPACT.\\n\\n\")"))
         assertTrue(vm.contains("Do NOT continue the conversation above — summarize it."))
-        assertTrue(vm.contains("NOT as an ongoing goal or todo list."))
-        // System prompt: past events, no carried-over objectives (old-task bleed).
-        assertTrue(vm.contains("Do not invent ongoing objectives or carry-over tasks from old turns"))
-        assertTrue(vm.contains("NOT a \"todo\" or \"pending\" list"))
+        assertTrue(vm.contains("what was still open is a record of how things stood, not a"))
+        // System prompt (Momoding state table): what was left open is kept as a record, never as
+        // a task — the old-task bleed guard is that the next message decides (and the wrapper below).
+        assertTrue(vm.contains("the summary is a record of how things stood, not a standing work order"))
+        assertTrue(vm.contains("Do not turn them into tasks; the person's next message decides whether any of them still matters."))
         // Summary wrapper at read time: newest user instruction wins.
         assertTrue(vm.contains("The user's most recent message (below or in the next turn) takes precedence"))
         assertTrue(vm.contains("do not resume the old plan from this summary"))
