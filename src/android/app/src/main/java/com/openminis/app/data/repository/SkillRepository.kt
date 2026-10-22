@@ -1237,7 +1237,32 @@ class SkillRepository(private val context: Context) {
         // Python, minis:// links…), loaded only when a task needs it
         runCatching { context.assets.open("momoding-skills-files-and-scripts.md").bufferedReader().readText() }
             .getOrNull()?.let { installBundledSkill("files-and-scripts", "1.0.0", it) }
+        installSelfSkill()
     }
+
+    /**
+     * momoding: the about-momoding skill and, next to it, Momoding's own source as built into this
+     * APK (assets/momoding-self, see CopySelfSourceTask). Refreshed whenever the app is updated, so
+     * what it reads is always the version that is running.
+     */
+    private fun installSelfSkill() = runCatching {
+        val installed = context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime.toString()
+        val md = context.assets.open("momoding-skills-about-momoding.md").bufferedReader().readText()
+        installBundledSkill("about-momoding", installed, md)
+        val dir = File(skillsDir, "about-momoding")
+        val marker = File(dir, ".source-version")
+        if (marker.takeIf { it.isFile }?.readText() == installed) return@runCatching
+        val source = File(dir, "source").apply { deleteRecursively(); mkdirs() }
+        fun copy(asset: String, to: File) {
+            val children = context.assets.list(asset).orEmpty()
+            if (children.isEmpty()) {
+                to.parentFile?.mkdirs()
+                context.assets.open(asset).use { input -> to.outputStream().use { input.copyTo(it) } }
+            } else children.forEach { copy("$asset/$it", File(to, it)) }
+        }
+        copy("momoding-self", source)
+        marker.writeText(installed)
+    }.onFailure { Log.w(TAG, "about-momoding install failed: ${it.message}") }
 
     private fun installBundledSkill(bundledId: String, bundledVersion: String, content: String) {
         val existing = _skills.value.find { it.id == bundledId }

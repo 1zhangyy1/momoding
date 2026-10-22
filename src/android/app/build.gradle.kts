@@ -260,6 +260,35 @@ abstract class WriteBuildInfoTask : DefaultTask() {
         file.writeText(System.currentTimeMillis().toString())
     }
 }
+// momoding: Momoding reads its own source when asked about itself (the about-momoding skill).
+// Its code, the OpenMinis files it changed (marked `// momoding`) and its UI wording, copied at
+// build time so the copy always matches the installed version.
+abstract class CopySelfSourceTask : DefaultTask() {
+    @get:InputDirectory
+    abstract val javaDir: DirectoryProperty
+
+    @get:InputDirectory
+    abstract val resDir: DirectoryProperty
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun copy() {
+        val out = outputDir.dir("momoding-self").get().asFile
+        out.deleteRecursively()
+        val java = javaDir.get().asFile
+        java.walkTopDown().filter { it.isFile && it.extension == "kt" }.forEach { f ->
+            val rel = f.relativeTo(java).invariantSeparatorsPath
+            if (rel.startsWith("app/momoding/") || f.readText().contains("// momoding")) {
+                f.copyTo(File(out, "java/$rel"), overwrite = true)
+            }
+        }
+        resDir.get().asFile.listFiles { d -> d.name == "values" || d.name.startsWith("values-zh") }?.forEach { d ->
+            d.listFiles { f -> f.name.startsWith("momoding_") }?.forEach { it.copyTo(File(out, "res/${d.name}/${it.name}"), overwrite = true) }
+        }
+    }
+}
 androidComponents {
     onVariants { variant ->
         val cap = variant.name.replaceFirstChar { it.uppercase() }
@@ -267,6 +296,11 @@ androidComponents {
             outputs.upToDateWhen { false }
         }
         variant.sources.assets?.addGeneratedSourceDirectory(task, WriteBuildInfoTask::outputDir)
+        val self = tasks.register<CopySelfSourceTask>("copy${cap}SelfSource") {
+            javaDir.set(layout.projectDirectory.dir("src/main/java"))
+            resDir.set(layout.projectDirectory.dir("src/main/res"))
+        }
+        variant.sources.assets?.addGeneratedSourceDirectory(self, CopySelfSourceTask::outputDir)
     }
 }
 
