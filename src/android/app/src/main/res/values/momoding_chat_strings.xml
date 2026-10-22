@@ -37,6 +37,13 @@
     <string name="mo_routine_every">Every %1$s</string>
     <string name="mo_routine_on_notification">On a notification: %1$s</string>
     <string name="mo_routine_skipped">Skipped: the condition did not hold</string>
+    <string name="mo_bg_untitled">Background job</string>
+    <string name="mo_bg_done">Done in the background · %1$s</string>
+    <string name="mo_bg_progress">Still working in the background · %1$s</string>
+    <string name="mo_bg_stopped">Stopped in the background · %1$s</string>
+    <string name="mo_bg_failed">Couldn\'t finish in the background · %1$s</string>
+    <string name="mo_bg_minutes">%1$d min</string>
+    <string name="mo_bg_seconds">%1$d s</string>
     <string name="mo_routine_once">Once</string>
     <string name="mo_routine_daily">Every day around %1$s</string>
     <string name="mo_routine_weekdays">Weekdays around %1$s</string>

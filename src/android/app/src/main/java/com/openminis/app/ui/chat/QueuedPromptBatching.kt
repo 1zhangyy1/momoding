@@ -21,7 +21,11 @@ package com.openminis.app.ui.chat
  *  - One scheduled fire per boundary. Several pending fires are delivered one
  *    boundary (or drain round) at a time, oldest first, so the original task
  *    still gets a model turn between them.
- *  - Non-scheduled prompts keep their old behaviour: merged into one message.
+ *  - Momoding (调研/M19): the person's words are never merged with agent
+ *    reports. A user follow-up goes in alone (with any other user follow-ups);
+ *    reports wait for the drain, where the person's words still go first and
+ *    the reports that arrived together then go as one turn — "answer the user
+ *    first", and several results become one message instead of several.
  */
 internal object QueuedPromptBatching {
 
@@ -29,14 +33,19 @@ internal object QueuedPromptBatching {
     fun nextInsertBatch(queue: List<QueuedPrompt>): List<QueuedPrompt> {
         val first = queue.firstOrNull { it.isScheduledFire || it.origin == QueuedPromptOrigin.USER }
             ?: return emptyList()
-        return if (first.isScheduledFire) listOf(first) else queue.filterNot { it.isScheduledFire }
+        return if (first.isScheduledFire) listOf(first) else queue.filter { it.isUserFollowUp }
     }
 
     /** What the drain sends as its next turn; empty = the queue is empty. */
     fun nextDrainBatch(queue: List<QueuedPrompt>): List<QueuedPrompt> {
         val first = queue.firstOrNull() ?: return emptyList()
-        return if (first.isScheduledFire) listOf(first) else queue.filterNot { it.isScheduledFire }
+        if (first.isScheduledFire) return listOf(first)
+        val users = queue.filter { it.isUserFollowUp }
+        return users.ifEmpty { queue.filterNot { it.isScheduledFire } }
     }
+
+    private val QueuedPrompt.isUserFollowUp: Boolean
+        get() = origin == QueuedPromptOrigin.USER && !isScheduledFire
 
     /**
      * Ids of queued fires a new fire of [taskId] replaces. Two undelivered

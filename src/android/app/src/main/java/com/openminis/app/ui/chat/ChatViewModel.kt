@@ -13236,7 +13236,8 @@ class ChatViewModel(
         currentText: String,
     ): ToolExecutionResult {
         val hr = com.openminis.app.agent.jobs.HelperRunner
-        val args = hr.parseArgs(argsJson)
+        // momoding: a phone-sized time budget on top of the shared contract's 1–60 (调研/M19)
+        val args = hr.parseArgs(argsJson).let { it.copy(minutes = minOf(it.minutes, app.momoding.prompt.MomodingHelper.MAX_MINUTES)) }
         val title = args.title.ifEmpty { "agent" }
         fun reject(reason: String, detail: String): ToolExecutionResult {
             AppLogger.warning(TAG, "[delegate_task] REJECTED $reason: $detail")
@@ -13431,7 +13432,7 @@ class ChatViewModel(
             ).also {
                 it.helperConfig = com.openminis.app.agent.jobs.HelperConfig(
                     parentSessionId = parentSid, parentToolUseId = toolId, jobId = job.id,
-                    maxTurns = hr.MAX_TURNS, title = title, tierUsed = resolution.tierUsed,
+                    maxTurns = app.momoding.prompt.MomodingHelper.MAX_TURNS, title = title, tierUsed = resolution.tierUsed, // momoding: phone-sized budget
                     // [T-sub-agents-v1] Identity + the user's own instructions
                     // for this definition; the built-in carries none.
                     agentName = subAgent.name.takeIf { !subAgent.isBuiltIn },

@@ -46,11 +46,18 @@ class ScheduledPreemptiveInsertTest {
     }
 
     @Test
-    fun `a user follow-up keeps its old batch, minus any scheduled fire`() {
-        // Before: everything queued was merged into the injected message. The
-        // held callbacks still ride along; scheduled fires never do.
+    fun `a user follow-up goes in with the other user follow-ups only`() {
+        // Momoding: agent reports never ride along with the person's words
+        // (they wait for the drain); scheduled fires never do either.
         val q = listOf(callback("1"), user("2"), fire("3"), user("4"))
-        assertEquals(listOf("1", "2", "4"), ids(QueuedPromptBatching.nextInsertBatch(q)))
+        assertEquals(listOf("2", "4"), ids(QueuedPromptBatching.nextInsertBatch(q)))
+    }
+
+    @Test
+    fun `the drain answers the person first, then the reports together`() {
+        val q = listOf(callback("1"), user("2"), callback("3"))
+        assertEquals(listOf("2"), ids(QueuedPromptBatching.nextDrainBatch(q)))
+        assertEquals(listOf("1", "3"), ids(QueuedPromptBatching.nextDrainBatch(listOf(callback("1"), callback("3")))))
     }
 
     @Test
@@ -74,7 +81,8 @@ class ScheduledPreemptiveInsertTest {
         val q = listOf(fire("1"), user("2"), callback("3"), fire("4"))
         assertEquals(listOf("1"), ids(QueuedPromptBatching.nextDrainBatch(q)))
         val rest = q.drop(1)
-        assertEquals(listOf("2", "3"), ids(QueuedPromptBatching.nextDrainBatch(rest)))
+        assertEquals(listOf("2"), ids(QueuedPromptBatching.nextDrainBatch(rest)))
+        assertEquals(listOf("3"), ids(QueuedPromptBatching.nextDrainBatch(listOf(callback("3"), fire("4")))))
         assertEquals(listOf("4"), ids(QueuedPromptBatching.nextDrainBatch(listOf(fire("4")))))
         assertTrue(QueuedPromptBatching.nextDrainBatch(emptyList()).isEmpty())
     }

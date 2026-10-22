@@ -37,6 +37,13 @@
     <string name="mo_routine_every">每 %1$s</string>
     <string name="mo_routine_on_notification">收到通知時：%1$s</string>
     <string name="mo_routine_skipped">條件不滿足，跳過了</string>
+    <string name="mo_bg_untitled">背景任務</string>
+    <string name="mo_bg_done">背景辦完 · %1$s</string>
+    <string name="mo_bg_progress">背景在辦 · %1$s</string>
+    <string name="mo_bg_stopped">背景停了 · %1$s</string>
+    <string name="mo_bg_failed">背景沒辦成 · %1$s</string>
+    <string name="mo_bg_minutes">%1$d 分鐘</string>
+    <string name="mo_bg_seconds">%1$d 秒</string>
     <string name="mo_routine_once">一次</string>
     <string name="mo_routine_daily">每天 %1$s 左右</string>
     <string name="mo_routine_weekdays">工作日 %1$s 左右</string>
