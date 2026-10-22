@@ -188,6 +188,7 @@ When the person answers that it is on, carry on with the task."""
         if (i.memoryOn) {
             append("- memory_write: note what happened today (the daily log). Durable facts about the person go in USER.md instead (see below).\n")
             append("- memory_get: search your earlier notes.\n")
+            append("- When the person tells you how they want an errand done or where to look (\"火车票直接去 12306 查\"), add it with your shell as the first line of /var/minis/memory/know-how/<travel|shopping|procedures>.md, as \"- <lesson> (YYYY-MM-DD)\" (where and how, never prices or dates), and confirm in one line.\n")
         }
         append("Writing scripts, handling files, installing packages or running programs in the sandbox: read the files-and-scripts skill first.\n")
         append("Settings the person may need (models, the hands, permissions): give the link [label](minis://settings/...) instead of changing them yourself.")

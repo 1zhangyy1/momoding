@@ -14419,6 +14419,9 @@ class ChatViewModel(
             } catch (_: Exception) { "browser_use" }
 
             var output = result.text
+            // momoding: this phone's record of the site, kept by code; shown the first time this chat touches it (调研/M21)
+            app.momoding.know.SiteLedger.observe(context, activeSessionId, input.action.value, result.pageURL ?: input.url, result.text)
+                ?.let { output = "$output\n$it" }
             var persistentImagePath: String? = result.imageFilePath
             var inferenceBytes: ByteArray? = null
 
@@ -15403,6 +15406,8 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
             added.forEach { app.momoding.guard.RuleHits.record(sid, it, app.momoding.guard.RuleHits.REMEMBER, at) }
         }
         if (_memoryEnabled.value && app.momoding.memory.UserFile.shouldAskName(context)) app.momoding.memory.UserFile.markNameAsked(context) // momoding: asked once
+        // momoding: a turn that worked hard on the web teaches this phone's know-how, in the background (调研/M21)
+        app.momoding.know.KnowHowLearner.afterTurn(context, activeSessionId, _messages.value.lastOrNull { it.role == "user" }?.content, last?.content)
     }
 
     // ─── Legacy tool execution methods (kept for compatibility) ───────────

@@ -1237,6 +1237,12 @@ class SkillRepository(private val context: Context) {
         // Python, minis:// links…), loaded only when a task needs it
         runCatching { context.assets.open("momoding-skills-files-and-scripts.md").bufferedReader().readText() }
             .getOrNull()?.let { installBundledSkill("files-and-scripts", "1.0.0", it) }
+        // momoding: where to look and in what order for common errands; what each phone learns goes to
+        // /var/minis/memory/know-how/<id>.md, outside the skill so an upgrade never overwrites it (调研/M21)
+        for (id in listOf("travel", "shopping", "procedures")) {
+            runCatching { context.assets.open("momoding-skills-know-how-$id.md").bufferedReader().readText() }
+                .getOrNull()?.let { installBundledSkill("know-how-$id", "1.0.1", it) }
+        }
         installSelfSkill()
     }
 
