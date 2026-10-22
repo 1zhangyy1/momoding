@@ -4462,7 +4462,21 @@ class ChatViewModel(
      * cannot fix.
      */
     private fun effectiveAgentHistory(): List<LLMMessage> =
-        dropOrphanedToolParts(effectiveAgentHistoryUncounted())
+        capLargeToolResults(dropOrphanedToolParts(effectiveAgentHistoryUncounted()))
+
+    /** Momoding: tool id → the file its full result went to, so each is written once per session. */
+    private val largeResultFiles = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    /** Momoding: one huge tool result goes to a file, its start stays (see [app.momoding.chat.LargeResults]). */
+    private fun capLargeToolResults(messages: List<LLMMessage>): List<LLMMessage> {
+        val sid = activeSessionId
+        if (sid.isEmpty()) return messages
+        return app.momoding.chat.LargeResults.cap(messages) { part ->
+            largeResultFiles["$sid/${part.id}"] ?: ContextOffload.offloadContent(
+                context, sid, part.content, toolId = part.id, toolName = part.name, ext = "full.txt",
+            ).also { if (it.isNotEmpty()) largeResultFiles["$sid/${part.id}"] = it }
+        }
+    }
 
     // ---- [T-longctx-persona-reminder-cachebreak] Long-context persona reminder ----
     //
