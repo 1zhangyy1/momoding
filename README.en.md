@@ -111,14 +111,6 @@ cd src/android && ./gradlew :app:assembleDebug
 
 **Where the code is:** Momoding's own interface and logic live in `src/android/app/src/main/java/app/momoding/`: the chat cards, first run, permissions, routines, prompts and so on. Everything else stays close to upstream so that OpenMinis updates keep merging cleanly.
 
-## Built on OpenMinis
-
-Momoding is a fork of **[OpenMinis](https://github.com/OpenMinis/OpenMinis)**, an excellent open-source on-device AI agent. The agent loop, Linux sandbox, device integrations, browser automation, skills and memory all come from OpenMinis.
-
-What Momoding adds is the product on top: a single assistant conversation, a Chinese-first voice, result, draft, approval and permission cards inside the chat, routines, presets for Chinese model providers, and a full visual redesign. Thanks to the OpenMinis team, and to the projects they build on, including [iSH](https://github.com/ish-app/ish), [PRoot](https://github.com/termux/proot), [Alpine Linux](https://alpinelinux.org) and FFmpeg. The full third-party license list is in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
-
-Momoding is not affiliated with the OpenMinis project.
-
 ## Get involved
 
 - **Bugs and ideas:** [GitHub Issues](https://github.com/1zhangyy1/momoding/issues/new/choose). The most useful report says what you asked it to do and what it actually did.
@@ -133,17 +125,4 @@ If Momoding saves you some re-typing, remembering or checking, a ⭐ helps a lot
 
 ## Thanks
 
-**Momoding exists because of [OpenMinis](https://github.com/OpenMinis/OpenMinis).**
-
-When we started, we built our own agent runtime from scratch and learned the hard way how much goes into it. The OpenMinis team open-sourced a carefully built on-device agent in full: the agent loop, a Linux sandbox that runs on the phone, device integrations such as calendar and contacts, browser automation, skills, memory, and support for many model providers. That is the foundation Momoding stands on. Without it we could not have shipped an assistant that actually gets things done in a matter of weeks. They believe a product's edge comes from a tight feedback loop with the people who use it, and that is how we want to build Momoding too.
-
-If you like Momoding, please give [OpenMinis](https://github.com/OpenMinis/OpenMinis) a ⭐ as well. On iPhone, use [Minis](https://apps.apple.com/app/id6759188481). We report upstream issues back to OpenMinis.
-
-Thanks also to:
-
-- [nanoMuse](https://github.com/nano-muse/nanoMuse) (GPLv3): the main chat, approvals and risk rules, drafts and several other modules are ported from it
-- [iSH](https://github.com/ish-app/ish), [PRoot](https://github.com/termux/proot), [Alpine Linux](https://alpinelinux.org), [FFmpeg](https://ffmpeg.org), [Shizuku](https://github.com/RikkaApps/Shizuku-API) and the other open-source projects OpenMinis builds on
-- [lobe-icons](https://github.com/lobehub/lobe-icons) (MIT): model provider logos
-- [Mobilerun (droidrun)](https://github.com/droidrun/droidrun) and [RikkaHub](https://github.com/rikkahub/rikkahub): ideas behind screen operation and the background screen
-
-The full third-party license list is in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
+Momoding is a fork of [OpenMinis](https://github.com/OpenMinis/OpenMinis), and it exists because of the OpenMinis team. They open-sourced a carefully built on-device agent in full: the agent loop, a Linux sandbox that runs on the phone, device integrations, browser automation, skills, memory and support for many model providers. That is the foundation Momoding stands on. What we add is the product on top: a single assistant conversation, a Chinese-first voice, cards inside the chat, routines and a full visual design. If you like Momoding, please give OpenMinis a ⭐ too, and on iPhone use [Minis](https://apps.apple.com/app/id6759188481). Thanks also to [nanoMuse](https://github.com/nano-muse/nanoMuse) (several modules are ported from it), [Mobilerun (droidrun)](https://github.com/droidrun/droidrun) and [RikkaHub](https://github.com/rikkahub/rikkahub) (ideas behind screen operation), Instinct and Grok Bot (product design references), and iSH, PRoot, Alpine Linux, FFmpeg and the other projects listed in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md). Momoding is not affiliated with any of these projects.

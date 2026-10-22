@@ -139,14 +139,6 @@ cd src/android && ./gradlew :app:assembleDebug
 
 **代码在哪：** Momoding 自己的界面和逻辑在 `src/android/app/src/main/java/app/momoding/`（对话里的卡片、首次使用、权限、例行任务、提示词等）；其余基本保持上游原样，方便持续合并 OpenMinis 的更新。
 
-## 站在 OpenMinis 的肩膀上
-
-Momoding 是 **[OpenMinis](https://github.com/OpenMinis/OpenMinis)** 的一个 fork。OpenMinis 是一款很出色的开源手机端 AI Agent，智能体循环、Linux 沙箱、设备能力、浏览器自动化、技能和记忆，都来自它。
-
-Momoding 在此之上做的是**产品形态**：单一的"办事员"对话、中文优先的说话方式、对话里的结果卡/草稿卡/审批卡/权限卡、例行任务、国内模型预设，以及一整套视觉设计。感谢 OpenMinis 团队，也感谢他们依赖的 [iSH](https://github.com/ish-app/ish)、[PRoot](https://github.com/termux/proot)、[Alpine Linux](https://alpinelinux.org)、FFmpeg 等项目。完整的第三方许可清单见 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)。
-
-Momoding 和 OpenMinis 官方没有隶属关系。
-
 ## 参与进来
 
 - **反馈问题、提需求**：[GitHub Issues](https://github.com/1zhangyy1/momoding/issues/new/choose)。说清楚你想让它办什么、它实际做了什么，比什么都有用。
@@ -161,17 +153,4 @@ Momoding 和 OpenMinis 官方没有隶属关系。
 
 ## 致谢
 
-**Momoding 能做出来，首先要感谢 [OpenMinis](https://github.com/OpenMinis/OpenMinis)。**
-
-我们自己开始做的时候，从零搭了智能体运行时，走了很多弯路。OpenMinis 团队把一个打磨得非常好的手机端 Agent 完整开源了：智能体循环、跑在手机上的 Linux 沙箱、日历通讯录等设备能力、浏览器自动化、技能、记忆、众多模型服务的接入。这些都是 Momoding 今天的地基，没有它们，我们不可能在几周内做出一个能真正办事的产品。他们相信"产品的优势来自和用户之间紧密的反馈"，这也是 Momoding 想坚持的做法。
-
-如果你喜欢 Momoding，也请去给 [OpenMinis](https://github.com/OpenMinis/OpenMinis) 点一个 ⭐。在 iPhone 上，推荐直接用 [Minis](https://apps.apple.com/app/id6759188481)。上游本身的问题，我们会反馈给 OpenMinis。
-
-同样感谢：
-
-- [nanoMuse](https://github.com/nano-muse/nanoMuse)（GPLv3）：主对话、审批与风险规则、草稿等不少模块从它移植而来
-- [iSH](https://github.com/ish-app/ish)、[PRoot](https://github.com/termux/proot)、[Alpine Linux](https://alpinelinux.org)、[FFmpeg](https://ffmpeg.org)、[Shizuku](https://github.com/RikkaApps/Shizuku-API) 等 OpenMinis 依赖的开源项目
-- [lobe-icons](https://github.com/lobehub/lobe-icons)（MIT）：模型服务商图标
-- [Mobilerun（droidrun）](https://github.com/droidrun/droidrun) 和 [RikkaHub](https://github.com/rikkahub/rikkahub)：屏幕操作和后台屏的思路
-
-完整的第三方许可清单见 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)。
+Momoding 是 [OpenMinis](https://github.com/OpenMinis/OpenMinis) 的一个 fork，能做出来首先要感谢 OpenMinis 团队。他们把一个打磨得非常好的手机端 Agent 完整开源了：智能体循环、跑在手机上的 Linux 沙箱、设备能力、浏览器自动化、技能、记忆、众多模型服务的接入，这些都是 Momoding 的地基。我们在此之上做的是产品形态：单一的办事员对话、中文优先的说话方式、对话里的各种卡片、例行任务和整套视觉设计。如果你喜欢 Momoding，也请去给 OpenMinis 点个 ⭐，iPhone 上推荐直接用 [Minis](https://apps.apple.com/app/id6759188481)。同样感谢 [nanoMuse](https://github.com/nano-muse/nanoMuse)（不少模块从它移植而来）、[Mobilerun（droidrun）](https://github.com/droidrun/droidrun) 和 [RikkaHub](https://github.com/rikkahub/rikkahub)（屏幕操作的思路），以及 Instinct 和 Grok Bot（产品设计参考）；还有 iSH、PRoot、Alpine Linux、FFmpeg 等开源项目，完整清单见 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)。Momoding 和以上项目都没有隶属关系。
