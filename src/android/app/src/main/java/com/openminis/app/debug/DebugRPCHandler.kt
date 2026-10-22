@@ -256,6 +256,16 @@ class DebugRPCHandler(private val context: Context) {
                     else -> JSONObject().put("displayId", app.momoding.hands.HandsDisplay.ensure(context) ?: -1)
                 }
             }
+            // momoding: hand a made-up notification to the on-notification routines, as the listener would
+            "momoding.notification.simulate" -> {
+                val posted = com.openminis.app.scheduled.ScheduledNotificationTriggers.Posted(
+                    pkg = params.optString("pkg").ifBlank { android.provider.Telephony.Sms.getDefaultSmsPackage(context) ?: "sms" },
+                    appName = params.optString("app", "Messages"),
+                    title = params.optString("title"),
+                    text = params.optString("text"),
+                )
+                JSONObject().put("fired", com.openminis.app.scheduled.ScheduledNotificationTriggers.dispatch(context, posted))
+            }
             "momoding.reset" -> {
                 if (!params.optBoolean("confirm", false)) throw RPCException(-32602, "confirm must be true")
                 app.momoding.debug.TestReset.reset(context)

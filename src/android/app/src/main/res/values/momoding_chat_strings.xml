@@ -35,6 +35,7 @@
     <string name="mo_settings_advanced_hide">Hide advanced</string>
     <string name="mo_routines_empty">No routines yet. Tell me in the chat, for example: “every morning at 8, tell me what to watch out for today”.</string>
     <string name="mo_routine_every">Every %1$s</string>
+    <string name="mo_routine_on_notification">On a notification: %1$s</string>
     <string name="mo_routine_once">Once</string>
     <string name="mo_routine_daily">Every day around %1$s</string>
     <string name="mo_routine_weekdays">Weekdays around %1$s</string>
@@ -93,6 +94,8 @@
     <string name="mo_settings_rules_count">%1$d rules</string>
     <string name="mo_settings_models_none">No model connected</string>
     <string name="mo_settings_models_change">Change</string>
+    <string name="mo_perm_row_read_notifications">Read notifications</string>
+    <string name="mo_perm_purpose_read_notifications">To act when a message, an SMS or an alert arrives</string>
     <string name="mo_perm_row_notifications">Notifications</string>
     <string name="mo_perm_purpose_notifications">When there is a result or something needs you</string>
     <string name="mo_perm_row_calendar">Calendar</string>
@@ -218,6 +221,8 @@
     <string name="mo_handoff_qr_saved">Saved to photos</string>
     <string name="mo_handoff_qr_save_failed">Could not save it</string>
     <string name="mo_handoff_qr_signed_in_msg">Scanned and signed in, carry on.</string>
+    <string name="mo_perm_read_notifications">your notifications</string>
+    <string name="mo_perm_read_notifications_ask">Let Momoding read your notifications, so it can act when something arrives?</string>
     <string name="mo_perm_files">the files on your phone</string>
     <string name="mo_perm_files_ask">Let Momoding see and tidy the files on your phone?</string>
     <string name="mo_perm_row_files">Files</string>

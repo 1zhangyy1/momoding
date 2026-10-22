@@ -28,6 +28,7 @@ import java.util.Calendar
  *                          [--after 30m] | [--interval 10m [--count N]]
  *                          | [--time HH:MM [--repeat once|daily|weekdays|custom --days mon,tue,...]]
  *                          | [--trigger on-completion --of <taskId|jobId>]
+ *                          | [--app <name|sms>] [--match "<words>"]      (on-notification, Momoding)
  *                          [--target new|follow-up|rerun]
  *                          [--session <id>] [--message <id>]
  *                          [--model <modelId>] [--thinking off|low|medium|high|xhigh|max|ultra]
@@ -111,6 +112,8 @@ class ScheduledTaskOffloadHandler(private val context: Context) : NativeOffloadH
         val intervalSec: Long? = null,
         val maxFires: Int? = null,
         val onCompletionOf: String? = null,
+        val onNotificationApp: String? = null,
+        val onNotificationMatch: String? = null,
     )
 
     private fun handleCreate(args: OffloadArgs, callerSessionId: String?): NativeOffloadResult {
@@ -148,6 +151,8 @@ class ScheduledTaskOffloadHandler(private val context: Context) : NativeOffloadH
                 intervalSec = trigger.intervalSec,
                 maxFires = trigger.maxFires,
                 onCompletionOf = trigger.onCompletionOf,
+                onNotificationApp = trigger.onNotificationApp,
+                onNotificationMatch = trigger.onNotificationMatch,
             ),
         )
         val destination = when (target) {
@@ -163,6 +168,12 @@ class ScheduledTaskOffloadHandler(private val context: Context) : NativeOffloadH
             .put("created", taskJson(task))
             .put("delivery", ScheduledTargetDelivery.sentence(destination, defaulted))
             .put("deliveryTarget", JSONObject(ScheduledTargetDelivery.summary(destination, defaulted)))
+        // momoding: an on-notification task sees nothing until notification access is on
+        if (task.triggerKind == ScheduledTriggerKind.ON_NOTIFICATION &&
+            !com.openminis.app.offload.MinisNotificationListenerService.isEnabled(context)
+        ) {
+            out.put("notificationAccess", "off: the task is saved but cannot see notifications until the person turns on notification access")
+        }
         return NativeOffloadResult(0, out.toString(2))
     }
 
@@ -282,6 +293,7 @@ class ScheduledTaskOffloadHandler(private val context: Context) : NativeOffloadH
                 ScheduledTriggerKind.AFTER -> "once"
                 ScheduledTriggerKind.INTERVAL -> "loop"
                 ScheduledTriggerKind.ON_COMPLETION -> "on-completion"
+                ScheduledTriggerKind.ON_NOTIFICATION -> "on-notification"
             },
         )
         t.delaySec?.let { put("afterSec", it) }
@@ -289,6 +301,8 @@ class ScheduledTaskOffloadHandler(private val context: Context) : NativeOffloadH
         t.maxFires?.let { put("count", it) }
         t.remainingFires?.let { put("remaining", it) }
         t.onCompletionOf?.let { put("of", it) }
+        t.onNotificationApp?.let { put("app", it) }
+        t.onNotificationMatch?.let { put("match", it) }
         if (t.usesAnchor) put("firedCount", t.triggeredCount ?: 0)
         t.thinkingLevel?.let { put("thinking", it.name.lowercase()) }
         if (t.modelId != null) put("model", t.modelId)
@@ -315,7 +329,7 @@ class ScheduledTaskOffloadHandler(private val context: Context) : NativeOffloadH
          * --of -> on-completion. [resolveOf] maps --of to a known id.
          */
         internal fun parseTrigger(args: OffloadArgs, resolveOf: (String) -> String): Trigger {
-            for (name in listOf("after", "interval", "count", "of", "trigger")) {
+            for (name in listOf("after", "interval", "count", "of", "trigger", "app", "match")) {
                 if (args.hasFlag(name)) throw IllegalArgumentException("--$name needs a value")
             }
             val kind = args.get("trigger")?.lowercase()
@@ -324,9 +338,11 @@ class ScheduledTaskOffloadHandler(private val context: Context) : NativeOffloadH
                     args.get("interval") != null -> "loop"
                     args.get("time", "t") != null -> "calendar"
                     args.get("of") != null -> "on-completion"
+                    args.get("app") != null || args.get("match") != null -> "on-notification"
                     else -> throw IllegalArgumentException(
                         "give a trigger: --after <dur> (once), --interval <dur> [--count N] (loop), " +
-                            "--time HH:MM [--repeat ...] (at a time of day), or --trigger on-completion --of <taskId|jobId>",
+                            "--time HH:MM [--repeat ...] (at a time of day), --trigger on-completion --of <taskId|jobId>, " +
+                            "or --app <name|sms> [--match \"<words>\"] (on a notification)",
                     )
                 }
             return when (kind) {
@@ -361,7 +377,15 @@ class ScheduledTaskOffloadHandler(private val context: Context) : NativeOffloadH
                         ?: throw IllegalArgumentException("--of <taskId|jobId> required for the on-completion trigger")
                     Trigger(ScheduledTriggerKind.ON_COMPLETION, onCompletionOf = resolveOf(of))
                 }
-                else -> throw IllegalArgumentException("--trigger must be once|loop|cron|on-completion")
+                "on-notification", "onnotification", "on_notification" -> {
+                    val app = args.get("app")?.trim()?.takeIf { it.isNotEmpty() }
+                    val match = args.get("match")?.trim()?.takeIf { it.isNotEmpty() }
+                    if (app == null && match == null) {
+                        throw IllegalArgumentException("on-notification needs --app <name|sms> and/or --match \"<words>\"")
+                    }
+                    Trigger(ScheduledTriggerKind.ON_NOTIFICATION, onNotificationApp = app, onNotificationMatch = match)
+                }
+                else -> throw IllegalArgumentException("--trigger must be once|loop|cron|on-completion|on-notification")
             }
         }
 
@@ -535,7 +559,15 @@ class ScheduledTaskOffloadHandler(private val context: Context) : NativeOffloadH
                                                              (its one fire, or its last --count fire;
                                                              a daily task or endless --interval never);
                                                              {{result}} in --prompt becomes its result
-                   [--trigger once|loop|cron|on-completion]  optional; inferred from the flags above
+                   --app <name|sms> [--match "<words>"]      every time that app posts a notification
+                                                             (whose title/text contains the words; a|b
+                                                             = either), until deleted, at most once a
+                                                             minute; `--app sms` = the SMS app; either
+                                                             flag alone works. {{notification}} in
+                                                             --prompt becomes it. Needs notification
+                                                             access (`create` says when it is off)
+                   [--trigger once|loop|cron|on-completion|on-notification]
+                                                             optional; inferred from the flags above
                    [--target follow-up|new|rerun --session <id> --message <id>]
                    [--model <modelId>] [--thinking off|low|medium|high|xhigh|max|ultra]
                    [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--disabled]

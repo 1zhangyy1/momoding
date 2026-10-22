@@ -40,6 +40,8 @@ class MinisNotificationListenerService : NotificationListenerService() {
         // until the listener has actually observed its own post.
         val key = postKey(sbn.packageName, sbn.id)
         postedLatches.remove(key)?.countDown()
+        // momoding: routines that wait for a notification (a delivery SMS, a message from someone)
+        com.openminis.app.scheduled.ScheduledNotificationTriggers.onPosted(applicationContext, sbn)
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {}

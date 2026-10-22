@@ -600,6 +600,7 @@ internal fun triggerPhrases(): ScheduledTaskDetailModel.TriggerPhrases {
         interval = stringResource(R.string.scheduled_trigger_interval),
         intervalCount = stringResource(R.string.scheduled_trigger_interval_count),
         onCompletion = stringResource(R.string.scheduled_trigger_on_completion),
+        onNotification = stringResource(R.string.mo_routine_on_notification),
     )
 }
 

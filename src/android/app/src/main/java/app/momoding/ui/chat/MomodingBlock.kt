@@ -176,6 +176,7 @@ private fun PermissionCard(o: JSONObject, code: String) {
         "location" -> stringResource(R.string.mo_perm_location)
         "background" -> stringResource(R.string.mo_perm_background)
         "files" -> stringResource(R.string.mo_perm_files)
+        "read-notifications" -> stringResource(R.string.mo_perm_read_notifications)
         else -> return
     }
     val permissions = PermissionNeeds.androidPermissions(need)
@@ -202,6 +203,13 @@ private fun PermissionCard(o: JSONObject, code: String) {
             // one switch, then the whole storage is mounted by itself on the way back
             app.momoding.files.PhoneFiles.openSwitch(context)
             AskState.choose(context, "perm.$id", "files"); state = "files"
+        } else if (need == "read-notifications") {
+            // notification access is a system list with one switch per app; checked again on the way back
+            runCatching {
+                context.startActivity(android.content.Intent(com.openminis.app.offload.MinisNotificationListenerService.SETTINGS_ACTION)
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+            AskState.choose(context, "perm.$id", "switch"); state = "switch"
         } else if (need == "background") {
             // let off the battery saver (a system dialog, one tap); the makers' own "background" page after, where there is one
             val activity = context as? android.app.Activity
@@ -229,12 +237,16 @@ private fun PermissionCard(o: JSONObject, code: String) {
     }
     // hands: back from the system page — carry on by itself once everything is on, else say what is left
     var handsStep by remember(id) { mutableStateOf(if (need == "hands") app.momoding.hands.HandsSetup.next(context) else null) }
-    if ((need == "hands" || need == "files") && state != "granted" && state != "declined") {
+    if ((need == "hands" || need == "files" || need == "read-notifications") && state != "granted" && state != "declined") {
         val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
         androidx.compose.runtime.DisposableEffect(owner, id) {
             val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
                 if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-                    if (need == "files") {
+                    if (need == "read-notifications") {
+                        if (state == "switch" && com.openminis.app.offload.MinisNotificationListenerService.isEnabled(context)) {
+                            AskState.choose(context, "perm.$id", "granted"); state = "granted"; MomodingSend.send(carryOn)
+                        }
+                    } else if (need == "files") {
                         if (state == "files" && app.momoding.files.PhoneFiles.allowed()) {
                             kotlinx.coroutines.MainScope().launch {
                                 app.momoding.files.PhoneFiles.ensureMounted(context)
@@ -260,6 +272,7 @@ private fun PermissionCard(o: JSONObject, code: String) {
             CardTitle(when (need) {
                 "background" -> stringResource(R.string.mo_perm_background_ask)
                 "files" -> stringResource(R.string.mo_perm_files_ask)
+                "read-notifications" -> stringResource(R.string.mo_perm_read_notifications_ask)
                 else -> stringResource(R.string.mo_perm_ask, label)
             })
             val detail = when (handsStep) {
@@ -285,7 +298,7 @@ private fun PermissionCard(o: JSONObject, code: String) {
                     PillButton(stringResource(R.string.mo_perm_done), primary = true) {
                         AskState.choose(context, "perm.$id", "granted"); state = "granted"; MomodingSend.send(carryOn)
                     }
-                } else if (state == "settings" || state == "hands" || state == "background" || state == "files") {
+                } else if (state == "settings" || state == "hands" || state == "background" || state == "files" || state == "switch") {
                     PillButton(stringResource(R.string.mo_perm_done), primary = true) {
                         AskState.choose(context, "perm.$id", "granted"); state = "granted"; MomodingSend.send(carryOn)
                     }

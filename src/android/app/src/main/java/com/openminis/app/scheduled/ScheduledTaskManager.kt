@@ -90,6 +90,18 @@ class ScheduledTaskManager(private val context: Context) {
             else t.copy(enabled = false, triggeredCount = 1)
         } != null
 
+    /**
+     * Momoding: atomically take one on-notification fire at [now]: false when the task is
+     * disabled or fired less than [NOTIFICATION_COOLDOWN_MS] ago, so a burst of notifications
+     * (a chat app posting one per message, a re-posted update) runs it once.
+     */
+    fun claimNotificationFire(taskId: String, now: Long): Boolean =
+        store.update(taskId) { t ->
+            if (!t.enabled || t.triggerKind != ScheduledTriggerKind.ON_NOTIFICATION) null
+            else if (t.anchorMs != null && now - t.anchorMs < NOTIFICATION_COOLDOWN_MS) null
+            else t.copy(anchorMs = now, triggeredCount = (t.triggeredCount ?: 0) + 1)
+        } != null
+
     fun delete(taskId: String) {
         cancelAlarm(taskId)
         store.delete(taskId)
@@ -280,7 +292,7 @@ class ScheduledTaskManager(private val context: Context) {
                     (t.maxFires == null || (t.triggeredCount ?: 0) < t.maxFires) &&
                         anchor + iv * 1000 <= now + ALARM_EARLY_SLACK_MS
                 }
-                ScheduledTriggerKind.ON_COMPLETION, ScheduledTriggerKind.CALENDAR -> true
+                ScheduledTriggerKind.ON_COMPLETION, ScheduledTriggerKind.ON_NOTIFICATION, ScheduledTriggerKind.CALENDAR -> true
             }
         }
 
@@ -299,7 +311,7 @@ class ScheduledTaskManager(private val context: Context) {
                 val next = t.copy(triggeredCount = n, anchorMs = now)
                 if (t.maxFires != null && n >= t.maxFires) next.copy(enabled = false) to false else next to true
             }
-            ScheduledTriggerKind.ON_COMPLETION, ScheduledTriggerKind.CALENDAR -> null
+            ScheduledTriggerKind.ON_COMPLETION, ScheduledTriggerKind.ON_NOTIFICATION, ScheduledTriggerKind.CALENDAR -> null
         }
 
         /**
@@ -313,6 +325,8 @@ class ScheduledTaskManager(private val context: Context) {
                 anchorMs = incoming.anchorMs ?: prev.anchorMs,
                 triggeredCount = incoming.triggeredCount ?: prev.triggeredCount,
             )
+        /** Momoding: an on-notification task runs at most once a minute. */
+        const val NOTIFICATION_COOLDOWN_MS = 60_000L
         const val ACTION_FIRE = "com.openminis.app.scheduled.FIRE"
         const val EXTRA_TASK_ID = "task_id"
         const val CHANNEL_ID = "minis_scheduled_tasks"

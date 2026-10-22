@@ -35,6 +35,7 @@
     <string name="mo_settings_advanced_hide">收起進階</string>
     <string name="mo_routines_empty">還沒有例行任務。在對話裡跟我說就行，比如「每天早上 8 點告訴我今天要注意的事」。</string>
     <string name="mo_routine_every">每 %1$s</string>
+    <string name="mo_routine_on_notification">收到通知時：%1$s</string>
     <string name="mo_routine_once">一次</string>
     <string name="mo_routine_daily">每天 %1$s 左右</string>
     <string name="mo_routine_weekdays">工作日 %1$s 左右</string>
@@ -93,6 +94,8 @@
     <string name="mo_settings_rules_count">%1$d 條</string>
     <string name="mo_settings_models_none">還沒連模型</string>
     <string name="mo_settings_models_change">更換</string>
+    <string name="mo_perm_row_read_notifications">讀取通知</string>
+    <string name="mo_perm_purpose_read_notifications">訊息、簡訊、提醒一來就替你處理</string>
     <string name="mo_perm_row_notifications">通知</string>
     <string name="mo_perm_purpose_notifications">有結果或需要你時</string>
     <string name="mo_perm_row_calendar">日曆</string>
@@ -218,6 +221,8 @@
     <string name="mo_handoff_qr_saved">已儲存到相簿</string>
     <string name="mo_handoff_qr_save_failed">沒儲存成功</string>
     <string name="mo_handoff_qr_signed_in_msg">掃碼登好了，接著做吧。</string>
+    <string name="mo_perm_read_notifications">通知</string>
+    <string name="mo_perm_read_notifications_ask">允許 Momoding 讀取通知？這樣訊息一來它就能替你處理。</string>
     <string name="mo_perm_files">手機裡的檔案</string>
     <string name="mo_perm_files_ask">允許 Momoding 查看和整理你手機裡的檔案？</string>
     <string name="mo_perm_row_files">檔案</string>

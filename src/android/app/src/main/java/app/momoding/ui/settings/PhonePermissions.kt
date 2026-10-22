@@ -9,6 +9,7 @@ import android.provider.Settings
 import androidx.annotation.StringRes
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Contacts
 import androidx.compose.material.icons.outlined.BatteryFull
 import androidx.compose.material.icons.outlined.Folder
@@ -48,6 +49,9 @@ fun rememberPhonePermissions(): List<PhonePermission> {
         listOf(
             PhonePermission("notifications", R.string.mo_perm_row_notifications, R.string.mo_perm_purpose_notifications, Icons.Outlined.Notifications,
                 NotificationManagerCompat.from(context).areNotificationsEnabled()),
+            // reading other apps' notifications: what lets a routine wait for a delivery SMS or a message
+            PhonePermission("read-notifications", R.string.mo_perm_row_read_notifications, R.string.mo_perm_purpose_read_notifications, Icons.Outlined.NotificationsActive,
+                com.openminis.app.offload.MinisNotificationListenerService.isEnabled(context)),
             PhonePermission("calendar", R.string.mo_perm_row_calendar, R.string.mo_perm_purpose_calendar, Icons.Outlined.CalendarMonth,
                 has(Manifest.permission.READ_CALENDAR) && has(Manifest.permission.WRITE_CALENDAR)),
             PhonePermission("contacts", R.string.mo_perm_row_contacts, R.string.mo_perm_purpose_contacts, Icons.Outlined.Contacts,
@@ -75,7 +79,8 @@ fun openAppPermissionSettings(context: Context, p: PhonePermission) {
         backgroundHint(activity)
         return
     }
-    val intent = if (p.key == "notifications") Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+    val intent = if (p.key == "read-notifications") Intent(com.openminis.app.offload.MinisNotificationListenerService.SETTINGS_ACTION)
+    else if (p.key == "notifications") Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
     else Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
     runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
 }

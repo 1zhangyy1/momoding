@@ -319,6 +319,8 @@ internal fun formatScheduleSummary(task: ScheduledTask): String {
         }
         com.openminis.app.scheduled.ScheduledTriggerKind.ON_COMPLETION ->
             return "After ${task.onCompletionOf.orEmpty().take(8)} finishes"
+        com.openminis.app.scheduled.ScheduledTriggerKind.ON_NOTIFICATION ->
+            return "On a notification: " + com.openminis.app.scheduled.ScheduledNotificationTriggers.watching(task)
         com.openminis.app.scheduled.ScheduledTriggerKind.CALENDAR -> Unit
     }
     val time = "%02d:%02d".format(task.timeOfDayHour, task.timeOfDayMinute)

@@ -70,8 +70,13 @@ enum class ScheduledRepeatMode { ONCE, DAILY, WEEKDAYS, CUSTOM }
  *  - [ON_COMPLETION]: once, when the scheduled task or agent job named by
  *    [ScheduledTask.onCompletionOf] finishes; `{{result}}` in the prompt is
  *    replaced by that result. No alarm: fired by [ScheduledCompletionTriggers].
+ *  - [ON_NOTIFICATION] (Momoding): every time another app posts a notification
+ *    matching [ScheduledTask.onNotificationApp] / [ScheduledTask.onNotificationMatch]
+ *    (a delivery SMS, a message from someone, a bank alert), until disabled;
+ *    `{{notification}}` in the prompt is replaced by it. No alarm: fired by
+ *    [ScheduledNotificationTriggers] from the notification listener.
  */
-enum class ScheduledTriggerKind { CALENDAR, AFTER, INTERVAL, ON_COMPLETION }
+enum class ScheduledTriggerKind { CALENDAR, AFTER, INTERVAL, ON_COMPLETION, ON_NOTIFICATION }
 
 /**
  * What the task does when it fires. Mirrors the iOS App Intent set.
@@ -191,10 +196,15 @@ data class ScheduledTask(
     val maxFires: Int? = null,
     /** [ScheduledTriggerKind.ON_COMPLETION]: the task id or agent job id to wait for. */
     val onCompletionOf: String? = null,
+    /** [ScheduledTriggerKind.ON_NOTIFICATION]: the posting app, by name or package (part of it). */
+    val onNotificationApp: String? = null,
+    /** [ScheduledTriggerKind.ON_NOTIFICATION]: words the notification's title or text contains. */
+    val onNotificationMatch: String? = null,
     /**
      * AFTER / INTERVAL: when the current countdown started — creation, the
      * last alarm fire (INTERVAL), or re-enabling. Absolute, so a reboot or a
      * killed process resumes the same schedule instead of restarting it.
+     * ON_NOTIFICATION: the last fire, for its cooldown.
      */
     val anchorMs: Long? = null,
     /**
@@ -217,7 +227,7 @@ data class ScheduledTask(
     val isOneShot: Boolean get() = when (triggerKind) {
         ScheduledTriggerKind.CALENDAR -> repeatMode == ScheduledRepeatMode.ONCE
         ScheduledTriggerKind.AFTER, ScheduledTriggerKind.ON_COMPLETION -> true
-        ScheduledTriggerKind.INTERVAL -> false
+        ScheduledTriggerKind.INTERVAL, ScheduledTriggerKind.ON_NOTIFICATION -> false
     }
 
     /** INTERVAL fires still to come; null when unbounded or not an interval. */
@@ -259,7 +269,7 @@ data class ScheduledTask(
                 return maxOf(now, (anchorMs ?: createdAt) + iv * 1000)
             }
             // Event-driven: no clock time at all.
-            ScheduledTriggerKind.ON_COMPLETION -> return null
+            ScheduledTriggerKind.ON_COMPLETION, ScheduledTriggerKind.ON_NOTIFICATION -> return null
             ScheduledTriggerKind.CALENDAR -> Unit
         }
 
@@ -347,6 +357,8 @@ data class ScheduledTask(
         if (intervalSec != null) put("intervalSec", intervalSec)
         if (maxFires != null) put("maxFires", maxFires)
         if (onCompletionOf != null) put("onCompletionOf", onCompletionOf)
+        if (onNotificationApp != null) put("onNotificationApp", onNotificationApp)
+        if (onNotificationMatch != null) put("onNotificationMatch", onNotificationMatch)
         if (anchorMs != null) put("anchorMs", anchorMs)
         if (triggeredCount != null) put("triggeredCount", triggeredCount)
     }
@@ -398,11 +410,16 @@ data class ScheduledTask(
             intervalSec = if (o.has("intervalSec")) o.optLong("intervalSec") else null,
             maxFires = if (o.has("maxFires")) o.optInt("maxFires") else null,
             onCompletionOf = if (o.has("onCompletionOf")) o.optString("onCompletionOf", null) else null,
+            onNotificationApp = if (o.has("onNotificationApp")) o.optString("onNotificationApp", null) else null,
+            onNotificationMatch = if (o.has("onNotificationMatch")) o.optString("onNotificationMatch", null) else null,
             anchorMs = if (o.has("anchorMs")) o.optLong("anchorMs") else null,
             triggeredCount = if (o.has("triggeredCount")) o.optInt("triggeredCount") else null,
         )
 
         /** `{{result}}` in an on-completion prompt, replaced by the upstream's result. */
         const val RESULT_PLACEHOLDER = "{{result}}"
+
+        /** `{{notification}}` in an on-notification prompt, replaced by the notification that fired it. */
+        const val NOTIFICATION_PLACEHOLDER = "{{notification}}"
     }
 }

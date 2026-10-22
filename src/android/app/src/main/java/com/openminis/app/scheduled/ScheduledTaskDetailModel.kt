@@ -204,6 +204,8 @@ object ScheduledTaskDetailModel {
         val intervalCount: String = "Every %1${'$'}s · %2${'$'}d times",
         /** `%1$s` the upstream task's label or id. */
         val onCompletion: String = "When \u201c%1${'$'}s\u201d finishes",
+        /** Momoding: `%1$s` what an on-notification task watches. */
+        val onNotification: String = "On a notification: %1${'$'}s",
     )
 
     /** Monday-first display order of Calendar.DAY_OF_WEEK values. */
@@ -247,6 +249,8 @@ object ScheduledTaskDetailModel {
                 val of = task.onCompletionOf.orEmpty()
                 return p.onCompletion.format(upstreamName(of) ?: of.take(8))
             }
+            ScheduledTriggerKind.ON_NOTIFICATION ->
+                return p.onNotification.format(ScheduledNotificationTriggers.watching(task))
             ScheduledTriggerKind.CALENDAR -> Unit
         }
         val time = formatTime(task.timeOfDayHour, task.timeOfDayMinute)

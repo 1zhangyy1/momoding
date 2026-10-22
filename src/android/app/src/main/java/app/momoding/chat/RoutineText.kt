@@ -17,6 +17,8 @@ object RoutineText {
         val `when` = when (task.triggerKind) {
             ScheduledTriggerKind.INTERVAL -> context.getString(R.string.mo_routine_every, minutes(context, task.intervalSec ?: 0L))
             ScheduledTriggerKind.AFTER, ScheduledTriggerKind.ON_COMPLETION -> context.getString(R.string.mo_routine_once)
+            ScheduledTriggerKind.ON_NOTIFICATION -> context.getString(R.string.mo_routine_on_notification,
+                com.openminis.app.scheduled.ScheduledNotificationTriggers.watching(task))
             ScheduledTriggerKind.CALENDAR -> when (task.repeatMode) {
                 ScheduledRepeatMode.DAILY -> context.getString(R.string.mo_routine_daily, time)
                 ScheduledRepeatMode.WEEKDAYS -> context.getString(R.string.mo_routine_weekdays, time)

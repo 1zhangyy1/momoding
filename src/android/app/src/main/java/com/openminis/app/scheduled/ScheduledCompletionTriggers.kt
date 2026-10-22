@@ -86,6 +86,8 @@ object ScheduledCompletionTriggers {
         return when (task.triggerKind) {
             ScheduledTriggerKind.AFTER, ScheduledTriggerKind.ON_COMPLETION -> true
             ScheduledTriggerKind.INTERVAL -> task.remainingFires == 0
+            // Watches until deleted, like a daily task.
+            ScheduledTriggerKind.ON_NOTIFICATION -> false
             ScheduledTriggerKind.CALENDAR ->
                 task.repeatMode == ScheduledRepeatMode.ONCE ||
                     (task.endDateMs != null && task.copy(enabled = true).nextTriggerMs(now) == null)
