@@ -158,3 +158,20 @@ Momoding 和 OpenMinis 官方没有隶属关系。
 ## 许可证
 
 [GNU General Public License v3.0](LICENSE)。Momoding 基于 GPLv3 的 OpenMinis，并链接了 GPL 组件（PRoot 为 GPLv2），因此整体以 GPLv3 发布。
+
+## 致谢
+
+**Momoding 能做出来，首先要感谢 [OpenMinis](https://github.com/OpenMinis/OpenMinis)。**
+
+我们自己开始做的时候，从零搭了智能体运行时，走了很多弯路。OpenMinis 团队把一个打磨得非常好的手机端 Agent 完整开源了：智能体循环、跑在手机上的 Linux 沙箱、日历通讯录等设备能力、浏览器自动化、技能、记忆、众多模型服务的接入。这些都是 Momoding 今天的地基，没有它们，我们不可能在几周内做出一个能真正办事的产品。他们相信"产品的优势来自和用户之间紧密的反馈"，这也是 Momoding 想坚持的做法。
+
+如果你喜欢 Momoding，也请去给 [OpenMinis](https://github.com/OpenMinis/OpenMinis) 点一个 ⭐。在 iPhone 上，推荐直接用 [Minis](https://apps.apple.com/app/id6759188481)。上游本身的问题，我们会反馈给 OpenMinis。
+
+同样感谢：
+
+- [nanoMuse](https://github.com/nano-muse/nanoMuse)（GPLv3）：主对话、审批与风险规则、草稿等不少模块从它移植而来
+- [iSH](https://github.com/ish-app/ish)、[PRoot](https://github.com/termux/proot)、[Alpine Linux](https://alpinelinux.org)、[FFmpeg](https://ffmpeg.org)、[Shizuku](https://github.com/RikkaApps/Shizuku-API) 等 OpenMinis 依赖的开源项目
+- [lobe-icons](https://github.com/lobehub/lobe-icons)（MIT）：模型服务商图标
+- [Mobilerun（droidrun）](https://github.com/droidrun/droidrun) 和 [RikkaHub](https://github.com/rikkahub/rikkahub)：屏幕操作和后台屏的思路
+
+完整的第三方许可清单见 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)。

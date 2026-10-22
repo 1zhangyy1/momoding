@@ -130,3 +130,20 @@ If Momoding saves you some re-typing, remembering or checking, a ⭐ helps a lot
 ## License
 
 [GNU General Public License v3.0](LICENSE). Momoding is based on OpenMinis, which is licensed under GPLv3, and it links GPL components (PRoot is GPLv2), so the combined work is released under GPLv3.
+
+## Thanks
+
+**Momoding exists because of [OpenMinis](https://github.com/OpenMinis/OpenMinis).**
+
+When we started, we built our own agent runtime from scratch and learned the hard way how much goes into it. The OpenMinis team open-sourced a carefully built on-device agent in full: the agent loop, a Linux sandbox that runs on the phone, device integrations such as calendar and contacts, browser automation, skills, memory, and support for many model providers. That is the foundation Momoding stands on. Without it we could not have shipped an assistant that actually gets things done in a matter of weeks. They believe a product's edge comes from a tight feedback loop with the people who use it, and that is how we want to build Momoding too.
+
+If you like Momoding, please give [OpenMinis](https://github.com/OpenMinis/OpenMinis) a ⭐ as well. On iPhone, use [Minis](https://apps.apple.com/app/id6759188481). We report upstream issues back to OpenMinis.
+
+Thanks also to:
+
+- [nanoMuse](https://github.com/nano-muse/nanoMuse) (GPLv3): the main chat, approvals and risk rules, drafts and several other modules are ported from it
+- [iSH](https://github.com/ish-app/ish), [PRoot](https://github.com/termux/proot), [Alpine Linux](https://alpinelinux.org), [FFmpeg](https://ffmpeg.org), [Shizuku](https://github.com/RikkaApps/Shizuku-API) and the other open-source projects OpenMinis builds on
+- [lobe-icons](https://github.com/lobehub/lobe-icons) (MIT): model provider logos
+- [Mobilerun (droidrun)](https://github.com/droidrun/droidrun) and [RikkaHub](https://github.com/rikkahub/rikkahub): ideas behind screen operation and the background screen
+
+The full third-party license list is in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
