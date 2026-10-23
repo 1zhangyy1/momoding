@@ -1,0 +1,14 @@
+# Momoding share relay. Deploy with scripts/deploy-share-relay.sh (it asks for everything it needs).
+name = "momoding-share-relay"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+REPO = "1zhangyy1/momoding-skills"
+
+# The KV namespace for per-day limits; the deploy script creates it and fills in the id.
+[[kv_namespaces]]
+binding = "LIMITS"
+id = "REPLACE_WITH_KV_ID"
+
+# routes = [{ pattern = "share.<your domain>", custom_domain = true }]  # filled in by the deploy script

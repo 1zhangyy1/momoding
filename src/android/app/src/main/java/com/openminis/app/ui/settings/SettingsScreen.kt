@@ -181,6 +181,10 @@ fun SettingsScreen(
                     subtitle = stringResource(R.string.mo_settings_background_sub), onClick = onBackgroundClick)
                 SettingsItem(icon = Icons.Outlined.AutoAwesome, iconColor = Color(0xFFAF52DE), title = stringResource(R.string.mo_settings_about_bot),
                     subtitle = stringResource(R.string.mo_settings_about_bot_sub), onClick = onSoulClick)
+                // momoding: proven routes go to the community skills (调研/M21), on unless turned off
+                var shareOn by remember { mutableStateOf(app.momoding.know.CommunitySkills.autoShare(context)) }
+                SettingsSwitchRow(title = stringResource(R.string.mo_settings_share_knowhow), subtitle = stringResource(R.string.mo_settings_share_knowhow_sub),
+                    checked = shareOn, onCheckedChange = { shareOn = it; app.momoding.know.CommunitySkills.setAutoShare(context, it) })
                 SettingsItem(icon = Icons.Outlined.Palette, iconColor = Color(0xFFFF2D55), title = stringResource(R.string.settings_section_appearance),
                     subtitle = stringResource(R.string.mo_settings_appearance_sub), onClick = onAppearanceClick, showDivider = false)
             }

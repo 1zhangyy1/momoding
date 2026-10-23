@@ -44,6 +44,8 @@
     <string name="mo_bg_failed">Couldn\'t finish in the background · %1$s</string>
     <string name="mo_bg_minutes">%1$d min</string>
     <string name="mo_bg_seconds">%1$d s</string>
+    <string name="mo_settings_share_knowhow">Share what works</string>
+    <string name="mo_settings_share_knowhow_sub">Routes that worked, without anything personal, go to the community skills for review</string>
     <string name="mo_routine_once">Once</string>
     <string name="mo_routine_daily">Every day around %1$s</string>
     <string name="mo_routine_weekdays">Weekdays around %1$s</string>

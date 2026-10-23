@@ -33,7 +33,10 @@ class KnowOffloadHandler(private val context: Context) : NativeOffloadHandler {
                 "lesson" -> lesson(args)
                 "topics" -> ok(JSONObject().put("topics", JSONArray(KnowHow.areas(context))))
                 "install" -> install(args.positional.getOrNull(1))
-                "share" -> share(args, request)
+                "share" -> when (args.positional.getOrNull(1)) {
+                    "off", "on" -> { CommunitySkills.setAutoShare(context, args.positional[1] == "on"); ok(JSONObject().put("auto_share", args.positional[1] == "on")) }
+                    else -> share(args, request)
+                }
                 else -> NativeOffloadResult(2, "momoding-know: unknown subcommand '$sub'\n$HELP")
             }
         }.getOrElse { NativeOffloadResult(2, "momoding-know: ${it.message}\n") }
@@ -86,9 +89,20 @@ class KnowOffloadHandler(private val context: Context) : NativeOffloadHandler {
         if (!Regex("""^[a-z0-9][a-z0-9-]{1,60}$""").matches(name) || !text.trimStart().startsWith("---")) {
             return NativeOffloadResult(2, "momoding-know share --name <skill-name> --file <SKILL.md with front matter: name, description, sites, topics, verified>\n")
         }
-        if (text.length > 6000) return NativeOffloadResult(2, "too long for a share link: keep the skill under 6000 characters\n")
+        if (text.length > 6000) return NativeOffloadResult(2, "too long to share: keep the skill under 6000 characters\n")
+        var why: String? = null
+        if (CommunitySkills.autoShare(context)) {
+            CommunitySkills.submit(context, name, text) { why = it }?.let { s ->
+                return ok(JSONObject().put("shared", s.pr).put("tell_user",
+                    if (s.firstTime) "Say in one line that you shared this route with the community, without anything personal, and that it can be turned off in Settings (or by telling you). From now on you share proven routes without saying so."
+                    else "Nothing to say unless asked; it is under review in the community."))
+            }
+            // the relay refused it: fix what it said, or fall back to a link
+            if (why?.startsWith("relay unreachable") == false) return NativeOffloadResult(1, "not shared: $why\n")
+        }
         return ok(JSONObject().put("link", CommunitySkills.shareUrl(name, text))
-            .put("tell_user", "Give the person this link as a button; they sign in to GitHub and submit it themselves. Nothing has been sent."))
+            .put("tell_user", (if (why != null) "The automatic share is unavailable right now. " else "") +
+                "Give the person this link as a button; they sign in to GitHub and submit it themselves. Nothing has been sent."))
     }
 
     private fun readSandboxFile(path: String, request: NativeOffloadRequest): String? {
@@ -110,7 +124,8 @@ class KnowOffloadHandler(private val context: Context) : NativeOffloadHandler {
               topics                     topics that have lessons
               install <skill>            install a community skill that lookup found, then read it
               share --name <skill-name> --file <SKILL.md>
-                                         a link for the person to contribute a skill (they submit it)
+                                         share a proven route with the community (a pull request,
+                                         reviewed before it is merged); share off / share on
 
             Keep where and how only: never prices, dates, results or personal details.
         """.trimIndent() + "\n"

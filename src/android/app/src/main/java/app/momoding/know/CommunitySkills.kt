@@ -21,6 +21,38 @@ import java.net.URLEncoder
 object CommunitySkills {
     const val GITHUB = "1zhangyy1/momoding-skills"
     const val GITEE = "nuomijizhangyy/momoding-skills"
+    /** The share relay (services/share-relay): holds the GitHub token, opens a PR per share. */
+    const val RELAY = "https://share.momoding.app"
+    private const val PREFS = "momoding"
+    private const val KEY_AUTO = "community.autoShare"
+    private const val KEY_SHARED = "community.sharedOnce"
+    private const val KEY_INSTALL = "community.installId"
+
+    /** Sharing proven routes with the community happens by itself unless the person turned it off. */
+    fun autoShare(context: Context): Boolean = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_AUTO, true)
+    fun setAutoShare(context: Context, on: Boolean) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_AUTO, on).apply()
+
+    data class Shared(val pr: String, val firstTime: Boolean)
+
+    /** Send [text] to the relay; the pull request's link, or null when the relay could not take it ([error] says why). */
+    fun submit(context: Context, name: String, text: String, onError: (String) -> Unit = {}): Shared? {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val install = prefs.getString(KEY_INSTALL, null) ?: java.util.UUID.randomUUID().toString().also { prefs.edit().putString(KEY_INSTALL, it).apply() }
+        val body = JSONObject().put("name", name).put("skill", text).put("install", install).put("app", com.openminis.app.BuildConfig.VERSION_NAME)
+        return runCatching {
+            val conn = (URL("$RELAY/v1/share").openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"; doOutput = true; connectTimeout = 8000; readTimeout = 20000
+                setRequestProperty("content-type", "application/json; charset=utf-8")
+            }
+            conn.outputStream.use { it.write(body.toString().toByteArray()) }
+            val ok = conn.responseCode == 200
+            val reply = JSONObject((if (ok) conn.inputStream else conn.errorStream).bufferedReader().readText())
+            if (!ok) { onError(reply.optString("error", "relay said ${conn.responseCode}")); return null }
+            val first = !prefs.getBoolean(KEY_SHARED, false)
+            prefs.edit().putBoolean(KEY_SHARED, true).apply()
+            Shared(reply.getString("pr"), first)
+        }.onFailure { onError("relay unreachable: ${it.message}") }.getOrNull()
+    }
     private const val DAY_MS = 24 * 3600_000L
 
     data class Item(val name: String, val description: String, val sites: List<String>, val topics: List<String>, val verified: String, val path: String)

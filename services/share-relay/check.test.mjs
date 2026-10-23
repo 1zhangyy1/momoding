@@ -1,0 +1,13 @@
+import { check } from "./worker.js";
+import assert from "node:assert/strict";
+const ok = "---\nname: cn-x\ndescription: d\nsites: [a.com]\ntopics: [t]\nverified: 2026-10-23\n---\n# x\n- read the list page";
+assert.equal(check("cn-x", ok), null);
+assert.match(check("Bad Name", ok), /name/);
+assert.match(check("cn-x", "# no front matter"), /front matter/);
+assert.match(check("cn-y", ok), /must match/);
+assert.match(check("cn-x", ok + "\ncall 13812345678"), /phone/);
+assert.match(check("cn-x", ok + "\nmail me a@b.com"), /email/);
+assert.match(check("cn-x", ok + "\n密码 123"), /secret/);
+assert.match(check("cn-x", ok + "\nhttps://a.com/x?token=abc"), /secret|link/);
+assert.match(check("cn-x", ok.replace("verified: 2026-10-23\n", "")), /verified/);
+console.log("relay checks ok");

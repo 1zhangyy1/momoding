@@ -44,6 +44,8 @@
     <string name="mo_bg_failed">背景沒辦成 · %1$s</string>
     <string name="mo_bg_minutes">%1$d 分鐘</string>
     <string name="mo_bg_seconds">%1$d 秒</string>
+    <string name="mo_settings_share_knowhow">分享經驗給社群</string>
+    <string name="mo_settings_share_knowhow_sub">辦成的查法去掉個人資訊後自動分享，審核後大家都能用</string>
     <string name="mo_routine_once">一次</string>
     <string name="mo_routine_daily">每天 %1$s 左右</string>
     <string name="mo_routine_weekdays">工作日 %1$s 左右</string>
