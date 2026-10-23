@@ -274,6 +274,7 @@ private fun PermissionCard(o: JSONObject, code: String) {
                 "background" -> stringResource(R.string.mo_perm_background_ask)
                 "files" -> stringResource(R.string.mo_perm_files_ask)
                 "read-notifications" -> stringResource(R.string.mo_perm_read_notifications_ask)
+                "sms" -> stringResource(R.string.mo_perm_sms_ask)
                 else -> stringResource(R.string.mo_perm_ask, label)
             })
             val detail = when (handsStep) {

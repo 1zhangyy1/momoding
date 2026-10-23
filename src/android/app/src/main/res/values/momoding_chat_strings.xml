@@ -233,7 +233,8 @@
     <string name="mo_handoff_qr_signed_in_msg">Scanned and signed in, carry on.</string>
     <string name="mo_perm_read_notifications">your notifications</string>
     <string name="mo_perm_read_notifications_ask">Let Momoding read your notifications, so it can act when something arrives?</string>
-    <string name="mo_perm_sms">your texts</string>
+    <string name="mo_perm_sms">texts</string>
+    <string name="mo_perm_sms_ask">Let Momoding receive texts, so it can act when one arrives (a delivery code)?</string>
     <string name="mo_perm_row_sms">Receive texts</string>
     <string name="mo_perm_purpose_sms">For routines that act when a text arrives (a delivery code)</string>
     <string name="mo_sms_app_name">Messages</string>
