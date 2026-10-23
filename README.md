@@ -23,10 +23,10 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/hero-zh.png" alt="Momoding：记住你、替你办、先给你看、替你盯着" width="960" />
+  <img src="docs/assets/hero-zh.jpg" alt="Momoding：把你的手机变成 AI 手机" width="960" />
 </p>
 
-<p align="center"><sub>以上都是模拟器上的真实运行截图，模型为 DeepSeek V4.1 Flash。</sub></p>
+<p align="center"><sub>截图来自模拟器实测（模型 DeepSeek V4.1 Flash），12306 与相册两张为示意。</sub></p>
 
 > **1.0 预览版。** 可以日常试用，但还在快速迭代；目前主要在模拟器和少数真机上打磨，国产系统的后台保活还在测。遇到问题请[提 Issue](https://github.com/1zhangyy1/momoding/issues/new/choose)。
 
@@ -82,7 +82,7 @@ Momoding 想把这三件事接过来：
 
 ## 现在能做什么
 
-<p align="center"><img src="docs/assets/features-zh.png" alt="提醒和日程、记住你、草稿、上网查、看过程、先问你、例行任务、动手操作屏幕" width="880" /></p>
+<p align="center"><img src="docs/assets/cases-zh.jpg" alt="取件码提醒、清理空间、操作 12306、整理照片、发短信、每日早报" width="880" /></p>
 
 **对话里交代一句就办：**
 
