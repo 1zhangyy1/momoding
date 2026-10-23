@@ -27,12 +27,39 @@ object CommunitySkills {
 
     private fun cache(context: Context) = File(File(context.filesDir, "momoding"), "community-index.json")
 
-    /** The catalogue: the cached copy, refreshed when older than a day (or [force]); empty when nothing could be read. */
+    /**
+     * The catalogue: the cached copy, refreshed when older than a day (or [force]); empty when
+     * nothing could be read. A refresh also brings installed community skills up to date.
+     */
     fun index(context: Context, force: Boolean = false): List<Item> {
         val f = cache(context)
         val fresh = f.isFile && System.currentTimeMillis() - f.lastModified() < DAY_MS
-        if (!fresh || force) fetch("index.json")?.let { body -> parseIndex(body).takeIf { it.isNotEmpty() }?.let { f.parentFile?.mkdirs(); f.writeText(body) } }
+        if (!fresh || force) fetch("index.json")?.let { body ->
+            parseIndex(body).takeIf { it.isNotEmpty() }?.let { items -> f.parentFile?.mkdirs(); f.writeText(body); updateInstalled(context, items) }
+        }
         return runCatching { parseIndex(f.readText()) }.getOrDefault(emptyList())
+    }
+
+    /** The cached catalogue only, never the network (for a browser step). */
+    fun cached(context: Context): List<Item> = runCatching { parseIndex(cache(context).readText()) }.getOrDefault(emptyList())
+
+    /** Community skills that cover [domain], not yet installed. */
+    fun forSite(context: Context, domain: String): List<Item> {
+        val installed = installedIds(context)
+        return cached(context).filter { i -> i.name !in installed && i.sites.any { s -> domain == s || domain.endsWith(".$s") } }
+    }
+
+    private fun installedIds(context: Context): Set<String> =
+        (context.applicationContext as? MinisApp)?.skillRepository?.skills?.value?.map { it.id }?.toSet().orEmpty()
+
+    /** Re-install community skills whose `verified` date moved since they were installed. */
+    private fun updateInstalled(context: Context, items: List<Item>) {
+        val prefs = context.getSharedPreferences("momoding", Context.MODE_PRIVATE)
+        val installed = installedIds(context)
+        for (i in items) {
+            val key = "community.verified.${i.name}"
+            if (i.name in installed && prefs.getString(key, null).let { it != null && it != i.verified }) install(context, i.name)
+        }
     }
 
     /** Import [name] into the skills; the installed SKILL.md path, or null. */
@@ -41,6 +68,7 @@ object CommunitySkills {
         val content = fetch(item.path) ?: return null
         val repo = (context.applicationContext as? MinisApp)?.skillRepository ?: return null
         val skill = repo.importFromContent(content, SkillRepository.ImportSource.URL, "https://github.com/$GITHUB/blob/main/${item.path}") ?: return null
+        context.getSharedPreferences("momoding", Context.MODE_PRIVATE).edit().putString("community.verified.${item.name}", item.verified).apply()
         return repo.skillMdPath(skill.id)
     }
 

@@ -44,7 +44,12 @@ object SiteLedger {
         synchronized(lock) {
             steps.getOrPut(sessionId) { mutableListOf() }.add(Step(domain, action))
             if (!shown.add("$sessionId|$domain")) return null
-            return load(context)[domain]?.let { render(it, now) }
+            val own = load(context)[domain]?.let { render(it, now) }
+            // the community may already know this site: say so, so the agent can install it
+            val community = CommunitySkills.forSite(context, domain).takeIf { it.isNotEmpty() }?.joinToString("; ") {
+                "community skill ${it.name} covers this site (${it.description.take(80)}): momoding-know install ${it.name}"
+            }?.let { "[$it]" }
+            return listOfNotNull(own, community).joinToString("\n").ifEmpty { null }
         }
     }
 
