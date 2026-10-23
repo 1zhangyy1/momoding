@@ -5,31 +5,46 @@ import java.io.File
 import java.time.LocalDate
 
 /**
- * What this phone learned about getting errands done (调研/M21, layer 2): one file per area at
- * /var/minis/memory/know-how/<area>.md, one line per lesson, dated. The bundled know-how skills
- * (the seed, replaced on upgrade) tell the model to read it first and to let it win, so each
- * person's copy drifts toward what works for them. Written by the learner after long jobs and by
- * the model when the person says how they want something done.
+ * Reusable lessons the Bot learned about getting errands done on this phone (调研/M21): one file
+ * per topic the agent names (travel, shopping, a city's government site…) at
+ * /var/minis/memory/know-how/<topic>.md, one dated line per lesson, newest first. Written by the
+ * agent (`momoding-know lesson`, when the person says how they want it done, or the learner after
+ * a long job); read back with `momoding-know lookup`.
  */
 object KnowHow {
-    val AREAS = listOf("travel", "shopping", "procedures")
     const val MAX_LINES = 20
     const val MAX_CHARS = 120
 
-    fun file(context: Context, area: String): File = File(File(context.filesDir, "minis-global/memory/know-how"), "$area.md")
+    fun dir(context: Context): File = File(context.filesDir, "minis-global/memory/know-how")
+    fun file(context: Context, area: String): File = File(dir(context), "$area.md")
+
+    /** Topics that have lessons. */
+    fun areas(context: Context): List<String> =
+        dir(context).listFiles { f -> f.isFile && f.name.endsWith(".md") }.orEmpty().map { it.name.removeSuffix(".md") }.sorted()
+
+    /** Lessons whose topic or text contains [query], as "topic: line". */
+    fun lookup(context: Context, query: String): List<String> {
+        val q = query.trim().lowercase()
+        if (q.isEmpty()) return emptyList()
+        return areas(context).flatMap { a -> lines(context, a).filter { a.contains(q) || it.lowercase().contains(q) }.map { "$a: ${it.removePrefix("- ")}" } }.take(12)
+    }
+
+    /** A topic name the agent chose, made safe as a file name. */
+    internal fun slug(area: String): String? =
+        area.trim().lowercase().replace(Regex("""[^a-z0-9\u4e00-\u9fff]+"""), "-").trim('-').take(30).takeIf { it.length >= 2 }
 
     fun lines(context: Context, area: String): List<String> =
         runCatching { file(context, area).readLines() }.getOrDefault(emptyList()).filter { it.startsWith("- ") }
 
     /** Add [line] to [area], replacing the line that starts like [replaces] when given; newest first, capped. */
     fun add(context: Context, area: String, line: String, replaces: String? = null, today: LocalDate = LocalDate.now()): Boolean {
-        if (area !in AREAS) return false
+        val topic = slug(area) ?: return false
         val clean = sanitize(line) ?: return false
         synchronized(this) {
-            val f = file(context, area)
-            val updated = merge(lines(context, area), clean, replaces, today)
+            val f = file(context, topic)
+            val updated = merge(lines(context, topic), clean, replaces, today)
             f.parentFile?.mkdirs()
-            f.writeText(header(area) + updated.joinToString("\n") + "\n")
+            f.writeText(header(topic) + updated.joinToString("\n") + "\n")
         }
         return true
     }
@@ -37,7 +52,7 @@ object KnowHow {
     // ── pure parts (tests) ─────────────────────────────────────────────────
 
     internal fun header(area: String) =
-        "# What this phone learned: $area\nNewest first. Learned automatically after long jobs, or told by the person. Wins over the know-how-$area skill.\n\n"
+        "# What this phone learned: $area\nNewest first. Written by the assistant after its own work, or told by the person.\n\n"
 
     internal fun merge(existing: List<String>, clean: String, replaces: String?, today: LocalDate): List<String> {
         val entry = "- $clean ($today)"

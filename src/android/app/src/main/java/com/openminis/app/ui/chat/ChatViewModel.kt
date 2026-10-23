@@ -14419,8 +14419,8 @@ class ChatViewModel(
             } catch (_: Exception) { "browser_use" }
 
             var output = result.text
-            // momoding: this phone's record of the site, kept by code; shown the first time this chat touches it (调研/M21)
-            app.momoding.know.SiteLedger.observe(context, activeSessionId, input.action.value, result.pageURL ?: input.url, result.text)
+            // momoding: the Bot's own records of this site, shown the first time this chat opens it (调研/M21)
+            app.momoding.know.SiteLedger.onBrowse(context, activeSessionId, input.action.value, result.pageURL ?: input.url)
                 ?.let { output = "$output\n$it" }
             var persistentImagePath: String? = result.imageFilePath
             var inferenceBytes: ByteArray? = null

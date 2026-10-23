@@ -15,41 +15,33 @@ class SiteLedgerTest {
         assertEquals("flights.ctrip.com", SiteLedger.domainOf("https://flights.ctrip.com/online/list?x=1"))
         assertEquals("jd.com", SiteLedger.domainOf("www.jd.com"))
         assertNull(SiteLedger.domainOf("minis://workspace/a.html"))
-        assertNull(SiteLedger.domainOf("about:blank"))
         assertNull(SiteLedger.domainOf(null))
     }
 
     @Test
-    fun `walls, reads and plain visits`() {
-        assertEquals(Outcome.WALL, SiteLedger.classify("navigate", "Navigated to https://x.com\n  Title: 安全验证"))
-        assertEquals(Outcome.VISIT, SiteLedger.classify("navigate", "Navigated to https://x.com\n  Title: 机票查询"))
-        assertEquals(Outcome.WALL, SiteLedger.classify("get_readable", "{\"text\":\"请拖动滑块完成验证\"}"))
-        assertEquals(Outcome.READ, SiteLedger.classify("get_readable", "G7 北京南 09:00 ".repeat(60)))
-        // a long page that merely has a login link is content, not a wall
-        assertEquals(Outcome.READ, SiteLedger.classify("get_text", "请先登录 " + "车次 时间 价格 ".repeat(400)))
-        assertEquals(Outcome.VISIT, SiteLedger.classify("click", "clicked"))
+    fun `a newer record of the same errand replaces the older, capped`() {
+        var e = SiteLedger.Entry("kayak.com")
+        e = SiteLedger.add(e, SiteLedger.Record("查机票", Outcome.WALLED, "首页验证", now - 2 * day))
+        e = SiteLedger.add(e, SiteLedger.Record("查机票", Outcome.WORKED, "flights 页 get_readable 可读", now - day))
+        assertEquals(1, e.records.size)
+        assertEquals(Outcome.WORKED, e.records.single().outcome)
+        repeat(8) { e = SiteLedger.add(e, SiteLedger.Record("errand $it", Outcome.PARTIAL, "x", now)) }
+        assertEquals(SiteLedger.MAX_RECORDS, e.records.size)
     }
 
     @Test
-    fun `the record counts and keeps the reading url without its query`() {
-        var e = SiteLedger.Entry("m.ctrip.com")
-        e = SiteLedger.record(e, Outcome.WALL, "https://m.ctrip.com/a", "滑块", now - 2 * day)
-        e = SiteLedger.record(e, Outcome.READ, "https://m.ctrip.com/html5/flight?dcity=bjs#x", "x".repeat(700), now - day)
-        assertEquals(2, e.visits); assertEquals(1, e.walls); assertEquals(1, e.reads)
-        assertEquals("https://m.ctrip.com/html5/flight", e.lastReadUrl)
+    fun `the record reads back as one line, nothing when empty`() {
+        val e = SiteLedger.Entry("kyfw.12306.cn", listOf(SiteLedger.Record("查余票", Outcome.WORKED, "余票查询页免登录可读", now - 3 * day)), now)
         val line = SiteLedger.render(e, now)!!
-        assertTrue(line, line.contains("walled 1 of 2 visits (last 2 days ago, \"滑块\")"))
-        assertTrue(line, line.contains("content read 1 times (last 24 h ago at https://m.ctrip.com/html5/flight)"))
+        assertTrue(line, line.contains("查余票: worked 3 days ago — 余票查询页免登录可读"))
+        assertNull(SiteLedger.render(SiteLedger.Entry("a.com"), now))
     }
 
     @Test
-    fun `nothing worth saying, nothing shown`() {
-        assertNull(SiteLedger.render(SiteLedger.Entry("a.com", visits = 3, lastAt = now), now))
-    }
-
-    @Test
-    fun `entries survive a round trip`() {
-        val e = SiteLedger.Entry("a.com", 3, 1, 1, now, now, "captcha", now, "https://a.com/p", listOf(SiteLedger.Note("use the mobile page", now)))
+    fun `outcomes parse loosely and entries survive a round trip`() {
+        assertEquals(Outcome.WALLED, Outcome.parse(" Walled "))
+        assertNull(Outcome.parse("blocked?"))
+        val e = SiteLedger.Entry("a.com", listOf(SiteLedger.Record("f", Outcome.PARTIAL, "h", now)), now)
         assertEquals(e, SiteLedger.fromJson(SiteLedger.toJson(e)))
     }
 }
