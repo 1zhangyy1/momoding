@@ -177,6 +177,7 @@ private fun PermissionCard(o: JSONObject, code: String) {
         "background" -> stringResource(R.string.mo_perm_background)
         "files" -> stringResource(R.string.mo_perm_files)
         "read-notifications" -> stringResource(R.string.mo_perm_read_notifications)
+        "sms" -> stringResource(R.string.mo_perm_sms)
         else -> return
     }
     val permissions = PermissionNeeds.androidPermissions(need)
@@ -418,6 +419,7 @@ internal object PermissionNeeds {
         "location" -> arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION)
         "photos" -> if (android.os.Build.VERSION.SDK_INT >= 33) arrayOf(android.Manifest.permission.READ_MEDIA_IMAGES) else arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE)
         "notifications" -> if (android.os.Build.VERSION.SDK_INT >= 33) arrayOf(android.Manifest.permission.POST_NOTIFICATIONS) else emptyArray()
+        "sms" -> arrayOf(android.Manifest.permission.RECEIVE_SMS)
         else -> emptyArray()
     }
 }

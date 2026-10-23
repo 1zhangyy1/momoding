@@ -10,6 +10,7 @@ import androidx.annotation.StringRes
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material.icons.outlined.Sms
 import androidx.compose.material.icons.outlined.Contacts
 import androidx.compose.material.icons.outlined.BatteryFull
 import androidx.compose.material.icons.outlined.Folder
@@ -52,6 +53,9 @@ fun rememberPhonePermissions(): List<PhonePermission> {
             // reading other apps' notifications: what lets a routine wait for a delivery SMS or a message
             PhonePermission("read-notifications", R.string.mo_perm_row_read_notifications, R.string.mo_perm_purpose_read_notifications, Icons.Outlined.NotificationsActive,
                 com.openminis.app.offload.MinisNotificationListenerService.isEnabled(context)),
+            // receiving texts: what a routine waiting for a delivery SMS listens to
+            PhonePermission("sms", R.string.mo_perm_row_sms, R.string.mo_perm_purpose_sms, Icons.Outlined.Sms,
+                has(Manifest.permission.RECEIVE_SMS)),
             PhonePermission("calendar", R.string.mo_perm_row_calendar, R.string.mo_perm_purpose_calendar, Icons.Outlined.CalendarMonth,
                 has(Manifest.permission.READ_CALENDAR) && has(Manifest.permission.WRITE_CALENDAR)),
             PhonePermission("contacts", R.string.mo_perm_row_contacts, R.string.mo_perm_purpose_contacts, Icons.Outlined.Contacts,

@@ -187,17 +187,26 @@ class LocationOffloadHandler(private val context: Context) : NativeOffloadHandle
                 }.getOrNull()
             }
             .maxByOrNull { it.time }
-        if (best != null) {
-            AppLogger.debug(TAG, "last-known hit provider=${best.provider} age=${System.currentTimeMillis() - best.time}ms")
+        // momoding: a last-known fix only stands in for "where the phone is" while it is recent; an
+        // old one (the phone has moved since) gave a morning brief the wrong city
+        val bestAge = best?.let { System.currentTimeMillis() - it.time }
+        if (best != null && bestAge!! <= RECENT_FIX_MS) {
+            AppLogger.debug(TAG, "last-known hit provider=${best.provider} age=${bestAge}ms")
             return NativeOffloadResult(0, OffloadOutput.formatBody(buildLocationJson(best), args) + "\n")
         }
 
         // Strategy 2: request a single fresh fix with timeout
-        AppLogger.debug(TAG, "no last-known, requesting fresh fix (enabled=$enabled)")
+        AppLogger.debug(TAG, "no recent last-known, requesting fresh fix (enabled=$enabled)")
         val fresh = requestFreshLocation(lm, enabled, timeoutSec)
         if (fresh != null) {
             AppLogger.debug(TAG, "fresh fix provider=${fresh.provider} accuracy=${fresh.accuracy}m")
             return NativeOffloadResult(0, OffloadOutput.formatBody(buildLocationJson(fresh), args) + "\n")
+        }
+        // momoding: no fresh fix: the old one, saying how old, so the reply can say "last seen at…"
+        if (best != null) {
+            val json = JSONObject(buildLocationJson(best)).put("stale_minutes", bestAge!! / 60_000)
+                .put("note", "No fresh fix; this is where the phone was ${bestAge / 60_000} minutes ago. Say so.")
+            return NativeOffloadResult(0, OffloadOutput.formatBody(json.toString(), args) + "\n")
         }
 
         // Strategy 3: give up with explicit diagnostics
@@ -417,6 +426,8 @@ class LocationOffloadHandler(private val context: Context) : NativeOffloadHandle
 
     companion object {
         private const val TAG = "LocationOffload"
+        /** momoding: how old a last-known fix may be and still count as where the phone is. */
+        private const val RECENT_FIX_MS = 10 * 60_000L
 
         // [T-android-location-cjk-geocode] CJK Unified Ideographs (+ Ext A,
         // compatibility block) — enough to detect Chinese place names.

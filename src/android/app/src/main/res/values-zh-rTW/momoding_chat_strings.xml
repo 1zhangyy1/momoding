@@ -233,6 +233,10 @@
     <string name="mo_handoff_qr_signed_in_msg">掃碼登好了，接著做吧。</string>
     <string name="mo_perm_read_notifications">通知</string>
     <string name="mo_perm_read_notifications_ask">允許 Momoding 讀取通知？這樣訊息一來它就能替你處理。</string>
+    <string name="mo_perm_sms">收到的簡訊</string>
+    <string name="mo_perm_row_sms">接收簡訊</string>
+    <string name="mo_perm_purpose_sms">例行任務等簡訊用：快遞取件碼一來就處理</string>
+    <string name="mo_sms_app_name">簡訊</string>
     <string name="mo_perm_files">手機裡的檔案</string>
     <string name="mo_perm_files_ask">允許 Momoding 查看和整理你手機裡的檔案？</string>
     <string name="mo_perm_row_files">檔案</string>

@@ -32,6 +32,20 @@ class ShellGuardTest {
         assertEquals(ShellGuard.WORKSPACE, a.target)
     }
 
+    @Test fun `a cd before the delete decides where it is`() {
+        val a = ShellGuard.assess("cd /var/minis/mounts/phone/Download && rm -f big.mp4 old.zip")
+        assertEquals(RiskClass.DESTRUCTIVE, a.riskClass)
+        assertEquals(ShellGuard.PHONE, a.target)
+        // after the command, relative paths are the workspace again
+        assertEquals(ShellGuard.WORKSPACE, ShellGuard.assess("rm report.md").target)
+        // a cd into scratch makes the delete not ask
+        assertFalse(asks("cd /tmp && rm -rf build"))
+    }
+
+    @Test fun `the phone's own files are named as such`() {
+        assertEquals(ShellGuard.PHONE, ShellGuard.assess("rm /var/minis/mounts/phone/Movies/a.mp4").target)
+    }
+
     @Test fun `wiping a root is a warning with no standing grant`() {
         for (cmd in listOf("rm -rf /", "rm -rf ~", "rm -rf /var/minis/workspace", "rm -rf .", "rm -rf *")) {
             val a = ShellGuard.assess(cmd)

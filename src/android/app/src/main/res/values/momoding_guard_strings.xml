@@ -42,6 +42,7 @@
     <string name="mo_risk_remember_money_note">Confirmed with your screen lock. Payments in this one app or site will then run without a card; listed first under Settings → Permissions, where you can revoke it any time.</string>
     <string name="mo_risk_remembered_toast">Remembered · see Settings → Permissions to revoke</string>
     <string name="mo_risk_target_shared">the shared folder</string>
+    <string name="mo_risk_target_phone_files">phone files</string>
     <string name="mo_risk_target_workspace">the workspace</string>
     <string name="mo_risk_tier_confirm">Remembered from the card · delete and send</string>
     <string name="mo_risk_tier_highest">Runs without asking · payments</string>

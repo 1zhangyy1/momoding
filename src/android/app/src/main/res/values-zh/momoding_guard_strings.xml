@@ -42,6 +42,7 @@
     <string name="mo_risk_remember_money_note">需要验证锁屏。之后只在这一个应用或网站里的付款不再弹卡片；它会排在「设置 → 权限」的最前面，随时可以撤销。</string>
     <string name="mo_risk_remembered_toast">已记住 · 可在「设置 → 权限」里撤销</string>
     <string name="mo_risk_target_shared">共享文件夹</string>
+    <string name="mo_risk_target_phone_files">手机文件</string>
     <string name="mo_risk_target_workspace">工作区</string>
     <string name="mo_risk_tier_confirm">卡片上记住的 · 删除与发送</string>
     <string name="mo_risk_tier_highest">不再询问 · 付款</string>

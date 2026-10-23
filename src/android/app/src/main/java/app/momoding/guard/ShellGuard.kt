@@ -17,6 +17,11 @@ package app.momoding.guard
 object ShellGuard {
     const val WORKSPACE = "/var/minis/workspace"
     const val SHARED = "/var/minis/shared"
+    /** momoding: folders of the phone mounted into the sandbox (the phone's own storage). */
+    const val PHONE = "/var/minis/mounts"
+
+    /** momoding: where a relative path points — the last `cd` of the command being judged. */
+    private val cwd = ThreadLocal<String?>()
 
     private val scratchPrefixes = listOf("/tmp/", "/var/tmp/", "/dev/shm/", "\$TMPDIR/", "\${TMPDIR}/")
     /**
@@ -82,10 +87,18 @@ object ShellGuard {
             val cls = if (warnings.any { it.startsWith("pipes a download") }) RiskClass.INSTALL else RiskClass.DESTRUCTIVE
             result = RiskAssessment(cls, warnings.joinToString("; "), warnings = warnings)
         }
-        for (pipeline in splitPipelines(command)) {
-            for (simple in splitPipes(pipeline)) {
-                result = RiskAssessment.merge(result, assessSimple(simple, depth))
+        val outer = cwd.get()
+        try {
+            for (pipeline in splitPipelines(command)) {
+                // momoding: `cd <dir> && rm x` deletes in <dir>, not in the workspace
+                val t = unwrap(tokenize(pipeline))
+                if (t.size >= 2 && t[0] == "cd") { cwd.set(resolve(t[1])); continue }
+                for (simple in splitPipes(pipeline)) {
+                    result = RiskAssessment.merge(result, assessSimple(simple, depth))
+                }
             }
+        } finally {
+            cwd.set(outer)
         }
         return result
     }
@@ -334,9 +347,10 @@ object ShellGuard {
         if (p.startsWith("~")) p = "/root" + p.drop(1)
         if (p.startsWith("\$TMPDIR") || p.startsWith("\${TMPDIR}")) p = "/tmp" + p.removePrefix("\${TMPDIR}").removePrefix("\$TMPDIR")
         if (p == "\$HOME" || p.startsWith("\$HOME/")) p = "/root" + p.removePrefix("\$HOME")
-        if (p.startsWith("\$PWD/")) p = WORKSPACE + p.removePrefix("\$PWD")
+        val here = cwd.get() ?: WORKSPACE
+        if (p.startsWith("\$PWD/")) p = here + p.removePrefix("\$PWD")
         if (!p.startsWith("/") && !p.startsWith("\$")) {
-            p = if (p == "." || p == "./" || p == "*" || p == "./*") WORKSPACE else "$WORKSPACE/" + p.removePrefix("./")
+            p = if (p == "." || p == "./" || p == "*" || p == "./*") here else "$here/" + p.removePrefix("./")
         }
         // Collapse `a/b/..` a little so `/var/minis/workspace/x/..` is the workspace.
         val parts = ArrayList<String>()
@@ -364,6 +378,7 @@ object ShellGuard {
         return when {
             path.startsWith("$WORKSPACE/") || path == WORKSPACE -> WORKSPACE
             path.startsWith("$SHARED/") || path == SHARED -> SHARED
+            path.startsWith("$PHONE/") || path == PHONE -> PHONE
             else -> {
                 val parts = path.trim('/').split('/')
                 if (parts.size <= 2) "/" + parts.joinToString("/") else "/" + parts.take(2).joinToString("/")

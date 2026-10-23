@@ -171,10 +171,15 @@ class ScheduledTaskOffloadHandler(private val context: Context) : NativeOffloadH
             .put("delivery", ScheduledTargetDelivery.sentence(destination, defaulted))
             .put("deliveryTarget", JSONObject(ScheduledTargetDelivery.summary(destination, defaulted)))
         // momoding: an on-notification task sees nothing until notification access is on
-        if (task.triggerKind == ScheduledTriggerKind.ON_NOTIFICATION &&
-            !com.openminis.app.offload.MinisNotificationListenerService.isEnabled(context)
-        ) {
-            out.put("notificationAccess", "off: the task is saved but cannot see notifications until the person turns on notification access")
+        // momoding: a routine waiting for a text hears it from the SMS itself (needs "sms");
+        // one waiting for another app's notification needs notification access ("read-notifications")
+        if (task.triggerKind == ScheduledTriggerKind.ON_NOTIFICATION) {
+            val sms = task.onNotificationApp.equals("sms", ignoreCase = true)
+            if (sms && context.checkSelfPermission(android.Manifest.permission.RECEIVE_SMS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                out.put("access", "off: the task is saved but cannot hear texts until the person allows receiving SMS (permission card \"sms\")")
+            } else if (!sms && !com.openminis.app.offload.MinisNotificationListenerService.isEnabled(context)) {
+                out.put("access", "off: the task is saved but cannot see notifications until the person turns on notification access (permission card \"read-notifications\")")
+            }
         }
         return NativeOffloadResult(0, out.toString(2))
     }

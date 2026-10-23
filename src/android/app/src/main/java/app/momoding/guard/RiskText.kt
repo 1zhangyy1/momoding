@@ -10,6 +10,7 @@ object RiskText {
         null -> null
         ShellGuard.WORKSPACE -> context.getString(R.string.mo_risk_target_workspace)
         ShellGuard.SHARED -> context.getString(R.string.mo_risk_target_shared)
+        ShellGuard.PHONE -> context.getString(R.string.mo_risk_target_phone_files)
         // momoding: the phone's own data, named the way the person names it
         "calendar" -> context.getString(R.string.mo_risk_target_calendar)
         "contacts" -> context.getString(R.string.mo_risk_target_contacts)
