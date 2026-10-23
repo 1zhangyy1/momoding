@@ -870,13 +870,13 @@ internal fun buildFlatChatItems(
         // retryLast() re-runs the whole turn, so one button is enough.
         val lastCancelledToolId = blocks.lastOrNull { it.kind == "tool_use" && it.toolStatus == ToolBlockStatus.CANCELLED }?.id
 
-        // momoding: with steps hidden, words said between tool calls ("let me check the calendar
-        // first:") are part of the process; only the text after the last step is the reply
-        val lastStepIdx = if (showSteps) -1 else blocks.indexOfLast { it.kind == "tool_use" || it.kind == "thinking" }
+        // momoding: with steps hidden, the tool calls fold away but what the Bot says between them
+        // stays — what it is on, what it found so far, a slow step coming (Instinct's milestone
+        // updates; Grok Bot's "useful progress"). The prompt keeps those lines few and real.
         blocks.forEachIndexed { index, block ->
             when (block.kind) {
                 "text" -> {
-                    if (block.content.isNotEmpty() && (showSteps || index > lastStepIdx || block.content.contains("```momoding-"))) {
+                    if (block.content.isNotEmpty()) {
                         val isLastText = index == lastTextIdx
                         // Pattern A: split this text block's content into
                         // independent markdown fragments so each becomes its
@@ -1033,7 +1033,7 @@ internal fun buildFlatChatItems(
             when (it.kind) {
                 "info" -> false
                 "thinking" -> showSteps && (message.thinkingLevel?.isEnabled ?: true) // momoding: hidden steps keep the typing dots
-                "text" -> it.content.isNotEmpty() && (showSteps || idx > lastStepIdx) // momoding: hidden narration is not content
+                "text" -> it.content.isNotEmpty()
                 else -> showSteps // tool_use pills render immediately — when steps are shown (momoding)
             }
         }

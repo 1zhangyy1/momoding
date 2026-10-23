@@ -4645,6 +4645,17 @@ class ChatViewModel(
         Log.i(TAG, "[PersonaReminder] appended at ~$contextTokens ctx tokens (agentHistory.size=${agentHistory.size})")
     }
 
+    /** Momoding: an app note (`<system-reminder>…`, never rendered) appended and persisted like the persona reminder. */
+    private fun appendAppNoteToHistory(note: String) {
+        val idx = agentHistory.size
+        agentHistory.add(LLMMessage(role = LLMMessage.Role.USER, content = note, contentParts = listOf(AgentContentPart.Text(note))))
+        val sid = activeSessionId
+        viewModelScope.launch(Dispatchers.IO) {
+            val row = chatRepository.appendMessage(sid, "user", """[{"type":"text","value":${escapeJson(note)}}]""")
+            if (idx < agentHistory.size) agentHistory[idx] = agentHistory[idx].copy(dbMessageId = row.id)
+        }
+    }
+
     private fun effectiveAgentHistoryUncounted(): List<LLMMessage> {
         val summary = _compactSummary.value
         val marker = _cachedLatestMarker
@@ -11302,6 +11313,10 @@ class ChatViewModel(
                         // bytes are never touched, so the cache prefix still hits.
                         if (personaReminderIsDue(lastContextTokens)) {
                             appendPersonaReminderToHistory(lastContextTokens)
+                        }
+                        // momoding: a long job in the chat says how it is going (a background job's words are not seen)
+                        if (helperConfig == null && app.momoding.chat.ProgressNudge.due(agentHistory)) {
+                            appendAppNoteToHistory(app.momoding.chat.ProgressNudge.TEXT)
                         }
                         // [T-ctx-measure-outbound] Record our estimate of THIS request
                         // (pre-budget, like every measurement) so the provider's count
