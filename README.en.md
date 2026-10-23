@@ -23,10 +23,10 @@ Simple, smooth, and quiet.</p>
 </p>
 
 <p align="center">
-  <img src="docs/assets/hero-en.png" alt="Momoding remembers you, gets things done, shows you drafts first, and keeps watch" width="960" />
+  <img src="docs/assets/hero-en.jpg" alt="Momoding: turn your phone into an AI phone" width="960" />
 </p>
 
-<p align="center"><sub>Real screenshots from an Android emulator with the English interface, running DeepSeek V4.1 Flash.</sub></p>
+<p align="center"><sub>Screenshots from an Android emulator with the English interface (DeepSeek V4.1 Flash); the train app and photo album screens are illustrations.</sub></p>
 
 > **1.0 preview.** Good for everyday trial use, but it is moving fast. Most polishing so far happened on an emulator and a few real phones, and background reliability on heavily customised Android builds is still being tested. Please [open an issue](https://github.com/1zhangyy1/momoding/issues/new/choose) when something goes wrong.
 
@@ -82,7 +82,7 @@ How it talks, how cards appear, when to stop and ask you: we studied **Grok Bot*
 
 ## What it can do today
 
-<p align="center"><img src="docs/assets/features-en.png" alt="Reminders and events, remembering you, drafts, web lookups, step view, approval cards, routines and screen operation" width="880" /></p>
+<p align="center"><img src="docs/assets/cases-en.jpg" alt="Pickup codes, storage cleanup, booking a train in an app, photo albums, texting, a daily brief" width="880" /></p>
 
 **Say it once, in the chat:**
 
