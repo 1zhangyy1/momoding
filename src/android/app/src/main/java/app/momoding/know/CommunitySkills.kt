@@ -22,7 +22,7 @@ object CommunitySkills {
     const val GITHUB = "1zhangyy1/momoding-skills"
     const val GITEE = "nuomijizhangyy/momoding-skills"
     /** The share relay (services/share-relay): checks a share and keeps it for review. */
-    const val RELAY = "https://share.momoding.app"
+    const val RELAY = "https://share.momoding.com"
     private const val PREFS = "momoding"
     private const val KEY_AUTO = "community.autoShare"
     private const val KEY_SHARED = "community.sharedOnce"

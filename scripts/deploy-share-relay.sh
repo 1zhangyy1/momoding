@@ -1,5 +1,5 @@
 #!/bin/zsh
-# deploy-share-relay.sh <your domain, e.g. momoding.app>
+# deploy-share-relay.sh <your domain, e.g. momoding.com>
 # Puts the Momoding share relay on https://share.<domain>. Run it yourself: a browser window opens
 # to sign in to Cloudflare (the domain must be on that account) — click Allow. Nothing else to type.
 # It makes a random review key for scripts/review-shares.sh and keeps it in

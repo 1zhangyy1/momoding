@@ -3,7 +3,7 @@ name = "momoding-share-relay"
 main = "worker.js"
 compatibility_date = "2026-10-01"
 workers_dev = true
-# routes = [{ pattern = "share.momoding.app", custom_domain = true }]
+routes = [{ pattern = "share.momoding.com", zone_name = "momoding.com", custom_domain = true }]
 
 [vars]
 # (no GitHub token here: pull requests are opened by scripts/review-shares.sh)
