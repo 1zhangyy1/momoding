@@ -1,14 +1,15 @@
-// Momoding share relay — a Cloudflare Worker that turns a know-how skill sent by the app into a
-// pull request on github.com/1zhangyy1/momoding-skills (调研/M21). The GitHub token lives here, as
-// a Worker secret, never in the app. Every submission is checked and lands as a PR for review;
-// nothing is merged automatically.
+// Momoding share relay — a Cloudflare Worker that receives the know-how skills Momoding apps share
+// and keeps them for review (调研/M21). It holds no GitHub token: a maintainer pulls the pending
+// shares with scripts/review-shares.sh, reviews each, and opens the pull requests with their own
+// signed-in GitHub. Every submission is checked here first (format, personal data, rate).
 //
 // POST /v1/share  {"name": "cn-train-flight-search", "skill": "---\nname: ...", "install": "<random id>", "app": "1.0.3"}
-//   → 200 {"pr": "https://github.com/..."}  |  4xx {"error": "..."}
+//   → 200 {"id": "<share id>", "status": "received"}  |  4xx {"error": "..."}
 // GET  /v1/health → 200 {"ok": true}
+// GET  /v1/pending, DELETE /v1/pending/<id>  (Authorization: Bearer <REVIEW_KEY>) — for the review script
 //
-// Bindings (wrangler.toml): REPO ("owner/name"), KV namespace LIMITS; secret GITHUB_TOKEN
-// (fine-grained: contents + pull requests, read/write, this repo only).
+// Bindings (wrangler.toml): KV namespace LIMITS (rate limits and the pending shares); secret
+// REVIEW_KEY (a random string the deploy script makes and keeps on the maintainer's Mac).
 
 const MAX_CHARS = 6000;
 const PER_INSTALL_PER_DAY = 5;
@@ -29,6 +30,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/v1/health") return json({ ok: true });
+    if (url.pathname.startsWith("/v1/pending")) return pending(request, env, url);
     if (request.method !== "POST" || url.pathname !== "/v1/share") return json({ error: "not found" }, 404);
 
     let body;
@@ -45,12 +47,9 @@ export default {
       return json({ error: "too many shares today" }, 429);
     }
 
-    try {
-      const pr = await openPullRequest(env, name, skill, String(body.app || "").slice(0, 20));
-      return json({ pr });
-    } catch (e) {
-      return json({ error: "could not open the pull request", detail: String(e.message || e).slice(0, 200) }, 502);
-    }
+    const id = `${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`;
+    await env.LIMITS.put(`share:${id}`, JSON.stringify({ name, skill, app: String(body.app || "").slice(0, 20), at: new Date().toISOString() }), { expirationTtl: 60 * 86400 });
+    return json({ id, status: "received" });
   },
 };
 
@@ -76,49 +75,23 @@ async function allow(env, key, limit) {
   return true;
 }
 
-async function gh(env, path, init = {}) {
-  const res = await fetch(`https://api.github.com/repos/${env.REPO}${path}`, {
-    ...init,
-    headers: {
-      authorization: `Bearer ${env.GITHUB_TOKEN}`,
-      accept: "application/vnd.github+json",
-      "user-agent": "momoding-share-relay",
-      ...(init.body ? { "content-type": "application/json" } : {}),
-    },
-  });
-  const data = res.status === 204 ? {} : await res.json();
-  if (!res.ok) throw new Error(`${res.status} ${data.message || ""}`);
-  return data;
-}
-
-async function openPullRequest(env, name, skill, app) {
-  const main = await gh(env, "/git/ref/heads/main");
-  const branch = `share/${name}-${Date.now().toString(36)}`;
-  await gh(env, "/git/refs", { method: "POST", body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: main.object.sha }) });
-  const path = `skills/${name}/SKILL.md`;
-  let sha;
-  try { sha = (await gh(env, `/contents/${path}?ref=${branch}`)).sha; } catch { /* a new skill */ }
-  await gh(env, `/contents/${path}`, {
-    method: "PUT",
-    body: JSON.stringify({ message: `${sha ? "Update" : "Add"} ${name} (shared from the app)`, content: b64(skill), branch, ...(sha ? { sha } : {}) }),
-  });
-  const pr = await gh(env, "/pulls", {
-    method: "POST",
-    body: JSON.stringify({
-      title: `${sha ? "Update" : "Add"} ${name}`,
-      head: branch,
-      base: "main",
-      body: `Shared automatically by a Momoding app${app ? ` (${app})` : ""}. Checked by the relay for format and obvious personal data; please review before merging.`,
-    }),
-  });
-  return pr.html_url;
-}
-
-function b64(text) {
-  const bytes = new TextEncoder().encode(text);
-  let bin = "";
-  for (const b of bytes) bin += String.fromCharCode(b);
-  return btoa(bin);
+async function pending(request, env, url) {
+  if (!env.REVIEW_KEY || request.headers.get("authorization") !== `Bearer ${env.REVIEW_KEY}`) return json({ error: "not allowed" }, 401);
+  if (request.method === "GET") {
+    const list = await env.LIMITS.list({ prefix: "share:" });
+    const items = [];
+    for (const k of list.keys) {
+      const v = await env.LIMITS.get(k.name);
+      if (v) items.push({ id: k.name.slice(6), ...JSON.parse(v) });
+    }
+    return json({ items });
+  }
+  if (request.method === "DELETE") {
+    const id = url.pathname.split("/").pop();
+    await env.LIMITS.delete(`share:${id}`);
+    return json({ deleted: id });
+  }
+  return json({ error: "not found" }, 404);
 }
 
 function json(obj, status = 200) {

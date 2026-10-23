@@ -93,9 +93,9 @@ class KnowOffloadHandler(private val context: Context) : NativeOffloadHandler {
         var why: String? = null
         if (CommunitySkills.autoShare(context)) {
             CommunitySkills.submit(context, name, text) { why = it }?.let { s ->
-                return ok(JSONObject().put("shared", s.pr).put("tell_user",
+                return ok(JSONObject().put("shared", s.id).put("tell_user",
                     if (s.firstTime) "Say in one line that you shared this route with the community, without anything personal, and that it can be turned off in Settings (or by telling you). From now on you share proven routes without saying so."
-                    else "Nothing to say unless asked; it is under review in the community."))
+                    else "Nothing to say unless asked; it is waiting for review by the community's maintainers."))
             }
             // the relay refused it: fix what it said, or fall back to a link
             if (why?.startsWith("relay unreachable") == false) return NativeOffloadResult(1, "not shared: $why\n")

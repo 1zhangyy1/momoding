@@ -21,7 +21,7 @@ import java.net.URLEncoder
 object CommunitySkills {
     const val GITHUB = "1zhangyy1/momoding-skills"
     const val GITEE = "nuomijizhangyy/momoding-skills"
-    /** The share relay (services/share-relay): holds the GitHub token, opens a PR per share. */
+    /** The share relay (services/share-relay): checks a share and keeps it for review. */
     const val RELAY = "https://share.momoding.app"
     private const val PREFS = "momoding"
     private const val KEY_AUTO = "community.autoShare"
@@ -32,9 +32,9 @@ object CommunitySkills {
     fun autoShare(context: Context): Boolean = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_AUTO, true)
     fun setAutoShare(context: Context, on: Boolean) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_AUTO, on).apply()
 
-    data class Shared(val pr: String, val firstTime: Boolean)
+    data class Shared(val id: String, val firstTime: Boolean)
 
-    /** Send [text] to the relay; the pull request's link, or null when the relay could not take it ([error] says why). */
+    /** Send [text] to the relay; the share's id, or null when the relay could not take it ([onError] says why). */
     fun submit(context: Context, name: String, text: String, onError: (String) -> Unit = {}): Shared? {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val install = prefs.getString(KEY_INSTALL, null) ?: java.util.UUID.randomUUID().toString().also { prefs.edit().putString(KEY_INSTALL, it).apply() }
@@ -50,7 +50,7 @@ object CommunitySkills {
             if (!ok) { onError(reply.optString("error", "relay said ${conn.responseCode}")); return null }
             val first = !prefs.getBoolean(KEY_SHARED, false)
             prefs.edit().putBoolean(KEY_SHARED, true).apply()
-            Shared(reply.getString("pr"), first)
+            Shared(reply.getString("id"), first)
         }.onFailure { onError("relay unreachable: ${it.message}") }.getOrNull()
     }
     private const val DAY_MS = 24 * 3600_000L
