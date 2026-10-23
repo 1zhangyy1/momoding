@@ -4,8 +4,9 @@
 
 <h1 align="center">Momoding</h1>
 
-<p align="center"><strong>A personal agent on your phone.</strong><br/>
-It lives on your phone and gets things done: tell it what you saw or thought of, and it uses what's on your phone to handle it, remembers how you like things, and keeps an eye on what comes next.<br/>
+<p align="center"><strong>Turn your phone into an AI phone.</strong><br/>
+A personal agent that lives on your phone.<br/>
+Tell it what you saw or thought of, and it uses what's on your phone to handle it, remembers how you like things, and keeps an eye on what comes next.<br/>
 Simple, smooth, and quiet.</p>
 
 <p align="center">
@@ -33,7 +34,13 @@ Simple, smooth, and quiet.</p>
 
 ## Why
 
-AI chat apps are great at answering questions. The small chores on your phone still fall to you, though: you **re-type** things, **remember** them, and **keep checking** on them.
+**An AI phone shouldn't require a new phone.**
+
+Codex, Grok Bot and Instinct have shown that AI can do real work, not just chat. But they live in the cloud or on your computer, out of reach of the calendar, alarms, contacts, messages and apps on your phone. Phone makers' AI phones, meanwhile, ask you to buy new hardware and use their model.
+
+Momoding puts an agent that gets things done on the Android phone you **already have**. It uses what's on your phone to handle things, remembers you, and keeps watch. Install one app, bring your own model key, and your phone is an AI phone.
+
+The small chores on your phone still fall to you: you **re-type** things, **remember** them, and **keep checking** on them.
 
 - The school emails a trip notice, and you copy the date into your calendar by hand, then set a reminder.
 - You tell a chatbot to "remember this", and next time it has forgotten.
@@ -49,7 +56,7 @@ Momoding takes those three jobs off your hands:
 
 ## How it's different
 
-| | AI chat apps | Built-in phone assistants | Cloud agents | **Momoding** |
+| | AI chat apps | Built-in phone assistants | Cloud agents (Grok Bot etc.) | **Momoding** |
 | - | :-: | :-: | :-: | :-: |
 | Uses what's on your phone (calendar, alarms, contacts, photos, notifications, the screen) | ✗ | ✓ | ✗ | **✓** |
 | Remembers you, and you can see and edit what it remembers | weak | weak | ✓ | **✓** |
