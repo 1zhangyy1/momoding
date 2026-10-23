@@ -4,8 +4,9 @@
 
 <h1 align="center">Momoding</h1>
 
-<p align="center"><strong>An assistant that lives on your phone and gets things done.</strong><br/>
-Tell it what you saw or thought of. It uses what's on your phone to handle it, remembers how you like things, and keeps an eye on what comes next.</p>
+<p align="center"><strong>A personal agent on your phone.</strong><br/>
+It lives on your phone and gets things done: tell it what you saw or thought of, and it uses what's on your phone to handle it, remembers how you like things, and keeps an eye on what comes next.<br/>
+Simple, smooth, and quiet.</p>
 
 <p align="center">
   <a href="https://github.com/1zhangyy1/momoding/releases/latest"><strong>Download the APK</strong></a>
@@ -55,6 +56,29 @@ Momoding takes those three jobs off your hands:
 | Takes on a task and follows up | ✗ | ✗ | ✓ | **✓** |
 | Where your data lives | vendor cloud | vendor cloud | vendor cloud | **your phone** |
 | Open source, bring your own model key | ✗ | ✗ | ✗ | **✓** |
+
+## Why it feels good to use
+
+What we care about most is not the number of features. It is how light it feels to hand something off:
+
+- **One conversation.** No chat list, no modes. Open it and it's there, like texting someone reliable.
+- **Results first.** When it's done, you get the result in a sentence plus a button to check it ("See in Calendar"). The steps fold into "Did N steps" for when you want them.
+- **At most one question.** If something is missing, it asks only the one thing that matters and offers choices. No guessing, no interrogation.
+- **It asks before acting.** Deleting, sending and paying show an approval card. Tap "Always allow" once and it just does it next time, leaving one line in the chat.
+- **Quiet.** Routines don't notify you unless something matters.
+- **Smooth.** It reacts 👀 the moment you send and ✅ when it's done. Replies pop in bubble by bubble, cards rise when they need you and fold to a line once settled.
+- **Pick one provider and go.** First run asks for one provider and one key; chat and vision models are set up for you.
+
+## Who we learned from
+
+Great agent experiences already exist. We took them apart and brought the best parts to the phone:
+
+| From | What we learned |
+| - | - |
+| **Grok Bot** | Talk like a chat: one bubble per thing, facts first, and "OK" alone is not a reply. Cards in the chat: decisions on a raised card, questions as options, settled cards fold to one line. Every approval leaves a line. A handoff card when you need to sign in |
+| **Instinct** | 👀 when your message lands, ✅ when it's done. At a blocker, say what stopped it, what it tried and what's next, never drop it silently. When a site offers a QR login, hand you the code itself |
+| **nanoMuse** | One main conversation as the home screen. Risk-tiered approvals. How to get things done on the phone's screen |
+| **iMessage** | Bubbles, tails and time dividers: the basic feel of a chat |
 
 ## What it can do today
 
