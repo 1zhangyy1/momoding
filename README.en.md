@@ -78,14 +78,7 @@ What we care about most is not the number of features. It is how light it feels 
 
 ## Who we learned from
 
-Great agent experiences already exist. We took them apart and brought the best parts to the phone:
-
-| From | What we learned |
-| - | - |
-| **Grok Bot** | Talk like a chat: one bubble per thing, facts first, and "OK" alone is not a reply. Cards in the chat: decisions on a raised card, questions as options, settled cards fold to one line. Every approval leaves a line. A handoff card when you need to sign in |
-| **Instinct** | 👀 when your message lands, ✅ when it's done. At a blocker, say what stopped it, what it tried and what's next, never drop it silently. When a site offers a QR login, hand you the code itself |
-| **nanoMuse** | One main conversation as the home screen. Risk-tiered approvals. How to get things done on the phone's screen |
-| **iMessage** | Bubbles, tails and time dividers: the basic feel of a chat |
+How it talks, how cards appear, when to stop and ask you: we studied **Grok Bot** and **Instinct**, two of the best agent products out there, and brought that experience to the phone.
 
 ## What it can do today
 
