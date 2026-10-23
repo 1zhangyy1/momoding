@@ -1258,16 +1258,21 @@ class SkillRepository(private val context: Context) {
         val dir = File(skillsDir, "about-momoding")
         val marker = File(dir, ".source-version")
         if (marker.takeIf { it.isFile }?.readText() == installed) return@runCatching
-        val source = File(dir, "source").apply { deleteRecursively(); mkdirs() }
-        fun copy(asset: String, to: File) {
-            val children = context.assets.list(asset).orEmpty()
-            if (children.isEmpty()) {
-                to.parentFile?.mkdirs()
-                context.assets.open(asset).use { input -> to.outputStream().use { input.copyTo(it) } }
-            } else children.forEach { copy("$asset/$it", File(to, it)) }
-        }
-        copy("momoding-self", source)
-        marker.writeText(installed)
+        // this runs in Application.onCreate: a few MB of files are copied off the main thread
+        Thread({
+            runCatching {
+                val source = File(dir, "source").apply { deleteRecursively(); mkdirs() }
+                fun copy(asset: String, to: File) {
+                    val children = context.assets.list(asset).orEmpty()
+                    if (children.isEmpty()) {
+                        to.parentFile?.mkdirs()
+                        context.assets.open(asset).use { input -> to.outputStream().use { input.copyTo(it) } }
+                    } else children.forEach { copy("$asset/$it", File(to, it)) }
+                }
+                copy("momoding-self", source)
+                marker.writeText(installed)
+            }.onFailure { Log.w(TAG, "about-momoding source copy failed: ${it.message}") }
+        }, "about-momoding-source").start()
     }.onFailure { Log.w(TAG, "about-momoding install failed: ${it.message}") }
 
     private fun installBundledSkill(bundledId: String, bundledVersion: String, content: String) {
