@@ -124,10 +124,19 @@ class AgentForegroundService : Service() {
                 putExtra(EXTRA_SESSION_COUNT, sessionCount)
                 putExtra(EXTRA_TOOL_STATUS, toolStatus)
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
+            // momoding: a turn that starts while the app is in the background (a message sent from
+            // elsewhere, a fire whose alarm exemption has lapsed) may not start a foreground service
+            // (ForegroundServiceStartNotAllowedException, an IllegalStateException) — that crashed
+            // the app. The turn runs on without the service.
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (e: IllegalStateException) {
+                awaitingStart = false
+                Log.w(TAG, "foreground service not allowed now: ${e.message}")
             }
         }
 
