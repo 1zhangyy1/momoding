@@ -36,8 +36,7 @@ class WebOffloadHandler : NativeOffloadHandler {
                 hits.forEach { h ->
                     put(JSONObject().put("title", h.title).put("url", h.url).put("snippet", h.snippet).apply { h.date?.let { put("date", it) } })
                 }
-            })
-            .put("note", "Snippets can be old or cut short: read the page before you rely on a price, a date, a figure or a rule — momoding-web read <url>."))
+            }))
     }
 
     private fun read(url: String?, from: Int): NativeOffloadResult {
