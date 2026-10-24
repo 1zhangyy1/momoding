@@ -105,6 +105,7 @@ How it talks, how cards appear, when to stop and ask you: we studied **Grok Bot*
 - **There's no Momoding account and no Momoding server.** Chats, memory, rules and routines are stored on your phone.
 - **Your model API key is stored encrypted on the phone** and is only used to call the provider you picked.
 - **It is not offline, though.** For the model to understand a request, the conversation and whatever Momoding reads while working on it (a calendar entry, a web page) are sent to **the model provider you chose**. Which provider gets that data is up to you.
+- **When it looks something up on the web**, the search words go to Exa, a free search service; pages it reads are fetched by the phone directly from the site.
 - **No analytics, ads or third-party tracking SDKs.**
 
 ## Get started
