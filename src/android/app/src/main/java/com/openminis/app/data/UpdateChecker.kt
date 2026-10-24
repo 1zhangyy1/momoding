@@ -199,8 +199,10 @@ object UpdateChecker {
                 // Highest version we've seen at all (used for the "release
                 // exists but is older or equal" → UpToDate decision and for
                 // logging).
+                // momoding: versions compared with each other; it compared each with "0", so every
+                // release tied and the first listed won (Gitee lists oldest first: 1.0.0 → 1.0.1 only)
                 val highest = candidates.maxWithOrNull(
-                    compareBy { compareVersions(it.versionName, "0") },
+                    Comparator { a, b -> compareVersions(a.versionName, b.versionName) },
                 ) ?: candidates.first()
                 AppLogger.info(
                     TAG,
@@ -213,7 +215,7 @@ object UpdateChecker {
                 val upgradeCandidate = candidates
                     .filter { it.apkUrl != null }
                     .filter { compareVersions(it.versionName, localVer) > 0 }
-                    .maxWithOrNull(compareBy { compareVersions(it.versionName, "0") })
+                    .maxWithOrNull(Comparator { a, b -> compareVersions(a.versionName, b.versionName) })
 
                 if (upgradeCandidate != null) {
                     AppLogger.info(

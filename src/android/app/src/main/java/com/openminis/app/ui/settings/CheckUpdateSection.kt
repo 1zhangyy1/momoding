@@ -242,7 +242,7 @@ fun CheckUpdateSection() {
 }
 
 @Composable
-private fun UpdateDialog(
+internal fun UpdateDialog( // momoding: also shown by app.momoding.update.UpdateOffer when the app opens
     update: UpdateChecker.CheckResult.UpdateAvailable,
     downloadProgress: Float?,
     downloadError: String?,

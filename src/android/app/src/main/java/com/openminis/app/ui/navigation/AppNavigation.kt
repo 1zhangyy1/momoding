@@ -489,6 +489,7 @@ fun AppNavigation(
         quickActionStart != null -> quickActionStart
         else -> Routes.SESSION_LIST
     }
+    app.momoding.update.UpdateOffer() // momoding: a new version is offered when the app opens, on whatever page
     NavHost(
         navController = navController,
         startDestination = startDestination,

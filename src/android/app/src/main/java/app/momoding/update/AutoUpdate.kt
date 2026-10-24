@@ -17,8 +17,9 @@ import kotlinx.coroutines.launch
 
 /**
  * New versions reach people without them looking: at most once a day, when the app comes to
- * the front, the releases are checked (Gitee, then GitHub) and a newer one is announced once
- * with a notification that opens About → Check for updates, where it downloads and installs.
+ * the front, the releases are checked (Gitee, then GitHub) and a newer one is offered once, in
+ * the app ([UpdateOffer]: what is new, Download, Later), or by a notification that opens About
+ * → Check for updates when the person has already left the app.
  */
 object AutoUpdate {
     private const val PREFS = "momoding"
@@ -29,6 +30,11 @@ object AutoUpdate {
     private const val DAY_MS = 24 * 60 * 60 * 1000L
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** A newer release to offer in the app ([UpdateOffer]); null once it is taken or put off. */
+    val offer = kotlinx.coroutines.flow.MutableStateFlow<UpdateChecker.CheckResult.UpdateAvailable?>(null)
+
+    fun close() { offer.value = null }
 
     fun onForeground(context: Context) {
         if (BuildConfig.DEBUG) return // the dev build is not the one on the releases page
@@ -41,7 +47,10 @@ object AutoUpdate {
             val r = runCatching { UpdateChecker.check() }.getOrNull() as? UpdateChecker.CheckResult.UpdateAvailable ?: return@launch
             if (prefs.getString(KEY_ANNOUNCED, null) == r.versionName) return@launch // said once per version
             prefs.edit().putString(KEY_ANNOUNCED, r.versionName).apply()
-            announce(app, r.versionName)
+            offer.value = r // shown by the chat as soon as it is on screen
+            // left the app before the answer came: a notification instead
+            val inFront = androidx.lifecycle.ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)
+            if (!inFront) announce(app, r.versionName)
         }
     }
 
