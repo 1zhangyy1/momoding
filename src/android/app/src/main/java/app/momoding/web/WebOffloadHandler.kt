@@ -29,12 +29,11 @@ class WebOffloadHandler : NativeOffloadHandler {
 
     private fun search(query: String, n: Int): NativeOffloadResult {
         if (query.isBlank()) return NativeOffloadResult(2, "momoding-web search \"<words>\"\n")
-        val found = WebLookup.search(query.trim(), n.coerceIn(1, 15))
-            ?: return NativeOffloadResult(1, "momoding-web: no results (the search engines may be refusing right now). Try other words once, or search in your browser.\n")
+        val hits = WebLookup.search(query.trim(), n.coerceIn(1, 15))
+        if (hits.isEmpty()) return NativeOffloadResult(1, "momoding-web: no results. Try other words, or search in your browser.\n")
         return ok(JSONObject()
-            .put("source", found.source)
             .put("results", JSONArray().apply {
-                found.hits.forEach { h ->
+                hits.forEach { h ->
                     put(JSONObject().put("title", h.title).put("url", h.url).put("snippet", h.snippet).apply { h.date?.let { put("date", it) } })
                 }
             })
@@ -69,7 +68,7 @@ class WebOffloadHandler : NativeOffloadHandler {
         private val HELP = """
             momoding-web — look things up without opening the browser.
 
-              search "<words>" [--n 8]     search the web: titles, links and snippets
+              search "<words>" [--n 8]     search the web: titles, links and passages
               read <url> [--from <n>]      a page as plain text (10,000 characters at a time)
 
             Works for public pages. A page that needs a sign-in, clicks or scripts to show

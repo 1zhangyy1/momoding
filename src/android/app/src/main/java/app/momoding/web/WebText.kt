@@ -1,6 +1,6 @@
 package app.momoding.web
 
-import org.jsoup.Jsoup
+import org.json.JSONObject
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import org.jsoup.nodes.Node
@@ -12,39 +12,31 @@ import org.jsoup.select.NodeVisitor
 data class Hit(val title: String, val url: String, val snippet: String, val date: String? = null)
 
 /**
- * Turning HTML into what the agent reads: search result pages into hits, any page into its text.
+ * Turning what comes back into what the agent reads: Exa's answer into hits, any page into its text.
  * Pure parsing, no network — [WebLookup] fetches.
  */
 object WebText {
 
-    /** 360 Search (so.com): each `li.res-list` carries the real address in `data-mdurl`. */
-    fun hits360(html: String): List<Hit> = Jsoup.parse(html, "https://www.so.com/").select("li.res-list").mapNotNull { li ->
-        val a = li.selectFirst("h3 a") ?: return@mapNotNull null
-        val url = a.attr("data-mdurl").ifBlank { a.absUrl("href") }
-        val snippet = li.selectFirst(".res-list-summary, .res-desc, p.res-desc")?.text()
-            ?: li.text().removePrefix(a.text())
-        hit(a.text(), url, snippet, li.selectFirst("span.g-c-gray")?.text()?.trim { it.isWhitespace() || it == ' ' || it == '-' })
-    }
-
-    /** Sogou: each `div.vrwrap` / `div.rb` has the real address in a `data-url` somewhere inside. */
-    fun hitsSogou(html: String): List<Hit> = Jsoup.parse(html, "https://www.sogou.com/").select("div.vrwrap, div.rb").mapNotNull { box ->
-        val a = box.selectFirst("h3 a") ?: return@mapNotNull null
-        val url = box.selectFirst("[data-url]")?.attr("data-url")?.takeIf { it.startsWith("http") } ?: a.absUrl("href")
-        val snippet = box.selectFirst(".space-txt, .star-wiki, .str_info, .text-layout, p")?.text().orEmpty()
-        hit(a.text(), url, snippet)
-    }
-
-    private fun hit(title: String, url: String, snippet: String, date: String? = null): Hit? {
-        val t = title.trim()
-        if (t.isEmpty() || !url.startsWith("http")) return null
-        return Hit(t, url, snippet.trim().take(300), date?.takeIf { it.isNotBlank() })
-    }
-
-    /** Where a redirect page (a search engine's link hop) sends the browser, if that is all it does. */
-    fun redirectTarget(html: String): String? {
-        if (html.length > 4000) return null
-        Regex("""location\.replace\(["']([^"']+)["']\)""").find(html)?.let { return it.groupValues[1] }
-        return Regex("""http-equiv=["']?refresh["']?[^>]*URL=['"]?([^'">]+)""", RegexOption.IGNORE_CASE).find(html)?.groupValues?.get(1)
+    /**
+     * Exa's MCP answer (one JSON-RPC result, sometimes as SSE `data:` lines) into hits. Its text
+     * lists results as `Title:` / `URL:` / `Published:` / `Highlights:` or `Text:` blocks.
+     * Throws on an error answer, so the agent hears why instead of "no results".
+     */
+    fun exaHits(answer: String): List<Hit> {
+        val frames = answer.lines().filter { it.startsWith("data:") }.map { it.removePrefix("data:").trim() }
+            .ifEmpty { listOf(answer.trim()) }
+        val texts = frames.mapNotNull { runCatching { JSONObject(it) }.getOrNull() }.flatMap { o ->
+            o.optJSONObject("error")?.let { throw IllegalStateException(it.optString("message", "search failed")) }
+            val content = o.optJSONObject("result")?.optJSONArray("content") ?: return@flatMap emptyList()
+            (0 until content.length()).mapNotNull { content.optJSONObject(it)?.optString("text")?.takeIf { t -> t.isNotBlank() } }
+        }
+        return texts.flatMap { it.replace("\r\n", "\n").split(Regex("\n(?:---\n)?\n?(?=Title:)")) }.mapNotNull { block ->
+            val url = Regex("(?m)^URL:\\s*(https?://\\S+)").find(block)?.groupValues?.get(1) ?: return@mapNotNull null
+            val title = Regex("(?m)^Title:[ \t]*(.*)$").find(block)?.groupValues?.get(1)?.trim().orEmpty()
+            val date = Regex("(?m)^Published:[ \t]*(\\S+)").find(block)?.groupValues?.get(1)?.takeIf { it != "N/A" }?.take(10)
+            val body = Regex("(?s)^(?:Highlights|Text):[ \t]*(.*)", RegexOption.MULTILINE).find(block)?.groupValues?.get(1)?.trim().orEmpty()
+            Hit(title.ifEmpty { url }, url, body.removeSuffix("---").trim(), date)
+        }.distinctBy { it.url }
     }
 
     data class Page(val title: String, val text: String)

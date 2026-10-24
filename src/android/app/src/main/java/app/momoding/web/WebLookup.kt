@@ -1,39 +1,30 @@
 package app.momoding.web
 
-import okhttp3.Cookie
-import okhttp3.CookieJar
 import okhttp3.Dns
-import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
 import org.jsoup.Jsoup
 import java.io.ByteArrayInputStream
 import java.net.InetAddress
-import java.net.URLEncoder
 import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
 
 /**
  * Looking things up without the browser (调研/M23 #1): a search engine's result page read as
  * hits, and any public page read as text. Seconds and a few hundred tokens, where opening the
- * browser costs a snapshot per step. Free engines that answer without a key from China:
- * 360 first, Sogou when 360 gives nothing (Bing serves bots unrelated results).
+ * browser costs a snapshot per step. Search goes to Exa's public MCP endpoint, free and keyless
+ * (Cherry Studio's default; on a phone in China it answered in seconds with the right pages,
+ * where scraping 360 and Sogou drew captchas after a few queries). The words searched go to Exa.
  */
 object WebLookup {
 
     private const val UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
     private const val MAX_BYTES = 3L * 1024 * 1024
 
-    /** Search engines look harder at a client that never keeps their cookies. */
-    private val jar = object : CookieJar {
-        private val kept = HashMap<String, List<Cookie>>()
-        @Synchronized override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
-            kept[url.host] = (kept[url.host].orEmpty().filter { c -> cookies.none { it.name == c.name } } + cookies)
-        }
-        @Synchronized override fun loadForRequest(url: HttpUrl): List<Cookie> =
-            kept[url.host].orEmpty().filter { it.expiresAt > System.currentTimeMillis() }
-    }
 
     /** Public addresses only: the phone's own services and the home network are not the web. */
     private val publicDns = object : Dns {
@@ -46,7 +37,7 @@ object WebLookup {
     }
 
     private val client = OkHttpClient.Builder()
-        .cookieJar(jar).dns(publicDns)
+        .dns(publicDns)
         .connectTimeout(10, TimeUnit.SECONDS).readTimeout(15, TimeUnit.SECONDS).callTimeout(25, TimeUnit.SECONDS)
         .build()
 
@@ -68,20 +59,20 @@ object WebLookup {
         }
     }
 
-    data class Found(val source: String, val hits: List<Hit>)
+    private const val EXA = "https://mcp.exa.ai/mcp"
 
-    fun search(query: String, limit: Int): Found? {
-        val q = URLEncoder.encode(query, "UTF-8")
-        val engines = listOf(
-            Triple("360", "https://www.so.com/s?q=$q", WebText::hits360),
-            Triple("sogou", "https://www.sogou.com/web?query=$q", WebText::hitsSogou),
-        )
-        for ((name, url, parse) in engines) {
-            val hits = runCatching { parse(String(fetch(url).bytes, Charsets.UTF_8)) }.getOrNull().orEmpty()
-                .distinctBy { it.url }
-            if (hits.size >= 2) return Found(name, hits.take(limit))
+    /** Exa's hits for [query]; throws when Exa cannot be reached or answers with an error. */
+    fun search(query: String, limit: Int): List<Hit> {
+        val call = JSONObject().put("jsonrpc", "2.0").put("id", 1).put("method", "tools/call").put("params", JSONObject()
+            .put("name", "web_search_exa")
+            .put("arguments", JSONObject().put("query", query).put("numResults", limit).put("type", "auto").put("livecrawl", "fallback")))
+        val req = Request.Builder().url(EXA)
+            .header("Accept", "application/json, text/event-stream")
+            .post(call.toString().toRequestBody("application/json".toMediaType())).build()
+        client.newCall(req).execute().use { r ->
+            if (!r.isSuccessful) throw IllegalStateException("the search service answered ${r.code}")
+            return WebText.exaHits(r.body?.string().orEmpty())
         }
-        return null
     }
 
     sealed class Read {
@@ -90,9 +81,7 @@ object WebLookup {
     }
 
     fun read(url: String): Read {
-        var f = fetch(url)
-        // a search engine's link hop: follow where it points, once
-        if (f.type == "text/html") WebText.redirectTarget(String(f.bytes, Charsets.UTF_8))?.let { f = fetch(it) }
+        val f = fetch(url)
         return when {
             f.type == "text/html" || f.type == "application/xhtml+xml" ->
                 WebText.page(Jsoup.parse(ByteArrayInputStream(f.bytes), f.charset, f.url)).let { Read.Text(f.url, it.title, it.text) }
