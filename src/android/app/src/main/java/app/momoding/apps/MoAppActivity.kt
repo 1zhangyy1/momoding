@@ -147,7 +147,7 @@ class MoAppActivity : ComponentActivity() {
                     if (now != seen) {
                         delay(400) // let a burst of writes finish
                         seen = stamp(app.dir)
-                        load(wv)
+                        load(wv, byChange = true)
                     }
                 }
             }
@@ -156,9 +156,10 @@ class MoAppActivity : ComponentActivity() {
         load(wv)
     }
 
-    private fun load(wv: WebView) {
+    /** [byChange]: its Momoding is changing it; errors while it works are expected, so none is offered a fix. */
+    private fun load(wv: WebView, byChange: Boolean = false) {
         loadedAt = System.currentTimeMillis()
-        troubleOffered = false
+        troubleOffered = byChange
         if (!app.index.isFile) { trouble("index.html is missing"); return }
         wv.loadUrl(ORIGIN + "index.html")
     }

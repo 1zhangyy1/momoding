@@ -66,7 +66,10 @@ class AppBridge(private val context: Context, private val webView: WebView, priv
     @JavascriptInterface fun storeAll(token: String): String = app(token)?.let { MoApps.data(it, !onScreen).toString() } ?: "{}"
 
     @JavascriptInterface
-    fun log(token: String, level: String, line: String) { app(token)?.let { MoApps.log(it, if (level == "error") "ERROR" else "log", line) } }
+    fun log(token: String, level: String, line: String) {
+        // what the agent's own checks print is marked, so the app's log tells them from the person's use
+        app(token)?.let { MoApps.log(it, (if (level == "error") "ERROR" else "log") + if (onScreen) "" else " preview", line) }
+    }
 
     @JavascriptInterface
     fun chat(token: String, text: String) {

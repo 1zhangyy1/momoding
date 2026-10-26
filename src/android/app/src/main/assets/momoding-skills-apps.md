@@ -35,7 +35,8 @@ not sure what is current, look up today's best practice with `momoding-web` befo
   decided and why, how they use it. Read it when you start; update it with every change.
 - Commit each working change with a message saying what changed. Going back is `git revert`.
 - `.momoding/` is the platform's and stays out of git: `data.json` (what the person's app
-  stored), `log` (its console and errors, newest last). Read them when something is wrong.
+  stored), `log` (its console and errors, newest last; lines from your own checks say
+  `preview`). Read them when something is wrong.
   Never write `data.json` yourself unless the person asks you to change their data.
 
 ## window.momoding
