@@ -49,6 +49,8 @@ sealed class DeepLinkAction {
     data object OpenAlarmList : DeepLinkAction()
     /** momoding: the system calendar at [atMs] (now when null) — the result button for an event. */
     data class OpenCalendar(val atMs: Long?) : DeepLinkAction()
+    /** momoding: a Momoding App, by its folder name (app/momoding/apps). */
+    data class OpenMomodingApp(val name: String) : DeepLinkAction()
     data class OpenTerminal(val initCommand: String?) : DeepLinkAction()
     data class CreateEnvironmentVariable(val key: String, val value: String, val note: String) : DeepLinkAction()
     data object OpenPermissionSettings : DeepLinkAction()
@@ -107,6 +109,8 @@ object DeepLinkHandler {
 
         return when (host) {
             "share" -> DeepLinkAction.OpenShare
+            // momoding: minis://apps/<name> opens a Momoding App
+            "apps" -> path.trim('/').substringBefore('/').takeIf { it.isNotEmpty() }?.let { DeepLinkAction.OpenMomodingApp(it) } ?: DeepLinkAction.Unknown
             "views" -> when (path) {
                 "/alarm" -> DeepLinkAction.OpenAlarmList
                 "/calendar" -> DeepLinkAction.OpenCalendar(app.momoding.tools.AlarmDate.epochMs(uri.getQueryParameter("at"))) // momoding

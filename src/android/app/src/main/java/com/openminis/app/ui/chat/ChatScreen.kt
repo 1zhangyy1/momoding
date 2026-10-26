@@ -2837,7 +2837,7 @@ fun ChatScreen(
                   // momoding: face + name + one status line; the title and model rows only with steps shown
                   if (!momodingShowSteps) {
                     Box(Modifier.fillMaxWidth().padding(start = 4.dp), contentAlignment = Alignment.CenterStart) {
-                        app.momoding.ui.chat.MomodingHeader() // momoding: the live status is in the chat, opening the turn
+                        app.momoding.ui.chat.MomodingHeader(sessionId) // momoding: the live status is in the chat, opening the turn
                     }
                   } else {
                     // iOS-style centered layout: "Minis" + group row + provider·model row
@@ -4469,7 +4469,7 @@ fun ChatScreen(
                         when (item) {
                             is FlatChatItem.UserBubble -> {
                                 // momoding: a row a routine sent is one quiet line, not a bubble in the person's voice
-                                app.momoding.ui.chat.RoutineWakeRow(item.message.id.substringBefore('#')) { app.momoding.ui.chat.PopIn(item.message.id, fromStart = false) {
+                                app.momoding.ui.chat.RoutineWakeRow(item.message.id.substringBefore('#'), item.message.content) { app.momoding.ui.chat.PopIn(item.message.id, fromStart = false) {
                                 // User bubbles intentionally don't register
                                 // MinisTextKit shards — long-press on a user
                                 // bubble shows its own action menu (Copy /

@@ -1237,6 +1237,9 @@ class SkillRepository(private val context: Context) {
         // Python, minis:// links…), loaded only when a task needs it
         runCatching { context.assets.open("momoding-skills-files-and-scripts.md").bufferedReader().readText() }
             .getOrNull()?.let { installBundledSkill("files-and-scripts", "1.0.0", it) }
+        // momoding: how a Momoding App works, for the Momoding that builds it (app/momoding/apps)
+        runCatching { context.assets.open("momoding-skills-apps.md").bufferedReader().readText() }
+            .getOrNull()?.let { installBundledSkill("momoding-apps", "1.0.1", it) }
         installSelfSkill()
     }
 

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Momoding Apps (app/momoding/apps) -->
+<resources>
+    <string name="mo_app_chat">%1$s 的 Momoding</string>
+    <string name="mo_app_open">打開%1$s</string>
+    <string name="mo_app_broken">這個 App 出了點問題。</string>
+    <string name="mo_app_fix">讓它的 Momoding 修</string>
+    <string name="mo_app_fix_brief">我打開 App 時出錯了（%1$s）。看一下 .momoding/log，把原因修好，在你的瀏覽器裡確認一遍，再告訴我。</string>
+    <string name="mo_app_from_momoding">來自 Momoding</string>
+    <string name="mo_app_chat_status">做這個 App，也改它</string>
+</resources>

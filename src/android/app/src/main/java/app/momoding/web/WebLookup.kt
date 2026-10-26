@@ -36,7 +36,8 @@ object WebLookup {
         }
     }
 
-    private val client = OkHttpClient.Builder()
+    /** Also the AI apps' `momoding.http` (apps/AppBridge.kt): public addresses only. */
+    internal val client = OkHttpClient.Builder()
         .dns(publicDns)
         .connectTimeout(10, TimeUnit.SECONDS).readTimeout(15, TimeUnit.SECONDS).callTimeout(25, TimeUnit.SECONDS)
         .build()

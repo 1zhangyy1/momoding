@@ -33,7 +33,7 @@ object SessionMounts {
     val SESSION_SUBDIRS = listOf("attachments", "offloads", "workspace", "browser")
 
     /** Subdirs under `minis-global/`, shared by every session. */
-    val GLOBAL_SUBDIRS = listOf("memory", "skills", "shared", "mcp-servers")
+    val GLOBAL_SUBDIRS = listOf("memory", "skills", "shared", "mcp-servers", "apps") // momoding: apps — Momoding Apps
 
     /**
      * Soft ceiling on the bytes the `-b` arguments add to PRoot's argv. The

@@ -89,6 +89,9 @@ object NativeOffloadServer {
 
     val registeredHandlers: Set<String> get() = handlers.keys.toSet()
 
+    /** momoding: an AI app runs a phone command without a shell (app/momoding/apps/AppBridge.kt). */
+    fun handler(name: String): NativeOffloadHandler? = handlers[name]
+
     fun register(name: String, handler: NativeOffloadHandler) {
         require(name.isNotEmpty())
         handlers[name] = handler

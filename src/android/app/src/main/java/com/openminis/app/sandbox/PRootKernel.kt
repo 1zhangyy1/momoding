@@ -267,10 +267,14 @@ object PRootKernel {
         // [T-mcp-integration-android] mcp-servers is global (like memory/skills):
         // binding it here makes the in-PRoot minis-mcp-cli read/write the SAME
         // servers.json the Android Settings UI does (host: minis-global/mcp-servers).
-        listOf("memory", "skills", "shared", "mcp-servers").forEach { subdir ->
+        // momoding: apps — the AI apps Momoding builds (app/momoding/apps/MoApps.kt)
+        listOf("memory", "skills", "shared", "mcp-servers", "apps").forEach { subdir ->
             val hostDir = File(globalBase, subdir).also { it.mkdirs() }
             bindMounts["/var/minis/$subdir"] = hostDir.absolutePath
         }
+        // momoding: a rootfs extracted before apps existed has no mount point for it, and PRoot
+        // skips a bind whose target is missing (the shell would see an empty rootfs folder)
+        File(RootfsManager.getInstance(context).rootfsDir, "var/minis").takeIf { it.isDirectory }?.let { File(it, "apps").mkdirs() }
     }
 
     fun removeBindMount(linuxPath: String) {

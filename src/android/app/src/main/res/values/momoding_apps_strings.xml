@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Momoding Apps (app/momoding/apps) -->
+<resources>
+    <string name="mo_app_chat">%1$s\'s Momoding</string>
+    <string name="mo_app_open">Open %1$s</string>
+    <string name="mo_app_broken">This app ran into a problem.</string>
+    <string name="mo_app_fix">Let its Momoding fix it</string>
+    <string name="mo_app_fix_brief">The app went wrong when I opened it (%1$s). Look at .momoding/log, fix the cause, check it in your browser, then tell me.</string>
+    <string name="mo_app_from_momoding">From Momoding</string>
+    <string name="mo_app_chat_status">Builds and changes this app</string>
+</resources>

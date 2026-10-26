@@ -4141,6 +4141,12 @@ class ChatViewModel(
         loadSession()
     }
 
+    /** momoding: a row written from outside this chat (an app Bot's receipt, apps/AppBots.kt) shows now. */
+    fun reloadFromDisk() {
+        if (_isStreaming.value) return
+        reloadSessionFromDb()
+    }
+
     /**
      * Produce the LLM-facing view of agentHistory. Mirrors iOS
      * `effectiveAgentHistory` (AIChatViewModel.swift:3843-3876):
@@ -15232,7 +15238,13 @@ Memory system (currently DISABLED):
                     recentNotes = if (memoryOn) memoryRepository?.loadRecentDailyMemoryFragment() else null,
                     aboutPerson = if (memoryOn) app.momoding.memory.UserFile.promptFragment(context) else null,
                     ladder = app.momoding.hands.Hands.promptParagraph(context),
-                    addenda = app.momoding.chat.SessionAddenda.forPrompt(realSessionId.ifEmpty { sessionId }),
+                    // momoding: an app's own Momoding is told which app it is; a main chat, what Momoding Apps are and which exist
+                    addenda = (realSessionId.ifEmpty { sessionId }).let { sid ->
+                        listOfNotNull(
+                            app.momoding.chat.SessionAddenda.forPrompt(sid),
+                            app.momoding.apps.AppBots.standingNote(context, sid) ?: app.momoding.apps.AppBots.directory(context),
+                        ).joinToString("\n\n").ifBlank { null }
+                    },
                     askName = memoryOn && app.momoding.memory.UserFile.shouldAskName(context),
                     lastUserText = _messages.value.lastOrNull { it.role == "user" }?.content, // momoding
                 ),

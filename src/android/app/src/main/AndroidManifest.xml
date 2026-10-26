@@ -404,6 +404,20 @@
              home-screen icons pinned before the rename are not preserved
              and will return "intent not found" on tap; the user has to
              re-add them from inside the app. -->
+        <!-- momoding: Momoding Apps — each app in its own task (app/momoding/apps) -->
+        <activity
+            android:name="app.momoding.apps.MoAppActivity"
+            android:exported="false"
+            android:taskAffinity=""
+            android:documentLaunchMode="intoExisting"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode"
+            android:theme="@style/Theme.Minis" />
+        <!-- momoding: an app's own Momoding, over the app -->
+        <activity
+            android:name="app.momoding.apps.AppChatActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.Momoding.AppChat" />
         <activity
             android:name=".webapp.WebAppActivity"
             android:label="@string/webapp_activity_label"

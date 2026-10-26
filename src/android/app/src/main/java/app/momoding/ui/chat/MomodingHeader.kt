@@ -48,11 +48,15 @@ import app.momoding.ui.Design
  * ([LiveStatusLine]) and folds into that turn's "做了 3 步" when it is done.
  */
 @Composable
-fun MomodingHeader() {
+fun MomodingHeader(sessionId: String? = null) {
     val context = LocalContext.current
     val soul by SoulStore.cachedMetadata.collectAsState()
     val uiMode = androidx.compose.ui.platform.LocalConfiguration.current.uiMode
-    val face = remember(soul.name, uiMode) { Identity.face(context)?.asImageBitmap() }
+    // a Momoding App's own Momoding: the app's icon and name
+    val ownApp = remember(sessionId) { sessionId?.let { app.momoding.apps.MoApps.ofSession(context, it) } }
+    val face = remember(soul.name, uiMode, ownApp?.name) {
+        (ownApp?.let { app.momoding.apps.AppIcon.bitmap(it, 96, adaptive = false) } ?: Identity.face(context))?.asImageBitmap()
+    }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         // A fixed slot, so the name never shifts while the face loads
         Box(Modifier.size(34.dp).clip(CircleShape)) {
@@ -60,12 +64,12 @@ fun MomodingHeader() {
         }
         Column {
             Text(
-                soul.name.ifBlank { stringResource(R.string.app_name) },
+                ownApp?.let { stringResource(R.string.mo_app_chat, it.title) } ?: soul.name.ifBlank { stringResource(R.string.app_name) },
                 fontSize = Design.Size.Title, lineHeight = Design.Line.Caption, fontWeight = FontWeight.SemiBold, color = ChatColors.primaryText, maxLines = 1,
                 style = NO_FONT_PAD,
             )
             Text(
-                stringResource(R.string.mo_status_idle), fontSize = Design.Size.Caption, lineHeight = Design.Line.Micro, maxLines = 1,
+                stringResource(if (ownApp != null) R.string.mo_app_chat_status else R.string.mo_status_idle), fontSize = Design.Size.Caption, lineHeight = Design.Line.Micro, maxLines = 1,
                 overflow = TextOverflow.Ellipsis, style = NO_FONT_PAD, color = ChatColors.secondaryText,
             )
         }

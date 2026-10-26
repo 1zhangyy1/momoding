@@ -27,7 +27,7 @@ object MainChat {
         prefs.getString(KEY_SESSION, null)?.let { id ->
             if (chatRepository.getSession(id) != null) return id
         }
-        chatRepository.dao.listSessions().firstOrNull { !it.isChild }?.let { latest ->
+        chatRepository.dao.listSessions().firstOrNull { !it.isChild && it.source?.startsWith(app.momoding.apps.AppBots.SOURCE_PREFIX) != true }?.let { latest ->
             prefs.edit().putString(KEY_SESSION, latest.id).apply()
             return latest.id
         }

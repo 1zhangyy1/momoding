@@ -11,5 +11,12 @@
         <item name="android:windowBackground">@android:color/white</item>
         <item name="android:colorBackground">@android:color/white</item>
     </style>
+    <!-- momoding: an app's own Momoding as a panel over the app (app/momoding/apps/AppChat.kt) -->
+    <style name="Theme.Momoding.AppChat" parent="Theme.Minis">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:backgroundDimEnabled">true</item>
+    </style>
 </resources>
 

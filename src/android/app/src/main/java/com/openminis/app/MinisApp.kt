@@ -738,6 +738,8 @@ class MinisApp : Application(), ImageLoaderFactory {
         NativeOffloadServer.register("momoding-know", app.momoding.know.KnowOffloadHandler(this))
         // momoding: momoding-web — search and read pages without the browser (调研/M23)
         NativeOffloadServer.register("momoding-web", app.momoding.web.WebOffloadHandler())
+        // momoding: momoding-app — Momoding Apps, each with its own Momoding (调研/M27)
+        NativeOffloadServer.register("momoding-app", app.momoding.apps.AppsOffloadHandler(this))
 
         NativeOffloadServer.start(RootfsManager.getInstance(this).rootfsDir)
 

@@ -782,6 +782,7 @@ class MainActivity : ComponentActivity() {
                     launchSingleTop = true
                 }
             }
+            is DeepLinkAction.OpenMomodingApp -> startActivity(app.momoding.apps.MoAppActivity.intent(this, action.name)) // momoding
             is DeepLinkAction.OpenCalendar -> {
                 // momoding: the event's day in the system calendar app
                 val at = action.atMs ?: System.currentTimeMillis()
