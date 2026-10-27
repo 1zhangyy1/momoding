@@ -75,6 +75,10 @@ On the phone and in your browser alike, every page of the app has:
   name in the share sheet (`s.text`, `s.subject`, `s.image` as a data URL). Offer it with
   `"momoding": {"share": true}` in `manifest.json` when sharing into the app makes sense (a
   screenshot of a bill into the ledger, a link into a reading list). The app opens to take it.
+- `momoding.widget({title, value, lines, color})` — what the app's home-screen widget shows: a
+  title, one big value, up to three short lines. Set it whenever what matters at a glance
+  changes, including in an `on` handler (a text came in, today's total moved). Offer the widget
+  with `momoding-app widget <name>` when a glance is worth having.
 - `momoding.app` (`name`, `title`), `momoding.device` (`dark`, `language`), `momoding.preview`
   (true in your browser).
 - `console.*` and uncaught errors go to `.momoding/log`.

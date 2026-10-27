@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- momoding: a Momoding App's home-screen widget (app/momoding/apps/AppWidget.kt) -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/mo_widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="14dp"
+    android:background="@drawable/momoding_app_widget_bg">
+    <TextView android:id="@+id/mo_widget_title" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:textSize="13sp" android:textColor="#CCFFFFFF" android:maxLines="1" android:ellipsize="end" />
+    <TextView android:id="@+id/mo_widget_value" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="2dp" android:textSize="28sp" android:textStyle="bold" android:textColor="#FFFFFFFF"
+        android:maxLines="1" android:ellipsize="end" />
+    <TextView android:id="@+id/mo_widget_lines" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="4dp" android:textSize="12sp" android:textColor="#E6FFFFFF" android:maxLines="3"
+        android:ellipsize="end" android:lineSpacingExtra="2dp" />
+</LinearLayout>

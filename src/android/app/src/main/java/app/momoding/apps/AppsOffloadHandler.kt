@@ -36,6 +36,7 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
                 "new" -> new(args, request)
                 "install" -> install(app(args))
                 "open" -> open(app(args))
+                "widget" -> widget(app(args))
                 "tell" -> tell(app(args), args.positional.drop(2).joinToString(" "))
                 "done", "progress" -> done(args, request)
                 "suggest" -> suggest(args, request)
@@ -67,6 +68,12 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
         AppShare.publish(context, app)
         return ok(JSONObject().put("app", app.name).put("home_screen", if (asked) "asked" else "unsupported")
             .put("note", if (asked) "The launcher shows its own confirmation; once the person adds it, the icon opens the app." else "This launcher cannot add icons; it opens with momoding-app open."))
+    }
+
+    private fun widget(app: MoApps.App): NativeOffloadResult {
+        val asked = onMain { AppWidget.requestPin(context, app) }
+        return ok(JSONObject().put("app", app.name).put("widget", if (asked) "asked" else "unsupported")
+            .put("note", if (asked) "The launcher shows its own confirmation. The widget shows what the app sets with momoding.widget." else "This launcher cannot add widgets this way; the person can add \"Momoding App\" from the widget list."))
     }
 
     private fun open(app: MoApps.App): NativeOffloadResult {
@@ -126,6 +133,7 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
                                    lowercase word like ledger)
               install <name>       put it on the home screen
               open <name>          show it on the screen
+              widget <name>        offer a home-screen widget of it (shows what the app sets with momoding.widget)
               tell <name> "<text>" a message for that app's Momoding
               progress "<what is there now>"
                                    from an app's own Momoding while it builds: a line with an open

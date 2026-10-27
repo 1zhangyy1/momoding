@@ -25,4 +25,8 @@
     <string name="mo_app_cap_speech">麦克风</string>
     <string name="mo_app_cap_routines">例行任务</string>
     <string name="mo_app_review_ask">看看这个 App 最近用得怎么样。</string>
+    <string name="mo_app_widget_label">Momoding App</string>
+    <string name="mo_app_widget_description">一眼看到你的某个 Momoding App</string>
+    <string name="mo_app_widget_pick">放哪个 App？</string>
+    <string name="mo_app_widget_empty">还没准备好：先打开一次这个 App</string>
 </resources>

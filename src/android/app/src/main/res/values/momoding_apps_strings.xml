@@ -25,4 +25,8 @@
     <string name="mo_app_cap_speech">microphone</string>
     <string name="mo_app_cap_routines">routines</string>
     <string name="mo_app_review_ask">Look at how the app has been used lately.</string>
+    <string name="mo_app_widget_label">Momoding App</string>
+    <string name="mo_app_widget_description">A glance at one of your Momoding Apps</string>
+    <string name="mo_app_widget_pick">Which app?</string>
+    <string name="mo_app_widget_empty">Not set up yet: open the app once</string>
 </resources>

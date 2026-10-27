@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- momoding: Momoding Apps on the home screen as a widget (app/momoding/apps/AppWidget.kt) -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="110dp"
+    android:minHeight="110dp"
+    android:targetCellWidth="2"
+    android:targetCellHeight="2"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/momoding_app_widget"
+    android:configure="app.momoding.apps.AppWidgetConfigure"
+    android:widgetFeatures="reconfigurable|configuration_optional"
+    android:description="@string/mo_app_widget_description" />

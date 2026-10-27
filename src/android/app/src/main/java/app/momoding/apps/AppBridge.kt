@@ -88,6 +88,14 @@ class AppBridge(private val context: Context, private val webView: WebView, priv
         main.post { AppChat.open(context, app, text) }
     }
 
+    /** What the app's home-screen widget shows: {title, value, lines, color} (AppWidget). Not from the agent's checks. */
+    @JavascriptInterface
+    fun widget(token: String, contentJson: String) {
+        val app = app(token) ?: return
+        if (preview) { MoApps.log(app, "log preview", "momoding.widget($contentJson)"); return }
+        runCatching { AppWidget.set(context, app, JSONObject(contentJson)) }
+    }
+
     /** The page is loaded and its handlers are set: hand it what arrived for it (AppEvents). */
     @JavascriptInterface
     fun ready(token: String) {
@@ -270,6 +278,7 @@ class AppBridge(private val context: Context, private val webView: WebView, priv
     chat: (text = '') => N.chat(T, String(text)),
     tell: text => call('tell', String(text)),
     on: (type, handler) => { (handlers[type] = handlers[type] || []).push(handler) },
+    widget: content => N.widget(T, JSON.stringify(content || {})),
   }
   // what arrived for the app (a text, a notification), handed over by the platform; handled ones are acknowledged
   window.__momodingDeliver = async events => {
