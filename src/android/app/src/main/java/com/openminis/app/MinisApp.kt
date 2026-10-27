@@ -758,6 +758,8 @@ class MinisApp : Application(), ImageLoaderFactory {
         // runs it, so the badge would be missing after restart. The persisted
         // message tail is the durable source of truth — scan it off-main and
         // reconcile. Runs after init() so it merges with the restored queues.
+        // momoding: work the phone cut off picks up by itself (app/momoding/chat/WorkResume.kt)
+        app.momoding.chat.WorkResume.start(this)
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
             val interrupted = runCatching { chatRepository.interruptedSessionIds() }.getOrElse { emptySet() }
             // Exclude any session that is already actively streaming (defensive;

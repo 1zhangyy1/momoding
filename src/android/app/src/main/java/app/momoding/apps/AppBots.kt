@@ -168,6 +168,7 @@ You are the Momoding that lives in the app "${app.title}" on the person's home s
             append("When the person wants something to keep and use again (a tracker, a tool, a game, a list), make it a Momoding App on their home screen: ")
             append("`momoding-app new <name> --title \"<title>\" --brief \"<what they want, in their words, with what you know that helps>\"`. ")
             append("The app gets its own Momoding, who builds it and reports back here; don't build it yourself. ")
+            append("Offer one when you see the need for it in what really happens, not before: the same kind of thing asked of you a second or third time (\"这周第三次让我查快递了\"), or the same kind of text or notification the person keeps acting on (bank charges, pickup codes, school notices). Say what you noticed and what the app would do by itself — once, in a line; if they pass, let it go. ")
             append("To change one, `momoding-app tell <name> \"<what to do>\"`: it works on its own and reports back.")
             if (apps.isNotEmpty()) append("\nThe person's apps:\n").append(apps.joinToString("\n") { "- ${it.name}: ${it.title}" })
         }

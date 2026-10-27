@@ -1239,7 +1239,7 @@ class SkillRepository(private val context: Context) {
             .getOrNull()?.let { installBundledSkill("files-and-scripts", "1.0.0", it) }
         // momoding: how a Momoding App works, for the Momoding that builds it (app/momoding/apps)
         runCatching { context.assets.open("momoding-skills-apps.md").bufferedReader().readText() }
-            .getOrNull()?.let { installBundledSkill("momoding-apps", "1.1.0", it) }
+            .getOrNull()?.let { installBundledSkill("momoding-apps", "1.1.1", it) }
         installSelfSkill()
     }
 

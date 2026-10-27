@@ -17,6 +17,9 @@ not sure what is current, look up today's best practice with `momoding-web` befo
 - It must work the first time they open it. Check it yourself before you hand it over, and
   after every change: everywhere the change shows, not only where you made it (a word changed
   on one screen is often on another).
+- Build in small steps the person can see: each step ends with the app working on their phone and
+  one short line saying what is new, then the next step. Never hold everything back for one big
+  hand-over at the end.
 - Something that works soon beats something polished late, and watching it grow is not waiting:
   get a first screen working in a minute or two, put it on the home screen and tell the chat
   that asked for it (`momoding-app progress "<what is there now>"`, a line with an open
