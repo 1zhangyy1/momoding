@@ -48,8 +48,11 @@ object AppEvents {
         return if (ask) AppPermissions.check(app, ability) else AppPermissions.allowedAlready(app, ability)
     }
 
-    /** Something the person shared to [app]: in its inbox; the app is opening to take it. */
-    fun share(app: MoApps.App, event: JSONObject) = add(app, event)
+    /** Something the person shared to [app]: in its inbox, and straight to its page when one is open (the app is coming to the front). */
+    fun share(app: MoApps.App, event: JSONObject) {
+        add(app, event)
+        live[app.name]?.let { deliver -> main.post { deliver(listOf(event)) } }
+    }
 
     // ── matching ──────────────────────────────────────────────────────────────
 
