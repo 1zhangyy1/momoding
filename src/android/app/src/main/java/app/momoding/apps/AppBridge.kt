@@ -178,6 +178,11 @@ class AppBridge(private val context: Context, private val webView: WebView, priv
             Mode.PREVIEW -> true
         }
         if (!allowed) throw IllegalStateException("the person has not allowed this app to use $name")
+        // the agent's own check sees real answers, but changes nothing on the phone (an event, a text)
+        if (preview && !reads(argv)) {
+            MoApps.log(app, "log preview", "momoding.run(${JSONObject.quote(command)}) — not done in a check; on the phone it would be")
+            return JSONObject().put("code", 0).put("output", "").put("preview", true)
+        }
         // the same gate as the agent's own commands, in the app's Bot chat (and on the app's screen)
         when (val gate = RiskGate.checkShell(app.botSession ?: (GATE_PREFIX + app.name), command, summary = "${app.title}: $command")) {
             is GateOutcome.Denied -> throw IllegalStateException(gate.message)
@@ -224,6 +229,13 @@ class AppBridge(private val context: Context, private val webView: WebView, priv
 
         /** The agent's phone commands, not the Linux shell and not the screen. */
         fun runnable(name: String) = name.startsWith("android-") || name == "momoding-web" || name == "minis-scheduled"
+
+        /** Commands that only look; any other phone command in an app's check is logged, not done. */
+        private val LOOKS = setOf("android-weather", "android-device", "momoding-web")
+        private val LOOK_VERBS = setOf("list", "get", "search", "read", "read-notifications", "status", "info", "stats", "help", "--help", "-h")
+
+        /** [argv] only reads: the phone is the same after it as before. */
+        fun reads(argv: List<String>) = argv.firstOrNull() in LOOKS || argv.getOrNull(1) in LOOK_VERBS
 
         /** A command line split as the shell would: spaces, '…' and "…" quotes, backslash escapes. */
         fun words(line: String): List<String> {

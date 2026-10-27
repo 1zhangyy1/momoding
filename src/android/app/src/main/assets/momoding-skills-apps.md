@@ -101,9 +101,10 @@ Use a phone-sized viewport. Hand it over only when it works.
 
 In your browser the app's store is a copy of the person's data (`.momoding/preview.json`, made
 the first time you open it there): fill it, empty it, test freely; theirs is untouched. Delete
-`preview.json` to start the copy over from their current data. `momoding.run` is real in your
-browser too: a command that changes things (an event, a reminder) really happens, so test those
-only when the person would want the result.
+`preview.json` to start the copy over from their current data. `momoding.run` is the same: a
+command that only reads (`list`, `get`, `search`, `read`, `status`, `info`) really runs, so you
+see real answers; one that would change something (an event, a reminder, a message) is not done —
+it answers `{"code":0, "preview":true}` and the `log` says what it would have done. Check it there.
 
 ## Commands
 

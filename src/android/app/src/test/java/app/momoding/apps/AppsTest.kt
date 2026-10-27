@@ -85,4 +85,13 @@ class AppsTest {
         assertEquals("android-notification", AppEvents.ability(org.json.JSONObject().put("sms", false)))
         assertEquals(null, AppEvents.ability(org.json.JSONObject().put("type", "share")))
     }
+
+    @Test fun readsTellsLookingFromChanging() {
+        assertTrue(AppBridge.reads(listOf("android-calendar", "list", "--days", "7")))
+        assertTrue(AppBridge.reads(listOf("android-weather")))
+        assertTrue(AppBridge.reads(listOf("momoding-web", "https://example.com")))
+        assertFalse(AppBridge.reads(listOf("android-calendar", "add", "--title", "x")))
+        assertFalse(AppBridge.reads(listOf("android-sms", "send", "10086", "hi")))
+        assertFalse(AppBridge.reads(listOf("android-speak", "你好")))
+    }
 }
