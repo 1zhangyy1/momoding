@@ -29,8 +29,9 @@ not sure what is current, look up today's best practice with `momoding-web` befo
 - `index.html` is where it starts. Plain HTML, CSS and JavaScript; use libraries if they help
   (vendored into the folder, so the app works offline).
 - `manifest.json` is a standard web app manifest: `short_name` is the name under the icon,
-  `theme_color` its colour, `icons` a PNG (make one if the app deserves its own; without it the
-  icon is the name's first letter on the theme colour).
+  `theme_color` its colour, `icons` a square PNG (make one if the app deserves its own; without
+  it the icon is the name's first letter on the theme colour). Launchers crop icons to a circle
+  or a rounded square: keep the mark well inside the middle, with the colour reaching the edges.
 - `NOTES.md` is your memory of this app: what it is for, what the person asked for, what was
   decided and why, how they use it. Read it when you start; update it with every change.
 - Commit each working change with a message saying what changed. Going back is `git revert`.

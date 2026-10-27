@@ -39,12 +39,15 @@ object AppBots {
         return session.id
     }
 
-    /** A message for the app's Bot; it answers on its own turn, in its own chat. */
-    fun tell(context: Context, app: MoApps.App, text: String) {
+    /**
+     * A message for the app's Bot; it answers on its own turn, in its own chat. From the main chat's
+     * Momoding unless [fromPerson] (the person asked from the app, as when they tap "fix it").
+     */
+    fun tell(context: Context, app: MoApps.App, text: String, fromPerson: Boolean = false) {
         val sid = app.botSession ?: return
         scope.launch {
             runCatching {
-                HeadlessChatRunner.prompt(context.applicationContext, sid, "$WAKE_CUE $text", wait = false, timeoutMs = 30 * 60_000L)
+                HeadlessChatRunner.prompt(context.applicationContext, sid, if (fromPerson) text else "$WAKE_CUE $text", wait = false, timeoutMs = 30 * 60_000L)
             }.onFailure { AppLogger.warning(TAG, "tell ${app.name}: ${it.message}") }
         }
     }

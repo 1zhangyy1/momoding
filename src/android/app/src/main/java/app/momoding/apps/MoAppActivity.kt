@@ -175,7 +175,7 @@ class MoAppActivity : ComponentActivity() {
                 .setTitle(app.title)
                 .setMessage(R.string.mo_app_broken)
                 .setPositiveButton(R.string.mo_app_fix) { _, _ ->
-                    AppBots.tell(this, app, getString(R.string.mo_app_fix_brief, what))
+                    AppBots.tell(this, app, getString(R.string.mo_app_fix_brief, what), fromPerson = true)
                     AppChat.open(this, app, "")
                 }
                 .setNegativeButton(android.R.string.cancel, null)
@@ -232,8 +232,8 @@ object AppIcon {
         val c = Canvas(out)
         val bg = runCatching { Color.parseColor(app.themeColor) }.getOrDefault(PALETTE[Math.floorMod(app.name.hashCode(), PALETTE.size)])
         c.drawColor(bg)
-        // an adaptive icon shows only its middle two thirds
-        val inset = if (adaptive) px / 6f else 0f
+        // a launcher masks an adaptive icon to its middle (a 66-unit circle of 108): keep what matters inside it
+        val inset = if (adaptive) px * 0.2f else 0f
         own(app)?.let { src ->
             c.drawBitmap(src, null, android.graphics.RectF(inset, inset, px - inset, px - inset), Paint(Paint.FILTER_BITMAP_FLAG))
             return out
