@@ -72,6 +72,7 @@ object OffloadPermissionManager {
         ToolPermissionInfo("clipboard", "Clipboard", PermissionCategory.PRIVACY, PermissionLevel.BYPASS),
         ToolPermissionInfo("contacts", "Contacts", PermissionCategory.PRIVACY, PermissionLevel.BYPASS),
         ToolPermissionInfo("photos", "Photos", PermissionCategory.PRIVACY, PermissionLevel.BYPASS),
+        ToolPermissionInfo("sms", "Text messages", PermissionCategory.PRIVACY, PermissionLevel.BYPASS), // momoding
         // Media — no personal data, hidden from Settings.
         ToolPermissionInfo("speak", "Text-to-Speech", PermissionCategory.MEDIA, PermissionLevel.BYPASS, showInSettings = false),
         ToolPermissionInfo("media_player", "Media Player", PermissionCategory.MEDIA, PermissionLevel.BYPASS, showInSettings = false),
@@ -160,6 +161,8 @@ object OffloadPermissionManager {
      * elapses.
      */
     suspend fun requestAndroidPermission(permissions: List<String>): AndroidPermissionResult {
+        // momoding: what it can turn on itself it does, before asking anyone (app/momoding/guard/SelfGrant.kt)
+        appContext?.let { if (app.momoding.guard.SelfGrant.grant(it, permissions)) return AndroidPermissionResult.GRANTED }
         // momoding: nobody can answer a system dialog while the app is in the background (a
         // routine at 8:00); it would only pop up later out of context. Report it as not granted
         // now, and the model says in one line where to switch it on.
@@ -320,7 +323,10 @@ object OffloadPermissionManager {
             .edit().putBoolean(permission, true).apply()
     }
 
+    private var appContext: Context? = null // momoding: for SelfGrant
+
     fun init(context: Context) {
+        appContext = context.applicationContext
         prefs = context.getSharedPreferences("offload_permissions", Context.MODE_PRIVATE)
     }
 

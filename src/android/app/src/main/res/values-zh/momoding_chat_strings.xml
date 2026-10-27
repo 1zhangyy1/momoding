@@ -235,8 +235,8 @@
     <string name="mo_perm_read_notifications_ask">允许 Momoding 读取通知？这样消息一来它就能替你处理。</string>
     <string name="mo_perm_sms">短信</string>
     <string name="mo_perm_sms_ask">允许 Momoding 接收短信？快递取件码这类短信一来，它就能替你处理。</string>
-    <string name="mo_perm_row_sms">接收短信</string>
-    <string name="mo_perm_purpose_sms">例行任务等短信用：快递取件码一来就处理</string>
+    <string name="mo_perm_row_sms">短信</string>
+    <string name="mo_perm_purpose_sms">读你收到的短信，比如取件码、扣款通知；例行任务也靠它等短信</string>
     <string name="mo_sms_app_name">短信</string>
     <string name="mo_perm_files">手机里的文件</string>
     <string name="mo_perm_files_ask">允许 Momoding 查看和整理你手机里的文件？</string>

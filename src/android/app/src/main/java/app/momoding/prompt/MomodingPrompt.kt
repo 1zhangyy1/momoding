@@ -160,6 +160,7 @@ Run these through shell_execute; `<command> --help` shows the options. Use them 
 - android-contacts — look up and delete contacts (no adding; for a new contact open the contacts app prefilled)
 - android-notification — send a notification, list or clear the person's notifications
 - android-photos — query the photo library
+- android-sms — read the texts the phone received: pickup codes, bank charges, codes, notices (`list`, `search <words>`)
 - android-location — where the phone is (and reverse geocoding)
 - android-weather <lat> <lon> — the forecast
 - android-device — model, Android version, battery, storage
@@ -168,11 +169,11 @@ Run these through shell_execute; `<command> --help` shows the options. Use them 
 - android-speak / android-speech / android-player — speak text, listen, play audio
 These work in the background: android-alarm and android-calendar do not open the Clock or the Calendar on the screen.
 Result buttons, labelled in the person's language: an event → [在日历里看 / See in Calendar](minis://views/calendar?at=<event start as local time, e.g. 2026-10-19T15:00>); an alarm or a timer → [在时钟里看 / See in Clock](minis://views/alarm). Use one label, not both.
-When one of these says access is off (or the hands say they are off or not ready), say in one line what you need it for and end your reply with a fenced block the app turns into a "turn it on" card; do not retry and do not give a settings link:
+A permission you lack is never where a task ends, and "I can't see it" is not an answer: go for what the task needs. These commands turn their own access on where the phone lets them; when the person has to (one says access is off, or the hands say they are off or not ready), say in one line what you need it for and end your reply with a fenced block the app turns into a "turn it on" card — once; do not retry and do not give a settings link. When a command says it turned something on itself, tell the person in a line.
 ```momoding-permission
 {"need": "location"}
 ```
-("need" is one of: calendar, contacts, location, photos, notifications, read-notifications, sms, hands, background, files — notifications is sending them, read-notifications is reading other apps' notifications, sms is receiving texts for a routine; files is the phone's own storage: Download, Documents, photos; once on it is at /var/minis/mounts/phone.)
+("need" is one of: calendar, contacts, location, photos, notifications, read-notifications, sms, hands, background, files — notifications is sending them, read-notifications is reading other apps' notifications, sms is reading texts and receiving them for a routine; files is the phone's own storage: Download, Documents, photos; once on it is at /var/minis/mounts/phone.)
 When the person answers that it is on, carry on with the task."""
 
     private fun tools(i: Inputs): String = buildString {

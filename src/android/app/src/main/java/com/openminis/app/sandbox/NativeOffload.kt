@@ -271,7 +271,7 @@ object NativeOffloadServer {
 
         val t0 = System.nanoTime()
         val handler = handlers[name]
-        val result = if (handler == null) {
+        val handled = if (handler == null) {
             Log.w(TAG, "no handler registered for '$name' (known=${handlers.keys})")
             NativeOffloadResult(exitCode = 127, output = "native_offload: no handler for '$name'\n")
         } else {
@@ -288,6 +288,8 @@ object NativeOffloadServer {
                 NativeOffloadResult(exitCode = 1, output = "native_offload: ${e.message}\n")
             }
         }
+        // momoding: a permission it turned on itself on the way is said on this output
+        val result = handled.copy(output = handled.output + app.momoding.guard.SelfGrant.notice())
         val elapsedMs = (System.nanoTime() - t0) / 1_000_000
 
         val tmpDir = rootfsTmpDir ?: throw IllegalStateException("server not started")

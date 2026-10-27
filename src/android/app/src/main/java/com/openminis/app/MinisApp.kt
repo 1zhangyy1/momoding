@@ -740,6 +740,8 @@ class MinisApp : Application(), ImageLoaderFactory {
         NativeOffloadServer.register("momoding-web", app.momoding.web.WebOffloadHandler())
         // momoding: momoding-app — Momoding Apps, each with its own Momoding (调研/M27)
         NativeOffloadServer.register("momoding-app", app.momoding.apps.AppsOffloadHandler(this))
+        // momoding: android-sms — reading the texts the phone received
+        NativeOffloadServer.register("android-sms", app.momoding.tools.SmsOffloadHandler(this))
 
         NativeOffloadServer.start(RootfsManager.getInstance(this).rootfsDir)
 

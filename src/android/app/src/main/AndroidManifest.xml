@@ -59,6 +59,8 @@
     <uses-permission android:name="android.permission.SEND_SMS" />
     <!-- momoding: routines that wait for a text hear it from the SMS itself (Android 15 hides code-like notification content) -->
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <!-- momoding: android-sms reads the inbox (pickup codes, bank charges) when the person asks about a text -->
+    <uses-permission android:name="android.permission.READ_SMS" />
     <!-- T36: WRITE_CONTACTS — required by `android-contacts delete <id>`. -->
     <uses-permission android:name="android.permission.WRITE_CONTACTS" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
