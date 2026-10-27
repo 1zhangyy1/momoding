@@ -570,6 +570,8 @@ fun ChatScreen(
     /** [T-android-picker-provider-edit] Open one provider instance's settings —
      *  wired to the edit button on each provider section of the model picker. */
     onEditProviderClick: (instanceId: String) -> Unit = {},
+    /** momoding: the chat sits over something (an app's own Momoding over the app): a way down to it is always shown. */
+    momodingOver: Boolean = false,
 ) {
     // momoding: how the work was done (steps, reasoning, the tool bar) is hidden unless Settings says show it
     val momodingShowSteps by app.momoding.ui.chat.ShowSteps.remember()
@@ -3182,7 +3184,11 @@ fun ChatScreen(
                 navigationIcon = {
                     // [T-android-tablet-split] See `isTwoPane`.
                     // momoding: the main chat is home — no back to a session list (steps shown: as before)
-                    if (!momodingShowSteps && !isTwoPane) {
+                    if (momodingOver) {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Close")
+                        }
+                    } else if (!momodingShowSteps && !isTwoPane) {
                     } else if (!isTwoPane) {
                         IconButton(onClick = onBack) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")

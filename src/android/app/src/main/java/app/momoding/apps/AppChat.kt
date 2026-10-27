@@ -32,6 +32,8 @@ class AppChatActivity : ComponentActivity() {
         window.setGravity(Gravity.BOTTOM)
         window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
         window.setDimAmount(0.25f)
+        // a tap on the app above puts the chat away, as with any sheet
+        setFinishOnTouchOutside(true)
         setContent {
             MinisTheme(darkTheme = isSystemInDarkTheme()) {
                 ChatScreen(
@@ -42,6 +44,7 @@ class AppChatActivity : ComponentActivity() {
                     skillRepository = minis.skillRepository,
                     mcpRepository = minis.mcpRepository,
                     onBack = { finish() },
+                    momodingOver = true,
                 )
             }
         }
