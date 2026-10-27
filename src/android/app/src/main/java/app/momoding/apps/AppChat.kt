@@ -80,4 +80,12 @@ object AppChat {
             .putExtra(AppChatActivity.EXTRA_TEXT, text)
             .apply { if (context !is android.app.Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
     }
+
+    /** The app with its Momoding over it: where anything that leads to that Momoding takes the person. */
+    fun openWithApp(context: Context, app: MoApps.App) {
+        context.startActivities(arrayOf(
+            MoAppActivity.intent(context, app.name),
+            Intent(context, AppChatActivity::class.java).putExtra(AppChatActivity.EXTRA_NAME, app.name),
+        ))
+    }
 }

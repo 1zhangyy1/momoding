@@ -499,7 +499,7 @@ class MainActivity : ComponentActivity() {
         // while inside a chat, synthesise an OpenSession deep-link so
         // the navigation stack lands on that chat instead of the
         // sessions list. T166.
-        val explicitDeepLink = DeepLinkHandler.parse(intent?.data)
+        val explicitDeepLink = DeepLinkHandler.parse(intent?.data).let { if (momodingAppChat(it)) DeepLinkAction.Unknown else it }
         val launchDeepLink = if (explicitDeepLink !is DeepLinkAction.Unknown) {
             explicitDeepLink
         } else {
@@ -722,8 +722,16 @@ class MainActivity : ComponentActivity() {
         handleDeepLink(intent.data)
     }
 
+    /** momoding: a link to an app's own Momoding opens the app with that Momoding over it, not a page here. */
+    private fun momodingAppChat(action: DeepLinkAction): Boolean {
+        val own = (action as? DeepLinkAction.OpenSession)?.let { app.momoding.apps.MoApps.ofSession(this, it.sessionId) } ?: return false
+        app.momoding.apps.AppChat.openWithApp(this, own)
+        return true
+    }
+
     private fun handleDeepLink(uri: Uri?) {
         val action = DeepLinkHandler.parse(uri)
+        if (momodingAppChat(action)) return
         val nav = navController ?: return
         when (action) {
             is DeepLinkAction.OpenTerminal -> {
