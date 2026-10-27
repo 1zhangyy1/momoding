@@ -37,7 +37,19 @@ object AppEvents {
     private val live = ConcurrentHashMap<String, (List<JSONObject>) -> Unit>()
 
     /** The ability an arrival needs the person's OK for, per app (AppPermissions). */
-    fun ability(event: JSONObject): String = if (event.optBoolean("sms")) "android-sms" else "android-notification"
+    fun ability(event: JSONObject): String? = when {
+        event.optString("type") == "share" -> null // the person shared it themselves
+        event.optBoolean("sms") -> "android-sms"
+        else -> "android-notification"
+    }
+
+    private suspend fun allowed(app: MoApps.App, event: JSONObject, ask: Boolean): Boolean {
+        val ability = ability(event) ?: return true
+        return if (ask) AppPermissions.check(app, ability) else AppPermissions.allowedAlready(app, ability)
+    }
+
+    /** Something the person shared to [app]: in its inbox; the app is opening to take it. */
+    fun share(app: MoApps.App, event: JSONObject) = add(app, event)
 
     // ── matching ──────────────────────────────────────────────────────────────
 
@@ -80,9 +92,7 @@ object AppEvents {
     @Synchronized fun handled(app: MoApps.App, ids: Set<String>) = write(app, read(app).filterNot { it.optString("id") in ids })
 
     /** What [app] may be given now: arrivals it is allowed to receive ([ask]: ask the person, on its screen). */
-    suspend fun pending(app: MoApps.App, ask: Boolean): List<JSONObject> = read(app).filter { e ->
-        if (ask) AppPermissions.check(app, ability(e)) else AppPermissions.allowedAlready(app, ability(e))
-    }
+    suspend fun pending(app: MoApps.App, ask: Boolean): List<JSONObject> = read(app).filter { allowed(app, it, ask) }
 
     // ── arrivals ──────────────────────────────────────────────────────────────
 
@@ -97,9 +107,10 @@ object AppEvents {
             add(app, event)
             AppLogger.info(TAG, "${app.name}: ${if (isSms) "text" else "notification"} from $appName")
             val deliver = live[app.name]
+            val ok = ability(event)?.let { AppPermissions.allowedAlready(app, it) } ?: true
             if (deliver != null) {
-                if (AppPermissions.allowedAlready(app, ability(event))) main.post { deliver(listOf(event)) }
-            } else if (AppPermissions.allowedAlready(app, ability(event))) {
+                if (ok) main.post { deliver(listOf(event)) }
+            } else if (ok) {
                 runInBackground(context.applicationContext, app)
             }
             // not allowed yet: it waits in the inbox, and the person is asked when they open the app

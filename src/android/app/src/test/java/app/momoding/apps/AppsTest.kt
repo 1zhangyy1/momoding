@@ -83,5 +83,6 @@ class AppsTest {
     @Test fun `what an arrival needs the person's OK for`() {
         assertEquals("android-sms", AppEvents.ability(org.json.JSONObject().put("sms", true)))
         assertEquals("android-notification", AppEvents.ability(org.json.JSONObject().put("sms", false)))
+        assertEquals(null, AppEvents.ability(org.json.JSONObject().put("type", "share")))
     }
 }

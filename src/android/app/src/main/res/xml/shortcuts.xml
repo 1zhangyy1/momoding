@@ -6,6 +6,12 @@
   parsed by DeepLinkHandler → DeepLinkAction.{NewChat,NewVoiceChat,NewCameraChat}.
 -->
 <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- momoding: Momoding Apps that take shares are offered by name in the share sheet (app/momoding/apps/AppShare.kt) -->
+    <share-target android:targetClass="com.openminis.app.share.ShareReceiverActivity">
+        <data android:mimeType="text/plain" />
+        <data android:mimeType="image/*" />
+        <category android:name="app.momoding.apps.SHARE_TARGET" />
+    </share-target>
     <shortcut
         android:shortcutId="new_chat"
         android:enabled="true"

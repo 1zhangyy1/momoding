@@ -64,6 +64,7 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
     private fun install(app: MoApps.App): NativeOffloadResult {
         if (!app.index.isFile) throw IllegalStateException("${app.linuxDir}/index.html does not exist yet")
         val asked = onMain { MoAppActivity.pin(context, app) }
+        AppShare.publish(context, app)
         return ok(JSONObject().put("app", app.name).put("home_screen", if (asked) "asked" else "unsupported")
             .put("note", if (asked) "The launcher shows its own confirmation; once the person adds it, the icon opens the app." else "This launcher cannot add icons; it opens with momoding-app open."))
     }

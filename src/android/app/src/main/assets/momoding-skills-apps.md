@@ -53,8 +53,9 @@ On the phone and in your browser alike, every page of the app has:
 - `await momoding.run("<command>")` — a phone command, the same ones you run: `android-*`,
   `momoding-web`, `minis-scheduled`. Resolves to `{code, output, json}`. What needs the
   person's OK asks them, as always.
-- `await momoding.ask(prompt, {system, json})` — the person's model as a function: the reply
-  text, or a parsed value with `json: true`. It is a plain model call, not you.
+- `await momoding.ask(prompt, {system, json, images})` — the person's model as a function: the
+  reply text, or a parsed value with `json: true`; `images` (data URLs) go to a model that can
+  see them. It is a plain model call, not you.
 - `await momoding.http(url, {method, headers, body})` — `{status, text}`; public addresses only.
 - `momoding.store.get(key)`, `.set(key, value)`, `.remove(key)`, `.all()` — what the app keeps,
   as JSON, synchronous. Keep the app's data here, not in localStorage: it survives every
@@ -70,6 +71,10 @@ On the phone and in your browser alike, every page of the app has:
   handle it in code: parse it, store it, `momoding.ask` if parsing needs the model. Nothing
   missed: what is not handled is handed over again next time the app opens. The person is asked,
   on the app's screen, before it receives their texts or notifications.
+- `momoding.on('share', s => …)` — what the person shares to the app from any other app, by its
+  name in the share sheet (`s.text`, `s.subject`, `s.image` as a data URL). Offer it with
+  `"momoding": {"share": true}` in `manifest.json` when sharing into the app makes sense (a
+  screenshot of a bill into the ledger, a link into a reading list). The app opens to take it.
 - `momoding.app` (`name`, `title`), `momoding.device` (`dark`, `language`), `momoding.preview`
   (true in your browser).
 - `console.*` and uncaught errors go to `.momoding/log`.

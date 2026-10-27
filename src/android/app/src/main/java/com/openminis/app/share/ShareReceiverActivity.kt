@@ -44,6 +44,8 @@ class ShareReceiverActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // momoding: shared to one Momoding App by name in the share sheet (app/momoding/apps/AppShare.kt)
+        if (intent != null && app.momoding.apps.AppShare.receive(this, intent)) { finish(); return }
         val items = mutableListOf<PendingShare.Item>()
         try {
             when (intent?.action) {

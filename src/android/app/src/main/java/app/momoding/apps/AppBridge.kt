@@ -133,19 +133,29 @@ class AppBridge(private val context: Context, private val webView: WebView, priv
     }
 
     private suspend fun ask(prompt: String, opts: JSONObject): Any {
-        val model = app.momoding.hands.Hands.textModel(context) ?: throw IllegalStateException("no model is set up in Momoding")
+        // pictures ({images: [data URLs]}) go to a model that can see them
+        val images = opts.optJSONArray("images")?.let { arr -> (0 until arr.length()).mapNotNull { pictureBytes(arr.optString(it)) } }.orEmpty()
+        val model = (if (images.isNotEmpty()) app.momoding.hands.Hands.screenModel(context) else app.momoding.hands.Hands.textModel(context))
+            ?: throw IllegalStateException(if (images.isNotEmpty()) "no model that can see pictures is set up in Momoding" else "no model is set up in Momoding")
         val provider = ProviderFactory.create(model.instance, model.apiKey, model.entry.model, context)
         val json = opts.optBoolean("json")
         val system = opts.optString("system").ifBlank { "You are part of a small app on the person's phone. Answer the app's request directly." } +
             if (json) "\nAnswer with one JSON value only: no prose, no code fence." else ""
         val text = provider.sendMessage(
-            messages = listOf(LLMMessage(role = LLMMessage.Role.USER, content = prompt)),
+            messages = listOf(LLMMessage(role = LLMMessage.Role.USER, content = prompt, contentParts = if (images.isEmpty()) emptyList() else
+                listOf(com.openminis.app.data.model.AgentContentPart.Text(prompt)) + images.map { (bytes, mime) -> com.openminis.app.data.model.AgentContentPart.ImageData(bytes, mime) })),
             systemPrompt = system,
             maxTokens = opts.optInt("maxTokens", 4096),
         ).text.orEmpty().trim()
         if (!json) return text
         val body = text.removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
         return runCatching { JSONTokener(body).nextValue() }.getOrElse { throw IllegalStateException("the model did not answer JSON: ${text.take(200)}") }
+    }
+
+    /** A `data:image/…;base64,…` URL as bytes and type. */
+    private fun pictureBytes(url: String): Pair<ByteArray, String>? {
+        val m = Regex("^data:(image/[a-z+.-]+);base64,(.+)$", RegexOption.DOT_MATCHES_ALL).find(url) ?: return null
+        return runCatching { android.util.Base64.decode(m.groupValues[2], android.util.Base64.DEFAULT) to m.groupValues[1] }.getOrNull()
     }
 
     private suspend fun run(app: MoApps.App, command: String): JSONObject {

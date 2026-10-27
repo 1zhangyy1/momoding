@@ -162,6 +162,7 @@ class MoAppActivity : ComponentActivity() {
         }
 
         AppBots.opened(this, app)
+        AppShare.publish(this, app)
         // what arrives while it is open comes straight in (AppEvents)
         val deliver: (List<org.json.JSONObject>) -> Unit = { events -> wv.evaluateJavascript(AppEvents.script(events), null) }
         this.deliver = deliver
