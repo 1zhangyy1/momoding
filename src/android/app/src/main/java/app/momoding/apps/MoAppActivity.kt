@@ -125,9 +125,13 @@ class MoAppActivity : ComponentActivity() {
 
         // the app's own commands may wait on an approval: shown here too, since the chat is not on screen
         lifecycleScope.launch {
+            var shown: AlertDialog? = null
             RiskGate.pending.collect { r ->
+                // the card goes when its request does (answered in the chat, or no answer in time)
+                shown?.dismiss()
+                shown = null
                 if (r == null || (r.sessionId != app.botSession && r.sessionId != AppBridge.GATE_PREFIX + app.name)) return@collect
-                AlertDialog.Builder(this@MoAppActivity)
+                shown = AlertDialog.Builder(this@MoAppActivity)
                     .setTitle(app.title)
                     .setMessage(r.summary ?: r.preview)
                     .setPositiveButton(R.string.mo_risk_allow_once) { _, _ -> RiskGate.decide(r.id, RiskDecision.ALLOW_ONCE) }
