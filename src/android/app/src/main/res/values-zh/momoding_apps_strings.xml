@@ -29,4 +29,12 @@
     <string name="mo_app_widget_description">一眼看到你的某个 Momoding App</string>
     <string name="mo_app_widget_pick">放哪个 App？</string>
     <string name="mo_app_widget_empty">还没准备好：先打开一次这个 App</string>
+    <string name="mo_apps_title">Momoding Apps</string>
+    <string name="mo_apps_sub">桌面上的小 App，每个都有自己的 Momoding</string>
+    <string name="mo_apps_none">还没有 App。跟 Momoding 说一句，比如“给我做个喝水打卡”。</string>
+    <string name="mo_apps_open">打开</string>
+    <string name="mo_apps_delete">删除</string>
+    <string name="mo_apps_delete_confirm">删除 %1$s？它的数据和它的对话也一起删掉。</string>
+    <string name="mo_apps_deleted_icon">这个 App 已删除</string>
+    <string name="mo_apps_uses_nothing">不用手机上的东西</string>
 </resources>

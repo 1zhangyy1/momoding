@@ -110,7 +110,7 @@ object DeepLinkHandler {
         return when (host) {
             "share" -> DeepLinkAction.OpenShare
             // momoding: minis://apps/<name> opens a Momoding App
-            "apps" -> path.trim('/').substringBefore('/').takeIf { it.isNotEmpty() }?.let { DeepLinkAction.OpenMomodingApp(it) } ?: DeepLinkAction.Unknown
+            "apps" -> DeepLinkAction.OpenMomodingApp(path.trim('/').substringBefore('/')) // empty: the list of apps
             "views" -> when (path) {
                 "/alarm" -> DeepLinkAction.OpenAlarmList
                 "/calendar" -> DeepLinkAction.OpenCalendar(app.momoding.tools.AlarmDate.epochMs(uri.getQueryParameter("at"))) // momoding

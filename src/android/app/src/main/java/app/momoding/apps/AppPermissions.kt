@@ -64,6 +64,9 @@ object AppPermissions {
         File(app.platform, "permissions.json").let { it.setWritable(true); it.writeText(all); it.setReadOnly() }
     }
 
+    /** The person changed an answer (the apps page). */
+    fun set(app: MoApps.App, command: String, allowed: Boolean) = record(app, command, allowed)
+
     /** Whether [app] may run [command] without asking now (nobody is there to ask). */
     fun allowedAlready(app: MoApps.App, command: String): Boolean =
         !needsAsking(command) || granted(app).opt(command) == true

@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.BatteryFull
 import androidx.compose.material.icons.outlined.BugReport
@@ -177,6 +178,10 @@ fun SettingsScreen(
                     subtitle = stringResource(R.string.mo_computer_row_sub), onClick = onComputerClick)
                 SettingsItem(icon = Icons.Outlined.Schedule, iconColor = Color(0xFF5856D6), title = stringResource(R.string.mo_settings_routines),
                     subtitle = stringResource(R.string.mo_settings_routines_sub), onClick = onRoutinesClick)
+                // momoding: Momoding Apps (app/momoding/apps)
+                SettingsItem(icon = Icons.Outlined.Widgets, iconColor = Color(0xFFFF6A3D), title = stringResource(R.string.mo_apps_title),
+                    subtitle = stringResource(R.string.mo_apps_sub),
+                    onClick = { context.startActivity(android.content.Intent(context, app.momoding.apps.AppsListActivity::class.java)) })
                 SettingsItem(icon = Icons.Outlined.BatteryFull, iconColor = Color(0xFFFF9500), title = stringResource(R.string.mo_settings_background),
                     subtitle = stringResource(R.string.mo_settings_background_sub), onClick = onBackgroundClick)
                 SettingsItem(icon = Icons.Outlined.AutoAwesome, iconColor = Color(0xFFAF52DE), title = stringResource(R.string.mo_settings_about_bot),
