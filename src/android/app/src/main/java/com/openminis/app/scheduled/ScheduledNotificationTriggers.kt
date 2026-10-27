@@ -1,5 +1,6 @@
 package com.openminis.app.scheduled
 
+import app.momoding.apps.AppEvents // momoding
 import android.app.Notification
 import android.content.Context
 import android.provider.Telephony
@@ -47,6 +48,12 @@ object ScheduledNotificationTriggers {
         val n = sbn.notification ?: return
         if (n.flags and (Notification.FLAG_ONGOING_EVENT or Notification.FLAG_GROUP_SUMMARY) != 0) return
         scope.launch {
+            // momoding: Momoding Apps listen too (app/momoding/apps/AppEvents.kt); texts reach them from the SMS itself when it can be read
+            read(app, sbn.packageName, n)?.let { p ->
+                val smsPkg = runCatching { Telephony.Sms.getDefaultSmsPackage(app) }.getOrNull()
+                val smsReadable = app.checkSelfPermission(android.Manifest.permission.RECEIVE_SMS) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                if (!(p.pkg == smsPkg && smsReadable)) AppEvents.arrived(app, p.pkg, p.appName, p.title, p.text, isSms = p.pkg == smsPkg)
+            }
             if (!hasWatchers(app)) return@launch
             read(app, sbn.packageName, n)?.let { dispatch(app, it) }
         }

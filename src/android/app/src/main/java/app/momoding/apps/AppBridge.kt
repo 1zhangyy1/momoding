@@ -38,10 +38,20 @@ import java.util.Locale
  *     momoding.chat(text)                              the app's own Momoding, to change it
  *
  * One bridge per WebView, for every app loaded in it: each call carries the token its page was
- * served with (AppPage), which names the app. [onScreen]: the person is using the app (its host);
- * false in the agent's browser, where `chat` only logs.
+ * served with (AppPage), which names the app. [mode]: on the person's screen, run in the background
+ * for an event (AppEvents), or checked in the agent's browser.
  */
-class AppBridge(private val context: Context, private val webView: WebView, private val onScreen: Boolean) {
+class AppBridge(private val context: Context, private val webView: WebView, private val mode: Mode) {
+    enum class Mode {
+        /** The person is using it: their data, questions asked on its screen. */
+        SCREEN,
+        /** Run for an event with nobody looking: their data, only what they already allowed. */
+        BACKGROUND,
+        /** The agent's own check: a copy of the data, nothing reaches the person. */
+        PREVIEW,
+    }
+    private val preview get() = mode == Mode.PREVIEW
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val main = Handler(Looper.getMainLooper())
 
@@ -56,26 +66,46 @@ class AppBridge(private val context: Context, private val webView: WebView, priv
         return JSONObject()
             .put("app", JSONObject().put("name", app.name).put("title", app.title))
             .put("device", JSONObject().put("dark", night).put("language", Locale.getDefault().toLanguageTag()))
-            .put("preview", !onScreen)
+            .put("preview", preview)
             .toString()
     }
 
     // in the agent's browser the app keeps a copy of the person's data, never theirs (MoApps.data)
-    @JavascriptInterface fun storeGet(token: String, key: String): String? = app(token)?.let { MoApps.data(context, it, !onScreen).opt(key) }?.let(::literal)
-    @JavascriptInterface fun storeSet(token: String, key: String, valueJson: String?) { app(token)?.let { MoApps.dataPut(context, it, key, valueJson, !onScreen) } }
-    @JavascriptInterface fun storeAll(token: String): String = app(token)?.let { MoApps.data(context, it, !onScreen).toString() } ?: "{}"
+    @JavascriptInterface fun storeGet(token: String, key: String): String? = app(token)?.let { MoApps.data(context, it, preview).opt(key) }?.let(::literal)
+    @JavascriptInterface fun storeSet(token: String, key: String, valueJson: String?) { app(token)?.let { MoApps.dataPut(context, it, key, valueJson, preview) } }
+    @JavascriptInterface fun storeAll(token: String): String = app(token)?.let { MoApps.data(context, it, preview).toString() } ?: "{}"
 
     @JavascriptInterface
     fun log(token: String, level: String, line: String) {
         // what the agent's own checks print is marked, so the app's log tells them from the person's use
-        app(token)?.let { MoApps.log(it, (if (level == "error") "ERROR" else "log") + if (onScreen) "" else " preview", line) }
+        app(token)?.let { MoApps.log(it, (if (level == "error") "ERROR" else "log") + if (preview) " preview" else "", line) }
     }
 
     @JavascriptInterface
     fun chat(token: String, text: String) {
         val app = app(token) ?: return
-        if (!onScreen) { MoApps.log(app, "log", "momoding.chat(${JSONObject.quote(text)}) — opens the app's chat on the phone"); return }
+        if (mode != Mode.SCREEN) { MoApps.log(app, "log", "momoding.chat(${JSONObject.quote(text)}) — opens the app's chat when it is on the screen"); return }
         main.post { AppChat.open(context, app, text) }
+    }
+
+    /** The page is loaded and its handlers are set: hand it what arrived for it (AppEvents). */
+    @JavascriptInterface
+    fun ready(token: String) {
+        val app = app(token) ?: return
+        if (preview) return // the person's arrivals are not the agent's to consume
+        scope.launch {
+            val events = AppEvents.pending(app, ask = mode == Mode.SCREEN)
+            if (events.isNotEmpty()) main.post { runCatching { webView.evaluateJavascript(AppEvents.script(events), null) } }
+        }
+    }
+
+    /** The page's handlers ran for these arrivals. */
+    @JavascriptInterface
+    fun handled(token: String, idsJson: String) {
+        val app = app(token) ?: return
+        if (preview) return
+        val ids = runCatching { JSONArray(idsJson) }.getOrDefault(JSONArray())
+        AppEvents.handled(app, (0 until ids.length()).map { ids.optString(it) }.toSet())
     }
 
     /** The async calls: the page waits on a promise, answered by __momodingResolve(id, ok, value). */
@@ -124,7 +154,12 @@ class AppBridge(private val context: Context, private val webView: WebView, priv
         if (!runnable(name)) throw IllegalArgumentException("$name is not a phone command an app can run (android-*, momoding-web, minis-scheduled)")
         val handler = NativeOffloadServer.handler(name) ?: throw IllegalArgumentException("$name is not available")
         // what this app may use is the person's choice, asked on its screen (the agent's own checks are its work, not the app's)
-        if (onScreen && !AppPermissions.check(app, name)) throw IllegalStateException("the person has not allowed this app to use $name")
+        val allowed = when (mode) {
+            Mode.SCREEN -> AppPermissions.check(app, name)
+            Mode.BACKGROUND -> AppPermissions.allowedAlready(app, name)
+            Mode.PREVIEW -> true
+        }
+        if (!allowed) throw IllegalStateException("the person has not allowed this app to use $name")
         // the same gate as the agent's own commands, in the app's Bot chat (and on the app's screen)
         when (val gate = RiskGate.checkShell(app.botSession ?: (GATE_PREFIX + app.name), command, summary = "${app.title}: $command")) {
             is GateOutcome.Denied -> throw IllegalStateException(gate.message)
@@ -140,7 +175,7 @@ class AppBridge(private val context: Context, private val webView: WebView, priv
     /** Something for the app's own Momoding to do, in its chat; on the screen only (in a check it is logged). */
     private fun tell(app: MoApps.App, text: String): String {
         require(text.isNotBlank()) { "momoding.tell needs what to ask" }
-        if (!onScreen) { MoApps.log(app, "log preview", "momoding.tell(${JSONObject.quote(text)}) — goes to the app's Momoding on the phone"); return "sent" }
+        if (preview) { MoApps.log(app, "log preview", "momoding.tell(${JSONObject.quote(text)}) — goes to the app's Momoding on the phone"); return "sent" }
         AppBots.tell(context, app, text, AppBots.From.APP)
         return "sent"
     }
@@ -201,6 +236,7 @@ class AppBridge(private val context: Context, private val webView: WebView, priv
   if (!N) return
   let seq = 0
   const waits = {}
+  const handlers = {}
   window.__momodingResolve = (id, ok, value) => {
     const w = waits[id]; if (!w) return; delete waits[id]
     ok ? w[0](value) : w[1](new Error(value))
@@ -223,7 +259,22 @@ class AppBridge(private val context: Context, private val webView: WebView, priv
     http: (url, options = {}) => call('http', String(url), options),
     chat: (text = '') => N.chat(T, String(text)),
     tell: text => call('tell', String(text)),
+    on: (type, handler) => { (handlers[type] = handlers[type] || []).push(handler) },
   }
+  // what arrived for the app (a text, a notification), handed over by the platform; handled ones are acknowledged
+  window.__momodingDeliver = async events => {
+    const done = []
+    for (const e of events) {
+      const list = handlers[e.type] || []
+      for (const handler of list) {
+        try { await handler(e) } catch (err) { N.log(T, 'error', 'momoding.on(' + e.type + '): ' + text(err)) }
+      }
+      if (list.length) done.push(e.id)
+    }
+    if (done.length) N.handled(T, JSON.stringify(done))
+  }
+  const whenReady = () => setTimeout(() => N.ready(T), 0)
+  if (document.readyState === 'complete') whenReady(); else window.addEventListener('load', whenReady)
   for (const level of ['log', 'warn', 'error']) {
     const original = console[level].bind(console)
     console[level] = (...a) => { N.log(T, level === 'error' ? 'error' : 'log', a.map(text).join(' ')); original(...a) }

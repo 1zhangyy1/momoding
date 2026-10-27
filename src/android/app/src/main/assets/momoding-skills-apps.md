@@ -61,6 +61,15 @@ On the phone and in your browser alike, every page of the app has:
   change you make, and you can read it.
 - `momoding.chat(text)` — opens the app's own Momoding (you) over the app, with `text` in the
   person's box.
+- `momoding.on('notification', async n => …)` — what arrives on the phone for the app: a text or
+  another app's notification (`n.app`, `n.title`, `n.text`, `n.sms`, `n.at`). Say what the app
+  listens to in `manifest.json`, the way routines match:
+  `"momoding": {"listen": [{"app": "sms", "match": "消费|支付|收款"}]}` (`app`: part of an app's
+  name, or `sms`; `match`: any of `a|b` in the title or text, written the way those messages
+  really are). It wakes the app even when it is closed (run in the background, no screen), so
+  handle it in code: parse it, store it, `momoding.ask` if parsing needs the model. Nothing
+  missed: what is not handled is handed over again next time the app opens. The person is asked,
+  on the app's screen, before it receives their texts or notifications.
 - `momoding.app` (`name`, `title`), `momoding.device` (`dark`, `language`), `momoding.preview`
   (true in your browser).
 - `console.*` and uncaught errors go to `.momoding/log`.

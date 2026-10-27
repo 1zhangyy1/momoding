@@ -1,5 +1,6 @@
 package app.momoding.chat
 
+import app.momoding.apps.AppEvents // momoding
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -35,6 +36,9 @@ class SmsTriggerReceiver : BroadcastReceiver() {
         val pending = goAsync()
         scope.launch {
             try {
+                // Momoding Apps that listen for texts (AppEvents)
+                AppEvents.arrived(app, runCatching { Telephony.Sms.getDefaultSmsPackage(app) }.getOrNull() ?: "sms",
+                    app.getString(R.string.mo_sms_app_name), sender, body, isSms = true)
                 val watching = ScheduledTaskManager(app).list().any { it.enabled && it.triggerKind == ScheduledTriggerKind.ON_NOTIFICATION }
                 if (!watching) return@launch
                 val pkg = runCatching { Telephony.Sms.getDefaultSmsPackage(app) }.getOrNull() ?: "sms"

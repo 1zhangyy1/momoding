@@ -52,6 +52,7 @@ class MoAppActivity : ComponentActivity() {
     private var bridge: AppBridge? = null
     private var loadedAt = 0L
     private var pen: TextView? = null
+    private var deliver: ((List<org.json.JSONObject>) -> Unit)? = null
     private var troubleOffered = false
 
     @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
@@ -62,7 +63,7 @@ class MoAppActivity : ComponentActivity() {
 
         val wv = WebView(this)
         web = wv
-        val b = AppBridge(this, wv, onScreen = true)
+        val b = AppBridge(this, wv, AppBridge.Mode.SCREEN)
         bridge = b
         wv.settings.apply {
             javaScriptEnabled = true
@@ -161,6 +162,10 @@ class MoAppActivity : ComponentActivity() {
         }
 
         AppBots.opened(this, app)
+        // what arrives while it is open comes straight in (AppEvents)
+        val deliver: (List<org.json.JSONObject>) -> Unit = { events -> wv.evaluateJavascript(AppEvents.script(events), null) }
+        this.deliver = deliver
+        AppEvents.attach(app, deliver)
 
         // a change to the folder shows at once (also while the app's chat is open over it)
         lifecycleScope.launch {
@@ -219,6 +224,7 @@ class MoAppActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        deliver?.let { AppEvents.detach(app, it) }
         bridge?.close()
         web?.destroy()
         super.onDestroy()

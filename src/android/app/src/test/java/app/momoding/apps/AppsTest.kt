@@ -68,4 +68,20 @@ class AppsTest {
         touch(File(dir, "app.js"), "b", 2_000_000)
         assertEquals(2_000_000, MoAppActivity.stamp(dir))
     }
+
+    @Test fun `an app listens the way routines do`() {
+        val manifest = org.json.JSONObject("""{"name":"记账","momoding":{"listen":[{"app":"sms","match":"消费|支付"},{"app":"支付宝"},{}]}}""")
+        val rules = AppEvents.listens(manifest)
+        assertEquals(2, rules.size)
+        assertTrue(AppEvents.matches(rules[0], "短信", "com.google.android.apps.messaging", isSms = true, body = "招商银行\n您尾号1234的卡消费56.80元"))
+        assertFalse(AppEvents.matches(rules[0], "短信", "com.google.android.apps.messaging", isSms = true, body = "您的验证码是 1234"))
+        assertFalse(AppEvents.matches(rules[0], "微信", "com.tencent.mm", isSms = false, body = "消费提醒"))
+        assertTrue(AppEvents.matches(rules[1], "支付宝", "com.eg.android.AlipayGphone", isSms = false, body = "任何内容"))
+        assertTrue(AppEvents.listens(org.json.JSONObject("{}")).isEmpty())
+    }
+
+    @Test fun `what an arrival needs the person's OK for`() {
+        assertEquals("android-sms", AppEvents.ability(org.json.JSONObject().put("sms", true)))
+        assertEquals("android-notification", AppEvents.ability(org.json.JSONObject().put("sms", false)))
+    }
 }

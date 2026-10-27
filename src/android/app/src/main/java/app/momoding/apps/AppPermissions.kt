@@ -51,14 +51,22 @@ object AppPermissions {
     val pending: StateFlow<Request?> = _pending.asStateFlow()
     private val asking = Mutex()
 
-    private fun file(app: MoApps.App) = File(app.platform, "permissions.json")
+    /** The person's answers live outside the sandbox; `.momoding/permissions.json` is a read-only copy for the app's Momoding. */
+    // never read back from the sandbox copy: what is written there is not the person's answer
+    private fun file(app: MoApps.App) = File(app.vault, "${app.name}.permissions.json")
 
     @Synchronized fun granted(app: MoApps.App): JSONObject =
         runCatching { JSONObject(file(app).readText()) }.getOrDefault(JSONObject())
 
     @Synchronized private fun record(app: MoApps.App, command: String, allowed: Boolean) {
-        file(app).writeText(granted(app).put(command, allowed).toString(2))
+        val all = granted(app).put(command, allowed).toString(2)
+        file(app).writeText(all)
+        File(app.platform, "permissions.json").let { it.setWritable(true); it.writeText(all); it.setReadOnly() }
     }
+
+    /** Whether [app] may run [command] without asking now (nobody is there to ask). */
+    fun allowedAlready(app: MoApps.App, command: String): Boolean =
+        !needsAsking(command) || granted(app).opt(command) == true
 
     /** Whether [app] may run [command]: asked once, on its screen; no answer within a minute is no. */
     suspend fun check(app: MoApps.App, command: String): Boolean {

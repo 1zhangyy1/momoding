@@ -27,6 +27,8 @@ object MoApps {
         val linuxDir: String get() = "$LINUX_ROOT/$name"
         val index: File get() = File(dir, "index.html")
         val platform: File get() = File(dir, ".momoding").also { it.mkdirs() }
+        /** Outside the sandbox (`files/momoding-app-data/`): what nothing run there may change — the person's data, their answers. */
+        val vault: File get() = File(dir.parentFile!!.parentFile!!.parentFile!!, "momoding-app-data").also { it.mkdirs() }
 
         /** The manifest's name, else the folder's. */
         val title: String get() = manifest().optString("short_name").ifBlank { manifest().optString("name") }.ifBlank { name }
@@ -84,7 +86,7 @@ object MoApps {
      * `.momoding/preview.json`, made from the person's data the first time it is checked there.
      */
     private fun store(context: Context, app: App): File {
-        val f = File(context.filesDir, "momoding-app-data/${app.name}.json")
+        val f = File(app.vault, "${app.name}.json")
         if (!f.exists()) {
             f.parentFile?.mkdirs()
             // apps from before the store moved out of the sandbox
@@ -114,7 +116,9 @@ object MoApps {
         }
     }
 
-    fun removeData(context: Context, app: App) { File(context.filesDir, "momoding-app-data/${app.name}.json").delete() }
+    fun removeData(context: Context, app: App) {
+        app.vault.listFiles().orEmpty().filter { it.name.startsWith(app.name + ".") }.forEach { it.delete() }
+    }
 
     // ── the app's log, which its Bot reads when something is wrong ───────────
 

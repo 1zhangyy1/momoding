@@ -250,7 +250,7 @@ class BrowserUseManager(
         configureWebView(webView, profile)
         webView.addJavascriptInterface(jsBridge, "__minis__")
         // momoding: Momoding Apps checked here get the same window.momoding as on the phone (apps/AppPage.kt)
-        appContext?.let { webView.addJavascriptInterface(app.momoding.apps.AppBridge(it, webView, onScreen = false), app.momoding.apps.AppBridge.JS_NAME) }
+        appContext?.let { webView.addJavascriptInterface(app.momoding.apps.AppBridge(it, webView, app.momoding.apps.AppBridge.Mode.PREVIEW), app.momoding.apps.AppBridge.JS_NAME) }
         setupWebViewClient()
         setupWebChromeClient()
         // Intercept page-triggered downloads (Content-Disposition attachment,
