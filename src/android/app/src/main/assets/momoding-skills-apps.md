@@ -15,7 +15,13 @@ not sure what is current, look up today's best practice with `momoding-web` befo
 - Trust your judgment: decide what makes the app good, and build that. Ask the person only what
   only they can answer.
 - It must work the first time they open it. Check it yourself before you hand it over, and
-  after every change.
+  after every change: everywhere the change shows, not only where you made it (a word changed
+  on one screen is often on another).
+- Something that works soon beats something polished late, and watching it grow is not waiting:
+  get a first screen working in a minute or two, put it on the home screen and tell the chat
+  that asked for it (`momoding-app progress "<what is there now>"`, a line with an open
+  button). From then on every change you make shows on their screen as you make it; keep going
+  from there. One or two progress lines per build, not more.
 - Say what you made or changed in plain words, one or two lines, never code.
 - The first time you hand an app over, end with one concrete change they could ask for
   ("想加个每月预算提醒？说一声就行"), so they know a sentence changes it. Only that first time.
@@ -35,10 +41,10 @@ not sure what is current, look up today's best practice with `momoding-web` befo
 - `NOTES.md` is your memory of this app: what it is for, what the person asked for, what was
   decided and why, how they use it. Read it when you start; update it with every change.
 - Commit each working change with a message saying what changed. Going back is `git revert`.
-- `.momoding/` is the platform's and stays out of git: `data.json` (what the person's app
-  stored), `log` (its console and errors, newest last; lines from your own checks say
-  `preview`). Read them when something is wrong.
-  Never write `data.json` yourself unless the person asks you to change their data.
+- `.momoding/` is the platform's and stays out of git: `data.json` (a read-only copy of what
+  the person's app stored: read it to understand their use, it cannot be changed from here),
+  `log` (its console and errors, newest last; lines from your own checks say `preview`).
+  Read them when something is wrong. To change the person's data, change the app so it does.
 
 ## window.momoding
 
@@ -83,5 +89,12 @@ only when the person would want the result.
 - `momoding-app install <name>` — the first time it is ready: puts it on the home screen (the
   phone asks the person to confirm).
 - `momoding-app open <name>` — shows it on the screen.
+- `momoding-app progress "<what is there now>"` — while building, once there is something to
+  see: the same line with an open button.
 - `momoding-app done "<what changed>"` — when a piece of work is done and checked: one line for
   the chat that asked for the app (in the person's language), with a button to open it.
+- In the app, `momoding.tell(text)` hands something to you (it arrives in your chat, marked as
+  from the app): use it for what needs you, not the model alone — "看看这个月花得怎么样".
+- What the app may use of the phone is the person's choice per app: the first time it runs a
+  command that reads their things or acts for them, they are asked on its screen; a "no" makes
+  `run` fail with that reason, and the app should say so plainly and carry on without it.

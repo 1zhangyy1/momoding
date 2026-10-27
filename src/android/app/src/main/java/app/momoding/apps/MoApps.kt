@@ -12,7 +12,8 @@ import java.io.File
  *                               manifest: name, icons, theme_color), NOTES.md (the app's memory)
  *     <name>/.momoding/         the platform's, kept out of git:
  *         bot.json              its Bot's chat and the chat that asked for it
- *         data.json             what the app keeps (momoding.store)
+ *         data.json             a read-only copy of what the app keeps (momoding.store), for its
+ *                               Momoding to read; the store itself is outside the sandbox
  *         log                   the app's console and errors
  *
  * Versions are git's; checking is the agent's own browser. This only knows where things are.
@@ -72,31 +73,48 @@ object MoApps {
         return app
     }
 
-    fun remove(context: Context, app: App) { app.dir.deleteRecursively() }
+    fun remove(context: Context, app: App) { removeData(context, app); app.dir.deleteRecursively() }
 
     // ── what the app keeps ────────────────────────────────────────────────────
 
     /**
-     * The person's data, or in the agent's browser ([preview]) a copy of it, made the first time the
-     * app is checked there: checking never touches what the person keeps.
+     * What the person's app keeps lives outside the sandbox (`files/momoding-app-data/<name>.json`),
+     * so nothing run there can change it; `.momoding/data.json` is a read-only copy kept current for
+     * the app's Momoding to read. In the agent's browser ([preview]) the app keeps a copy of its own,
+     * `.momoding/preview.json`, made from the person's data the first time it is checked there.
      */
-    private fun dataFile(app: App, preview: Boolean): File {
-        val real = File(app.platform, "data.json")
-        if (!preview) return real
-        return File(app.platform, "preview.json").also { if (!it.exists() && real.exists()) real.copyTo(it) }
+    private fun store(context: Context, app: App): File {
+        val f = File(context.filesDir, "momoding-app-data/${app.name}.json")
+        if (!f.exists()) {
+            f.parentFile?.mkdirs()
+            // apps from before the store moved out of the sandbox
+            File(app.platform, "data.json").takeIf { it.isFile }?.let { it.setWritable(true); it.copyTo(f) }
+        }
+        return f
     }
 
-    @Synchronized fun data(app: App, preview: Boolean = false): JSONObject =
-        runCatching { JSONObject(dataFile(app, preview).readText()) }.getOrDefault(JSONObject())
+    private fun previewFile(context: Context, app: App): File =
+        File(app.platform, "preview.json").also { p -> if (!p.exists()) store(context, app).takeIf { it.exists() }?.copyTo(p) }
 
-    @Synchronized fun dataPut(app: App, key: String, valueJson: String?, preview: Boolean = false) {
-        val all = data(app, preview)
+    @Synchronized fun data(context: Context, app: App, preview: Boolean = false): JSONObject =
+        runCatching { JSONObject((if (preview) previewFile(context, app) else store(context, app)).readText()) }.getOrDefault(JSONObject())
+
+    @Synchronized fun dataPut(context: Context, app: App, key: String, valueJson: String?, preview: Boolean = false) {
+        val all = data(context, app, preview)
         if (valueJson == null) all.remove(key) else all.put(key, org.json.JSONTokener(valueJson).nextValue())
-        val file = dataFile(app, preview)
-        val tmp = File(app.platform, file.name + ".tmp")
+        val target = if (preview) previewFile(context, app) else store(context, app)
+        val tmp = File(target.path + ".tmp")
         tmp.writeText(all.toString())
-        tmp.renameTo(file)
+        tmp.renameTo(target)
+        if (!preview) {
+            val copy = File(app.platform, "data.json")
+            copy.setWritable(true)
+            copy.writeText(all.toString(2))
+            copy.setReadOnly()
+        }
     }
+
+    fun removeData(context: Context, app: App) { File(context.filesDir, "momoding-app-data/${app.name}.json").delete() }
 
     // ── the app's log, which its Bot reads when something is wrong ───────────
 

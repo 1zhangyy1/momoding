@@ -8,4 +8,21 @@
     <string name="mo_app_fix_brief">我打开 App 时出错了（%1$s）。看一下 .momoding/log，把原因修好，在你的浏览器里确认一遍，再告诉我。</string>
     <string name="mo_app_from_momoding">来自 Momoding</string>
     <string name="mo_app_chat_status">做这个 App，也改它</string>
+    <string name="mo_app_cap_ask">%1$s 想用你的「%2$s」。</string>
+    <string name="mo_app_cap_allow">允许</string>
+    <string name="mo_app_cap_deny">不允许</string>
+    <string name="mo_app_from_app">来自 App</string>
+    <string name="mo_app_review_line">回顾了一下这个 App 的使用情况</string>
+    <string name="mo_app_cap_calendar">日历</string>
+    <string name="mo_app_cap_contacts">通讯录</string>
+    <string name="mo_app_cap_sms">短信</string>
+    <string name="mo_app_cap_notifications">通知</string>
+    <string name="mo_app_cap_location">位置</string>
+    <string name="mo_app_cap_photos">相册</string>
+    <string name="mo_app_cap_clipboard">剪贴板</string>
+    <string name="mo_app_cap_alarm">闹钟</string>
+    <string name="mo_app_cap_open">打开链接和其他 App</string>
+    <string name="mo_app_cap_speech">麦克风</string>
+    <string name="mo_app_cap_routines">例行任务</string>
+    <string name="mo_app_review_ask">看看这个 App 最近用得怎么样。</string>
 </resources>

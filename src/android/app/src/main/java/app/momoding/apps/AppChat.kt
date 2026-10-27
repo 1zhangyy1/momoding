@@ -45,6 +45,7 @@ class AppChatActivity : ComponentActivity() {
                 )
             }
         }
+        lifecycleScope.launch { runCatching { AppBots.chatSeen(this@AppChatActivity, app) } }
         // text the app handed over goes into the composer once the chat screen has its view model
         intent.getStringExtra(EXTRA_TEXT)?.takeIf { it.isNotBlank() }?.let { text ->
             lifecycleScope.launch {
@@ -54,6 +55,12 @@ class AppChatActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // what was said while the chat was open has been seen
+        MoApps.get(this, intent.getStringExtra(EXTRA_NAME).orEmpty())?.let { app -> lifecycleScope.launch { runCatching { AppBots.chatSeen(this@AppChatActivity, app) } } }
     }
 
     companion object {

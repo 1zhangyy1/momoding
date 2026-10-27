@@ -29,7 +29,13 @@ import app.momoding.ui.Design
 @Composable
 fun RoutineWakeRow(messageId: String, text: String? = null, bubble: @Composable () -> Unit) {
     // a message from the Momoding of the main chat to an app's own Momoding: theirs, not the person's
-    text?.takeIf { it.startsWith(app.momoding.apps.AppBots.WAKE_CUE) }?.let { FromMomodingRow(it.removePrefix(app.momoding.apps.AppBots.WAKE_CUE).trim()); return }
+    val bots = app.momoding.apps.AppBots
+    when {
+        text == null -> Unit
+        text.startsWith(bots.WAKE_CUE) -> { FromMomodingRow(R.string.mo_app_from_momoding, text.removePrefix(bots.WAKE_CUE).trim()); return }
+        text.startsWith(bots.APP_CUE) -> { FromMomodingRow(R.string.mo_app_from_app, text.removePrefix(bots.APP_CUE).trim()); return }
+        text.startsWith(bots.REVIEW_CUE) -> { RoutineNote(stringResource(R.string.mo_app_review_line)); return }
+    }
     val wakes by RoutineWakes.wakes.collectAsState()
     val wake = wakes[messageId]
     if (wake == null) {
@@ -59,11 +65,19 @@ fun RoutineLine(label: String, time: String?) {
     }
 }
 
-/** What the main chat's Momoding asked an app's own Momoding to do: a quiet card on the left, labelled. */
+/** One quiet centred line, for something the app itself started. */
 @Composable
-private fun FromMomodingRow(text: String) {
+private fun RoutineNote(text: String) {
+    Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), contentAlignment = Alignment.Center) {
+        Text(text, fontSize = Design.Size.Caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** What the main chat's Momoding (or the app itself) asked an app's own Momoding to do: a quiet card on the left, labelled. */
+@Composable
+private fun FromMomodingRow(label: Int, text: String) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
-        Text(stringResource(R.string.mo_app_from_momoding), fontSize = Design.Size.Caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(label), fontSize = Design.Size.Caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(
             text, fontSize = Design.Size.Caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 4.dp).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp),

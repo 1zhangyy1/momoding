@@ -61,9 +61,9 @@ class AppBridge(private val context: Context, private val webView: WebView, priv
     }
 
     // in the agent's browser the app keeps a copy of the person's data, never theirs (MoApps.data)
-    @JavascriptInterface fun storeGet(token: String, key: String): String? = app(token)?.let { MoApps.data(it, !onScreen).opt(key) }?.let(::literal)
-    @JavascriptInterface fun storeSet(token: String, key: String, valueJson: String?) { app(token)?.let { MoApps.dataPut(it, key, valueJson, !onScreen) } }
-    @JavascriptInterface fun storeAll(token: String): String = app(token)?.let { MoApps.data(it, !onScreen).toString() } ?: "{}"
+    @JavascriptInterface fun storeGet(token: String, key: String): String? = app(token)?.let { MoApps.data(context, it, !onScreen).opt(key) }?.let(::literal)
+    @JavascriptInterface fun storeSet(token: String, key: String, valueJson: String?) { app(token)?.let { MoApps.dataPut(context, it, key, valueJson, !onScreen) } }
+    @JavascriptInterface fun storeAll(token: String): String = app(token)?.let { MoApps.data(context, it, !onScreen).toString() } ?: "{}"
 
     @JavascriptInterface
     fun log(token: String, level: String, line: String) {
@@ -89,6 +89,7 @@ class AppBridge(private val context: Context, private val webView: WebView, priv
                     "ask" -> ask(args.optString(0), args.optJSONObject(1) ?: JSONObject())
                     "run" -> run(app, args.optString(0))
                     "http" -> http(args.optString(0), args.optJSONObject(1) ?: JSONObject())
+                    "tell" -> tell(app, args.optString(0))
                     else -> throw IllegalArgumentException("momoding.$method does not exist")
                 }
             }
@@ -122,6 +123,8 @@ class AppBridge(private val context: Context, private val webView: WebView, priv
         val name = argv.firstOrNull() ?: throw IllegalArgumentException("momoding.run needs a command")
         if (!runnable(name)) throw IllegalArgumentException("$name is not a phone command an app can run (android-*, momoding-web, minis-scheduled)")
         val handler = NativeOffloadServer.handler(name) ?: throw IllegalArgumentException("$name is not available")
+        // what this app may use is the person's choice, asked on its screen (the agent's own checks are its work, not the app's)
+        if (onScreen && !AppPermissions.check(app, name)) throw IllegalStateException("the person has not allowed this app to use $name")
         // the same gate as the agent's own commands, in the app's Bot chat (and on the app's screen)
         when (val gate = RiskGate.checkShell(app.botSession ?: (GATE_PREFIX + app.name), command, summary = "${app.title}: $command")) {
             is GateOutcome.Denied -> throw IllegalStateException(gate.message)
@@ -132,6 +135,14 @@ class AppBridge(private val context: Context, private val webView: WebView, priv
         runCatching { JSONTokener(r.output.trim()).nextValue() }.getOrNull()?.takeIf { it is JSONObject || it is JSONArray }?.let { out.put("json", it) }
         AppLogger.info(TAG, "${app.name} ran $name -> ${r.exitCode}")
         return out
+    }
+
+    /** Something for the app's own Momoding to do, in its chat; on the screen only (in a check it is logged). */
+    private fun tell(app: MoApps.App, text: String): String {
+        require(text.isNotBlank()) { "momoding.tell needs what to ask" }
+        if (!onScreen) { MoApps.log(app, "log preview", "momoding.tell(${JSONObject.quote(text)}) — goes to the app's Momoding on the phone"); return "sent" }
+        AppBots.tell(context, app, text, AppBots.From.APP)
+        return "sent"
     }
 
     private fun http(url: String, opts: JSONObject): JSONObject {
@@ -211,6 +222,7 @@ class AppBridge(private val context: Context, private val webView: WebView, priv
     run: command => call('run', String(command)),
     http: (url, options = {}) => call('http', String(url), options),
     chat: (text = '') => N.chat(T, String(text)),
+    tell: text => call('tell', String(text)),
   }
   for (const level of ['log', 'warn', 'error']) {
     const original = console[level].bind(console)

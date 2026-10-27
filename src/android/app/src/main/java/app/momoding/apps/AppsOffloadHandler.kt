@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit
  *     momoding-app install <name>        put it on the home screen
  *     momoding-app open <name>           show it on the screen
  *     momoding-app tell <name> "<text>"  a message for that app's Momoding
+ *     momoding-app progress "<what is there now>"  (from an app's Momoding, while building) the same, early
  *     momoding-app done "<what changed>" (from an app's Momoding) one line in the chat that asked for it
  *     momoding-app list
  */
@@ -36,7 +37,8 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
                 "install" -> install(app(args))
                 "open" -> open(app(args))
                 "tell" -> tell(app(args), args.positional.drop(2).joinToString(" "))
-                "done" -> done(args, request)
+                "done", "progress" -> done(args, request)
+                "suggest" -> suggest(args, request)
                 "list" -> list()
                 else -> NativeOffloadResult(2, "momoding-app: unknown subcommand '$sub'\n$HELP")
             }
@@ -81,12 +83,21 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
 
     private fun done(args: OffloadArgs, request: NativeOffloadRequest): NativeOffloadResult {
         val app = request.sessionId?.let { MoApps.ofSession(context, it) }
-            ?: throw IllegalStateException("done is for an app's own Momoding")
+            ?: throw IllegalStateException("done and progress are for an app's own Momoding")
         val text = args.positional.drop(1).joinToString(" ").trim()
         require(text.isNotEmpty()) { "momoding-app done \"<what changed, in one line>\"" }
         val ui = LocaleWrap.uiContext(context)
         AppBots.receipt(context, app, text, ui.getString(R.string.mo_app_open, app.title))
         return ok(JSONObject().put("reported", app.name))
+    }
+
+    private fun suggest(args: OffloadArgs, request: NativeOffloadRequest): NativeOffloadResult {
+        val app = request.sessionId?.let { MoApps.ofSession(context, it) }
+            ?: throw IllegalStateException("suggest is for an app's own Momoding")
+        val text = args.positional.drop(1).joinToString(" ").trim()
+        require(text.isNotEmpty()) { "momoding-app suggest \"<the improvement, in one line>\"" }
+        AppBots.suggest(app, text)
+        return ok(JSONObject().put("suggested", app.name).put("note", "A dot shows on the app until the person opens your chat."))
     }
 
     private fun list(): NativeOffloadResult = ok(JSONObject().put("apps", JSONArray().apply {
@@ -115,7 +126,11 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
               install <name>       put it on the home screen
               open <name>          show it on the screen
               tell <name> "<text>" a message for that app's Momoding
+              progress "<what is there now>"
+                                   from an app's own Momoding while it builds: a line with an open
+                                   button, so the person can watch it grow
               done "<what changed>" from an app's own Momoding: one line in the chat that asked for it
+              suggest "<improvement>" from an app's own Momoding after a review: a dot on the app
               list                 the apps
         """.trimIndent() + "\n"
     }

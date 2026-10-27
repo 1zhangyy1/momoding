@@ -51,6 +51,7 @@ class MoAppActivity : ComponentActivity() {
     private var web: WebView? = null
     private var bridge: AppBridge? = null
     private var loadedAt = 0L
+    private var pen: TextView? = null
     private var troubleOffered = false
 
     @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
@@ -111,6 +112,7 @@ class MoAppActivity : ComponentActivity() {
             contentDescription = getString(R.string.mo_app_chat, app.title)
             setOnClickListener { AppChat.open(this@MoAppActivity, app, "") }
         }
+        this.pen = pen
         val dp = resources.displayMetrics.density
         setContentView(FrameLayout(this).apply {
             fitsSystemWindows = true
@@ -140,6 +142,25 @@ class MoAppActivity : ComponentActivity() {
                     .show()
             }
         }
+
+        // the person's answer on what this app may use (AppPermissions)
+        lifecycleScope.launch {
+            var shown: AlertDialog? = null
+            AppPermissions.pending.collect { q ->
+                shown?.dismiss()
+                shown = null
+                if (q == null || q.app.name != app.name) return@collect
+                val what = AppPermissions.label(q.command)?.let { getString(it) } ?: q.command
+                shown = AlertDialog.Builder(this@MoAppActivity)
+                    .setMessage(getString(R.string.mo_app_cap_ask, app.title, what))
+                    .setPositiveButton(R.string.mo_app_cap_allow) { _, _ -> q.answer(true) }
+                    .setNegativeButton(R.string.mo_app_cap_deny) { _, _ -> q.answer(false) }
+                    .setOnCancelListener { q.answer(false) }
+                    .show()
+            }
+        }
+
+        AppBots.opened(this, app)
 
         // a change to the folder shows at once (also while the app's chat is open over it)
         lifecycleScope.launch {
@@ -179,11 +200,21 @@ class MoAppActivity : ComponentActivity() {
                 .setTitle(app.title)
                 .setMessage(R.string.mo_app_broken)
                 .setPositiveButton(R.string.mo_app_fix) { _, _ ->
-                    AppBots.tell(this, app, getString(R.string.mo_app_fix_brief, what), fromPerson = true)
+                    AppBots.tell(this, app, getString(R.string.mo_app_fix_brief, what), AppBots.From.PERSON)
                     AppChat.open(this, app, "")
                 }
                 .setNegativeButton(android.R.string.cancel, null)
                 .show()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // a dot on the pen when the app's Momoding has said something the person has not seen
+        lifecycleScope.launch {
+            val news = runCatching { AppBots.hasNews(this@MoAppActivity, app) }.getOrDefault(false)
+            pen?.text = if (news) "✎•" else "✎"
+            pen?.alpha = if (news) 0.95f else 0.6f
         }
     }
 
