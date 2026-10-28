@@ -23,6 +23,8 @@
     <string name="mo_app_cap_alarm">鬧鐘</string>
     <string name="mo_app_cap_open">打開連結和其他 App</string>
     <string name="mo_app_cap_speech">麥克風</string>
+    <string name="mo_app_cap_camera">相機</string>
+    <string name="mo_app_saved">已儲存到「下載」：%1$s</string>
     <string name="mo_app_cap_routines">例行任務</string>
     <string name="mo_app_review_ask">看看這個 App 最近用得怎麼樣。</string>
     <string name="mo_app_widget_label">Momoding App</string>

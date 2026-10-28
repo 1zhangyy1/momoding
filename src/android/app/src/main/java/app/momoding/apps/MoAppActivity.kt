@@ -14,9 +14,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.view.Gravity
 import android.view.ViewGroup
-import android.webkit.ConsoleMessage
 import android.webkit.RenderProcessGoneDetail
-import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -73,12 +71,8 @@ class MoAppActivity : ComponentActivity() {
             mediaPlaybackRequiresUserGesture = false
         }
         wv.addJavascriptInterface(b, AppBridge.JS_NAME)
-        wv.webChromeClient = object : WebChromeClient() {
-            override fun onConsoleMessage(m: ConsoleMessage): Boolean {
-                if (m.messageLevel() == ConsoleMessage.MessageLevel.ERROR) trouble(m.message())
-                return false
-            }
-        }
+        // whatever a page can do in a browser (AppWeb)
+        AppWeb(this, app) { trouble(it) }.attach(wv)
         wv.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
                 if (request.url.host != HOST) return null

@@ -23,6 +23,8 @@
     <string name="mo_app_cap_alarm">alarms</string>
     <string name="mo_app_cap_open">links and other apps</string>
     <string name="mo_app_cap_speech">microphone</string>
+    <string name="mo_app_cap_camera">camera</string>
+    <string name="mo_app_saved">Saved to Downloads: %1$s</string>
     <string name="mo_app_cap_routines">routines</string>
     <string name="mo_app_review_ask">Look at how the app has been used lately.</string>
     <string name="mo_app_widget_label">Momoding App</string>

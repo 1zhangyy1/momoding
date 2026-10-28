@@ -33,6 +33,7 @@ object AppPermissions {
         "android-alarm" to R.string.mo_app_cap_alarm,
         "android-open" to R.string.mo_app_cap_open,
         "android-speech" to R.string.mo_app_cap_speech,
+        AppWeb.CAMERA to R.string.mo_app_cap_camera,
         "minis-scheduled" to R.string.mo_app_cap_routines,
     )
 

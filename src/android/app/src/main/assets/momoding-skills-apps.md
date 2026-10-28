@@ -88,6 +88,10 @@ On the phone and in your browser alike, every page of the app has:
 
 ## The phone
 
+- The app is a web page, and whatever a page can do in a phone browser it can do here, through
+  the web's own interfaces and any library built on them: take or pick a picture or a file, the
+  camera and microphone, location, saving a file. `momoding.run` is for what the web has no
+  interface for.
 - Mobile first, one hand: big tap targets, the main action within thumb reach. The app runs
   full screen in its own window, below the status bar and above the navigation bar.
 - A pen button sits in the bottom-right corner (it opens you): keep 64 px clear there.
