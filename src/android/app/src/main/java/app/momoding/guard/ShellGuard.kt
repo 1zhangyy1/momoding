@@ -19,6 +19,8 @@ object ShellGuard {
     const val SHARED = "/var/minis/shared"
     /** momoding: folders of the phone mounted into the sandbox (the phone's own storage). */
     const val PHONE = "/var/minis/mounts"
+    /** momoding: Momoding Apps, one folder each. */
+    const val APPS = "/var/minis/apps"
 
     /** momoding: where a relative path points — the last `cd` of the command being judged. */
     private val cwd = ThreadLocal<String?>()
@@ -192,9 +194,15 @@ object ShellGuard {
         return RiskAssessment(RiskClass.DESTRUCTIVE, "deletes files under $start", folderOf(start))
     }
 
-    private fun git(args: List<String>): RiskAssessment {
+    private fun git(all: List<String>): RiskAssessment {
+        // `git -C <dir> …` works in <dir>
+        val at = all.indexOf("-C").takeIf { it >= 0 && it + 1 < all.size }
+        val args = at?.let { all.drop(it + 2) } ?: all
+        val repo = resolve(at?.let { all[it + 1] } ?: (cwd.get() ?: WORKSPACE))
         val sub = args.firstOrNull { !it.startsWith("-") } ?: return RiskAssessment.SAFE
         val rest = args.drop(args.indexOf(sub) + 1)
+        // in an app's repository, discarding changes is its Momoding going back in its own work
+        if (sub != "push" && isScratch("$repo/")) return RiskAssessment.SAFE
         return when (sub) {
             "push" -> {
                 val remote = rest.firstOrNull { !it.startsWith("-") && !it.startsWith("+") } ?: "origin"
@@ -352,12 +360,18 @@ object ShellGuard {
         return "/" + parts.joinToString("/")
     }
 
+    /**
+     * Free to delete: scratch space, and what is inside an app's folder — that is Momoding's own
+     * work (the app's code, kept in its git; what the app keeps for the person is not there). The
+     * app itself, removed whole, is the person's and asks.
+     */
     private fun isScratch(path: String): Boolean =
-        scratchPrefixes.any { path.startsWith(it) } || path in setOf("/tmp", "/var/tmp", "/dev/shm")
+        scratchPrefixes.any { path.startsWith(it) } || path in setOf("/tmp", "/var/tmp", "/dev/shm") ||
+            (path.startsWith("$APPS/") && path.removePrefix("$APPS/").contains('/'))
 
     /** The roots nobody deletes in one go. */
     private fun isWholeTree(path: String): Boolean = path in setOf(
-        "/", "/root", "/home", "/etc", "/usr", "/var", "/bin", "/lib", "/opt", "/var/minis", WORKSPACE, SHARED, "/var/minis/skills", "/var/minis/attachments",
+        "/", "/root", "/home", "/etc", "/usr", "/var", "/bin", "/lib", "/opt", "/var/minis", WORKSPACE, SHARED, "/var/minis/skills", "/var/minis/attachments", APPS,
     ) || path == "/*"
 
     /** The folder a standing grant is bound to. */

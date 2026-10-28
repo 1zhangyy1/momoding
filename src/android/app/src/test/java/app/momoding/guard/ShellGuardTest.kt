@@ -134,6 +134,16 @@ class ShellGuardTest {
         }
     }
 
+    @Test fun `inside an app's folder is its Momoding's own work, the app whole is the person's`() {
+        assertFalse(ShellGuard.assess("rm -rf /var/minis/apps/kaipai/_t").needsApproval)
+        assertFalse(ShellGuard.assess("cd /var/minis/apps/kaipai && rm old.js").needsApproval)
+        assertTrue(ShellGuard.assess("rm -rf /var/minis/apps/kaipai").needsApproval)
+        assertTrue(ShellGuard.assess("rm -rf /var/minis/apps").needsApproval)
+        assertFalse(ShellGuard.assess("cd /var/minis/apps/kaipai && git reset --hard HEAD~1").needsApproval)
+        assertFalse(ShellGuard.assess("git -C /var/minis/apps/kaipai checkout -- .").needsApproval)
+        assertTrue(ShellGuard.assess("git reset --hard HEAD~1").needsApproval)
+    }
+
     @Test fun `what only the sandbox could feel is not asked`() {
         for (cmd in listOf("chmod -R 777 build", "dd if=/dev/zero of=/tmp/x bs=1M count=1")) assertFalse(cmd, ShellGuard.assess(cmd).needsApproval)
     }
