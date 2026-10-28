@@ -94,13 +94,6 @@ object RiskText {
 
     private fun warningLabel(context: Context, warning: String): String = when {
         warning.startsWith("wipes ") -> context.getString(R.string.mo_risk_warn_wipes, warning.removePrefix("wipes "))
-        warning == "disk-level operation" -> context.getString(R.string.mo_risk_warn_disk)
-        warning == "writes to a block device" -> context.getString(R.string.mo_risk_warn_disk)
-        warning == "system-level command" -> context.getString(R.string.mo_risk_warn_system)
-        warning == "world-writable permissions" -> context.getString(R.string.mo_risk_warn_perms)
-        warning == "force push" -> context.getString(R.string.mo_risk_warn_force_push)
-        warning == "fork bomb" -> context.getString(R.string.mo_risk_warn_fork_bomb)
-        warning.startsWith("pipes a download") -> context.getString(R.string.mo_risk_warn_pipe_sh)
         else -> warning
     }
 }

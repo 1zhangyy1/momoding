@@ -59,7 +59,7 @@ enum class GuardKind {
 /**
  * The verdict on one call. [target] is the object a standing grant would be bound to — a
  * folder, a host, a recipient — so "always allow for X" means exactly X and nothing wider.
- * [warnings] are the always-ask flags (`rm -rf /`, `curl | sh`, force push): a call that
+ * [warnings] are the always-ask flags (wiping a whole folder of the person's): a call that
  * carries one is never waved through by a grant and offers none.
  */
 data class RiskAssessment(

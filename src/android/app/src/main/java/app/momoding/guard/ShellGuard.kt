@@ -59,17 +59,10 @@ object ShellGuard {
     private val urlRegex = Regex("https?://([^/\\s:'\"]+)", RegexOption.IGNORE_CASE)
     private val hostArg = Regex("^(?:[\\w.-]+@)?([\\w.-]+\\.[a-z]{2,}|\\d{1,3}(?:\\.\\d{1,3}){3}|[\\w-]+)(?::|$)", RegexOption.IGNORE_CASE)
 
-    // Always-ask patterns, whatever else the command looks like.
-    private val warningPatterns: List<Pair<Regex, String>> = listOf(
-        Regex("\\bmkfs\\b|\\bdd\\s+(if|of)=") to "disk-level operation",
-        Regex(">\\s*/dev/(sd|nvme|mmcblk|block)") to "writes to a block device",
-        Regex("\\b(shutdown|reboot|halt|poweroff)\\b") to "system-level command",
-        Regex("\\bchmod\\s+(-R\\s+)?(777|a\\+rwx)\\b|\\bchmod\\s+-R\\s+.*\\s/(\\s|$)") to "world-writable permissions",
-        Regex("\\bgit\\s+push\\b[^;&|]*(--force\\b|\\s-f\\b|--force-with-lease|\\s\\+\\S)") to "force push",
-        Regex(":\\(\\)\\s*\\{\\s*:\\s*\\|\\s*:\\s*&\\s*\\}\\s*;\\s*:") to "fork bomb",
-        Regex("\\bcurl\\b[^|]*\\|\\s*(sudo\\s+)?(ba|z|a|da)?sh\\b|\\bwget\\b[^|]*\\|\\s*(sudo\\s+)?(ba|z|a|da)?sh\\b") to "pipes a download into a shell",
-        Regex("\\bcurl\\b[^|]*\\|\\s*(python3?|perl|node)\\b|\\bwget\\b[^|]*\\|\\s*(python3?|perl|node)\\b") to "pipes a download into an interpreter",
-    )
+    // A download fed straight to a shell or an interpreter installs something, like `apk add`.
+    // What the person is asked about is what reaches their things (their files, what leaves the
+    // phone, money); a command that is only risky to the sandbox is the sandbox's to contain.
+    private val pipedInstall = Regex("\\b(curl|wget)\\b[^|]*\\|\\s*(sudo\\s+)?((ba|z|a|da)?sh|python3?|perl|node)\\b")
 
     // Inline-code reach, for `python -c`, `node -e`, heredocs.
     private val codeDeletes = Regex("\\b(shutil\\.rmtree|os\\.(remove|unlink|rmdir|removedirs)|pathlib\\.[^\\n]*\\.unlink|\\.unlink\\(|fs\\.(rm|rmSync|rmdir|rmdirSync|unlink|unlinkSync)|rimraf|File\\.delete|FileUtils\\.rm)\\b")
@@ -81,12 +74,7 @@ object ShellGuard {
     private fun assess(command: String, depth: Int): RiskAssessment {
         if (depth > 3 || command.isBlank()) return RiskAssessment.SAFE
         var result = RiskAssessment.SAFE
-        val warnings = warningPatterns.filter { it.first.containsMatchIn(command) }.map { it.second }
-        if (warnings.isNotEmpty()) {
-            // A pipe into a shell is an install by shape; the warning makes it ask anyway.
-            val cls = if (warnings.any { it.startsWith("pipes a download") }) RiskClass.INSTALL else RiskClass.DESTRUCTIVE
-            result = RiskAssessment(cls, warnings.joinToString("; "), warnings = warnings)
-        }
+        if (pipedInstall.containsMatchIn(command)) result = RiskAssessment(RiskClass.INSTALL, "installs from a download")
         val outer = cwd.get()
         try {
             for (pipeline in splitPipelines(command)) {
