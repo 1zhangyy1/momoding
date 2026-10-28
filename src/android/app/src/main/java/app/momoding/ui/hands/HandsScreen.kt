@@ -294,7 +294,11 @@ private fun openOverlaySettings(context: Context) = app.momoding.hands.HandsSetu
 @Composable
 private fun ScreenModelPicker(current: String?, onDismiss: () -> Unit, onPick: (String?) -> Unit) {
     val context = LocalContext.current
-    val options = remember { Hands.recommendedScreenModels(context) }
+    val options = remember {
+        // the chosen one is always there to be seen ticked, even when it is off the offered few
+        val offered = Hands.recommendedScreenModels(context)
+        offered + Hands.visionEntries(context).filter { (_, e) -> e.id == current && offered.none { it.second.id == current } }
+    }
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.mo_models_hands_title)) },

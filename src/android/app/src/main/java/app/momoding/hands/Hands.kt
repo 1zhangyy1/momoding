@@ -119,7 +119,11 @@ object Hands {
     fun recommendedScreenModels(context: Context, max: Int = 6): List<Pair<ProviderInstance, ModelEntry>> {
         val all = visionEntries(context)
         val ranked = SCREEN_PREFERENCE.mapNotNull { want -> all.filter { it.second.model.id.contains(want, ignoreCase = true) }.minByOrNull { it.second.model.id.length } }
-        return ranked.distinctBy { app.momoding.providers.AutoSetup.family(it.second.model.id) }.take(max)
+            .distinctBy { app.momoding.providers.AutoSetup.family(it.second.model.id) }
+        if (ranked.size >= 3) return ranked.take(max)
+        // providers off the list (OpenAI, Anthropic…): their own sighted models, newest first, as the chat models page does
+        val more = app.momoding.providers.AutoSetup.ranked(all.map { it.second }).mapNotNull { e -> all.firstOrNull { it.second.id == e.id } }
+        return (ranked + more.filter { m -> ranked.none { it.second.id == m.second.id } }).take(max)
     }
 
     /** No configured model can see the screen: the one sentence that says so, or null when one can. */

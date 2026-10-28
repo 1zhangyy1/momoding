@@ -108,8 +108,10 @@ fun backgroundHint(context: Context) {
 fun currentModelLabel(context: Context): String? {
     val repo = (context.applicationContext as? MinisApp)?.providerRepositoryOrNull ?: return null
     val cfg = repo.config.value
-    val group = cfg.modelGroups.firstOrNull { it.id == cfg.defaultPrimaryGroupId } ?: cfg.modelGroups.firstOrNull() ?: return null
-    val entry = group.memberEntryIds.firstNotNullOfOrNull { id -> cfg.modelEntries.firstOrNull { it.id == id } } ?: return null
+    val group = cfg.modelGroups.firstOrNull { it.id == cfg.defaultPrimaryGroupId } ?: cfg.modelGroups.firstOrNull()
+    // no group: the model the chat falls back to, as on the models page
+    val entry = (if (group != null) group.memberEntryIds.firstNotNullOfOrNull { id -> cfg.modelEntries.firstOrNull { it.id == id } }
+    else repo.lastUsedVisibleEntry() ?: repo.newestProviderNewestTextEntry()) ?: return null
     val inst = cfg.instances.firstOrNull { it.id == entry.providerInstanceId }
     val model = entry.model.displayName.ifBlank { entry.model.id }.substringAfter(": ")
     return listOfNotNull(model, inst?.label?.takeIf { it.isNotBlank() }).joinToString(" · ")
