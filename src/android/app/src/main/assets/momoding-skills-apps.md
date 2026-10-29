@@ -103,6 +103,15 @@ Open `minis://apps/<name>/` (with the trailing slash) in your browser: look at a
 tap through the main flow, run JavaScript to read state, and read `.momoding/log` for errors.
 Use a phone-sized viewport. Hand it over only when it works.
 
+Then check it where it is used: on the phone. `momoding-app look` shows it on the screen and gives
+a picture of it as the person sees it there (with what Momoding shows over it, like a question);
+look at it with `read_image`. `momoding-app tap <x> <y>`, `swipe`, `type "<text>"` use it with a
+finger, in that picture's pixels. The camera, the real keyboard and screen size, the pen button:
+only the phone shows them. What the system itself shows (its permission prompt, a picker, the
+camera app) is not in the picture; when the app stands waiting on the person, its `.momoding/log`
+says what for, and what they answered. Never conclude something cannot work before you have seen
+it on the phone and read the log.
+
 In your browser the app's store is a copy of the person's data (`.momoding/preview.json`, made
 the first time you open it there): fill it, empty it, test freely; theirs is untouched. Delete
 `preview.json` to start the copy over from their current data. `momoding.run` is the same: a

@@ -210,7 +210,8 @@ class AppWeb(private val activity: ComponentActivity, private val app: MoApps.Ap
         val answer = CompletableDeferred<androidx.activity.result.ActivityResult>()
         filesAnswer = answer
         if (runCatching { files.launch(intent) }.isFailure) return null
-        val result = answer.await()
+        val result = MoApps.waiting(app, "the system's ${if (intent == takes.firstOrNull()) "camera" else "file picker"} (not drawn by Momoding: no picture of it)",
+            { answer.await() }, { if (it.resultCode == Activity.RESULT_OK) "came back with a choice" else "came back without one" })
         if (result.resultCode != Activity.RESULT_OK) { shot?.delete(); return null }
         val data = result.data
         val picked = buildList {
@@ -232,8 +233,8 @@ class AppWeb(private val activity: ComponentActivity, private val app: MoApps.Ap
         val answer = CompletableDeferred<Map<String, Boolean>>()
         permissionsAnswer = answer
         permissions.launch(arrayOf(*names))
-        answer.await()
-        return has()
+        return MoApps.waiting(app, "Android's own permission prompt for ${names.joinToString { it.substringAfterLast('.') }} (not drawn by Momoding: no picture of it)",
+            { answer.await(); has() }, { if (it) "allowed it" else "did not allow it" })
     }
 
     companion object {

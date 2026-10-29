@@ -122,6 +122,15 @@ object MoApps {
 
     // ── the app's log, which its Bot reads when something is wrong ───────────
 
+    /**
+     * The app stands still until the person answers [what] (on its screen, or in something the system
+     * shows): the log says so before and after, so its Momoding knows why it waits and what came of it.
+     */
+    suspend fun <T> waiting(app: App, what: String, answer: suspend () -> T, said: (T) -> String): T {
+        log(app, "wait", "waiting for the person: $what")
+        return answer().also { log(app, "wait", "the person: ${said(it)}") }
+    }
+
     fun log(app: App, level: String, line: String) {
         val f = File(app.platform, "log")
         runCatching {

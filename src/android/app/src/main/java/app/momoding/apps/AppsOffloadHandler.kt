@@ -9,7 +9,11 @@ import com.openminis.app.sandbox.NativeOffloadHandler
 import com.openminis.app.sandbox.NativeOffloadRequest
 import com.openminis.app.sandbox.NativeOffloadResult
 import com.openminis.app.sandbox.offload.OffloadArgs
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.CountDownLatch
@@ -25,6 +29,7 @@ import java.util.concurrent.TimeUnit
  *     momoding-app progress "<what is there now>"  (from an app's Momoding, while building) the same, early
  *     momoding-app done "<what changed>" (from an app's Momoding) one line in the chat that asked for it
  *     momoding-app list
+ *     momoding-app look | tap <x> <y> | swipe <x1> <y1> <x2> <y2> | type "<text>"   (an app's Momoding) its app on the phone (AppScreen)
  */
 class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
 
@@ -41,6 +46,7 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
                 "done", "progress" -> done(args, request)
                 "suggest" -> suggest(args, request)
                 "list" -> list()
+                "look", "tap", "swipe", "type" -> screen(sub, args, request)
                 else -> NativeOffloadResult(2, "momoding-app: unknown subcommand '$sub'\n$HELP")
             }
         }.getOrElse { NativeOffloadResult(2, "momoding-app: ${it.message}\n") }
@@ -108,6 +114,54 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
         return ok(JSONObject().put("suggested", app.name).put("note", "A dot shows on the app until the person opens your chat."))
     }
 
+    /** Its app on the phone as the person sees it, and a finger on it: for checking the work where it is used. */
+    private fun screen(sub: String, args: OffloadArgs, request: NativeOffloadRequest): NativeOffloadResult {
+        val mine = request.sessionId?.let { MoApps.ofSession(context, it) }
+        // an app's Momoding sees its own app; Momoding itself names the one it means
+        val first = args.positional.getOrNull(1)
+        val other = first?.let { MoApps.get(context, it) }
+        if (mine != null && other != null && other.name != mine.name) throw IllegalArgumentException("an app's Momoding sees its own app only (${mine.name})")
+        val app = mine ?: other ?: throw IllegalArgumentException("which app? momoding-app $sub <name> … (momoding-app list)")
+        val rest = args.positional.drop(if (first == app.name) 2 else 1)
+        fun n(i: Int) = rest.getOrNull(i)?.toFloatOrNull() ?: throw IllegalArgumentException("momoding-app $sub: pixel numbers as in the picture from look\n$HELP")
+        return runBlocking {
+            val activity = shown(app)
+            when (sub) {
+                "look" -> {
+                    val file = java.io.File(app.platform, "look.png")
+                    val picture = withContext(Dispatchers.Main) { AppScreen.picture(activity) }
+                    file.outputStream().use { picture.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+                    ok(JSONObject().put("picture", "${app.linuxDir}/.momoding/look.png").put("width", picture.width).put("height", picture.height)
+                        .put("note", "Look at it with read_image. tap / swipe take its pixels. What the system shows (its permission prompt, a picker, the camera app) is not in it: the log says when the app waits on one."))
+                }
+                "tap" -> { withContext(Dispatchers.Main) { AppScreen.touch(activity, n(0), n(1), n(0), n(1), args.get("ms")?.toLongOrNull() ?: 60) }; settled() }
+                "swipe" -> { withContext(Dispatchers.Main) { AppScreen.touch(activity, n(0), n(1), n(2), n(3), args.get("ms")?.toLongOrNull() ?: 300) }; settled() }
+                else -> {
+                    val text = rest.joinToString(" ")
+                    require(text.isNotEmpty()) { "momoding-app type \"<text>\"" }
+                    val typed = withContext(Dispatchers.Main) { AppScreen.type(activity, text) }
+                    if (!typed) throw IllegalStateException("nothing on the page has the focus: tap the field first")
+                    settled()
+                }
+            }
+        }
+    }
+
+    /** The app on the screen, opened (and given time to draw) if it is not. */
+    private suspend fun shown(app: MoApps.App): MoAppActivity {
+        AppScreen.of(app.name)?.let { return it }
+        if (!app.index.isFile) throw IllegalStateException("${app.linuxDir}/index.html does not exist yet")
+        withContext(Dispatchers.Main) { context.startActivity(MoAppActivity.intent(context, app.name)) }
+        val activity = withTimeoutOrNull(8000) { while (AppScreen.of(app.name) == null) delay(100); AppScreen.of(app.name) }
+            ?: throw IllegalStateException("${app.name} did not come up on the screen")
+        withTimeoutOrNull(8000) { while (withContext(Dispatchers.Main) { activity.page()?.progress ?: 100 } < 100) delay(100) }
+        delay(SETTLE)
+        return activity
+    }
+
+    /** What the touch started has had a moment to show. */
+    private suspend fun settled(): NativeOffloadResult { delay(SETTLE); return ok(JSONObject().put("done", true).put("note", "look shows what it did")) }
+
     private fun list(): NativeOffloadResult = ok(JSONObject().put("apps", JSONArray().apply {
         MoApps.list(context).forEach { put(JSONObject().put("name", it.name).put("title", it.title).put("folder", it.linuxDir).put("ready", it.index.isFile)) }
     }))
@@ -125,6 +179,7 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
     private fun ok(o: JSONObject) = NativeOffloadResult(0, o.toString(2) + "\n")
 
     companion object {
+        private const val SETTLE = 700L
         private val HELP = """
             momoding-app — Momoding Apps: small apps on the home screen, each with its own Momoding.
 
@@ -141,6 +196,13 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
               done "<what changed>" from an app's own Momoding: one line in the chat that asked for it
               suggest "<improvement>" from an app's own Momoding after a review: a dot on the app
               list                 the apps
+
+            An app's own Momoding, checking its work on the phone as the person sees it (opens it if
+            it is not on the screen; Momoding itself names the app: look <name>):
+              look                 a picture of it now, with what Momoding shows over it
+              tap <x> <y> [--ms N] a finger, in the picture's pixels (--ms 800: press and hold)
+              swipe <x1> <y1> <x2> <y2> [--ms N]
+              type "<text>"        typed where the page's focus is (tap the field first)
         """.trimIndent() + "\n"
     }
 }

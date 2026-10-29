@@ -52,6 +52,15 @@ class MoAppActivity : ComponentActivity() {
     private var pen: TextView? = null
     private var deliver: ((List<org.json.JSONObject>) -> Unit)? = null
     private var troubleOffered = false
+    /** What Momoding shows over the page (asks, approvals), newest last. */
+    private val dialogs = mutableListOf<AlertDialog>()
+
+    /** Momoding's windows over the page now, bottom to top (AppScreen). */
+    internal fun over(): List<AlertDialog> = dialogs.filter { it.isShowing }
+
+    internal fun page(): WebView? = web
+
+    private fun AlertDialog.Builder.showOver(): AlertDialog = show().also { d -> dialogs.removeAll { !it.isShowing }; dialogs += d }
 
     @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -134,7 +143,7 @@ class MoAppActivity : ComponentActivity() {
                     .setPositiveButton(R.string.mo_risk_allow_once) { _, _ -> RiskGate.decide(r.id, RiskDecision.ALLOW_ONCE) }
                     .setNegativeButton(R.string.mo_risk_deny) { _, _ -> RiskGate.decide(r.id, RiskDecision.DENY) }
                     .setOnCancelListener { RiskGate.decide(r.id, RiskDecision.DENY) }
-                    .show()
+                    .showOver()
             }
         }
 
@@ -151,7 +160,7 @@ class MoAppActivity : ComponentActivity() {
                     .setPositiveButton(R.string.mo_app_cap_allow) { _, _ -> q.answer(true) }
                     .setNegativeButton(R.string.mo_app_cap_deny) { _, _ -> q.answer(false) }
                     .setOnCancelListener { q.answer(false) }
-                    .show()
+                    .showOver()
             }
         }
 
@@ -204,18 +213,24 @@ class MoAppActivity : ComponentActivity() {
                     AppChat.open(this, app, "")
                 }
                 .setNegativeButton(android.R.string.cancel, null)
-                .show()
+                .showOver()
         }
     }
 
     override fun onResume() {
         super.onResume()
+        AppScreen.showing(app.name, this)
         // a dot on the pen when the app's Momoding has said something the person has not seen
         lifecycleScope.launch {
             val news = runCatching { AppBots.hasNews(this@MoAppActivity, app) }.getOrDefault(false)
             pen?.text = if (news) "✎•" else "✎"
             pen?.alpha = if (news) 0.95f else 0.6f
         }
+    }
+
+    override fun onPause() {
+        if (AppScreen.of(app.name) === this) AppScreen.showing(app.name, null)
+        super.onPause()
     }
 
     override fun onDestroy() {

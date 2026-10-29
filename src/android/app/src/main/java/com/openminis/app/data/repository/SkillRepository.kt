@@ -1233,13 +1233,16 @@ class SkillRepository(private val context: Context) {
 
     private fun installBundledSkills() {
         installBundledSkill("skill-creator", "2.0.0", SKILL_CREATOR_CONTENT)
+        // momoding's own skills are refreshed whenever the app is updated, like about-momoding: what
+        // they say is always the version that is running, with no version number to remember
+        val installed = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime.toString() }.getOrDefault("0")
         // momoding: the sandbox know-how that used to sit in every system prompt (files, BusyBox,
         // Python, minis:// links…), loaded only when a task needs it
         runCatching { context.assets.open("momoding-skills-files-and-scripts.md").bufferedReader().readText() }
-            .getOrNull()?.let { installBundledSkill("files-and-scripts", "1.0.0", it) }
+            .getOrNull()?.let { installBundledSkill("files-and-scripts", installed, it) }
         // momoding: how a Momoding App works, for the Momoding that builds it (app/momoding/apps)
         runCatching { context.assets.open("momoding-skills-apps.md").bufferedReader().readText() }
-            .getOrNull()?.let { installBundledSkill("momoding-apps", "1.1.2", it) }
+            .getOrNull()?.let { installBundledSkill("momoding-apps", installed, it) }
         installSelfSkill()
     }
 

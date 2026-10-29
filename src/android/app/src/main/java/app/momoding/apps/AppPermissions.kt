@@ -80,7 +80,9 @@ object AppPermissions {
             granted(app).opt(command)?.let { return@withLock it == true }
             val request = Request(app, command)
             _pending.value = request
-            val allowed = withTimeoutOrNull(60_000) { request.answer.await() }
+            val allowed = MoApps.waiting(app, "may this app use $command? (asked on its screen)",
+                { withTimeoutOrNull(60_000) { request.answer.await() } },
+                { when (it) { true -> "allowed it"; false -> "did not allow it"; null -> "did not answer within a minute (taken as no)" } })
             _pending.value = null
             if (allowed != null) record(app, command, allowed)
             allowed == true
