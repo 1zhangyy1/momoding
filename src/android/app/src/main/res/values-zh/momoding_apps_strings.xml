@@ -9,6 +9,9 @@
     <string name="mo_app_from_momoding">来自 Momoding</string>
     <string name="mo_app_chat_status">做这个 App，也改它</string>
     <string name="mo_app_cap_ask">%1$s 想用你的「%2$s」。</string>
+    <string name="mo_app_key_ask">%1$s 需要一把钥匙：%2$s</string>
+    <string name="mo_app_key_why">%1$s\n\n它存在 Momoding 里，你所有的 App 都能借用，只会发给 %2$s，App 自己看不到。</string>
+    <string name="mo_app_key_save">保存</string>
     <string name="mo_app_cap_allow">允许</string>
     <string name="mo_app_cap_deny">不允许</string>
     <string name="mo_app_from_app">来自 App</string>

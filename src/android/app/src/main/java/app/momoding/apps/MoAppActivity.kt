@@ -164,6 +164,29 @@ class MoAppActivity : ComponentActivity() {
             }
         }
 
+        // a key Momoding lacks, typed into Momoding's own field: the page never has it (AppKeys)
+        lifecycleScope.launch {
+            var shown: AlertDialog? = null
+            AppKeys.pending.collect { q ->
+                shown?.dismiss()
+                shown = null
+                if (q == null || q.app.name != app.name) return@collect
+                val field = android.widget.EditText(this@MoAppActivity).apply {
+                    inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+                    hint = q.name
+                }
+                val pad = (20 * resources.displayMetrics.density).toInt()
+                shown = AlertDialog.Builder(this@MoAppActivity)
+                    .setTitle(getString(R.string.mo_app_key_ask, app.title, q.name))
+                    .setMessage(getString(R.string.mo_app_key_why, q.why.ifEmpty { q.name }, q.site))
+                    .setView(FrameLayout(this@MoAppActivity).apply { setPadding(pad, 0, pad, 0); addView(field) })
+                    .setPositiveButton(R.string.mo_app_key_save) { _, _ -> q.answer(field.text.toString()) }
+                    .setNegativeButton(android.R.string.cancel) { _, _ -> q.answer(null) }
+                    .setOnCancelListener { q.answer(null) }
+                    .showOver()
+            }
+        }
+
         AppBots.opened(this, app)
         AppShare.publish(this, app)
         // what arrives while it is open comes straight in (AppEvents)

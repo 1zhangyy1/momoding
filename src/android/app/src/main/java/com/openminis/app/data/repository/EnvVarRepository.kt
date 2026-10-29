@@ -36,6 +36,8 @@ class EnvVarRepository(private val context: Context) {
          */
         val note: String = "",
         val createdAt: Long = System.currentTimeMillis(),
+        /** momoding: the one site an app may send it to (app/momoding/apps/AppKeys); empty: the sandbox's only. */
+        val host: String = "",
     )
 
     private val _entries = MutableStateFlow<List<EnvVarEntry>>(emptyList())
@@ -70,12 +72,12 @@ class EnvVarRepository(private val context: Context) {
 
     // -- CRUD --
 
-    fun add(key: String, value: String, note: String = ""): Boolean {
+    fun add(key: String, value: String, note: String = "", host: String = ""): Boolean {
         val normalizedKey = key.trim().uppercase()
         if (!isValidKey(normalizedKey)) return false
         if (isDuplicateKey(normalizedKey)) return false
 
-        val entry = EnvVarEntry(key = normalizedKey, note = note.trim())
+        val entry = EnvVarEntry(key = normalizedKey, note = note.trim(), host = host.trim().lowercase())
         _entries.value = _entries.value + entry
         encryptedPrefs.edit().putString(normalizedKey, sanitizeValue(value)).apply()
         saveMetadata()
@@ -144,6 +146,7 @@ class EnvVarRepository(private val context: Context) {
                 obj.put("id", entry.id)
                 obj.put("key", entry.key)
                 if (entry.note.isNotEmpty()) obj.put("note", entry.note)
+                if (entry.host.isNotEmpty()) obj.put("host", entry.host)
                 obj.put("createdAt", entry.createdAt)
                 array.put(obj)
             }
@@ -165,6 +168,7 @@ class EnvVarRepository(private val context: Context) {
                     key = obj.optString("key", ""),
                     note = obj.optString("note", ""),
                     createdAt = obj.optLong("createdAt", 0),
+                    host = obj.optString("host", ""),
                 ))
             }
             _entries.value = entries

@@ -60,6 +60,13 @@ On the phone and in your browser alike, every page of the app has:
   reply text, or a parsed value with `json: true`; `images` (data URLs) go to a model that can
   see them. It is a plain model call, not you.
 - `await momoding.http(url, {method, headers, body})` — `{status, text}`; public addresses only.
+  When the app needs a service (hearing speech, making pictures, any web API), write the code
+  for it yourself, and borrow the key: put `{{NAME}}` where the key goes (a header or the URL),
+  and Momoding fills it in on the way to that key's own site only; nothing of the app ever sees
+  it. `await momoding.keys()` lists the keys Momoding holds (`name`, `about`, `site`): the model
+  services it already uses are there. When none fits, `await momoding.key("NAME", {site, why})`
+  asks the person once, in Momoding's own field over the app, in your plain words for `why`;
+  every app can borrow it after. Make the app work without it first.
 - `momoding.store.get(key)`, `.set(key, value)`, `.remove(key)`, `.all()` — what the app keeps,
   as JSON, synchronous. Keep the app's data here, not in localStorage: it survives every
   change you make, and you can read it.

@@ -33,7 +33,8 @@ import java.util.Locale
  *
  *     momoding.run("android-calendar list --next 2")   a phone command, as the agent runs them
  *     momoding.ask(prompt, {system, json})             the person's model, as a function
- *     momoding.http(url, {method, headers, body})      the web: public addresses, no CORS
+ *     momoding.http(url, {method, headers, body})      the web: public addresses, no CORS; {{NAME}} borrows a key (AppKeys)
+ *     momoding.keys() / momoding.key(name, {site, why}) the keys it may borrow; asking the person for one
  *     momoding.store.get/set/remove/all                what the app keeps; its Bot can read it
  *     momoding.chat(text)                              the app's own Momoding, to change it
  *
@@ -127,6 +128,8 @@ class AppBridge(private val context: Context, private val webView: WebView, priv
                     "ask" -> ask(args.optString(0), args.optJSONObject(1) ?: JSONObject())
                     "run" -> run(app, args.optString(0))
                     "http" -> http(args.optString(0), args.optJSONObject(1) ?: JSONObject())
+                    "keys" -> AppKeys.list(context)
+                    "key" -> key(app, args.optString(0), args.optJSONObject(1) ?: JSONObject())
                     "tell" -> tell(app, args.optString(0))
                     else -> throw IllegalArgumentException("momoding.$method does not exist")
                 }
@@ -203,18 +206,31 @@ class AppBridge(private val context: Context, private val webView: WebView, priv
         return "sent"
     }
 
+    /** Whether Momoding has the key [name]; if not, the person is asked for it on the app's screen (never in a check). */
+    private suspend fun key(app: MoApps.App, name: String, opts: JSONObject): Boolean {
+        if (AppKeys.has(context, name) || mode != Mode.SCREEN) {
+            if (preview) MoApps.log(app, "log preview", "momoding.key(${JSONObject.quote(name)}) — on the phone the person is asked for it when Momoding lacks it")
+            return AppKeys.has(context, name)
+        }
+        return AppKeys.ask(context, app, name, opts.optString("site"), opts.optString("why"))
+    }
+
     private fun http(url: String, opts: JSONObject): JSONObject {
         val method = opts.optString("method", "GET").uppercase()
-        val b = Request.Builder().url(url)
-        val headers = opts.optJSONObject("headers")
-        headers?.keys()?.forEach { k -> b.header(k, headers.getString(k)) }
+        val given = opts.optJSONObject("headers")?.let { h -> h.keys().asSequence().associateWith { h.getString(it) } }.orEmpty()
+        // a borrowed key goes in here, on the way out, and only to its own site
+        val (to, headers) = AppKeys.fill(context, url, given)
+        val b = Request.Builder().url(to)
+        headers.forEach { (k, v) -> b.header(k, v) }
         if (method != "GET" && method != "HEAD") {
             val body = opts.opt("body")?.let { if (it is String) it else it.toString() }.orEmpty()
-            b.method(method, body.toRequestBody(headers?.optString("Content-Type")?.toMediaTypeOrNull()))
+            b.method(method, body.toRequestBody(headers.entries.firstOrNull { it.key.equals("Content-Type", true) }?.value?.toMediaTypeOrNull()))
         }
-        app.momoding.web.WebLookup.client.newCall(b.build()).execute().use { r ->
+        // with a key in it, a redirect is not followed: it could lead the key elsewhere
+        val client = app.momoding.web.WebLookup.client.let { c -> if (to == url && headers == given) c else c.newBuilder().followRedirects(false).followSslRedirects(false).build() }
+        client.newCall(b.build()).execute().use { r ->
             val text = r.body?.source()?.let { s -> s.request(MAX_HTTP); s.buffer.readUtf8(minOf(s.buffer.size, MAX_HTTP)) }.orEmpty()
-            return JSONObject().put("status", r.code).put("text", text).put("url", r.request.url.toString())
+            return JSONObject().put("status", r.code).put("text", text).put("url", url)
         }
     }
 
@@ -287,6 +303,8 @@ class AppBridge(private val context: Context, private val webView: WebView, priv
     ask: (prompt, options = {}) => call('ask', String(prompt), options),
     run: command => call('run', String(command)),
     http: (url, options = {}) => call('http', String(url), options),
+    keys: () => call('keys'),
+    key: (name, options = {}) => call('key', String(name), options),
     chat: (text = '') => N.chat(T, String(text)),
     tell: text => call('tell', String(text)),
     on: (type, handler) => { (handlers[type] = handlers[type] || []).push(handler) },

@@ -3020,6 +3020,9 @@ class ProviderRepository(private val context: Context) {
         }
     }
 
+    /** The instance's API address (momoding: an app borrowing its key sends it there only, AppKeys). */
+    fun apiBaseURL(instance: ProviderInstance): String = modelsDevBaseURL(instance)
+
     /** Resolve the models.dev lookup base URL for an instance. */
     private fun modelsDevBaseURL(instance: ProviderInstance): String {
         instance.effectiveBaseURL?.let { return it }
