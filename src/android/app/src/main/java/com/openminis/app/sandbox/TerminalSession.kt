@@ -134,7 +134,7 @@ class TerminalSession(private val context: Context) {
                 PRootKernel.boot(context)
 
                 if (sessionId != null) {
-                    ExecutionCoordinator.envVarRepository?.allAsDict()?.let { envVars ->
+                    ExecutionCoordinator.envVarRepository?.sandboxDict()?.let { envVars ->
                         PRootKernel.customEnvironment.putAll(envVars)
                     }
                 }
@@ -160,7 +160,7 @@ class TerminalSession(private val context: Context) {
                 // and the system timezone changed since.
                 envMap["TZ"] = PRootKernel.posixTz()
                 for ((k, v) in PRootKernel.customEnvironment) envMap[k] = v
-                ExecutionCoordinator.envVarRepository?.allAsDict()?.forEach { (k, v) -> envMap[k] = v }
+                ExecutionCoordinator.envVarRepository?.sandboxDict()?.forEach { (k, v) -> envMap[k] = v }
 
                 // [T-android-seccomp-selfheal / GH#186] Applied last so nothing
                 // above can clobber it once this device is known to need it.

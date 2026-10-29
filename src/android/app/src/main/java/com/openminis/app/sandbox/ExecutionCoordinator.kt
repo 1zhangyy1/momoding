@@ -70,7 +70,7 @@ object ExecutionCoordinator {
     ): CommandResult {
         val startTime = System.currentTimeMillis()
         val bindMounts = buildSessionBindMounts(fsSessionId ?: sessionId)
-        val envVars = envVarRepository?.allAsDict() ?: emptyMap()
+        val envVars = envVarRepository?.sandboxDict() ?: emptyMap()
 
         suspend fun attempt(noSeccomp: Boolean): Pair<String, Int> {
             val shell = FreshProcessShell(
@@ -380,7 +380,7 @@ object ExecutionCoordinator {
             // command. Before that, a cold-start shell death between here and
             // executeCommand silently dropped the whole environment and the
             // user's first tool call ran bare.
-            val envVars = envVarRepository?.allAsDict() ?: emptyMap()
+            val envVars = envVarRepository?.sandboxDict() ?: emptyMap()
             val previousKeys = lastInjectedKeys[lease.key] ?: emptySet()
             if (envVars.isNotEmpty() || previousKeys.isNotEmpty()) {
                 shell.applyEnvironment(envVars, previousKeys = previousKeys)

@@ -122,12 +122,17 @@ class EnvVarRepository(private val context: Context) {
     fun getValue(key: String): String? = encryptedPrefs.getString(key, null)
 
     /**
-     * Returns all env vars as a Map<String, String> for sandbox injection.
+     * Returns all env vars as a Map<String, String> (what output is redacted of).
      * Reads directly from storage to be thread-safe.
      */
-    fun allAsDict(): Map<String, String> {
+    fun allAsDict(): Map<String, String> = dictOf(_entries.value)
+
+    /** momoding: what the sandbox gets. A key bound to a site is lent to apps only (AppKeys), never read in the shell. */
+    fun sandboxDict(): Map<String, String> = dictOf(_entries.value.filter { it.host.isEmpty() })
+
+    private fun dictOf(entries: List<EnvVarEntry>): Map<String, String> {
         val result = mutableMapOf<String, String>()
-        for (entry in _entries.value) {
+        for (entry in entries) {
             val value = encryptedPrefs.getString(entry.key, null)
             if (value != null) {
                 result[entry.key] = value

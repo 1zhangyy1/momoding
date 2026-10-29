@@ -53,6 +53,7 @@ object AppKeys {
         if (named.isEmpty()) return url to headers
         val keys = all(context).associateBy { it.name }
         val to = host(url)
+        if (!url.startsWith("https://", ignoreCase = true)) throw IllegalStateException("a key goes over https only")
         val values = named.associateWith { n ->
             val k = keys[n] ?: throw IllegalStateException("no key called $n: momoding.keys() lists them; momoding.key(\"$n\", {site, why}) asks the person")
             if (to != k.host && !to.endsWith("." + k.host)) throw IllegalStateException("$n goes to ${k.host} only, not $to")
