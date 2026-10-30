@@ -39,8 +39,10 @@ class RiskApprovalNotifier(
         val bot = app.momoding.apps.BotStatus.botOf(context, request.sessionId)
         if (app.momoding.apps.BotStatus.quiet(context, bot)) return false
         val name = app.momoding.apps.BotStatus.name(context, bot)
-        val title = RiskText.title(context, request, name)
-        val body = RiskText.description(context, request, name) + "\n" + request.preview.lines().first().take(120)
+        // in the app's language, not the phone's
+        val ui = com.openminis.app.i18n.LocaleWrap.uiContext(context)
+        val title = RiskText.title(ui, request, name)
+        val body = RiskText.description(ui, request, name) + "\n" + request.preview.lines().first().take(120)
 
         val open = PendingIntent.getActivity(
             context, request.id.hashCode(),
@@ -64,8 +66,8 @@ class RiskApprovalNotifier(
             .setContentText(body.lines().first())
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setContentIntent(open)
-            .addAction(0, context.getString(R.string.mo_risk_allow_once), action(RiskDecision.ALLOW_ONCE, 1))
-            .addAction(0, context.getString(R.string.mo_risk_deny), action(RiskDecision.DENY, 2))
+            .addAction(0, ui.getString(R.string.mo_risk_allow_once), action(RiskDecision.ALLOW_ONCE, 1))
+            .addAction(0, ui.getString(R.string.mo_risk_deny), action(RiskDecision.DENY, 2))
             .setAutoCancel(true)
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -92,9 +94,10 @@ class RiskApprovalNotifier(
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = ContextCompat.getSystemService(context, NotificationManager::class.java) ?: return
         if (manager.getNotificationChannel(CHANNEL_ID) != null) return
+        val ui = com.openminis.app.i18n.LocaleWrap.uiContext(context)
         manager.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, context.getString(R.string.mo_risk_channel_name), NotificationManager.IMPORTANCE_HIGH).apply {
-                description = context.getString(R.string.mo_risk_channel_description)
+            NotificationChannel(CHANNEL_ID, ui.getString(R.string.mo_risk_channel_name), NotificationManager.IMPORTANCE_HIGH).apply {
+                description = ui.getString(R.string.mo_risk_channel_description)
                 setShowBadge(true)
             },
         )
