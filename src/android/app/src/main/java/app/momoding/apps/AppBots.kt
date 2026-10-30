@@ -5,11 +5,13 @@ import app.momoding.home.MainChat
 import com.openminis.app.MinisApp
 import com.openminis.app.debug.HeadlessChatRunner
 import com.openminis.app.logging.AppLogger
+import com.openminis.app.service.SessionActivityTracker
 import com.openminis.app.ui.chat.ChatViewModelStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -44,23 +46,39 @@ object AppBots {
         val repo = repo(context)
         val session = repo.createSession(modelId = "", title = app.title)
         repo.dao.updateSource(session.id, SOURCE_PREFIX + app.name)
-        app.setBot(session.id, askedIn)
+        app.setBot(session.id, null)
         tell(context, app, brief, by = askedIn)
         return session.id
     }
 
     /**
      * Who handed each Bot the work it is on (Bot's chat → the chat that told it): where its result
-     * goes, where its questions for the person show, and what stopping that chat stops too.
+     * goes and where its questions for the person show, until that work is done. Kept in bot.json
+     * (`askedIn`), so it outlives the process; this is its cache.
      */
     private val handedBy = java.util.concurrent.ConcurrentHashMap<String, String>()
 
-    fun handedBy(botSession: String): String? = handedBy[botSession]
+    fun handedBy(context: Context, botSession: String): String? = handedBy.getOrPut(botSession) {
+        MoApps.ofSession(context, botSession)?.bot()?.optString("askedIn").orEmpty()
+    }.ifBlank { null }
+
+    private fun setHandedBy(app: MoApps.App, sid: String, by: String?) {
+        app.setBot(sid, by)
+        handedBy[sid] = by.orEmpty()
+    }
+
+    /** What a stop in a chat reaches: the Bots it handed work to in the turn still running (asker → Bots). */
+    private val handedThisTurn = java.util.concurrent.ConcurrentHashMap<String, MutableSet<String>>()
 
     /** A message for the Bot; it answers on its own turn, in its own chat. [by]: the chat that hands it work. */
     fun tell(context: Context, app: MoApps.App, text: String, from: From = From.MOMODING, by: String? = null) {
         val sid = app.botSession ?: return
-        if (by != null && by != sid) handedBy[sid] = by
+        if (by != null && by != sid) {
+            setHandedBy(app, sid, by)
+            handedThisTurn.getOrPut(by) { java.util.concurrent.ConcurrentHashMap.newKeySet() }.add(sid)
+            // once the asker's turn is over, stopping it later no longer reaches this Bot
+            scope.launch { SessionActivityTracker.activeSessions.first { by !in it }; handedThisTurn[by]?.remove(sid) }
+        }
         scope.launch {
             runCatching {
                 HeadlessChatRunner.prompt(context.applicationContext, sid, from.cue?.let { "$it $text" } ?: text, wait = false, timeoutMs = 30 * 60_000L)
@@ -68,10 +86,10 @@ object AppBots {
         }
     }
 
-    /** Stopping [session] stops the Bots it handed work to that are still at it. */
+    /** Stopping [session] stops the Bots it handed work to in this turn that are still at it. */
     fun stopHandedBy(session: String) {
-        handedBy.filterValues { it == session }.keys
-            .filter { it in com.openminis.app.service.SessionActivityTracker.activeSessions.value }
+        handedThisTurn.remove(session).orEmpty()
+            .filter { it in SessionActivityTracker.activeSessions.value }
             .forEach { ChatViewModelStore.existing(it)?.cancelStream() }
     }
 
@@ -85,7 +103,8 @@ object AppBots {
         val line = text.trim().let { if (it.startsWith(app.title)) it else "${app.title}：$it" }
         val body = "$line\n[$openLabel](" + (if (app.hasApp) "minis://apps/${app.name}" else "minis://session/$sid") + ")"
         scope.launch {
-            val target = handedBy[sid]?.takeIf { repo(context).getSession(it) != null } ?: MainChat.resolve(context, repo(context))
+            val target = handedBy(context, sid)?.takeIf { repo(context).getSession(it) != null } ?: MainChat.resolve(context, repo(context))
+            setHandedBy(app, sid, null) // the work is done: what it says next is its own
             repeat(600) {
                 val vm = ChatViewModelStore.existing(target)
                 if (vm == null || !vm.isStreaming.value) {

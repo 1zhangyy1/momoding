@@ -73,8 +73,9 @@ import app.momoding.ui.Design
 @Composable
 fun RiskApprovalHost(sessionId: String) {
     val open by RiskGate.open.collectAsState()
+    val context = LocalContext.current
     // this chat's own, or one of a Momoding this chat handed work to: questions come to where the person asked
-    val own = open.firstOrNull { it.sessionId == sessionId || app.momoding.apps.AppBots.handedBy(it.sessionId) == sessionId }
+    val own = open.firstOrNull { it.sessionId == sessionId || app.momoding.apps.AppBots.handedBy(context, it.sessionId) == sessionId }
     val request = own ?: open.firstOrNull()
     val mine = own != null
     // nothing waits: another Momoding that has just done something for the person says so here
@@ -94,7 +95,8 @@ fun RiskApprovalHost(sessionId: String) {
 @Composable
 fun RiskScrim(sessionId: String) {
     val open by RiskGate.open.collectAsState()
-    val visible = open.any { it.sessionId == sessionId || app.momoding.apps.AppBots.handedBy(it.sessionId) == sessionId }
+    val context = LocalContext.current
+    val visible = open.any { it.sessionId == sessionId || app.momoding.apps.AppBots.handedBy(context, it.sessionId) == sessionId }
     AnimatedVisibility(visible = visible, enter = fadeIn(tween(220)), exit = fadeOut(tween(160))) {
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.28f)).clickable(enabled = false) {})
     }

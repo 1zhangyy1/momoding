@@ -296,6 +296,13 @@ class MoAppActivity : ComponentActivity() {
             return runCatching { ShortcutManagerCompat.requestPinShortcut(context, shortcut(context, app), null) }.getOrDefault(false)
         }
 
+        /** After a rename: a pinned icon and the share entry take the new name. */
+        fun relabel(context: Context, app: MoApps.App) {
+            val pinned = ShortcutManagerCompat.getShortcuts(context, ShortcutManagerCompat.FLAG_MATCH_PINNED).any { it.id == shortcutId(app) }
+            if (pinned) runCatching { ShortcutManagerCompat.updateShortcuts(context, listOf(shortcut(context, app))) }
+            AppShare.publish(context, app)
+        }
+
         private fun shortcutId(app: MoApps.App) = "momoding_app_${app.name}"
 
         private fun shortcut(context: Context, app: MoApps.App) = ShortcutInfoCompat.Builder(context, shortcutId(app))

@@ -196,6 +196,7 @@ class AppsListActivity : ComponentActivity() {
             .setPositiveButton(android.R.string.ok) { _, _ ->
                 val title = field.text.toString().trim().ifEmpty { return@setPositiveButton }
                 MoApps.rename(app, title)
+                MoAppActivity.relabel(this, app) // its home-screen icon and share entry say the new name
                 background.launch { runCatching { (application as MinisApp).chatRepository.updateSessionTitle(session, title) }; BotStatus.touch() }
             }
             .setNegativeButton(android.R.string.cancel, null)
@@ -226,7 +227,10 @@ class AppsListActivity : ComponentActivity() {
 
     private suspend fun removeBot(app: MoApps.App, session: String) {
         unpin(app)
-        runCatching { (application as MinisApp).chatRepository.deleteSession(session) }
+        // the way app code deletes a chat: its work stops first, then its rows and files go
+        runCatching { com.openminis.app.data.session.SessionDeleter.deleteTree(this, (application as MinisApp).chatRepository, session, "bot-deleted") }
+        runCatching { com.openminis.app.scheduled.ScheduledTaskManager(this).let { m -> m.list().filter { it.targetMode.sessionIdOrNull == session }.forEach { m.delete(it.id) } } }
+        BotStatus.setQuiet(this, session, false)
         MoApps.remove(app)
         AppWidget.refresh(this, app)
     }

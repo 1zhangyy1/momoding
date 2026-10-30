@@ -14,7 +14,7 @@
     <string name="mo_bot_open_chat">Open chat</string>
     <string name="mo_bot_rename">Rename</string>
     <string name="mo_bot_notify">Notifications</string>
-    <string name="mo_bot_notify_sub">When it is done, or waiting for you</string>
+    <string name="mo_bot_notify_sub">When it has done something</string>
     <string name="mo_bot_app">App</string>
     <string name="mo_bot_delete_app">Delete app</string>
     <string name="mo_bot_app_deleted">Deleted %1$s’s app</string>

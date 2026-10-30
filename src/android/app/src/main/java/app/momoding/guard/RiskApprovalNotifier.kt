@@ -35,9 +35,9 @@ class RiskApprovalNotifier(
         val nm = NotificationManagerCompat.from(context)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !nm.areNotificationsEnabled()) return false
 
-        // the Momoding that asks, by its name; a silenced one waits in its chat without a notice
+        // the Momoding that asks, by its name. Silencing a Bot quiets its news, never its questions:
+        // unanswered, a question times out as a no
         val bot = app.momoding.apps.BotStatus.botOf(context, request.sessionId)
-        if (app.momoding.apps.BotStatus.quiet(context, bot)) return false
         val name = app.momoding.apps.BotStatus.name(context, bot)
         // in the app's language, not the phone's
         val ui = com.openminis.app.i18n.LocaleWrap.uiContext(context)

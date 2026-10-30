@@ -14,7 +14,7 @@
     <string name="mo_bot_open_chat">打開對話</string>
     <string name="mo_bot_rename">改名</string>
     <string name="mo_bot_notify">通知</string>
-    <string name="mo_bot_notify_sub">做完了、在等你時告訴你</string>
+    <string name="mo_bot_notify_sub">做完事時告訴你</string>
     <string name="mo_bot_app">App</string>
     <string name="mo_bot_delete_app">刪除 App</string>
     <string name="mo_bot_app_deleted">已刪除 %1$s 的 App</string>
