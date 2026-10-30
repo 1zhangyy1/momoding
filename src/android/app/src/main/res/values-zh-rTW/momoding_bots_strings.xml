@@ -10,4 +10,17 @@
     <string name="mo_bot_working">在做：%1$s</string>
     <string name="mo_bot_waiting_banner">%1$s 在等你：%2$s</string>
     <string name="mo_bot_done_banner">%1$s 做好了：%2$s</string>
+    <string name="mo_bot_open_app">打開 App</string>
+    <string name="mo_bot_open_chat">打開對話</string>
+    <string name="mo_bot_rename">改名</string>
+    <string name="mo_bot_notify">通知</string>
+    <string name="mo_bot_notify_sub">做完了、在等你時告訴你</string>
+    <string name="mo_bot_app">App</string>
+    <string name="mo_bot_delete_app">刪除 App</string>
+    <string name="mo_bot_app_deleted">已刪除 %1$s 的 App</string>
+    <string name="mo_bot_make_app">讓它做一個 App</string>
+    <string name="mo_bot_make_app_ask">幫我做一個 App：</string>
+    <string name="mo_bot_delete">刪除這個 Bot</string>
+    <string name="mo_bot_deleted">已刪除 %1$s</string>
+    <string name="mo_bot_undo">復原</string>
 </resources>

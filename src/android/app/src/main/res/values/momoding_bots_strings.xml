@@ -10,4 +10,17 @@
     <string name="mo_bot_working">Working on: %1$s</string>
     <string name="mo_bot_waiting_banner">%1$s is waiting for you: %2$s</string>
     <string name="mo_bot_done_banner">%1$s is done: %2$s</string>
+    <string name="mo_bot_open_app">Open app</string>
+    <string name="mo_bot_open_chat">Open chat</string>
+    <string name="mo_bot_rename">Rename</string>
+    <string name="mo_bot_notify">Notifications</string>
+    <string name="mo_bot_notify_sub">When it is done, or waiting for you</string>
+    <string name="mo_bot_app">App</string>
+    <string name="mo_bot_delete_app">Delete app</string>
+    <string name="mo_bot_app_deleted">Deleted %1$s’s app</string>
+    <string name="mo_bot_make_app">Have it make an app</string>
+    <string name="mo_bot_make_app_ask">Make me an app: </string>
+    <string name="mo_bot_delete">Delete this Bot</string>
+    <string name="mo_bot_deleted">Deleted %1$s</string>
+    <string name="mo_bot_undo">Undo</string>
 </resources>

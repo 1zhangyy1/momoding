@@ -3275,7 +3275,10 @@ fun ChatScreen(
                                 if (routineDot) Box(Modifier.align(Alignment.TopEnd).size(8.dp).background(app.momoding.ui.Tones.action, CircleShape))
                             }
                         }
-                        IconButton(onClick = { runCatching { context.startActivity(app.momoding.deeplink.OwnScheme.intent(context, android.net.Uri.parse("minis://settings"), 0)) } }) {
+                        // another Momoding's gear is about that Momoding: its row in Bots and apps
+                        IconButton(onClick = { runCatching { context.startActivity(app.momoding.apps.MoApps.ofSession(context, viewModel.activeSessionId)
+                            ?.let { android.content.Intent(context, app.momoding.apps.AppsListActivity::class.java).putExtra(app.momoding.apps.AppsListActivity.EXTRA_NAME, it.name) }
+                            ?: app.momoding.deeplink.OwnScheme.intent(context, android.net.Uri.parse("minis://settings"), 0)) } }) {
                             Icon(Icons.Outlined.Settings, contentDescription = stringResource(R.string.settings_title))
                         }
                     }

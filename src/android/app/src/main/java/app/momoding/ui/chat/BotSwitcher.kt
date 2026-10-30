@@ -53,10 +53,7 @@ import app.momoding.ui.Design
 import app.momoding.ui.Tones
 import com.openminis.app.R
 import com.openminis.app.ui.theme.ChatColors
-import com.openminis.app.ui.chat.ChatViewModelStore
-import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 /**
  * The person's other Momodings, in the header (调研/M32 第十一节): a face for each beside the name,
@@ -176,13 +173,8 @@ private fun open(context: android.content.Context, b: BotStatus.Bot, current: St
 /** A new Bot is the main Momoding's to make: its chat, with the ask begun in the composer. */
 private fun newBot(context: android.content.Context, main: BotStatus.Bot?, current: String?, ask: String) {
     main ?: return
-    open(context, main, current)
-    MainScope().launch {
-        repeat(30) {
-            ChatViewModelStore.existing(main.session)?.let { it.appendToInputText(ask); return@launch }
-            delay(100)
-        }
-    }
+    AppChat.ask(context, main.session, null, ask)
+    if (context is app.momoding.apps.AppChatActivity && current != main.session) context.finish()
 }
 
 private fun manage(context: android.content.Context) {

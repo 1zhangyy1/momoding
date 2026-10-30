@@ -92,6 +92,17 @@ object MoApps {
         removeData(app)
         app.dir.listFiles().orEmpty().filter { it.name !in KEPT }.forEach { it.deleteRecursively() }
         listOf("data.json", "preview.json", "log", "permissions.json", "look.png").forEach { File(app.platform, it).apply { setWritable(true); delete() } }
+        // of the manifest, only who the Bot is: what the app asked for (shares, texts to listen to, icons) goes with it
+        val m = app.manifest()
+        val kept = JSONObject()
+        listOf("name", "short_name", "description", "theme_color").forEach { k -> m.opt(k)?.let { kept.put(k, it) } }
+        File(app.dir, "manifest.json").writeText(kept.toString(2) + "\n")
+    }
+
+    /** The person renamed the Bot. */
+    fun rename(app: App, title: String) {
+        val m = app.manifest().put("name", title).put("short_name", title)
+        File(app.dir, "manifest.json").writeText(m.toString(2) + "\n")
     }
 
     // ── what the app keeps ────────────────────────────────────────────────────

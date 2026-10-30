@@ -98,7 +98,8 @@ class AppsTest {
     @Test fun `deleting a Bot's app keeps the Bot`() {
         val dir = File(tmp.root, "files/minis-global/apps/ledger").apply { mkdirs() }
         val app = MoApps.App("ledger", dir)
-        listOf("index.html", "NOTES.md", "manifest.json", "app.js").forEach { File(dir, it).writeText("x") }
+        listOf("index.html", "NOTES.md", "app.js").forEach { File(dir, it).writeText("x") }
+        File(dir, "manifest.json").writeText("""{"name":"记账","short_name":"记账","description":"银行短信来了记一笔","icons":[{"src":"i.png"}],"momoding":{"share":true,"listen":[{"app":"sms"}]}}""")
         File(dir, "lib").mkdirs(); File(dir, "lib/chart.js").writeText("x")
         app.setBot("s1", null)
         File(app.vault, "ledger.json").writeText("{}")
@@ -109,5 +110,8 @@ class AppsTest {
         assertEquals(setOf("NOTES.md", "manifest.json", ".momoding"), dir.list()!!.toSet())
         assertEquals("s1", app.botSession)
         assertEquals(listOf("ledger-other.json"), app.vault.list()!!.toList())
+        // it no longer asks for shares or texts, and keeps who it is
+        assertEquals(setOf("name", "short_name", "description"), app.manifest().keys().asSequence().toSet())
+        assertEquals("记账", app.title)
     }
 }

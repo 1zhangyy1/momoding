@@ -101,6 +101,18 @@ object AppChat {
         }
     }
 
+    /** A Bot's chat with [text] begun in its composer, for the person to finish and send. */
+    fun ask(context: Context, session: String, app: MoApps.App?, text: String) {
+        if (app?.hasApp == true) { open(context, app, text); return }
+        home(context, session, app, raise = true)
+        kotlinx.coroutines.MainScope().launch {
+            repeat(30) {
+                ChatViewModelStore.existing(session)?.let { it.appendToInputText(text); return@launch }
+                delay(100)
+            }
+        }
+    }
+
     /** The app with its Momoding over it: where anything that leads to that Momoding takes the person. */
     fun openWithApp(context: Context, app: MoApps.App) {
         context.startActivities(arrayOf(

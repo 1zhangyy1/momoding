@@ -34,12 +34,9 @@
     <string name="mo_app_widget_description">A glance at one of your Momoding Apps</string>
     <string name="mo_app_widget_pick">Which app?</string>
     <string name="mo_app_widget_empty">Not set up yet: open the app once</string>
-    <string name="mo_apps_title">Momoding Apps</string>
-    <string name="mo_apps_sub">Small apps on your home screen, each with its own Momoding</string>
-    <string name="mo_apps_none">No apps yet. Ask Momoding to make one: “make me a water tracker”.</string>
-    <string name="mo_apps_open">Open</string>
-    <string name="mo_apps_delete">Delete</string>
-    <string name="mo_apps_delete_confirm">Delete %1$s? Its data and its chat go with it.</string>
+    <string name="mo_apps_title">Bots and apps</string>
+    <string name="mo_apps_sub">Each Bot looks after one thing, and may have an app</string>
+    <string name="mo_apps_none">No other Bots yet. Tell Momoding, say, “make me a fitness coach”.</string>
     <string name="mo_apps_deleted_icon">This app was deleted</string>
     <string name="mo_apps_uses_nothing">Uses nothing on your phone</string>
 </resources>
