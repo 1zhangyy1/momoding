@@ -279,13 +279,11 @@ fun AppNavigation(
                 // restoreState=true preserves chat-screen state across the
                 // hop. When the synthesized deep-link is a no-op (chat
                 // already on top) launchSingleTop short-circuits.
-                navController.safeNavigate(Routes.chat(initialDeepLink.sessionId)) {
-                    popUpTo(Routes.SESSION_LIST) {
-                        inclusive = false
-                        saveState = true
-                    }
+                // momoding: a plain navigate, as the launch dispatcher does (T314): at a cold start the
+                // list is not RESUMED yet and safeNavigate dropped this, leaving the person on the list
+                navController.navigate(Routes.chat(initialDeepLink.sessionId)) {
+                    popUpTo(Routes.SESSION_LIST) { inclusive = false }
                     launchSingleTop = true
-                    restoreState = true
                 }
             }
             is DeepLinkAction.CreateEnvironmentVariable -> {
@@ -563,15 +561,17 @@ fun AppNavigation(
                 androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
                 return@composable
             }
-            ChatSplitScaffoldRoute(
-                initialSessionId = null,
-                navController = navController,
-                chatRepository = chatRepository,
-                providerRepository = providerRepository,
-                memoryRepository = memoryRepository,
-                skillRepository = skillRepository,
-                mcpRepository = mcpRepository,
-            )
+            // momoding: upstream's list is never a page here. Whenever it is what's showing (a link that
+            // didn't land, a Back that uncovered it), Momoding opens instead: the main chat, or the first run.
+            val listContext = LocalContext.current
+            LaunchedEffect(Unit) {
+                kotlinx.coroutines.delay(300) // a link being opened lands first
+                if (navController.currentDestination?.route != Routes.SESSION_LIST) return@LaunchedEffect
+                val home = if (app.momoding.onboarding.FirstRun.needed(listContext, providerRepository.instances.isNotEmpty())) app.momoding.onboarding.ROUTE_FIRST_RUN
+                    else Routes.chat(app.momoding.home.MainChat.resolve(listContext, chatRepository))
+                navController.navigate(home) { popUpTo(Routes.SESSION_LIST) { inclusive = false }; launchSingleTop = true }
+            }
+            androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
         }
 
         composable(
