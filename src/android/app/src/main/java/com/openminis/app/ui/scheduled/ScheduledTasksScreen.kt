@@ -232,7 +232,11 @@ private fun ScheduledTaskRow(
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = app.momoding.chat.RoutineText.summary(LocalContext.current, task), // momoding
+                    // momoding: whose it is (the Momoding whose chat it runs in), then when and what
+                    text = listOfNotNull(
+                        task.targetMode.sessionIdOrNull?.let { app.momoding.apps.BotStatus.name(LocalContext.current, it) },
+                        app.momoding.chat.RoutineText.summary(LocalContext.current, task),
+                    ).joinToString(" · "),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp,
                     maxLines = 3,

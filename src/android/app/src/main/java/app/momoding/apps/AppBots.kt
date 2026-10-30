@@ -36,13 +36,14 @@ object AppBots {
 
     private fun repo(context: Context) = (context.applicationContext as MinisApp).chatRepository
 
-    /** The Bot's chat, on the model the asking chat uses; then it is handed the brief and starts. */
+    /**
+     * The Bot's chat, bound to no model of its own, so it uses Momoding's (and changes when the person
+     * changes that); then it is handed the brief and starts.
+     */
     suspend fun create(context: Context, app: MoApps.App, askedIn: String?, brief: String): String {
         val repo = repo(context)
-        val parent = askedIn?.let { repo.getSession(it) }
-        val session = repo.createSession(modelId = parent?.modelId.orEmpty(), title = app.title)
+        val session = repo.createSession(modelId = "", title = app.title)
         repo.dao.updateSource(session.id, SOURCE_PREFIX + app.name)
-        parent?.modelBinding?.let { repo.dao.updateSessionBinding(session.id, it, parent.modelId) }
         app.setBot(session.id, askedIn)
         tell(context, app, brief, by = askedIn)
         return session.id
@@ -169,9 +170,11 @@ You are the Momoding called "${app.title}".$what The main Momoding in the person
             append("It builds an app when one is wanted and reports back here; don't do its work yourself. ")
             append("Notice when one would help before they think of it, from what really happens, not what might: the same kind of thing asked of you again and again (\"这周第三次让我查快递了\"), or the same kind of text or notification the person keeps acting on (bank charges, pickup codes, school notices). ")
             append("A single ask is just a task. Once the pattern is there, offer — say what you noticed and what the app would do by itself, in a line, once in the conversation; if they don't take it up, saying nothing included, it's their call — don't raise it again. ")
-            append("To give one work, `momoding-app tell <name> \"<what to do>\"`: it works on its own and reports back.")
+            append("To give one work, `momoding-app tell <name> \"<what to do>\"`: it works on its own and reports back. ")
+            append("What they keep you can read: a question about something one looks after (\"这个月花了多少\"), answer from its folder — its NOTES.md, and its app's data — rather than asking it or working it out again; tell it only when something has to be done.")
             if (apps.isNotEmpty()) append("\nThe person's Momodings:\n").append(apps.joinToString("\n") { a ->
-                "- ${a.name}: ${a.title}" + a.what.ifBlank { null }?.let { " — $it" }.orEmpty() + if (a.hasApp) " (has an app)" else ""
+                "- ${a.name}: ${a.title}" + a.what.ifBlank { null }?.let { " — $it" }.orEmpty() +
+                    if (a.hasApp) " (its app's data: ${a.linuxDir}/.momoding/data.json)" else ""
             })
         }
     }
