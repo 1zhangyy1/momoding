@@ -124,7 +124,16 @@ class BackgroundTaskNotifier(
         }
     }
 
-    private fun postNotification(sessionId: String, title: String, body: String) {
+    /**
+     * momoding: a Bot's line in the chat that handed it the work, for a person who is not in Momoding:
+     * filed under that chat (seeing it withdraws this), opening [link] — the Bot, or its app.
+     */
+    fun notifyReceipt(askerSession: String, title: String, body: String, link: Uri) {
+        if (isAppForeground()) return
+        postNotification(askerSession, title, body, link)
+    }
+
+    private fun postNotification(sessionId: String, title: String, body: String, link: Uri = Uri.parse("minis://session/$sessionId")) {
         // Pre-Tiramisu: we don't need the runtime permission, just post.
         // Tiramisu+: NotificationManagerCompat.areNotificationsEnabled
         // is the right gate — POST_NOTIFICATIONS is requested at toggle-on
@@ -135,7 +144,7 @@ class BackgroundTaskNotifier(
             return
         }
 
-        val deepLink = Uri.parse("minis://session/$sessionId")
+        val deepLink = link
         // momoding: to MainActivity by name (the manifest registers `momoding`, not `minis`).
         // FLAG_ACTIVITY_NEW_TASK because we're posting from a background scope without an
         // Activity context; FLAG_ACTIVITY_CLEAR_TOP so MainActivity (singleTask) reuses the

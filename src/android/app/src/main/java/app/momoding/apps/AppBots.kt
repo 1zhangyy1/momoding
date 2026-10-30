@@ -101,7 +101,8 @@ object AppBots {
     fun receipt(context: Context, app: MoApps.App, text: String, openLabel: String, finished: Boolean = true) {
         val sid = app.botSession ?: return
         val line = text.trim().let { if (it.startsWith(app.title)) it else "${app.title}：$it" }
-        val body = "$line\n[$openLabel](" + (if (app.hasApp) "minis://apps/${app.name}" else "minis://session/$sid") + ")"
+        val link = if (app.hasApp) "minis://apps/${app.name}" else "minis://session/$sid"
+        val body = "$line\n[$openLabel]($link)"
         scope.launch {
             val target = handedBy(context, sid)?.takeIf { repo(context).getSession(it) != null } ?: MainChat.resolve(context, repo(context))
             if (finished) setHandedBy(app, sid, null) // done, not just progress: what it says next is its own
@@ -110,6 +111,10 @@ object AppBots {
                 if (vm == null || !vm.isStreaming.value) {
                     repo(context).appendMessage(target, "assistant", """[{"type":"text","value":${JSONObject.quote(body)}}]""")
                     vm?.let { withContext(Dispatchers.Main) { it.reloadFromDisk() } }
+                    // done for the person: the banner in Momoding (via the state), a notification outside it
+                    BotStatus.touch()
+                    if (!BotStatus.looking(target) && !BotStatus.quiet(context, sid))
+                        (context.applicationContext as MinisApp).backgroundTaskNotifier.notifyReceipt(target, app.title, text.trim(), android.net.Uri.parse(link))
                     return@launch
                 }
                 delay(2000)

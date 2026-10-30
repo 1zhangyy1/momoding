@@ -323,6 +323,18 @@ private fun ElsewhereBanner(request: RiskRequest) {
     }
 }
 
+/**
+ * On an app's own page (Momoding is in front there too, so nothing is notified): one line when
+ * another Momoding waits for the person, or has just done something. The page's own Bot has its pen.
+ */
+@Composable
+fun OthersBanner(own: String?) {
+    val open by RiskGate.open.collectAsState()
+    val context = LocalContext.current
+    val other = open.firstOrNull { app.momoding.apps.BotStatus.botOf(context, it.sessionId) != own }
+    if (other != null) ElsewhereBanner(other) else app.momoding.ui.chat.BotDoneBanner(own)
+}
+
 /** One line over the composer about another Momoding, and a way there. */
 @Composable
 fun BannerPill(text: String, onOpen: () -> Unit) {

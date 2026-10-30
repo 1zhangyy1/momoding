@@ -1,5 +1,6 @@
 package app.momoding.apps
 
+import app.momoding.ui.guard.OthersBanner
 import android.annotation.SuppressLint
 import android.app.ActivityManager
 import android.app.AlertDialog
@@ -134,6 +135,10 @@ class MoAppActivity : ComponentActivity() {
             addView(wv, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
             addView(pen, FrameLayout.LayoutParams((36 * dp).toInt(), (36 * dp).toInt(), Gravity.BOTTOM or Gravity.END)
                 .apply { setMargins((14 * dp).toInt(), (14 * dp).toInt(), (14 * dp).toInt(), (14 * dp).toInt()) })
+            // other Momodings: done, or waiting for the person — the same line the chat shows
+            addView(androidx.compose.ui.platform.ComposeView(this@MoAppActivity).apply {
+                setContent { androidx.compose.material3.MaterialTheme { OthersBanner(this@MoAppActivity.app.botSession) } }
+            }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP))
         })
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
