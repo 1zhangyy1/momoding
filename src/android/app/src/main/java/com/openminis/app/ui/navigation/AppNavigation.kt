@@ -598,18 +598,11 @@ fun AppNavigation(
             // app (like Home) instead of uncovering a page Momoding has no use for. Registered here,
             // after the NavHost's own handler and before the chat's sheets and menus, which still
             // take Back first.
-            // A Bot without an app lives here too, in place of the main chat: Back there goes to the main chat.
+            // A Bot without an app is Momoding talking as that Bot (switching Bots keeps the app, as in Grok Bot), so Back is the same.
             val momodingActivity = LocalContext.current as? android.app.Activity
-            val momodingScope = androidx.compose.runtime.rememberCoroutineScope()
             androidx.activity.compose.BackHandler(
                 enabled = navController.previousBackStackEntry?.destination?.route == Routes.SESSION_LIST,
-            ) {
-                if (momodingApp == null) momodingActivity?.moveTaskToBack(true)
-                else momodingScope.launch {
-                    val main = app.momoding.home.MainChat.resolve(momodingContext, chatRepository)
-                    navController.navigate(Routes.chat(main)) { popUpTo(Routes.SESSION_LIST) { inclusive = false }; launchSingleTop = true }
-                }
-            }
+            ) { momodingActivity?.moveTaskToBack(true) }
             // momoding: a Bot without an app is Momoding with its own name, face and colour
             val momodingAccent = momodingApp?.let { androidx.compose.ui.graphics.Color(app.momoding.apps.AppIcon.color(it)) }
             androidx.compose.runtime.CompositionLocalProvider(app.momoding.ui.LocalAccent provides momodingAccent) {
