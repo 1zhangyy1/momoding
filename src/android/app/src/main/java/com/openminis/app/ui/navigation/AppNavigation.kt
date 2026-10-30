@@ -610,6 +610,10 @@ fun AppNavigation(
                     navController.navigate(Routes.chat(main)) { popUpTo(Routes.SESSION_LIST) { inclusive = false }; launchSingleTop = true }
                 }
             }
+            // momoding: a Bot without an app is Momoding with its own name, face and colour
+            val momodingAccent = momodingApp?.let { androidx.compose.ui.graphics.Color(app.momoding.apps.AppIcon.color(it)) }
+            androidx.compose.runtime.CompositionLocalProvider(app.momoding.ui.LocalAccent provides momodingAccent) {
+            MaterialTheme(colorScheme = momodingAccent?.let { MaterialTheme.colorScheme.copy(primary = it) } ?: MaterialTheme.colorScheme) {
             ChatSplitScaffoldRoute(
                 initialSessionId = sessionId,
                 navController = navController,
@@ -619,6 +623,8 @@ fun AppNavigation(
                 skillRepository = skillRepository,
                 mcpRepository = mcpRepository,
             )
+            }
+            }
         }
 
         composable(Routes.SETTINGS) {

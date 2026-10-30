@@ -4929,7 +4929,10 @@ fun ChatScreen(
                 } // AlwaysStretchOverscrollBox
                 // momoding: an empty main chat opens with "What can I do for you?" and examples
                 if (messages.isEmpty() && !isStreaming) {
-                    app.momoding.onboarding.StarterExamples(onPick = { viewModel.sendMessage(it) })
+                    app.momoding.onboarding.StarterExamples(
+                        bot = remember(viewModel.activeSessionId) { app.momoding.apps.MoApps.ofSession(context, viewModel.activeSessionId) },
+                        onPick = { viewModel.sendMessage(it) },
+                    )
                 }
                 // SelectionDragTracker bridges gesture-published dragIntent
                 // with listState scroll observation — that's what keeps the

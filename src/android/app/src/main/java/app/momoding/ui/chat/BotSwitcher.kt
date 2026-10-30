@@ -162,11 +162,10 @@ private fun line(b: BotStatus.Bot): Pair<String, Boolean>? {
 private val WAITING = Color(0xFFE8590C)
 private const val MAX_FACES = 3
 
-/** To [b]'s home; from an app's chat panel, the panel goes. */
+/** To [b]'s app: its app when it has one, else its chat, which is its app. From an app's chat panel, the panel goes. */
 private fun open(context: android.content.Context, b: BotStatus.Bot, current: String?) {
     if (b.session == current) return
-    val raise = b.status.kind == BotStatus.Kind.WAITING || b.status.kind == BotStatus.Kind.NEWS
-    AppChat.home(context, b.session, b.app, raise)
+    AppChat.home(context, b.session, b.app, raise = false)
     if (context is app.momoding.apps.AppChatActivity) context.finish()
 }
 

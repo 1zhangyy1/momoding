@@ -315,11 +315,13 @@ class MoAppActivity : ComponentActivity() {
 
 /** An app's icon: the one its manifest names (a PNG), else its first letter on its theme colour. */
 object AppIcon {
+    /** Its colour: the manifest's theme colour, else one of a few picked by its name. Its face, and its chat's accent. */
+    fun color(app: MoApps.App): Int = runCatching { Color.parseColor(app.themeColor) }.getOrDefault(PALETTE[Math.floorMod(app.name.hashCode(), PALETTE.size)])
+
     fun bitmap(app: MoApps.App, px: Int, adaptive: Boolean): Bitmap {
         val out = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
         val c = Canvas(out)
-        val bg = runCatching { Color.parseColor(app.themeColor) }.getOrDefault(PALETTE[Math.floorMod(app.name.hashCode(), PALETTE.size)])
-        c.drawColor(bg)
+        c.drawColor(color(app))
         // a launcher masks an adaptive icon to its middle (a 66-unit circle of 108): keep what matters inside it
         val inset = if (adaptive) px * 0.2f else 0f
         own(app)?.let { src ->

@@ -23,4 +23,5 @@
     <string name="mo_bot_delete">刪除這個 Bot</string>
     <string name="mo_bot_deleted">已刪除 %1$s</string>
     <string name="mo_bot_undo">復原</string>
+    <string name="mo_bot_hello">我是%1$s</string>
 </resources>

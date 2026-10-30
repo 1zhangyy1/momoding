@@ -194,16 +194,21 @@ fun FirstRunScreen(
     }
 }
 
-/** The empty main chat: "What can I do for you?" and examples; a tap sends one. */
+/** The empty main chat: "What can I do for you?" and examples; a tap sends one. A Bot's says who it is instead. */
 @Composable
-fun StarterExamples(onPick: (String) -> Unit) {
-    val examples = listOf(
+fun StarterExamples(bot: app.momoding.apps.MoApps.App? = null, onPick: (String) -> Unit) {
+    val examples = if (bot != null) emptyList() else listOf(
         stringResource(R.string.mo_ex_reminder), stringResource(R.string.mo_ex_routine),
         stringResource(R.string.mo_ex_train), stringResource(R.string.mo_ex_reply),
     )
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp), verticalArrangement = Arrangement.Center) {
-        Text(stringResource(R.string.mo_ex_title), fontSize = Design.Size.Display, fontWeight = FontWeight.SemiBold,
+        Text(if (bot != null) stringResource(R.string.mo_bot_hello, bot.title) else stringResource(R.string.mo_ex_title),
+            fontSize = Design.Size.Display, fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onBackground, textAlign = TextAlign.Start)
+        bot?.what?.ifBlank { null }?.let {
+            Spacer(Modifier.height(8.dp))
+            Text(it, fontSize = Design.Size.Body, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         Spacer(Modifier.height(14.dp))
         Column(verticalArrangement = Arrangement.spacedBy(Design.Space.Gap)) {
             examples.forEach { ex -> app.momoding.ui.chat.Pill(ex, app.momoding.ui.chat.PillKind.SUGGEST) { onPick(ex) } }
