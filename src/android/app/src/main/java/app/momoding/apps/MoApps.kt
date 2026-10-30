@@ -45,7 +45,6 @@ object MoApps {
         /** The app's Bot: its chat session, and the chat that asked for the app. */
         fun bot(): JSONObject = runCatching { JSONObject(File(platform, "bot.json").readText()) }.getOrDefault(JSONObject())
         val botSession: String? get() = bot().optString("session").ifBlank { null }
-        val askedIn: String? get() = bot().optString("askedIn").ifBlank { null }
 
         fun setBot(session: String, askedIn: String?) {
             File(platform, "bot.json").writeText(bot().put("session", session).put("askedIn", askedIn ?: "").toString(2))

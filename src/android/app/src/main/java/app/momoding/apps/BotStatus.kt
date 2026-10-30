@@ -69,6 +69,10 @@ object BotStatus {
         }
     }
 
+    /** The Bot an approval request comes from (an app's own commands are filed under the app). */
+    fun botOf(context: Context, requestSession: String): String =
+        MoApps.get(context, requestSession.removePrefix(AppBridge.GATE_PREFIX))?.botSession ?: requestSession
+
     /** The name the person knows a Momoding by: its own, or the main Momoding's. */
     fun name(context: Context, session: String): String =
         MoApps.ofSession(context, session)?.title ?: app.momoding.Identity.name(context)

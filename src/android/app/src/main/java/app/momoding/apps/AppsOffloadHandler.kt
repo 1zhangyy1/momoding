@@ -42,7 +42,7 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
                 "install" -> install(app(args))
                 "open" -> open(app(args))
                 "widget" -> widget(app(args))
-                "tell" -> tell(app(args), args.positional.drop(2).joinToString(" "))
+                "tell" -> tell(app(args), args.positional.drop(2).joinToString(" "), request)
                 "done", "progress" -> done(args, request)
                 "suggest" -> suggest(args, request)
                 "list" -> list()
@@ -88,11 +88,11 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
         return ok(JSONObject().put("opened", app.name))
     }
 
-    private fun tell(app: MoApps.App, text: String): NativeOffloadResult {
+    private fun tell(app: MoApps.App, text: String, request: NativeOffloadRequest): NativeOffloadResult {
         require(text.isNotBlank()) { "momoding-app tell <name> \"<what to do>\"" }
         if (app.botSession == null) throw IllegalStateException("${app.name} has no Momoding of its own")
-        AppBots.tell(context, app, text)
-        return ok(JSONObject().put("told", app.name).put("note", "It works on its own and reports back here; no need to wait or check."))
+        AppBots.tell(context, app, text, by = request.sessionId)
+        return ok(JSONObject().put("told", app.name).put("note", "It works on its own and reports back here; no need to wait or check. Tell the person in a line that ${app.title} has it."))
     }
 
     private fun done(args: OffloadArgs, request: NativeOffloadRequest): NativeOffloadResult {

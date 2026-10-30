@@ -62,7 +62,6 @@ import app.momoding.guard.RiskDecision
 import app.momoding.guard.RiskGate
 import app.momoding.guard.RiskRequest
 import app.momoding.guard.RiskText
-import app.momoding.Identity
 import app.momoding.ui.Tones
 import app.momoding.ui.Design
 
@@ -74,7 +73,8 @@ import app.momoding.ui.Design
 @Composable
 fun RiskApprovalHost(sessionId: String) {
     val open by RiskGate.open.collectAsState()
-    val own = open.firstOrNull { it.sessionId == sessionId }
+    // this chat's own, or one of a Momoding this chat handed work to: questions come to where the person asked
+    val own = open.firstOrNull { it.sessionId == sessionId || app.momoding.apps.AppBots.handedBy(it.sessionId) == sessionId }
     val request = own ?: open.firstOrNull()
     val mine = own != null
     // nothing waits: another Momoding that has just done something for the person says so here
@@ -94,7 +94,7 @@ fun RiskApprovalHost(sessionId: String) {
 @Composable
 fun RiskScrim(sessionId: String) {
     val open by RiskGate.open.collectAsState()
-    val visible = open.any { it.sessionId == sessionId }
+    val visible = open.any { it.sessionId == sessionId || app.momoding.apps.AppBots.handedBy(it.sessionId) == sessionId }
     AnimatedVisibility(visible = visible, enter = fadeIn(tween(220)), exit = fadeOut(tween(160))) {
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.28f)).clickable(enabled = false) {})
     }
@@ -103,7 +103,8 @@ fun RiskScrim(sessionId: String) {
 @Composable
 private fun RiskApprovalCard(request: RiskRequest) {
     val context = LocalContext.current
-    val name = Identity.name(context)
+    // by the name of the Momoding that asks: here it may be one this chat handed work to
+    val name = app.momoding.apps.BotStatus.name(context, app.momoding.apps.BotStatus.botOf(context, request.sessionId))
     val open by RiskGate.open.collectAsState()
     val queued = open.count { it.sessionId == request.sessionId } - 1
     val icon: ImageVector = when {
@@ -314,9 +315,7 @@ private fun GreyPill(label: String, onClick: () -> Unit) {
 @Composable
 private fun ElsewhereBanner(request: RiskRequest) {
     val context = LocalContext.current
-    // the Momoding that waits (an app's own commands are filed under the app)
-    val bot = request.sessionId.removePrefix(app.momoding.apps.AppBridge.GATE_PREFIX)
-        .let { app.momoding.apps.MoApps.get(context, it)?.botSession } ?: request.sessionId
+    val bot = app.momoding.apps.BotStatus.botOf(context, request.sessionId)
     BannerPill(stringResource(R.string.mo_bot_waiting_banner, app.momoding.apps.BotStatus.name(context, bot), request.summary ?: request.preview.lines().first())) {
         app.momoding.apps.AppChat.home(context, bot, app.momoding.apps.MoApps.ofSession(context, bot), raise = true)
     }

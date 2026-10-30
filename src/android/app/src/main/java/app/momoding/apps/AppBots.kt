@@ -1,6 +1,7 @@
 package app.momoding.apps
 
 import android.content.Context
+import app.momoding.home.MainChat
 import com.openminis.app.MinisApp
 import com.openminis.app.debug.HeadlessChatRunner
 import com.openminis.app.logging.AppLogger
@@ -43,13 +44,22 @@ object AppBots {
         repo.dao.updateSource(session.id, SOURCE_PREFIX + app.name)
         parent?.modelBinding?.let { repo.dao.updateSessionBinding(session.id, it, parent.modelId) }
         app.setBot(session.id, askedIn)
-        tell(context, app, brief)
+        tell(context, app, brief, by = askedIn)
         return session.id
     }
 
-    /** A message for the app's Bot; it answers on its own turn, in its own chat. */
-    fun tell(context: Context, app: MoApps.App, text: String, from: From = From.MOMODING) {
+    /**
+     * Who handed each Bot the work it is on (Bot's chat → the chat that told it): where its result
+     * goes, where its questions for the person show, and what stopping that chat stops too.
+     */
+    private val handedBy = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    fun handedBy(botSession: String): String? = handedBy[botSession]
+
+    /** A message for the Bot; it answers on its own turn, in its own chat. [by]: the chat that hands it work. */
+    fun tell(context: Context, app: MoApps.App, text: String, from: From = From.MOMODING, by: String? = null) {
         val sid = app.botSession ?: return
+        if (by != null && by != sid) handedBy[sid] = by
         scope.launch {
             runCatching {
                 HeadlessChatRunner.prompt(context.applicationContext, sid, from.cue?.let { "$it $text" } ?: text, wait = false, timeoutMs = 30 * 60_000L)
@@ -57,16 +67,24 @@ object AppBots {
         }
     }
 
+    /** Stopping [session] stops the Bots it handed work to that are still at it. */
+    fun stopHandedBy(session: String) {
+        handedBy.filterValues { it == session }.keys
+            .filter { it in com.openminis.app.service.SessionActivityTracker.activeSessions.value }
+            .forEach { ChatViewModelStore.existing(it)?.cancelStream() }
+    }
+
     /**
-     * The app Bot's line in the chat that asked for the app ("记账本：加了月度图"), with a button to
-     * open it. Written when that chat is not mid-turn, so it never lands between a tool call and
-     * its result; the chat's Momoding reads it next time like anything else said there.
+     * The Bot's line in the chat that handed it the work, else the main chat ("记账：加了月度图"),
+     * with a way to it. Written when that chat is not mid-turn, so it never lands between a tool
+     * call and its result; the chat's Momoding reads it next time like anything else said there.
      */
     fun receipt(context: Context, app: MoApps.App, text: String, openLabel: String) {
-        val target = app.askedIn ?: return
+        val sid = app.botSession ?: return
         val line = text.trim().let { if (it.startsWith(app.title)) it else "${app.title}：$it" }
-        val body = if (app.hasApp) "$line\n[$openLabel](minis://apps/${app.name})" else line
+        val body = "$line\n[$openLabel](" + (if (app.hasApp) "minis://apps/${app.name}" else "minis://session/$sid") + ")"
         scope.launch {
+            val target = handedBy[sid]?.takeIf { repo(context).getSession(it) != null } ?: MainChat.resolve(context, repo(context))
             repeat(600) {
                 val vm = ChatViewModelStore.existing(target)
                 if (vm == null || !vm.isStreaming.value) {

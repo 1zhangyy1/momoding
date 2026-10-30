@@ -16485,6 +16485,7 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
 
     fun cancelStream() {
         AppLogger.info(TAG_STREAM, "cancelStream invoked _isStreaming=false (sid=$activeSessionId)")
+        app.momoding.apps.AppBots.stopHandedBy(activeSessionId) // momoding: the Momodings it handed work to stop too
         // [T-android-context-usage-hint] Suppress this turn's usage line — see
         // [lastTurnWasCancelled]. Set before `_isStreaming = false` below, so
         // the edge collector observes the flag already raised.
