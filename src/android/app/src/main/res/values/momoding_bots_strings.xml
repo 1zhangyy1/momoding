@@ -23,5 +23,4 @@
     <string name="mo_bot_delete">Delete this Bot</string>
     <string name="mo_bot_deleted">Deleted %1$s</string>
     <string name="mo_bot_undo">Undo</string>
-    <string name="mo_bot_hello">I\'m %1$s</string>
 </resources>
