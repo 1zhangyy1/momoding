@@ -98,13 +98,13 @@ object AppBots {
      * with a way to it. Written when that chat is not mid-turn, so it never lands between a tool
      * call and its result; the chat's Momoding reads it next time like anything else said there.
      */
-    fun receipt(context: Context, app: MoApps.App, text: String, openLabel: String) {
+    fun receipt(context: Context, app: MoApps.App, text: String, openLabel: String, finished: Boolean = true) {
         val sid = app.botSession ?: return
         val line = text.trim().let { if (it.startsWith(app.title)) it else "${app.title}：$it" }
         val body = "$line\n[$openLabel](" + (if (app.hasApp) "minis://apps/${app.name}" else "minis://session/$sid") + ")"
         scope.launch {
             val target = handedBy(context, sid)?.takeIf { repo(context).getSession(it) != null } ?: MainChat.resolve(context, repo(context))
-            setHandedBy(app, sid, null) // the work is done: what it says next is its own
+            if (finished) setHandedBy(app, sid, null) // done, not just progress: what it says next is its own
             repeat(600) {
                 val vm = ChatViewModelStore.existing(target)
                 if (vm == null || !vm.isStreaming.value) {

@@ -101,7 +101,7 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
         val text = args.positional.drop(1).joinToString(" ").trim()
         require(text.isNotEmpty()) { "momoding-app done \"<what changed, in one line>\"" }
         val ui = LocaleWrap.uiContext(context)
-        AppBots.receipt(context, app, text, ui.getString(R.string.mo_app_open, app.title))
+        AppBots.receipt(context, app, text, ui.getString(R.string.mo_app_open, app.title), finished = args.positional.firstOrNull() == "done")
         return ok(JSONObject().put("reported", app.name))
     }
 
