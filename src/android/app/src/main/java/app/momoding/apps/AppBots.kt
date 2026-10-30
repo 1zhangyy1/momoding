@@ -116,32 +116,7 @@ object AppBots {
     /** Its Momoding's one improvement after a review (`momoding-app suggest`): the dot on the app until its chat is opened. */
     fun suggest(app: MoApps.App, text: String) {
         saveUsage(app, usage(app).put("suggestion", JSONObject().put("text", text.take(300)).put("at", System.currentTimeMillis())))
-    }
-
-    /**
-     * The app's chat has something for the person: an improvement its Momoding suggested, or a reply
-     * they have not seen — but not what it said while looking over the app's use (a review answers
-     * with a dot only through [suggest]).
-     */
-    suspend fun hasNews(context: Context, app: MoApps.App): Boolean {
-        val sid = app.botSession ?: return false
-        val u = usage(app)
-        if (u.optJSONObject("suggestion")?.optLong("at", 0) ?: 0 > u.optLong("chatSeenAt", 0)) return true
-        val repo = repo(context)
-        val total = repo.messageCount(sid)
-        if (total <= u.optInt("chatSeen", total)) return false
-        val recent = repo.loadMessagePage(sid, offset = maxOf(0, total - 12), limit = 12, maxChars = 40, includeTools = true)
-        val last = recent.lastOrNull() ?: return false
-        if (last.role != "assistant" || last.toolUses.isNotEmpty()) return false
-        // what started this turn: the last row someone wrote, not a tool's result
-        return recent.lastOrNull { it.role == "user" && it.toolResults.isEmpty() }?.text?.startsWith(REVIEW_CUE) != true
-    }
-
-    /** The person opened the app's chat. */
-    suspend fun chatSeen(context: Context, app: MoApps.App) {
-        val sid = app.botSession ?: return
-        val total = repo(context).messageCount(sid)
-        saveUsage(app, usage(app).put("chatSeen", total).put("chatSeenAt", System.currentTimeMillis()))
+        BotStatus.touch()
     }
 
     /** What a Bot is told on every turn, after the usual Momoding instructions. */

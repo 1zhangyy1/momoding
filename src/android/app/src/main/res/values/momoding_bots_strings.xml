@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The person's Momodings, in the header (app/momoding/ui/chat/BotSwitcher.kt) -->
+<resources>
+    <string name="mo_bot_chat_status">No app · just talk here</string>
+    <string name="mo_bots_switch">Your Momodings</string>
+    <string name="mo_bots_new">New Bot</string>
+    <string name="mo_bots_new_ask">Make me a new Bot: </string>
+    <string name="mo_bots_manage">Manage</string>
+    <string name="mo_bot_waiting">Waiting for you: %1$s</string>
+    <string name="mo_bot_working">Working on: %1$s</string>
+    <string name="mo_bot_waiting_banner">%1$s is waiting for you: %2$s</string>
+    <string name="mo_bot_done_banner">%1$s is done: %2$s</string>
+</resources>

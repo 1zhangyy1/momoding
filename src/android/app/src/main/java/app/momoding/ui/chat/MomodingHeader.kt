@@ -14,12 +14,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,7 +46,9 @@ import com.openminis.app.ui.theme.ChatColors
 import app.momoding.ui.Design
 
 /**
- * The main chat's header: Momoding's face, its name, and one quiet line ("在你手机上 · 随时可以交代").
+ * A Momoding's header: its face, its name, and one quiet line ("在你手机上 · 随时可以交代"); then the
+ * faces of the person's other Momodings ([BotFaces]). A tap on the name opens them all ([BotList]).
+ * The same header is on the main chat, a Bot's chat, and an app's chat panel.
  * What it is doing right now is not up here: it opens the running turn in the chat
  * ([LiveStatusLine]) and folds into that turn's "做了 3 步" when it is done.
  */
@@ -52,27 +57,44 @@ fun MomodingHeader(sessionId: String? = null) {
     val context = LocalContext.current
     val soul by SoulStore.cachedMetadata.collectAsState()
     val uiMode = androidx.compose.ui.platform.LocalConfiguration.current.uiMode
-    // a Momoding App's own Momoding: the app's icon and name
+    // another Momoding: the face and name of the Bot (its app's icon, or its letter)
     val ownApp = remember(sessionId) { sessionId?.let { app.momoding.apps.MoApps.ofSession(context, it) } }
     val face = remember(soul.name, uiMode, ownApp?.name) {
         (ownApp?.let { app.momoding.apps.AppIcon.bitmap(it, 96, adaptive = false) } ?: Identity.face(context))?.asImageBitmap()
     }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        // A fixed slot, so the name never shifts while the face loads
-        Box(Modifier.size(34.dp).clip(CircleShape)) {
-            if (face != null) Image(face, contentDescription = null, modifier = Modifier.size(34.dp))
+    var listOpen by remember { androidx.compose.runtime.mutableStateOf(false) }
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.weight(1f)) {
+            Row(
+                Modifier.clip(RoundedCornerShape(Design.Radius.Press)).clickable(onClickLabel = stringResource(R.string.mo_bots_switch)) { listOpen = !listOpen },
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                // A fixed slot, so the name never shifts while the face loads
+                Box(Modifier.size(34.dp).clip(CircleShape)) {
+                    if (face != null) Image(face, contentDescription = null, modifier = Modifier.size(34.dp))
+                }
+                Column(Modifier.weight(1f, fill = false)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            ownApp?.title ?: soul.name.ifBlank { stringResource(R.string.app_name) },
+                            fontSize = Design.Size.Title, lineHeight = Design.Line.Caption, fontWeight = FontWeight.SemiBold, color = ChatColors.primaryText, maxLines = 1,
+                            overflow = TextOverflow.Ellipsis, style = NO_FONT_PAD, modifier = Modifier.weight(1f, fill = false),
+                        )
+                        androidx.compose.material3.Icon(
+                            androidx.compose.material.icons.Icons.Outlined.ExpandMore, null, tint = ChatColors.secondaryText,
+                            modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = if (listOpen) 180f else 0f },
+                        )
+                    }
+                    Text(
+                        stringResource(when { ownApp == null -> R.string.mo_status_idle; ownApp.hasApp -> R.string.mo_app_chat_status; else -> R.string.mo_bot_chat_status }),
+                        fontSize = Design.Size.Caption, lineHeight = Design.Line.Micro, maxLines = 1,
+                        overflow = TextOverflow.Ellipsis, style = NO_FONT_PAD, color = ChatColors.secondaryText,
+                    )
+                }
+            }
+            BotList(listOpen, sessionId) { listOpen = false }
         }
-        Column {
-            Text(
-                ownApp?.let { stringResource(R.string.mo_app_chat, it.title) } ?: soul.name.ifBlank { stringResource(R.string.app_name) },
-                fontSize = Design.Size.Title, lineHeight = Design.Line.Caption, fontWeight = FontWeight.SemiBold, color = ChatColors.primaryText, maxLines = 1,
-                style = NO_FONT_PAD,
-            )
-            Text(
-                stringResource(if (ownApp != null) R.string.mo_app_chat_status else R.string.mo_status_idle), fontSize = Design.Size.Caption, lineHeight = Design.Line.Micro, maxLines = 1,
-                overflow = TextOverflow.Ellipsis, style = NO_FONT_PAD, color = ChatColors.secondaryText,
-            )
-        }
+        BotFaces(sessionId) { listOpen = true }
     }
 }
 
@@ -82,8 +104,8 @@ fun MomodingHeader(sessionId: String? = null) {
  * A pulsing dot marks it live; when the turn ends the same place holds "做了 3 步 · 18 秒".
  */
 @Composable
-fun LiveStatusLine(isStreaming: Boolean, replying: Boolean, request: String?, onOpenBrowser: () -> Unit) {
-    val status = rememberStatusLine(isStreaming, replying, request) ?: return
+fun LiveStatusLine(sessionId: String, isStreaming: Boolean, replying: Boolean, request: String?, onOpenBrowser: () -> Unit) {
+    val status = rememberStatusLine(sessionId, isStreaming, replying, request) ?: return
     val accent = status.waiting || status.inBrowser
     val pulse = androidx.compose.animation.core.rememberInfiniteTransition(label = "live").animateFloat(
         initialValue = .35f, targetValue = 1f, animationSpec = androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween(700), androidx.compose.animation.core.RepeatMode.Reverse), label = "dot",
@@ -112,11 +134,11 @@ private val NO_FONT_PAD = TextStyle(platformStyle = PlatformTextStyle(includeFon
 private data class StatusLine(val text: String, val waiting: Boolean = false, val inBrowser: Boolean = false)
 
 @Composable
-private fun rememberStatusLine(isStreaming: Boolean, replying: Boolean, request: String?): StatusLine? {
+private fun rememberStatusLine(sessionId: String, isStreaming: Boolean, replying: Boolean, request: String?): StatusLine? {
     val toolTitle by SessionActivityTracker.currentToolTitle.collectAsState()
     val toolRunning by SessionActivityTracker.isToolRunning.collectAsState()
     val lastToolTitle by SessionActivityTracker.lastToolTitle.collectAsState()
-    val pendingRisk by RiskGate.pending.collectAsState()
+    val pendingRisk = RiskGate.open.collectAsState().value.firstOrNull { it.sessionId == sessionId }
     val hands by Hands.progress.collectAsState()
     val toolName by SessionActivityTracker.currentToolName.collectAsState()
     val lastToolName by SessionActivityTracker.lastToolName.collectAsState()

@@ -113,11 +113,11 @@ class HandsOperator(private val context: Context) {
     @Volatile private var gateSession: String? = null
 
     /**
-     * The approval card waiting on this run, if the one on top is ours: a tap or an Enter the
-     * hands asked about, not a shell or browser request of some other conversation.
+     * The approval card waiting on this run: a tap or an Enter the hands asked about, not a shell
+     * or browser request of some other conversation.
      */
     private fun ownPendingRequest(): RiskRequest? =
-        RiskGate.pending.value?.takeIf { it.kind == GuardKind.SCREEN && it.sessionId == gateSession }
+        RiskGate.open.value.firstOrNull { it.kind == GuardKind.SCREEN && it.sessionId == gateSession }
 
     /**
      * Ends the run after the action in flight; from the capsule, the chat or the settings page.

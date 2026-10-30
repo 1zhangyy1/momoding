@@ -579,11 +579,11 @@ fun AppNavigation(
             arguments = listOf(navArgument("sessionId") { type = NavType.StringType }),
         ) { backStackEntry ->
             val sessionId = backStackEntry.arguments?.getString("sessionId") ?: return@composable
-            // momoding: an app's own Momoding is never a page here (Back would leave it stranded): whatever
+            // momoding: the Momoding of an app is never a page here (Back would leave it stranded): whatever
             // led to it (a notification, an approval, a link) opens it the app's way, and this stays the main chat
             val momodingContext = LocalContext.current
             val momodingApp = remember(sessionId) { app.momoding.apps.MoApps.ofSession(momodingContext, sessionId) }
-            if (momodingApp != null) {
+            if (momodingApp?.hasApp == true) {
                 LaunchedEffect(sessionId) {
                     app.momoding.apps.AppChat.openWithApp(momodingContext, momodingApp)
                     val main = app.momoding.home.MainChat.resolve(momodingContext, chatRepository)
@@ -598,10 +598,18 @@ fun AppNavigation(
             // app (like Home) instead of uncovering a page Momoding has no use for. Registered here,
             // after the NavHost's own handler and before the chat's sheets and menus, which still
             // take Back first.
+            // A Bot without an app lives here too, in place of the main chat: Back there goes to the main chat.
             val momodingActivity = LocalContext.current as? android.app.Activity
+            val momodingScope = androidx.compose.runtime.rememberCoroutineScope()
             androidx.activity.compose.BackHandler(
                 enabled = navController.previousBackStackEntry?.destination?.route == Routes.SESSION_LIST,
-            ) { momodingActivity?.moveTaskToBack(true) }
+            ) {
+                if (momodingApp == null) momodingActivity?.moveTaskToBack(true)
+                else momodingScope.launch {
+                    val main = app.momoding.home.MainChat.resolve(momodingContext, chatRepository)
+                    navController.navigate(Routes.chat(main)) { popUpTo(Routes.SESSION_LIST) { inclusive = false }; launchSingleTop = true }
+                }
+            }
             ChatSplitScaffoldRoute(
                 initialSessionId = sessionId,
                 navController = navController,

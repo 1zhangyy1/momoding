@@ -35,7 +35,11 @@ class RiskApprovalNotifier(
         val nm = NotificationManagerCompat.from(context)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !nm.areNotificationsEnabled()) return false
 
-        val name = Identity.name(context)
+        // the Momoding that asks, by its name; a silenced one waits in its chat without a notice
+        val bot = request.sessionId.removePrefix(app.momoding.apps.AppBridge.GATE_PREFIX)
+            .let { app.momoding.apps.MoApps.get(context, it)?.botSession } ?: request.sessionId
+        if (app.momoding.apps.BotStatus.quiet(context, bot)) return false
+        val name = app.momoding.apps.BotStatus.name(context, bot)
         val title = RiskText.title(context, request, name)
         val body = RiskText.description(context, request, name) + "\n" + request.preview.lines().first().take(120)
 

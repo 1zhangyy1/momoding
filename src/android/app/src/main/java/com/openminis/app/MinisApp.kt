@@ -835,14 +835,8 @@ class MinisApp : Application(), ImageLoaderFactory {
                 val wasBackgrounded = foregroundActivityCount == 0
                 foregroundActivityCount++
                 if (wasBackgrounded) _isAppForegroundFlow.value = true
-                // T298: as soon as the app transitions background → foreground,
-                // clear any task-completed notifications still in the tray.
-                // The user is back in front of the app — there's no point
-                // making them swipe away a "task completed" entry for the
-                // result they're about to look at directly.
-                if (wasBackgrounded && ::backgroundTaskNotifier.isInitialized) {
-                    backgroundTaskNotifier.cancelAllCompletedNotifications()
-                }
+                // momoding: a task-completed notification stays until its Momoding's chat is seen
+                // (BotStatus), not merely until the app comes back: it may be another Momoding's
                 // [T-android-session-paused-badge-hardkill] On foreground,
                 // reconcile PAUSED badges from the DB tail (authoritative
                 // interrupted-state) instead of the old heuristic that marked

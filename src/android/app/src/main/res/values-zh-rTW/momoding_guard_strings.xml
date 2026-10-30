@@ -28,7 +28,6 @@
     <string name="mo_risk_desc_shell_outbound">%1$s 想運行一條會向「%2$s」發送內容的命令。</string>
     <string name="mo_risk_desc_shell_outbound_generic">%1$s 想運行一條會把內容發出去的命令。</string>
     <string name="mo_risk_desc_warning">這條命令%1$s。記住的授權對它不生效。</string>
-    <string name="mo_risk_elsewhere">%1$s 在另一個對話裡等你批准</string>
     <string name="mo_risk_lock_subtitle">Momoding 將記住 %1$s 裡的付款許可，之後不再逐次詢問。</string>
     <string name="mo_risk_lock_title">確認是你本人</string>
     <string name="mo_risk_preview_browser">頁面</string>

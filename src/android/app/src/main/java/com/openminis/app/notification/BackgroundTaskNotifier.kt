@@ -104,13 +104,18 @@ class BackgroundTaskNotifier(
                     )
                     return@launch
                 }
-                val rawTitle = session?.title?.takeIf { it.isNotBlank() }
-                    ?: context.getString(R.string.notif_task_completed_default_title)
+                // momoding: one rule for every Momoding (调研/M32): an answer to the person, from a Bot
+                // they have not silenced, under its name, saying what it said; a turn another
+                // Momoding started reaches the person through that Momoding instead
+                if (!isError && !app.momoding.apps.BotStatus.forPerson(context, sessionId)) return@launch
+                if (app.momoding.apps.BotStatus.quiet(context, sessionId)) return@launch
+                val rawTitle = app.momoding.apps.BotStatus.name(context, sessionId)
                 val title = if (isError) "❌ $rawTitle" else rawTitle
                 val body = if (isError) {
                     context.getString(R.string.notif_task_failed_body)
                 } else {
-                    context.getString(R.string.notif_task_completed_body)
+                    app.momoding.apps.BotStatus.lastWords(context, sessionId, "assistant", max = 140)
+                        ?: context.getString(R.string.notif_task_completed_body)
                 }
                 postNotification(sessionId, title, body)
             } catch (t: Throwable) {

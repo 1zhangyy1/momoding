@@ -34,6 +34,8 @@ import app.momoding.guard.RiskDecision
 import app.momoding.guard.RiskGate
 import com.openminis.app.R
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -49,7 +51,6 @@ class MoAppActivity : ComponentActivity() {
     private var web: WebView? = null
     private var bridge: AppBridge? = null
     private var loadedAt = 0L
-    private var pen: TextView? = null
     private var deliver: ((List<org.json.JSONObject>) -> Unit)? = null
     private var troubleOffered = false
     /** What Momoding shows over the page (asks, approvals), newest last. */
@@ -116,7 +117,17 @@ class MoAppActivity : ComponentActivity() {
             contentDescription = getString(R.string.mo_app_chat, app.title)
             setOnClickListener { AppChat.open(this@MoAppActivity, app, "") }
         }
-        this.pen = pen
+        // the pen shows what the app's Momoding is doing: waiting for the person, working, or something new for them
+        lifecycleScope.launch {
+            repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                BotStatus.all(this@MoAppActivity).map { all -> all.firstOrNull { it.app?.name == app.name }?.status?.kind }
+                    .distinctUntilChanged().collect { kind ->
+                        pen.text = when (kind) { BotStatus.Kind.WAITING -> "✎!"; BotStatus.Kind.WORKING -> "✎…"; BotStatus.Kind.NEWS -> "✎•"; else -> "✎" }
+                        pen.alpha = if (kind == null || kind == BotStatus.Kind.NONE) 0.6f else 0.95f
+                        (pen.background as android.graphics.drawable.GradientDrawable).setColor(if (kind == BotStatus.Kind.WAITING) 0xE6E8590C.toInt() else 0x99000000.toInt())
+                    }
+            }
+        }
         val dp = resources.displayMetrics.density
         setContentView(FrameLayout(this).apply {
             fitsSystemWindows = true
@@ -132,11 +143,12 @@ class MoAppActivity : ComponentActivity() {
         // the app's own commands may wait on an approval: shown here too, since the chat is not on screen
         lifecycleScope.launch {
             var shown: AlertDialog? = null
-            RiskGate.pending.collect { r ->
+            RiskGate.open.map { all -> all.firstOrNull { it.sessionId == app.botSession || it.sessionId == AppBridge.GATE_PREFIX + app.name } }
+                .distinctUntilChanged().collect { r ->
                 // the card goes when its request does (answered in the chat, or no answer in time)
                 shown?.dismiss()
                 shown = null
-                if (r == null || (r.sessionId != app.botSession && r.sessionId != AppBridge.GATE_PREFIX + app.name)) return@collect
+                if (r == null) return@collect
                 shown = AlertDialog.Builder(this@MoAppActivity)
                     .setTitle(app.title)
                     .setMessage(r.summary ?: r.preview)
@@ -243,12 +255,7 @@ class MoAppActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         AppScreen.showing(app.name, this)
-        // a dot on the pen when the app's Momoding has said something the person has not seen
-        lifecycleScope.launch {
-            val news = runCatching { AppBots.hasNews(this@MoAppActivity, app) }.getOrDefault(false)
-            pen?.text = if (news) "✎•" else "✎"
-            pen?.alpha = if (news) 0.95f else 0.6f
-        }
+        BotStatus.touch()
     }
 
     override fun onPause() {

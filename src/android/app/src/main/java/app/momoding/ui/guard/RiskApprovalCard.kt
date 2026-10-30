@@ -68,14 +68,17 @@ import app.momoding.ui.Design
 
 /**
  * Muse's "Needs approval" card, sitting between the messages and the composer of the chat
- * the request came from. When the request belongs to another chat, a one-line banner points
- * there instead. Nothing here is state: it reads [RiskGate.pending] and writes a decision.
+ * the request came from, whoever else is waiting. When only another chat has one, a one-line
+ * banner points there instead. Nothing here is state: it reads [RiskGate.open] and writes a decision.
  */
 @Composable
-fun RiskApprovalHost(sessionId: String, onOpenSession: (String) -> Unit) {
-    val pending by RiskGate.pending.collectAsState()
-    val request = pending
-    val mine = request != null && request.sessionId == sessionId
+fun RiskApprovalHost(sessionId: String) {
+    val open by RiskGate.open.collectAsState()
+    val own = open.firstOrNull { it.sessionId == sessionId }
+    val request = own ?: open.firstOrNull()
+    val mine = own != null
+    // nothing waits: another Momoding that has just done something for the person says so here
+    if (request == null) app.momoding.ui.chat.BotDoneBanner(sessionId)
     AnimatedVisibility(
         visible = request != null,
         enter = slideInVertically(tween(220)) { it / 2 } + fadeIn(tween(220)),
@@ -83,15 +86,15 @@ fun RiskApprovalHost(sessionId: String, onOpenSession: (String) -> Unit) {
     ) {
         // Keep drawing the last request through the exit animation.
         val shown = request ?: return@AnimatedVisibility
-        if (mine) RiskApprovalCard(shown) else ElsewhereBanner(shown, onOpenSession)
+        if (mine) RiskApprovalCard(shown) else ElsewhereBanner(shown)
     }
 }
 
 /** Dims the message list behind the card; drawn inside the list's own Box so the composer stays bright. */
 @Composable
 fun RiskScrim(sessionId: String) {
-    val pending by RiskGate.pending.collectAsState()
-    val visible = pending?.sessionId == sessionId
+    val open by RiskGate.open.collectAsState()
+    val visible = open.any { it.sessionId == sessionId }
     AnimatedVisibility(visible = visible, enter = fadeIn(tween(220)), exit = fadeOut(tween(160))) {
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.28f)).clickable(enabled = false) {})
     }
@@ -101,7 +104,8 @@ fun RiskScrim(sessionId: String) {
 private fun RiskApprovalCard(request: RiskRequest) {
     val context = LocalContext.current
     val name = Identity.name(context)
-    val queued by RiskGate.queued.collectAsState()
+    val open by RiskGate.open.collectAsState()
+    val queued = open.count { it.sessionId == request.sessionId } - 1
     val icon: ImageVector = when {
         request.assessment.warnings.isNotEmpty() -> Icons.Outlined.WarningAmber
         request.assessment.riskClass == RiskClass.DESTRUCTIVE -> Icons.Outlined.DeleteOutline
@@ -308,8 +312,19 @@ private fun GreyPill(label: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ElsewhereBanner(request: RiskRequest, onOpenSession: (String) -> Unit) {
+private fun ElsewhereBanner(request: RiskRequest) {
     val context = LocalContext.current
+    // the Momoding that waits (an app's own commands are filed under the app)
+    val bot = request.sessionId.removePrefix(app.momoding.apps.AppBridge.GATE_PREFIX)
+        .let { app.momoding.apps.MoApps.get(context, it)?.botSession } ?: request.sessionId
+    BannerPill(stringResource(R.string.mo_bot_waiting_banner, app.momoding.apps.BotStatus.name(context, bot), request.summary ?: request.preview.lines().first())) {
+        app.momoding.apps.AppChat.home(context, bot, app.momoding.apps.MoApps.ofSession(context, bot), raise = true)
+    }
+}
+
+/** One line over the composer about another Momoding, and a way there. */
+@Composable
+fun BannerPill(text: String, onOpen: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -317,20 +332,20 @@ private fun ElsewhereBanner(request: RiskRequest, onOpenSession: (String) -> Uni
             .clip(CircleShape)
             .background(Tones.surface)
             .border(1.dp, Tones.hairline, CircleShape)
-            .clickable { onOpenSession(request.sessionId) }
+            .clickable(onClick = onOpen)
             .padding(start = 16.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(
-            stringResource(R.string.mo_risk_elsewhere, Identity.name(context)),
+            text,
             fontSize = Design.Size.Note,
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        TextButton(onClick = { onOpenSession(request.sessionId) }) {
+        TextButton(onClick = onOpen) {
             Text(stringResource(R.string.mo_risk_view), color = Tones.action, fontWeight = FontWeight.SemiBold)
         }
     }

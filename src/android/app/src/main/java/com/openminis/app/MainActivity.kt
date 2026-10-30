@@ -582,6 +582,7 @@ class MainActivity : ComponentActivity() {
                                     SessionActivityTracker.setPresent(sid)
                                 }
                                 currentChatSessionId = sid
+                                momodingShowing(previous, sid)
                             }
                         }
                     }
@@ -644,6 +645,7 @@ class MainActivity : ComponentActivity() {
      */
     override fun onStart() {
         super.onStart()
+        app.momoding.apps.BotStatus.showing(currentChatSessionId) // momoding
         if (!hasResumedFromBackground) {
             hasResumedFromBackground = true
             return
@@ -656,6 +658,19 @@ class MainActivity : ComponentActivity() {
         nav.safeNavigate(newRoute) {
             popUpTo(Routes.SESSION_LIST) { inclusive = false }
         }
+    }
+
+    // momoding: which Momoding is in front of the person (BotStatus), as the chat here changes
+    private fun momodingShowing(previous: String?, now: String?) {
+        if (!lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) return
+        app.momoding.apps.BotStatus.hidden(previous)
+        app.momoding.apps.BotStatus.showing(now)
+    }
+
+    // momoding: the chat here is no longer in front of the person (Home, or an app over it)
+    override fun onStop() {
+        app.momoding.apps.BotStatus.hidden(currentChatSessionId)
+        super.onStop()
     }
 
     /**
@@ -722,9 +737,9 @@ class MainActivity : ComponentActivity() {
         handleDeepLink(intent.data)
     }
 
-    /** momoding: a link to an app's own Momoding opens the app with that Momoding over it, not a page here. */
+    /** momoding: a link to the Momoding of an app opens the app with that Momoding over it, not a page here. */
     private fun momodingAppChat(action: DeepLinkAction): Boolean {
-        val own = (action as? DeepLinkAction.OpenSession)?.let { app.momoding.apps.MoApps.ofSession(this, it.sessionId) } ?: return false
+        val own = (action as? DeepLinkAction.OpenSession)?.let { app.momoding.apps.MoApps.ofSession(this, it.sessionId) }?.takeIf { it.hasApp } ?: return false
         app.momoding.apps.AppChat.openWithApp(this, own)
         return true
     }
@@ -742,13 +757,11 @@ class MainActivity : ComponentActivity() {
                 // OpenSession options so a runtime deep-link (notification /
                 // shortcut / onNewIntent) can't stack a duplicate chat on
                 // top of the same chat that's already showing.
+                // momoding: no saved state is restored — it would bring back the chat that was
+                // showing (the main chat) in place of the one asked for (another Momoding)
                 nav.navigate(Routes.chat(action.sessionId)) {
-                    popUpTo(Routes.SESSION_LIST) {
-                        inclusive = false
-                        saveState = true
-                    }
+                    popUpTo(Routes.SESSION_LIST) { inclusive = false }
                     launchSingleTop = true
-                    restoreState = true
                 }
             }
             is DeepLinkAction.CreateEnvironmentVariable -> {

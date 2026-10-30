@@ -48,7 +48,6 @@ class AppChatActivity : ComponentActivity() {
                 )
             }
         }
-        lifecycleScope.launch { runCatching { AppBots.chatSeen(this@AppChatActivity, app) } }
         // text the app handed over goes into the composer once the chat screen has its view model
         intent.getStringExtra(EXTRA_TEXT)?.takeIf { it.isNotBlank() }?.let { text ->
             lifecycleScope.launch {
@@ -60,11 +59,18 @@ class AppChatActivity : ComponentActivity() {
         }
     }
 
+    // what is said while the chat is open is seen
+    override fun onResume() {
+        super.onResume()
+        BotStatus.showing(session())
+    }
+
     override fun onPause() {
         super.onPause()
-        // what was said while the chat was open has been seen
-        MoApps.get(this, intent.getStringExtra(EXTRA_NAME).orEmpty())?.let { app -> lifecycleScope.launch { runCatching { AppBots.chatSeen(this@AppChatActivity, app) } } }
+        BotStatus.hidden(session())
     }
+
+    private fun session() = MoApps.get(this, intent.getStringExtra(EXTRA_NAME).orEmpty())?.botSession
 
     companion object {
         const val EXTRA_NAME = "momoding_app"
@@ -79,6 +85,20 @@ object AppChat {
             .putExtra(AppChatActivity.EXTRA_NAME, app.name)
             .putExtra(AppChatActivity.EXTRA_TEXT, text)
             .apply { if (context !is android.app.Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
+    }
+
+    /**
+     * Where a Bot lives: its app, with its chat raised over it when [raise] (something new, or it
+     * waits); a Bot without an app (and the main Momoding) in its chat in Momoding's own window.
+     */
+    fun home(context: Context, session: String, app: MoApps.App?, raise: Boolean) {
+        when {
+            app?.hasApp == true && raise -> openWithApp(context, app)
+            app?.hasApp == true -> context.startActivity(MoAppActivity.intent(context, app.name)
+                .apply { if (context !is android.app.Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
+            else -> context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("momoding://session/$session"))
+                .setPackage(context.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+        }
     }
 
     /** The app with its Momoding over it: where anything that leads to that Momoding takes the person. */

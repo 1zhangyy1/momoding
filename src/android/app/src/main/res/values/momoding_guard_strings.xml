@@ -28,7 +28,6 @@
     <string name="mo_risk_desc_shell_outbound">%1$s wants to run a command that sends to %2$s.</string>
     <string name="mo_risk_desc_shell_outbound_generic">%1$s wants to run a command that sends data out.</string>
     <string name="mo_risk_desc_warning">This command %1$s. Remembered approvals never cover it.</string>
-    <string name="mo_risk_elsewhere">%1$s is waiting for your approval in another chat</string>
     <string name="mo_risk_lock_subtitle">Momoding will remember payment approvals for %1$s and run them without asking.</string>
     <string name="mo_risk_lock_title">Confirm it is you</string>
     <string name="mo_risk_preview_browser">Page</string>

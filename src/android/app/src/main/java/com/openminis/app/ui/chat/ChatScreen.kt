@@ -4853,7 +4853,7 @@ fun ChatScreen(
                             is FlatChatItem.MomodingTimeDivider -> app.momoding.ui.chat.TimeDivider(item.at) // momoding
                             is FlatChatItem.MomodingHandsTrail -> app.momoding.ui.chat.HandsTrail(item.lastScreen, viewModel.currentSessionId, onOpen = urlClickHandler) // momoding
                             is FlatChatItem.MomodingStepsToggle -> if (item.live) app.momoding.ui.chat.LiveStatusLine( // momoding: the running turn's status, in place
-                                isStreaming = isStreaming, replying = momodingReplying, request = momodingRequest,
+                                sessionId = viewModel.currentSessionId, isStreaming = isStreaming, replying = momodingReplying, request = momodingRequest,
                                 onOpenBrowser = { viewModel.toggleBrowserSheet() },
                             ) else app.momoding.ui.chat.StepsToggle(item.expanded, item.steps, item.seconds) { // momoding
                                 val id = item.messageId.substringBefore('#')
@@ -7826,10 +7826,7 @@ fun ChatScreen(
     // momoding: "Needs approval" — the conversation dims and the card sits at the bottom of the chat
     app.momoding.ui.guard.RiskScrim(sessionId = viewModel.activeSessionId)
     Box(Modifier.fillMaxSize().navigationBarsPadding().imePadding(), contentAlignment = Alignment.BottomCenter) {
-        app.momoding.ui.guard.RiskApprovalHost(
-            sessionId = viewModel.activeSessionId,
-            onOpenSession = { onMoveToSession(it) },
-        )
+        app.momoding.ui.guard.RiskApprovalHost(sessionId = viewModel.activeSessionId)
     }
 
     // URL preview sheet — shown when a markdown link is tapped

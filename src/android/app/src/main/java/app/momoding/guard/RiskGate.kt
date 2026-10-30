@@ -73,7 +73,17 @@ object RiskGate {
     private val _queued = MutableStateFlow(0)
     val queued: StateFlow<Int> = _queued.asStateFlow()
 
+    /** Every request still open, oldest first: each chat shows its own, whoever else is waiting. */
+    private val _open = MutableStateFlow<List<RiskRequest>>(emptyList())
+    val open: StateFlow<List<RiskRequest>> = _open.asStateFlow()
+
     private val queue = ArrayDeque<Pair<RiskRequest, Continuation<RiskDecision>>>()
+
+    /** After the queue changed (called holding [mutex]). */
+    private fun published() {
+        _queued.value = queue.size
+        _open.value = listOfNotNull(_pending.value) + queue.map { it.first }
+    }
     private val awaiters = HashMap<String, Continuation<RiskDecision>>()
     private val timeouts = HashMap<String, Job>()
     private val mutex = Mutex()
@@ -101,13 +111,9 @@ object RiskGate {
                     delay(TIMEOUT_MS)
                     resolve(request.id, RiskDecision.TIMEOUT)
                 }
-                if (_pending.value == null) {
-                    _pending.value = request
-                    notifyIfBackgrounded(request)
-                } else {
-                    queue.addLast(request to cont)
-                    _queued.value = queue.size
-                }
+                if (_pending.value == null) _pending.value = request else queue.addLast(request to cont)
+                published()
+                notifyIfBackgrounded(request)
             }
         }
         cont.invokeOnCancellation { scope.launch { resolve(request.id, RiskDecision.DENY, record = false) } }
@@ -118,13 +124,12 @@ object RiskGate {
     }
 
     fun notifyPending() {
-        _pending.value?.let { notifyIfBackgrounded(it) }
+        _open.value.forEach { notifyIfBackgrounded(it) }
     }
 
     /** A withdrawn request ([record] false) leaves the card and the queue but is not a decision anyone took. */
     private suspend fun resolve(id: String, decision: RiskDecision, record: Boolean = true) {
         var cont: Continuation<RiskDecision>? = null
-        var advancedTo: RiskRequest? = null
         var resolved: RiskRequest? = null
         mutex.withLock {
             cont = awaiters.remove(id) ?: return@withLock
@@ -134,13 +139,12 @@ object RiskGate {
                 resolved = _pending.value
                 val next = queue.removeFirstOrNull()
                 _pending.value = next?.first
-                advancedTo = next?.first
-                _queued.value = queue.size
             } else {
                 // Still queued: drop it from the line.
                 val idx = queue.indexOfFirst { it.first.id == id }
-                if (idx >= 0) { resolved = queue[idx].first; queue.removeAt(idx); _queued.value = queue.size }
+                if (idx >= 0) { resolved = queue[idx].first; queue.removeAt(idx) }
             }
+            published()
         }
         val c = cont ?: return
         cancelNotification?.invoke(id)
@@ -150,7 +154,6 @@ object RiskGate {
         } else {
             AppLogger.info(TAG, "request $id withdrawn (caller cancelled)")
         }
-        advancedTo?.let { notifyIfBackgrounded(it) }
         // A cancelled continuation ignores the resume; the others get their answer.
         c.resume(decision)
     }
@@ -160,7 +163,7 @@ object RiskGate {
         scope.launch {
             mutex.withLock {
                 if (request.id in notified) return@launch
-                if (_pending.value?.id != request.id) return@launch
+                if (_open.value.none { it.id == request.id }) return@launch
                 if (notifier(request)) notified.add(request.id)
             }
         }
