@@ -65,7 +65,7 @@ object AppBots {
     fun receipt(context: Context, app: MoApps.App, text: String, openLabel: String) {
         val target = app.askedIn ?: return
         val line = text.trim().let { if (it.startsWith(app.title)) it else "${app.title}：$it" }
-        val body = "$line\n[$openLabel](minis://apps/${app.name})"
+        val body = if (app.hasApp) "$line\n[$openLabel](minis://apps/${app.name})" else line
         scope.launch {
             repeat(600) {
                 val vm = ChatViewModelStore.existing(target)
@@ -144,34 +144,42 @@ object AppBots {
         saveUsage(app, usage(app).put("chatSeen", total).put("chatSeenAt", System.currentTimeMillis()))
     }
 
-    /** What the app's Bot is told on every turn, after the usual Momoding instructions. */
+    /** What a Bot is told on every turn, after the usual Momoding instructions. */
     fun standingNote(context: Context, sessionId: String): String? {
         val app = MoApps.ofSession(context, sessionId) ?: return null
-        return """## You are ${app.title}'s Momoding
-You are the Momoding that lives in the app "${app.title}" on the person's home screen: you build it, and you change it when they ask, from inside the app or here. Read the momoding-apps skill before you start work on it.
-- The app is the folder ${app.linuxDir} (a git repository). Changes there show in the app at once; nothing to publish.
-- ${app.linuxDir}/NOTES.md is your memory of this app: why it exists, what the person asked for, what was decided, how they use it. Read it when you start, keep it current.
+        val what = app.what.ifBlank { null }?.let { " You take care of this for them: $it." }.orEmpty()
+        val home = """## You are ${app.title}, one of the person's Momodings
+You are the Momoding called "${app.title}".$what The main Momoding in the person's main chat made you; you work on your own, in this chat.
+- Your folder is ${app.linuxDir} (a git repository). ${app.linuxDir}/NOTES.md is your memory: why you exist, what the person asked for, what was decided, how they use you. Read it when you start, keep it current.
 - Messages that start with $WAKE_CUE come from the Momoding in the person's main chat, not from the person.
+- When a piece of work the main Momoding gave you is done, tell the main chat in one line: `momoding-app done "<what came of it>"`."""
+        if (!app.hasApp) return home + """
+- You have no app. When the person wants something to keep and use again, build it as your app in your folder (read the momoding-apps skill first); it opens from the person's list of Momodings."""
+        return home + """
+- Your app is the folder: you build it, and you change it when the person asks, from inside the app or here. Read the momoding-apps skill before you start work on it. Changes there show in the app at once; nothing to publish.
 - What the person's app keeps is theirs: ${app.linuxDir}/.momoding/data.json is a read-only copy for you to read; in your browser the app has its own copy to test with.
 - Messages that start with $APP_CUE come from the app itself (`momoding.tell`): do what it asks, in this chat.
 - A message that starts with $REVIEW_CUE asks you to look at how the app has been used (${app.linuxDir}/.momoding/usage.json, its data, NOTES.md). Offer one improvement only when what you see clearly calls for it: say it in one or two lines and run `momoding-app suggest "<that improvement, in one line>"`, which puts a dot on the app for the person; change nothing until they say yes. When nothing calls for one, do not run it, and keep any reply to a few words.
 - Apps live on the phone: an app can wake when a text or a notification arrives (`momoding.on`, the momoding-apps skill). When what the app is for arrives that way (bank texts for a ledger, pickup codes for a parcel list), make it come in by itself rather than asking the person to type it.
 - What the app may use of the phone is the person's choice, per app: the first time it runs a command that reads their things or acts for them, they are asked on the app's screen. ${app.linuxDir}/.momoding/permissions.json has their answers.
-- When a piece of work is done and checked, commit it and tell the main chat in one line: `momoding-app done "<what changed>"`."""
+- Commit your work on the app once it is done and checked."""
     }
 
     /** For the main chat's Momoding: what Momoding Apps are, and the person's. */
     fun directory(context: Context): String {
         val apps = MoApps.list(context).filter { it.botSession != null }
         return buildString {
-            append("## Momoding Apps\n")
-            append("When the person wants something to keep and use again (a tracker, a tool, a game, a list), make it a Momoding App on their home screen: ")
-            append("`momoding-app new <name> --title \"<title>\" --brief \"<what they want, in their words, with what you know that helps>\"`. ")
-            append("The app gets its own Momoding, who builds it and reports back here; don't build it yourself. ")
+            append("## Momodings and their apps\n")
+            append("Besides you, the person can have other Momodings, each looking after one thing for them (a coach, a ledger), in its own chat; one may have an app on the home screen. ")
+            append("When the person wants one, or wants something to keep and use again (a tracker, a tool, a game, a list), make a Momoding for it: ")
+            append("`momoding-app new <name> --title \"<title>\" --what \"<what it takes care of, in a line>\" --brief \"<what they want, in their words, with what you know that helps>\"`. ")
+            append("It builds an app when one is wanted and reports back here; don't do its work yourself. ")
             append("Notice when one would help before they think of it, from what really happens, not what might: the same kind of thing asked of you again and again (\"这周第三次让我查快递了\"), or the same kind of text or notification the person keeps acting on (bank charges, pickup codes, school notices). ")
             append("A single ask is just a task. Once the pattern is there, offer — say what you noticed and what the app would do by itself, in a line, once in the conversation; if they don't take it up, saying nothing included, it's their call — don't raise it again. ")
-            append("To change one, `momoding-app tell <name> \"<what to do>\"`: it works on its own and reports back.")
-            if (apps.isNotEmpty()) append("\nThe person's apps:\n").append(apps.joinToString("\n") { "- ${it.name}: ${it.title}" })
+            append("To give one work, `momoding-app tell <name> \"<what to do>\"`: it works on its own and reports back.")
+            if (apps.isNotEmpty()) append("\nThe person's Momodings:\n").append(apps.joinToString("\n") { a ->
+                "- ${a.name}: ${a.title}" + a.what.ifBlank { null }?.let { " — $it" }.orEmpty() + if (a.hasApp) " (has an app)" else ""
+            })
         }
     }
 }

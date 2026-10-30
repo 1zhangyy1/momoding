@@ -5,8 +5,10 @@ import org.json.JSONObject
 import java.io.File
 
 /**
- * Momoding Apps: small apps that live on the phone, each with its own Momoding inside
- * (调研/M27). An app is a folder the agent works in the way it works on any web project:
+ * Momoding's Bots and their apps (调研/M27, M34). Every Bot but the main Momoding has a folder, its
+ * home: NOTES.md is its memory, `.momoding/bot.json` its chat. An app is what a Bot may build there
+ * (index.html and its code), at most one per Bot; a Bot without one lives in its chat. The folder
+ * is worked in the way the agent works on any web project:
  *
  *     /var/minis/apps/<name>/   a git repository: index.html, its code, manifest.json (a PWA
  *                               manifest: name, icons, theme_color), NOTES.md (the app's memory)
@@ -30,8 +32,12 @@ object MoApps {
         /** Outside the sandbox (`files/momoding-app-data/`): what nothing run there may change — the person's data, their answers. */
         val vault: File get() = File(dir.parentFile!!.parentFile!!.parentFile!!, "momoding-app-data").also { it.mkdirs() }
 
-        /** The manifest's name, else the folder's. */
+        /** The Bot's name: the manifest's, else the folder's. */
         val title: String get() = manifest().optString("short_name").ifBlank { manifest().optString("name") }.ifBlank { name }
+        /** What the Bot takes care of, in a line (the manifest's description). */
+        val what: String get() = manifest().optString("description")
+        /** The Bot has built its app. */
+        val hasApp: Boolean get() = index.isFile
         val themeColor: String? get() = manifest().optString("theme_color").ifBlank { null }
 
         fun manifest(): JSONObject = runCatching { JSONObject(File(dir, "manifest.json").readText()) }.getOrDefault(JSONObject())
@@ -53,29 +59,40 @@ object MoApps {
     fun get(context: Context, name: String): App? =
         name.takeIf(::validName)?.let { File(root(context), it) }?.takeIf { it.isDirectory }?.let { App(name, it) }
 
+    /** In the order they were made, which is the order the person sees them in, whatever they are doing. */
     fun list(context: Context): List<App> =
         root(context).listFiles().orEmpty().filter { it.isDirectory && validName(it.name) }.map { App(it.name, it) }
-            .sortedByDescending { it.dir.lastModified() }
+            .sortedBy { File(it.platform, "bot.json").lastModified() }
 
     /** The app whose Bot this chat is, if it is one. */
     fun ofSession(context: Context, sessionId: String): App? = list(context).firstOrNull { it.botSession == sessionId }
 
-    /** A new app folder with what every app starts from; the Bot writes the rest. */
-    fun create(context: Context, name: String, title: String): App {
+    /** A new Bot's folder with what every one starts from; the Bot writes the rest (an app, if it is to have one). */
+    fun create(context: Context, name: String, title: String, what: String = ""): App {
         require(validName(name)) { "name: a short lowercase word (a-z, 0-9, -), like ledger or water" }
         val dir = File(root(context), name)
         require(!dir.exists()) { "an app called $name already exists" }
         dir.mkdirs()
         val app = App(name, dir)
         File(dir, ".gitignore").writeText(".momoding/\n")
-        File(dir, "manifest.json").writeText(JSONObject().put("name", title).put("short_name", title)
+        File(dir, "manifest.json").writeText(JSONObject().put("name", title).put("short_name", title).put("description", what)
             .put("start_url", "index.html").put("display", "standalone").toString(2) + "\n")
         File(dir, "NOTES.md").writeText("# $title\n\nWhat it is for, what the person asked, what was decided. Keep it current.\n")
         app.platform
         return app
     }
 
-    fun remove(context: Context, app: App) { removeData(context, app); app.dir.deleteRecursively() }
+    fun remove(app: App) { removeData(app); app.dir.deleteRecursively() }
+
+    /** What the Bot keeps when its app goes: its memory, its chat, its name and its history. */
+    private val KEPT = setOf(".git", ".gitignore", ".momoding", "NOTES.md", "manifest.json")
+
+    /** The app goes (its code and what it kept); the Bot stays, and can build another. */
+    fun removeApp(app: App) {
+        removeData(app)
+        app.dir.listFiles().orEmpty().filter { it.name !in KEPT }.forEach { it.deleteRecursively() }
+        listOf("data.json", "preview.json", "log", "permissions.json", "look.png").forEach { File(app.platform, it).apply { setWritable(true); delete() } }
+    }
 
     // ── what the app keeps ────────────────────────────────────────────────────
 
@@ -116,7 +133,7 @@ object MoApps {
         }
     }
 
-    fun removeData(context: Context, app: App) {
+    fun removeData(app: App) {
         app.vault.listFiles().orEmpty().filter { it.name.startsWith(app.name + ".") }.forEach { it.delete() }
     }
 

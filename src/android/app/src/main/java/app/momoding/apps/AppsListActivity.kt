@@ -119,7 +119,7 @@ class AppsListActivity : ComponentActivity() {
         val session = app.botSession
         lifecycleScope.launch {
             session?.let { runCatching { (application as MinisApp).chatRepository.deleteSession(it) } }
-            MoApps.remove(this@AppsListActivity, app)
+            MoApps.remove(app)
             AppWidget.refresh(this@AppsListActivity, app)
             apps = MoApps.list(this@AppsListActivity).filter { it.index.isFile }
         }

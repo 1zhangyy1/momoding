@@ -94,4 +94,20 @@ class AppsTest {
         assertFalse(AppBridge.reads(listOf("android-sms", "send", "10086", "hi")))
         assertFalse(AppBridge.reads(listOf("android-speak", "你好")))
     }
+
+    @Test fun `deleting a Bot's app keeps the Bot`() {
+        val dir = File(tmp.root, "files/minis-global/apps/ledger").apply { mkdirs() }
+        val app = MoApps.App("ledger", dir)
+        listOf("index.html", "NOTES.md", "manifest.json", "app.js").forEach { File(dir, it).writeText("x") }
+        File(dir, "lib").mkdirs(); File(dir, "lib/chart.js").writeText("x")
+        app.setBot("s1", null)
+        File(app.vault, "ledger.json").writeText("{}")
+        File(app.vault, "ledger-other.json").writeText("{}")
+        assertTrue(app.hasApp)
+        MoApps.removeApp(app)
+        assertFalse(app.hasApp)
+        assertEquals(setOf("NOTES.md", "manifest.json", ".momoding"), dir.list()!!.toSet())
+        assertEquals("s1", app.botSession)
+        assertEquals(listOf("ledger-other.json"), app.vault.list()!!.toList())
+    }
 }

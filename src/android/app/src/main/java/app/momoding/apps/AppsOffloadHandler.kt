@@ -20,9 +20,9 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 /**
- * `momoding-app` — Momoding Apps from the shell (调研/M27):
+ * `momoding-app` — the person's other Momodings and their apps, from the shell (调研/M27, M34):
  *
- *     momoding-app new <name> --title "<title>" --brief "<what the person wants>"
+ *     momoding-app new <name> --title "<title>" --what "<what it takes care of>" --brief "<what the person wants>"
  *     momoding-app install <name>        put it on the home screen
  *     momoding-app open <name>           show it on the screen
  *     momoding-app tell <name> "<text>"  a message for that app's Momoding
@@ -62,10 +62,10 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
         val title = args.get("title")?.trim().orEmpty().ifEmpty { name }
         val brief = args.get("brief")?.trim().orEmpty()
         require(brief.isNotEmpty()) { "--brief: what the person wants, in their words, with anything you know that helps" }
-        val app = MoApps.create(context, name, title)
+        val app = MoApps.create(context, name, title, args.get("what")?.trim().orEmpty())
         runBlocking { AppBots.create(context, app, request.sessionId, brief) }
         return ok(JSONObject().put("app", name).put("folder", app.linuxDir)
-            .put("tell_user", "Its own Momoding is building it now and reports back here when it is ready. Say so in one line; do not build it yourself."))
+            .put("tell_user", "It is starting now and reports back here. Say so in one line; do not do its work yourself."))
     }
 
     private fun install(app: MoApps.App): NativeOffloadResult {
@@ -163,7 +163,7 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
     private suspend fun settled(): NativeOffloadResult { delay(SETTLE); return ok(JSONObject().put("done", true).put("note", "look shows what it did")) }
 
     private fun list(): NativeOffloadResult = ok(JSONObject().put("apps", JSONArray().apply {
-        MoApps.list(context).forEach { put(JSONObject().put("name", it.name).put("title", it.title).put("folder", it.linuxDir).put("ready", it.index.isFile)) }
+        MoApps.list(context).forEach { put(JSONObject().put("name", it.name).put("title", it.title).put("what", it.what).put("folder", it.linuxDir).put("app", it.hasApp)) }
     }))
 
     private fun <T> onMain(block: () -> T): T {
@@ -181,21 +181,22 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
     companion object {
         private const val SETTLE = 700L
         private val HELP = """
-            momoding-app — Momoding Apps: small apps on the home screen, each with its own Momoding.
+            momoding-app — the person's other Momodings, each looking after one thing, and their apps
+            (at most one each, on the home screen).
 
-              new <name> --title "<title>" --brief "<what the person wants>"
-                                   a new app folder and its Momoding, who builds it (name: a short
-                                   lowercase word like ledger)
+              new <name> --title "<title>" --what "<what it takes care of>" --brief "<what the person wants>"
+                                   a new Momoding with its own chat and folder; it builds an app when
+                                   one is wanted (name: a short lowercase word like ledger)
               install <name>       put it on the home screen
               open <name>          show it on the screen
               widget <name>        offer a home-screen widget of it (shows what the app sets with momoding.widget)
-              tell <name> "<text>" a message for that app's Momoding
+              tell <name> "<text>" a message for that Momoding
               progress "<what is there now>"
                                    from an app's own Momoding while it builds: a line with an open
                                    button, so the person can watch it grow
               done "<what changed>" from an app's own Momoding: one line in the chat that asked for it
               suggest "<improvement>" from an app's own Momoding after a review: a dot on the app
-              list                 the apps
+              list                 the Momodings, and which have an app
 
             An app's own Momoding, checking its work on the phone as the person sees it (opens it if
             it is not on the screen; Momoding itself names the app: look <name>):
