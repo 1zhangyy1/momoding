@@ -58,7 +58,7 @@ fun MomodingHeader(sessionId: String? = null) {
     // another Momoding: the face and name of the Bot (its app's icon, or its letter)
     val ownApp = remember(sessionId) { sessionId?.let { app.momoding.apps.MoApps.ofSession(context, it) } }
     val face = remember(soul.name, uiMode, ownApp?.name) {
-        (ownApp?.let { app.momoding.apps.AppIcon.bitmap(it, 96, adaptive = false) } ?: Identity.face(context))?.asImageBitmap()
+        (ownApp?.let { app.momoding.apps.AppIcon.bitmap(context, it, 96, adaptive = false) } ?: Identity.face(context))?.asImageBitmap()
     }
     var listOpen by remember { androidx.compose.runtime.mutableStateOf(false) }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

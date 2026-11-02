@@ -381,6 +381,8 @@ dependencies {
 
     // Coil (image loading)
     implementation("io.coil-kt:coil-compose:2.7.0")
+    // momoding: a Bot's icon is a Fluent emoji (assets/emoji, MIT), drawn from its SVG
+    implementation("com.caverock:androidsvg-aar:1.4")
 
     // Markdown rendering (mikepenz multiplatform-markdown-renderer)
     implementation("com.mikepenz:multiplatform-markdown-renderer-android:0.33.0")

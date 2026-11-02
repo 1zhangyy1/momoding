@@ -74,7 +74,7 @@ class MoAppActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         app = intent.getStringExtra(EXTRA_NAME)?.let { MoApps.get(this, it) } ?: run { finish(); return }
-        setTaskDescription(ActivityManager.TaskDescription(app.title, AppIcon.bitmap(app, 192, adaptive = false)))
+        setTaskDescription(ActivityManager.TaskDescription(app.title, AppIcon.bitmap(this, app, 192, adaptive = false)))
 
         val wv = WebView(this)
         web = wv
@@ -147,7 +147,7 @@ class MoAppActivity : ComponentActivity() {
         })
 
         AppBots.opened(this, app)
-        AppShare.publish(this, app)
+        relabel(this, app)
         // what arrives while it is open comes straight in (AppEvents)
         val deliver: (List<org.json.JSONObject>) -> Unit = { events -> wv.evaluateJavascript(AppEvents.script(events), null) }
         this.deliver = deliver
@@ -235,7 +235,7 @@ class MoAppActivity : ComponentActivity() {
         fun onHome(context: Context, app: MoApps.App): Boolean =
             runCatching { ShortcutManagerCompat.getShortcuts(context, ShortcutManagerCompat.FLAG_MATCH_PINNED).any { it.id == shortcutId(app) } }.getOrDefault(false)
 
-        /** After a rename: a pinned icon and the share entry take the new name. */
+        /** After a rename or a new icon: a pinned icon and the share entry follow the manifest. */
         fun relabel(context: Context, app: MoApps.App) {
             if (onHome(context, app)) runCatching { ShortcutManagerCompat.updateShortcuts(context, listOf(shortcut(context, app))) }
             AppShare.publish(context, app)
@@ -245,23 +245,32 @@ class MoAppActivity : ComponentActivity() {
 
         private fun shortcut(context: Context, app: MoApps.App) = ShortcutInfoCompat.Builder(context, shortcutId(app))
             .setShortLabel(app.title).setLongLabel(app.title)
-            .setIcon(IconCompat.createWithAdaptiveBitmap(AppIcon.bitmap(app, 432, adaptive = true)))
+            .setIcon(IconCompat.createWithAdaptiveBitmap(AppIcon.bitmap(context, app, 432, adaptive = true)))
             .setIntent(intent(context, app.name))
             .build()
     }
 }
 
-/** An app's icon: the one its manifest names (a PNG), else its first letter on its theme colour. */
+/**
+ * An app's icon: the Fluent emoji its manifest names (`"emoji": "📸"`, assets/emoji, MIT) on white;
+ * else the PNG its manifest names; else its first letter on its theme colour.
+ */
 object AppIcon {
-    /** Its colour: the manifest's theme colour, else one of a few picked by its name. Its face, and its chat's accent. */
+    /** Its colour: the manifest's theme colour, else one of a few picked by its name. Its chat's accent, its name's colour. */
     fun color(app: MoApps.App): Int = runCatching { Color.parseColor(app.themeColor) }.getOrDefault(PALETTE[Math.floorMod(app.name.hashCode(), PALETTE.size)])
 
-    fun bitmap(app: MoApps.App, px: Int, adaptive: Boolean): Bitmap {
+    fun bitmap(context: Context, app: MoApps.App, px: Int, adaptive: Boolean): Bitmap {
         val out = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
         val c = Canvas(out)
-        c.drawColor(color(app))
         // a launcher masks an adaptive icon to its middle (a 66-unit circle of 108): keep what matters inside it
         val inset = if (adaptive) px * 0.2f else 0f
+        emoji(context, app)?.let { svg ->
+            c.drawColor(Color.WHITE)
+            val pad = inset + (px - 2 * inset) * 0.18f
+            svg.renderToCanvas(c, android.graphics.RectF(pad, pad, px - pad, px - pad))
+            return out
+        }
+        c.drawColor(color(app))
         own(app)?.let { src ->
             c.drawBitmap(src, null, android.graphics.RectF(inset, inset, px - inset, px - inset), Paint(Paint.FILTER_BITMAP_FLAG))
             return out
@@ -273,6 +282,17 @@ object AppIcon {
         }
         c.drawText(letter, px / 2f, px / 2f - (p.descent() + p.ascent()) / 2f, p)
         return out
+    }
+
+    /** The emoji's drawing, named by its code points ("1f4f8", "0023-20e3"; variation selectors left out). */
+    private fun emoji(context: Context, app: MoApps.App): com.caverock.androidsvg.SVG? {
+        val e = app.manifest().optString("emoji").trim().ifEmpty { return null }
+        val key = e.codePoints().toArray().filter { it != 0xFE0F }.joinToString("-") { "%04x".format(it) }
+        return runCatching {
+            // drawn to the box it is given, not the 32 px the file says
+            context.assets.open("emoji/$key.svg").use { com.caverock.androidsvg.SVG.getFromInputStream(it) }
+                .apply { setDocumentWidth("100%"); setDocumentHeight("100%") }
+        }.getOrNull()
     }
 
     /** The largest PNG or WebP among the manifest's icons. */

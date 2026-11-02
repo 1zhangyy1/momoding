@@ -60,7 +60,7 @@ fun AppCard(app: MoApps.App, onOpen: () -> Unit) {
             delay(1500)
         }
     }
-    val icon = remember(app.name) { AppIcon.bitmap(app, 120, adaptive = false).asImageBitmap() }
+    val icon = remember(app.name) { AppIcon.bitmap(context, app, 120, adaptive = false).asImageBitmap() }
     Surface(shape = RoundedCornerShape(Design.Radius.Panel), color = Tones.surface, border = BorderStroke(1.dp, Tones.hairline)) {
         Column(Modifier.widthIn(max = 320.dp).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

@@ -94,7 +94,7 @@ object MoApps {
         // of the manifest, only who the Bot is: what the app asked for (shares, texts to listen to, icons) goes with it
         val m = app.manifest()
         val kept = JSONObject()
-        listOf("name", "short_name", "description", "theme_color").forEach { k -> m.opt(k)?.let { kept.put(k, it) } }
+        listOf("name", "short_name", "description", "emoji", "theme_color").forEach { k -> m.opt(k)?.let { kept.put(k, it) } }
         File(app.dir, "manifest.json").writeText(kept.toString(2) + "\n")
     }
 

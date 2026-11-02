@@ -112,7 +112,7 @@ class AppsListActivity : ComponentActivity() {
         val app = b.app!!
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Tones.surface).animateContentSize()) {
             Row(Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                val icon = remember(app.name, app.title) { AppIcon.bitmap(app, 96, adaptive = false).asImageBitmap() }
+                val icon = remember(app.name, app.title) { AppIcon.bitmap(this@AppsListActivity, app, 96, adaptive = false).asImageBitmap() }
                 Image(icon, null, Modifier.size(40.dp).clip(CircleShape))
                 Spacer(Modifier.size(12.dp))
                 Column(Modifier.weight(1f)) {

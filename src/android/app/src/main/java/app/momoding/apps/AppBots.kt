@@ -120,7 +120,7 @@ object AppBots {
                     if (last != null) repo(context).updateMessageParts(last.id, parts)
                     else repo(context).appendMessage(target, "assistant", parts).let { lastLine[app.name] = Line(target, it.id, it.sortOrder) }
                     if (finished) lastLine.remove(app.name)
-                    if (app.hasApp) AppShare.publish(context, app)
+                    if (app.hasApp) MoAppActivity.relabel(context, app) // its icon and name on the home screen follow its manifest
                     vm?.let { withContext(Dispatchers.Main) { it.reloadFromDisk() } }
                     // done for the person: the banner in Momoding (via the state), a notification outside it
                     BotStatus.touch()

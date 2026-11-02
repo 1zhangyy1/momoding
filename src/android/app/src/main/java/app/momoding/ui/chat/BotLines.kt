@@ -103,7 +103,7 @@ fun HandoffRow(handoff: BotLines.Handoff, live: Boolean, onOpen: (String) -> Uni
 fun FromBotHeader(name: String, onOpen: (String) -> Unit) {
     val context = LocalContext.current
     val app = remember(name) { MoApps.get(context, name) } ?: return
-    val face = remember(app.name) { AppIcon.bitmap(app, 60, adaptive = false).asImageBitmap() }
+    val face = remember(app.name) { AppIcon.bitmap(context, app, 60, adaptive = false).asImageBitmap() }
     FromHeader(face, app.title, Color(AppIcon.color(app))) { onOpen(home(app)) }
 }
 
@@ -133,6 +133,7 @@ private fun home(app: MoApps.App) = if (app.hasApp) "minis://apps/${app.name}" e
 
 @Composable
 private fun BotFace(app: MoApps.App, size: Int) {
-    val icon = remember(app.name) { AppIcon.bitmap(app, size * 3, adaptive = false).asImageBitmap() }
+    val context = LocalContext.current
+    val icon = remember(app.name) { AppIcon.bitmap(context, app, size * 3, adaptive = false).asImageBitmap() }
     Image(icon, null, Modifier.size(size.dp).clip(CircleShape))
 }

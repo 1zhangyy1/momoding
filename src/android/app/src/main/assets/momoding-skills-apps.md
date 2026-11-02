@@ -41,9 +41,9 @@ not sure what is current, look up today's best practice with `momoding-web` befo
   (vendored into the folder, so the app works offline).
 - `manifest.json` is a standard web app manifest: `short_name` is the name under the icon,
   `description` the one line under its name in the person's list of Bots (what it is for),
-  `theme_color` its colour, `icons` a square PNG (make one if the app deserves its own; without
-  it the icon is the name's first letter on the theme colour). Launchers crop icons to a circle
-  or a rounded square: keep the mark well inside the middle, with the colour reaching the edges.
+  `emoji` its icon: one emoji that says what it is for (`"📸"`), which Momoding draws in one
+  style for every Bot, on the home screen and wherever the person sees it; `theme_color` its
+  colour (its name, its chat's accent).
 - `NOTES.md` is your memory of this app: what it is for, what the person asked for, what was
   decided and why, how they use it. Read it when you start; update it with every change.
 - Commit each working change with a message saying what changed. Going back is `git revert`.

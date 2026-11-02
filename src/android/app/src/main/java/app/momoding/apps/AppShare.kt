@@ -31,7 +31,7 @@ object AppShare {
         if (!wantsShares(app)) { runCatching { ShortcutManagerCompat.removeDynamicShortcuts(context, listOf(id)) }; return }
         val info = ShortcutInfoCompat.Builder(context, id)
             .setShortLabel(app.title).setLongLabel(app.title)
-            .setIcon(IconCompat.createWithAdaptiveBitmap(AppIcon.bitmap(app, 432, adaptive = true)))
+            .setIcon(IconCompat.createWithAdaptiveBitmap(AppIcon.bitmap(context, app, 432, adaptive = true)))
             .setIntent(MoAppActivity.intent(context, app.name))
             .setCategories(setOf(CATEGORY))
             .setLongLived(true)

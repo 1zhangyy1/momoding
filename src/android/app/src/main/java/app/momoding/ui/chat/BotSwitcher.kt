@@ -128,7 +128,7 @@ private fun Face(b: BotStatus.Bot, size: Dp) {
     val context = LocalContext.current
     val uiMode = LocalConfiguration.current.uiMode
     val img: ImageBitmap? = remember(b.app?.name, b.app?.title, uiMode) {
-        (b.app?.let { AppIcon.bitmap(it, 96, adaptive = false) } ?: Identity.face(context))?.asImageBitmap()
+        (b.app?.let { AppIcon.bitmap(context, it, 96, adaptive = false) } ?: Identity.face(context))?.asImageBitmap()
     }
     Box(Modifier.size(size)) {
         Box(Modifier.size(size).clip(CircleShape).background(Tones.fill).border(2.dp, ChatColors.background, CircleShape)) {
