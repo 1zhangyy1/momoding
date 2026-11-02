@@ -123,8 +123,12 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
                     ok(JSONObject().put("picture", "${app.linuxDir}/.momoding/look.png").put("width", picture.width).put("height", picture.height)
                         .put("note", "Look at it with read_image. tap / swipe take its pixels. What the system shows (its permission prompt, a picker, the camera app) is not in it: the log says when the app waits on one."))
                 }
-                "tap" -> { withContext(Dispatchers.Main) { AppScreen.touch(stage, n(0), n(1), n(0), n(1), args.get("ms")?.toLongOrNull() ?: 60) }; settled() }
-                "swipe" -> { withContext(Dispatchers.Main) { AppScreen.touch(stage, n(0), n(1), n(2), n(3), args.get("ms")?.toLongOrNull() ?: 300) }; settled() }
+                "tap", "swipe" -> {
+                    val to = if (sub == "tap") listOf(n(0), n(1)) else listOf(n(2), n(3))
+                    val hit = withContext(Dispatchers.Main) { AppScreen.touch(stage, n(0), n(1), to[0], to[1], args.get("ms")?.toLongOrNull() ?: if (sub == "tap") 60 else 300) }
+                    MoApps.log(app, "log", "$sub ${rest.joinToString(" ")} → ${hit.ifEmpty { "nothing" }}")
+                    settled(hit)
+                }
                 else -> {
                     val text = rest.joinToString(" ")
                     require(text.isNotEmpty()) { "momoding-app type \"<text>\"" }
@@ -150,7 +154,10 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
     }
 
     /** What the touch started has had a moment to show. */
-    private suspend fun settled(): NativeOffloadResult { delay(SETTLE); return ok(JSONObject().put("done", true).put("note", "look shows what it did")) }
+    private suspend fun settled(hit: String = ""): NativeOffloadResult {
+        delay(SETTLE)
+        return ok(JSONObject().put("done", true).apply { if (hit.isNotEmpty()) put("landed_on", hit) }.put("note", "look shows what it did"))
+    }
 
     private fun list(): NativeOffloadResult = ok(JSONObject().put("apps", JSONArray().apply {
         MoApps.list(context).forEach { put(JSONObject().put("name", it.name).put("title", it.title).put("what", it.what).put("folder", it.linuxDir).put("app", it.hasApp)

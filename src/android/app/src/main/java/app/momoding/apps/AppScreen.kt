@@ -63,7 +63,7 @@ object AppScreen {
      * the pen) is the person's to answer, so it is not touched; while a question is up, nothing is.
      * Main thread.
      */
-    suspend fun touch(stage: Stage, x1: Float, y1: Float, x2: Float, y2: Float, ms: Long) {
+    suspend fun touch(stage: Stage, x1: Float, y1: Float, x2: Float, y2: Float, ms: Long): String {
         if (stage.asking()) throw IllegalStateException("Momoding is asking the person something over the app (look shows it); only they can answer it. Wait, or tell them in a line.")
         if (stage.ownAt(x1, y1)) throw IllegalStateException("that is Momoding's own, over the page (the pen, or a line at the top for the person); only they tap it. Say in a line what it is for.")
         val page = stage.page() ?: throw IllegalStateException("the app's page is not there")
@@ -86,6 +86,15 @@ object AppScreen {
             send(MotionEvent.ACTION_MOVE, x1 + (x2 - x1) * f, y1 + (y2 - y1) * f)
         }
         send(MotionEvent.ACTION_UP, x2, y2)
+        return hit(page, x1 + dx, y1 + dy)
+    }
+
+    /** What is under ([x],[y]) on [page] (its own pixels), in a few words: what the finger landed on. */
+    private suspend fun hit(page: WebView, x: Float, y: Float): String = suspendCancellableCoroutine { c ->
+        val script = "(()=>{const r=devicePixelRatio,e=document.elementFromPoint($x/r,$y/r);if(!e)return '';" +
+            "const t=(e.getAttribute('aria-label')||e.value||e.innerText||'').trim().replace(/\\s+/g,' ').slice(0,40);" +
+            "return e.tagName.toLowerCase()+(t?' \u201c'+t+'\u201d':'')})()"
+        page.evaluateJavascript(script) { c.resume(runCatching { org.json.JSONTokener(it).nextValue() as? String }.getOrNull().orEmpty()) }
     }
 
     /** [text] typed where the page's focus is, as a keyboard would. Main thread. */
