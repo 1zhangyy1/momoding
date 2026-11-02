@@ -83,7 +83,7 @@ class AppWidget : AppWidgetProvider() {
         fun added(context: Context, app: MoApps.App): Boolean = AppWidgetManager.getInstance(context)
             .getAppWidgetIds(ComponentName(context, AppWidget::class.java)).any { prefs(context).getString(KEY + it, null) == app.name }
 
-        /** Asks the launcher to add a widget for [app]; it shows its own confirmation (only from the person's tap: [AppOffer]). */
+        /** Asks the launcher to add a widget for [app]; it shows its own confirmation (only from the person's tap: [AppHome]). */
         fun requestPin(context: Context, app: MoApps.App): Boolean {
             val manager = AppWidgetManager.getInstance(context)
             if (!manager.isRequestPinAppWidgetSupported) return false

@@ -1,6 +1,6 @@
 ---
 name: momoding-apps
-description: How a Momoding App works — its folder, its own Momoding, window.momoding (phone commands, the model, the web, storage), checking it in your browser, putting it on the home screen, reporting back. Read before you build or change a Momoding App.
+description: How a Momoding App works — its folder, its own Momoding, window.momoding (phone commands, the model, the web, storage), checking it in your browser, reporting back. Read before you build or change a Momoding App.
 ---
 
 # Momoding Apps
@@ -21,14 +21,13 @@ not sure what is current, look up today's best practice with `momoding-web` befo
   one short line saying what is new, then the next step. Never hold everything back for one big
   hand-over at the end.
 - Something that works soon beats something polished late, and watching it grow is not waiting:
-  get a first screen working in a minute or two, offer it for the home screen and tell the chat
-  that asked for it (`momoding-app progress "<what is there now>"`, a line with an open
-  button). From then on every change you make shows on their screen as you make it; keep going
-  from there. One or two progress lines per build, not more.
+  get a first screen working in a minute or two and tell the chat that asked for it
+  (`momoding-app progress "<what is there now>"`). From then on every change you make shows on
+  their screen as you make it; keep going from there.
 - Say what you made or changed in plain words, one or two lines, never code.
 - Say only what is so. What waits on the person's yes (an icon on the home screen, a widget, a
   permission) is there once they have said it, which `momoding-app list` or the log shows; until
-  then, say what they tap to have it.
+  then it is theirs to add, from the card under your line.
 - The first time you hand an app over, end with one concrete change they could ask for
   ("想加个每月预算提醒？说一声就行"), so they know a sentence changes it. Only that first time.
 - Same rules as all of Momoding: what needs the person's OK still does.
@@ -92,9 +91,8 @@ On the phone and in your browser alike, every page of the app has:
   screenshot of a bill into the ledger, a link into a reading list). The app opens to take it.
 - `momoding.widget({title, value, lines, color})` — what the app's home-screen widget shows: a
   title, one big value, up to three short lines. Set it whenever what matters at a glance
-  changes, including in an `on` handler (a text came in, today's total moved). Offer the widget
-  with `momoding-app widget <name>` when a glance is worth having (the person adds it, as with
-  `install`).
+  changes, including in an `on` handler (a text came in, today's total moved). Once it has
+  something to show, the app's card in the chat offers the person its widget.
 - `momoding.app` (`name`, `title`), `momoding.device` (`dark`, `language`), `momoding.preview`
   (true in your browser).
 - `console.*` and uncaught errors go to `.momoding/log`.
@@ -119,8 +117,8 @@ Use a phone-sized viewport. Hand it over only when it works.
 Then check it where it is used: on the phone. `momoding-app look` shows it on the screen and gives
 a picture of it as the person sees it there (with what Momoding shows over it, like a question);
 look at it with `read_image`. `momoding-app tap <x> <y>`, `swipe`, `type "<text>"` use it with a
-finger, in that picture's pixels, on the page: what Momoding shows over it (a question, the
-line to put the app on the home screen) is the person's to answer, and your finger does not reach it. The camera, the real keyboard and screen size, the pen button:
+finger, in that picture's pixels, on the page: what Momoding shows over it (a question, the pen)
+is the person's, and your finger does not reach it. The camera, the real keyboard and screen size:
 only the phone shows them. What the system itself shows (its permission prompt, a picker, the
 camera app) is not in the picture; when the app stands waiting on the person, its `.momoding/log`
 says what for, and what they answered. Never conclude something cannot work before you have seen
@@ -135,13 +133,13 @@ it answers `{"code":0, "preview":true}` and the `log` says what it would have do
 
 ## Commands
 
-- `momoding-app install <name>` — the first time it is ready: offers it for the home screen, a
-  line at the top of the app's page; the person taps it and the phone asks them to confirm.
 - `momoding-app open <name>` — shows it on the screen.
-- `momoding-app progress "<what is there now>"` — while building, once there is something to
-  see: the same line with an open button.
 - `momoding-app done "<what changed>"` — when a piece of work is done and checked: one line for
-  the chat that asked for the app (in the person's language), with a button to open it.
+  the chat that asked for it (in the person's language), and under it the app's card, where the
+  person opens it and puts it, and its widget, on the home screen with a tap.
+- `momoding-app progress "<what is there now>"` — while building, once there is something to
+  see: the same line, early. Your next line replaces it while nothing else has been said there,
+  so the chat keeps one line for the work, the newest.
 - In the app, `momoding.tell(text)` hands something to you (it arrives in your chat, marked as
   from the app): use it for what needs you, not the model alone — "看看这个月花得怎么样".
 - What the app may use of the phone is the person's choice per app: the first time it runs a

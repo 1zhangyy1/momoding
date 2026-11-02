@@ -23,8 +23,9 @@
     <string name="mo_bot_delete">删除这个 Bot</string>
     <string name="mo_bot_deleted">已删除 %1$s</string>
     <string name="mo_bot_undo">撤销</string>
-    <string name="mo_app_offer_home">把「%1$s」放到桌面</string>
-    <string name="mo_app_offer_home_action">放上去</string>
-    <string name="mo_app_offer_widget">给「%1$s」加个桌面小组件</string>
-    <string name="mo_app_offer_widget_action">加上</string>
+    <string name="mo_app_card_open">打开</string>
+    <string name="mo_app_card_icon">放到桌面</string>
+    <string name="mo_app_card_icon_there">已在桌面</string>
+    <string name="mo_app_card_widget">加小组件</string>
+    <string name="mo_app_card_widget_there">已有小组件</string>
 </resources>

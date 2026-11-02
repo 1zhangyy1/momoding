@@ -3751,6 +3751,10 @@ fun ChatScreen(
                     mutableStateOf<List<FlatChatItem>>(emptyList())
                 }
                 SideEffect { voiceScreenItems.items = flatItems }
+                // momoding: each app's card shows where the chat last mentions it; earlier mentions are a plain link
+                val momodingAppCards = remember(flatItems) {
+                    app.momoding.ui.chat.appCardsAt(flatItems.filterIsInstance<FlatChatItem.AssistantMarkdownBlock>().map { it.key to it.rawText })
+                }
                 // [T-android-coldload-offmain-parse] Composition-snapshot
                 // prewarmer (captures the markdown palette) used by the
                 // flatten effect below to warm the parse caches for the
@@ -4595,7 +4599,7 @@ fun ChatScreen(
                                 }
                             }
                             is FlatChatItem.AssistantMarkdownBlock -> app.momoding.ui.chat.LinkLine.splitTrailing(item.rawText)?.takeIf { it.first.isBlank() }?.let { (_, links) ->
-                                app.momoding.ui.chat.LinkButtons(links, onOpen = urlClickHandler) // momoding: a line of links is a row of buttons
+                                app.momoding.ui.chat.LinkButtons(links, onOpen = urlClickHandler, cardAt = { momodingAppCards[it] == item.key }) // momoding: a line of links is a row of buttons
                             } ?: BoundsTrackedBlock(
                                 messageId = item.messageId,
                                 slotKey = "mdblock:${item.parentBlockId}:${item.blockIndex}",
@@ -4624,7 +4628,7 @@ fun ChatScreen(
                                     )
                                     }
                                     }
-                                    momodingSplit?.let { app.momoding.ui.chat.LinkButtons(it.second, onOpen = urlClickHandler) }
+                                    momodingSplit?.let { app.momoding.ui.chat.LinkButtons(it.second, onOpen = urlClickHandler, cardAt = { momodingAppCards[it] == item.key }) }
                                     }
                                 }
                             }

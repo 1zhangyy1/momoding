@@ -93,6 +93,10 @@ object AppBots {
             .forEach { ChatViewModelStore.existing(it)?.cancelStream() }
     }
 
+    private data class Line(val chat: String, val id: String, val order: Int)
+    /** The line an app's Momoding last wrote in a chat for the work at hand (progress, until done). */
+    private val lastLine = java.util.concurrent.ConcurrentHashMap<String, Line>()
+
     /**
      * The Bot's line in the chat that handed it the work, else the main chat ("记账：加了月度图"),
      * with a way to it. Written when that chat is not mid-turn, so it never lands between a tool
@@ -109,7 +113,13 @@ object AppBots {
             repeat(600) {
                 val vm = ChatViewModelStore.existing(target)
                 if (vm == null || !vm.isStreaming.value) {
-                    repo(context).appendMessage(target, "assistant", """[{"type":"text","value":${JSONObject.quote(body)}}]""")
+                    // one line per piece of work: while it is still the newest in that chat, the next report replaces it
+                    val parts = """[{"type":"text","value":${JSONObject.quote(body)}}]"""
+                    val last = lastLine[app.name]?.takeIf { it.chat == target && it.order == repo(context).dao.nextSortOrder(target) - 1 }
+                    if (last != null) repo(context).updateMessageParts(last.id, parts)
+                    else repo(context).appendMessage(target, "assistant", parts).let { lastLine[app.name] = Line(target, it.id, it.sortOrder) }
+                    if (finished) lastLine.remove(app.name)
+                    if (app.hasApp) AppShare.publish(context, app)
                     vm?.let { withContext(Dispatchers.Main) { it.reloadFromDisk() } }
                     // done for the person: the banner in Momoding (via the state), a notification outside it
                     BotStatus.touch()

@@ -1,8 +1,6 @@
 package app.momoding.apps
 
-import android.appwidget.AppWidgetManager
 import android.content.Context
-import androidx.core.content.pm.ShortcutManagerCompat
 import android.os.Handler
 import android.os.Looper
 import com.openminis.app.R
@@ -25,7 +23,6 @@ import java.util.concurrent.TimeUnit
  * `momoding-app` — the person's other Momodings and their apps, from the shell (调研/M27, M34):
  *
  *     momoding-app new <name> --title "<title>" --what "<what it takes care of>" --brief "<what the person wants>"
- *     momoding-app install <name>        offer it for the home screen (the person taps it on the app's page)
  *     momoding-app open <name>           show it on the screen
  *     momoding-app tell <name> "<text>"  a message for that app's Momoding
  *     momoding-app progress "<what is there now>"  (from an app's Momoding, while building) the same, early
@@ -41,9 +38,7 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
             when (val sub = args.positional.firstOrNull()) {
                 null, "help", "--help", "-h" -> NativeOffloadResult(0, HELP)
                 "new" -> new(args, request)
-                "install" -> install(app(args))
                 "open" -> open(app(args))
-                "widget" -> widget(app(args))
                 "tell" -> tell(app(args), args.positional.drop(2).joinToString(" "), request)
                 "done", "progress" -> done(args, request)
                 "suggest" -> suggest(args, request)
@@ -68,30 +63,6 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
         runBlocking { AppBots.create(context, app, request.sessionId, brief) }
         return ok(JSONObject().put("app", name).put("folder", app.linuxDir)
             .put("tell_user", "It is starting now and reports back here. Say so in one line; do not do its work yourself."))
-    }
-
-    private fun install(app: MoApps.App): NativeOffloadResult {
-        if (!app.index.isFile) throw IllegalStateException("${app.linuxDir}/index.html does not exist yet")
-        AppShare.publish(context, app)
-        return offer(app, AppOffer.What.HOME, ShortcutManagerCompat.isRequestPinShortcutSupported(context), "home_screen")
-    }
-
-    private fun widget(app: MoApps.App) =
-        offer(app, AppOffer.What.WIDGET, AppWidgetManager.getInstance(context).isRequestPinAppWidgetSupported, "widget")
-
-    /** Offered on the app's own page; the person taps it and the launcher asks them. It is there once [AppOffer.there] says so. */
-    private fun offer(app: MoApps.App, what: AppOffer.What, supported: Boolean, field: String): NativeOffloadResult {
-        val o = JSONObject().put("app", app.name)
-        when {
-            AppOffer.there(context, app, what) -> o.put(field, "there")
-            !supported -> o.put(field, "unsupported").put("note", "This launcher cannot add it; the app opens with momoding-app open.")
-            else -> {
-                AppOffer.offer(context, app, what)
-                o.put(field, "offered").put("note", "The app's page now shows a line for it at the top; the person taps it and the phone asks them to confirm. " +
-                    "It is not there yet: say so in those words (tap it in the app), never that it is done. momoding-app list shows when it is.")
-            }
-        }
-        return ok(o)
     }
 
     private fun open(app: MoApps.App): NativeOffloadResult {
@@ -176,7 +147,7 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
 
     private fun list(): NativeOffloadResult = ok(JSONObject().put("apps", JSONArray().apply {
         MoApps.list(context).forEach { put(JSONObject().put("name", it.name).put("title", it.title).put("what", it.what).put("folder", it.linuxDir).put("app", it.hasApp)
-            .put("home_screen", AppOffer.there(context, it, AppOffer.What.HOME)).put("widget", AppOffer.there(context, it, AppOffer.What.WIDGET))) }
+            .put("home_screen", AppHome.there(context, it, AppHome.What.ICON)).put("widget", AppHome.there(context, it, AppHome.What.WIDGET))) }
     }))
 
     private fun <T> onMain(block: () -> T): T {
@@ -200,18 +171,17 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
               new <name> --title "<title>" --what "<what it takes care of>" --brief "<what the person wants>"
                                    a new Momoding with its own chat and folder; it builds an app when
                                    one is wanted (name: a short lowercase word like ledger)
-              install <name>       offer it for the home screen: a line on the app's page the
-                                   person taps; the phone then asks them (list says when it is there)
               open <name>          show it on the screen
-              widget <name>        offer a home-screen widget of it, the same way (it shows what the
-                                   app sets with momoding.widget)
               tell <name> "<text>" a message for that Momoding
               progress "<what is there now>"
                                    from an app's own Momoding while it builds: a line with an open
                                    button, so the person can watch it grow
-              done "<what changed>" from an app's own Momoding: one line in the chat that asked for it
+              done "<what changed>" from an app's own Momoding: one line in the chat that asked for it,
+                                   with the app's card (the person opens it, and puts it on the home
+                                   screen, from there)
               suggest "<improvement>" from an app's own Momoding after a review: a dot on the app
-              list                 the Momodings, and which have an app
+              list                 the Momodings, which have an app, and what of it is on the home
+                                   screen (home_screen, widget: what the launcher says)
 
             An app's own Momoding, checking its work on the phone as the person sees it (opens it if
             it is not on the screen; Momoding itself names the app: look <name>):
