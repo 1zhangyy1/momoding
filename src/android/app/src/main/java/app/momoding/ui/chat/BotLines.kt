@@ -20,7 +20,6 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.momoding.apps.AppBots
 import app.momoding.apps.AppIcon
@@ -85,15 +84,14 @@ fun HandoffRow(handoff: BotLines.Handoff, live: Boolean, onOpen: (String) -> Uni
     val link = if (app.hasApp) "minis://apps/${app.name}" else "minis://session/${app.botSession}"
     Row(
         Modifier.clip(RoundedCornerShape(Design.Radius.Row)).clickable { onOpen(link) }.padding(horizontal = 16.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = Alignment.Top,
     ) {
         BotFace(app, 18)
         Text(
-            // who and how it stands first: a long message is what gets cut
+            // who and how it stands first, then all it was given
             listOfNotNull(head, state).joinToString(" · ") + handoff.text.takeIf { it.isNotEmpty() }?.let { "：$it" }.orEmpty(),
             Modifier.padding(start = 8.dp), fontSize = Design.Size.Caption,
             color = if (status == BotStatus.Kind.WAITING) Color(AppIcon.color(app)) else ChatColors.secondaryText,
-            maxLines = 1, overflow = TextOverflow.Ellipsis,
         )
     }
 }
