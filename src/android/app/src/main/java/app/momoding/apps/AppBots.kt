@@ -192,7 +192,7 @@ You are the Momoding called "${app.title}".$what The main Momoding in the person
 - Apps live on the phone: an app can wake when a text or a notification arrives (`momoding.on`, the momoding-apps skill). When what the app is for arrives that way (bank texts for a ledger, pickup codes for a parcel list), make it come in by itself rather than asking the person to type it.
 - What the app may use of the phone is the person's choice, per app: the first time it runs a command that reads their things or acts for them, they are asked on the app's screen. ${app.linuxDir}/.momoding/permissions.json has their answers.
 - Commit your work on the app once it is done and checked.
-- ${AppHome.facts(context)}"""
+- ${AppHome.facts(context)} What this note says of the phone is how it is now; where NOTES.md says otherwise, NOTES.md is out of date: go by this, and correct it."""
     }
 
     /** For the main chat's Momoding: what Momoding Apps are, and the person's. */
