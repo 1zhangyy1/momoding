@@ -1,13 +1,8 @@
 package app.momoding.apps
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import android.webkit.WebResourceRequest
-import android.webkit.WebResourceResponse
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import com.openminis.app.logging.AppLogger
 import org.json.JSONArray
 import org.json.JSONObject
@@ -128,21 +123,9 @@ object AppEvents {
     fun script(events: List<JSONObject>) = "window.__momodingDeliver && window.__momodingDeliver(${JSONArray(events)})"
 
     /** [app]'s page, loaded with nobody looking, for as long as its handlers need (at most [BACKGROUND_MS]). */
-    @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
     private fun runInBackground(context: Context, app: MoApps.App) = main.post {
         if (live.containsKey(app.name)) return@post // a page is already open; the new arrival went to it
-        val wv = WebView(context)
-        val bridge = AppBridge(context, wv, AppBridge.Mode.BACKGROUND)
-        wv.settings.javaScriptEnabled = true
-        wv.settings.domStorageEnabled = true
-        wv.settings.allowFileAccess = false
-        wv.settings.allowContentAccess = false
-        wv.addJavascriptInterface(bridge, AppBridge.JS_NAME)
-        wv.webViewClient = object : WebViewClient() {
-            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
-                if (request.url.host == MoAppActivity.HOST) AppPage.respond(app, request.url.path.orEmpty()) else null
-            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest) = true // nowhere to go
-        }
+        val (wv, bridge) = AppPage.unattended(context, app)
         val deliver: (List<JSONObject>) -> Unit = { events -> wv.evaluateJavascript(script(events), null) }
         attach(app, deliver)
         MoApps.log(app, "log", "woke in the background for what arrived")

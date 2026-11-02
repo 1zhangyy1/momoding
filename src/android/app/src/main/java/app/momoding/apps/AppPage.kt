@@ -32,6 +32,27 @@ object AppPage {
             200, "OK", mapOf("Cache-Control" to "no-store"), ByteArrayInputStream(bytes))
     }
 
+    /**
+     * [app]'s page for when no one is looking (an event in the background, its Momoding's check):
+     * served from its folder, `momoding` bound on the background's terms, links out going nowhere.
+     */
+    @android.annotation.SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
+    fun unattended(context: android.content.Context, app: MoApps.App): Pair<android.webkit.WebView, AppBridge> {
+        val wv = android.webkit.WebView(context)
+        val bridge = AppBridge(context, wv, AppBridge.Mode.BACKGROUND)
+        wv.settings.javaScriptEnabled = true
+        wv.settings.domStorageEnabled = true
+        wv.settings.allowFileAccess = false
+        wv.settings.allowContentAccess = false
+        wv.addJavascriptInterface(bridge, AppBridge.JS_NAME)
+        wv.webViewClient = object : android.webkit.WebViewClient() {
+            override fun shouldInterceptRequest(view: android.webkit.WebView, request: android.webkit.WebResourceRequest): WebResourceResponse? =
+                if (request.url.host == MoAppActivity.HOST) respond(app, request.url.path.orEmpty()) else null
+            override fun shouldOverrideUrlLoading(view: android.webkit.WebView, request: android.webkit.WebResourceRequest) = true // nowhere to go
+        }
+        return wv to bridge
+    }
+
     /** `minis://apps/<name>/<path>` in the agent's browser. */
     fun forBrowser(context: android.content.Context, path: String): WebResourceResponse {
         val name = path.trimStart('/').substringBefore('/')

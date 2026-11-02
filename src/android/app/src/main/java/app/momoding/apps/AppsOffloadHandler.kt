@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
  * `momoding-app` — the person's other Momodings and their apps, from the shell (调研/M27, M34):
  *
  *     momoding-app new <name> --title "<title>" --what "<what it takes care of>" --brief "<what the person wants>"
- *     momoding-app open <name>           show it on the screen
+ *     momoding-app open <name>           show it on the person's screen (when they ask to see it)
  *     momoding-app tell <name> "<text>"  a message for that app's Momoding
  *     momoding-app progress "<what is there now>"  (from an app's Momoding, while building) the same, early
  *     momoding-app done "<what changed>" (from an app's Momoding) one line in the chat that asked for it
@@ -37,7 +37,7 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
             when (val sub = args.positional.firstOrNull()) {
                 null, "help", "--help", "-h" -> NativeOffloadResult(0, HELP)
                 "new" -> new(args, request)
-                "open" -> open(app(args))
+                "open" -> open(app(args), request)
                 "tell" -> tell(app(args), args.positional.drop(2).joinToString(" "), request)
                 "done", "progress" -> done(args, request)
                 "suggest" -> suggest(args, request)
@@ -64,8 +64,16 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
             .put("tell_user", "It is starting now and reports back here. Say so in one line; do not do its work yourself."))
     }
 
-    private fun open(app: MoApps.App): NativeOffloadResult {
+    /**
+     * Shows [app] on the person's screen — when they ask to see it. An app's own Momoding never takes
+     * their screen: its open readies the stage no one sees, where look and tap work (AppStage).
+     */
+    private fun open(app: MoApps.App, request: NativeOffloadRequest): NativeOffloadResult {
         if (!app.index.isFile) throw IllegalStateException("${app.linuxDir}/index.html does not exist yet")
+        if (request.sessionId?.let { MoApps.ofSession(context, it) } != null) {
+            runBlocking { stage(app) }
+            return ok(JSONObject().put("ready", app.name).put("note", "Not shown on the person's screen: they are not interrupted while you check. look, tap, swipe and type work as it is; they open it from your line's card."))
+        }
         onMain { context.startActivity(MoAppActivity.intent(context, app.name)); true }
         return ok(JSONObject().put("opened", app.name))
     }
@@ -106,21 +114,21 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
         val rest = args.positional.drop(if (first == app.name) 2 else 1)
         fun n(i: Int) = rest.getOrNull(i)?.toFloatOrNull() ?: throw IllegalArgumentException("momoding-app $sub: pixel numbers as in the picture from look\n$HELP")
         return runBlocking {
-            val activity = shown(app)
+            val stage = stage(app)
             when (sub) {
                 "look" -> {
                     val file = java.io.File(app.platform, "look.png")
-                    val picture = withContext(Dispatchers.Main) { AppScreen.picture(activity) }
+                    val picture = withContext(Dispatchers.Main) { AppScreen.picture(stage) }
                     file.outputStream().use { picture.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
                     ok(JSONObject().put("picture", "${app.linuxDir}/.momoding/look.png").put("width", picture.width).put("height", picture.height)
                         .put("note", "Look at it with read_image. tap / swipe take its pixels. What the system shows (its permission prompt, a picker, the camera app) is not in it: the log says when the app waits on one."))
                 }
-                "tap" -> { withContext(Dispatchers.Main) { AppScreen.touch(activity, n(0), n(1), n(0), n(1), args.get("ms")?.toLongOrNull() ?: 60) }; settled() }
-                "swipe" -> { withContext(Dispatchers.Main) { AppScreen.touch(activity, n(0), n(1), n(2), n(3), args.get("ms")?.toLongOrNull() ?: 300) }; settled() }
+                "tap" -> { withContext(Dispatchers.Main) { AppScreen.touch(stage, n(0), n(1), n(0), n(1), args.get("ms")?.toLongOrNull() ?: 60) }; settled() }
+                "swipe" -> { withContext(Dispatchers.Main) { AppScreen.touch(stage, n(0), n(1), n(2), n(3), args.get("ms")?.toLongOrNull() ?: 300) }; settled() }
                 else -> {
                     val text = rest.joinToString(" ")
                     require(text.isNotEmpty()) { "momoding-app type \"<text>\"" }
-                    val typed = withContext(Dispatchers.Main) { AppScreen.type(activity, text) }
+                    val typed = withContext(Dispatchers.Main) { AppScreen.type(stage, text) }
                     if (!typed) throw IllegalStateException("nothing on the page has the focus: tap the field first")
                     settled()
                 }
@@ -128,16 +136,17 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
         }
     }
 
-    /** The app on the screen, opened (and given time to draw) if it is not. */
-    private suspend fun shown(app: MoApps.App): MoAppActivity {
+    /**
+     * Where to check [app]: the person's screen when they have it open, else a stage no one sees
+     * (AppStage) — checking the work never takes their screen.
+     */
+    private suspend fun stage(app: MoApps.App): AppScreen.Stage {
         AppScreen.of(app.name)?.let { return it }
         if (!app.index.isFile) throw IllegalStateException("${app.linuxDir}/index.html does not exist yet")
-        withContext(Dispatchers.Main) { context.startActivity(MoAppActivity.intent(context, app.name)) }
-        val activity = withTimeoutOrNull(8000) { while (AppScreen.of(app.name) == null) delay(100); AppScreen.of(app.name) }
-            ?: throw IllegalStateException("${app.name} did not come up on the screen")
-        withTimeoutOrNull(8000) { while (withContext(Dispatchers.Main) { activity.page()?.progress ?: 100 } < 100) delay(100) }
+        val stage = withContext(Dispatchers.Main) { AppStage.of(context, app) }
+        withContext(Dispatchers.Main) { stage.ready() }
         delay(SETTLE)
-        return activity
+        return stage
     }
 
     /** What the touch started has had a moment to show. */
@@ -169,7 +178,7 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
               new <name> --title "<title>" --what "<what it takes care of>" --brief "<what the person wants>"
                                    a new Momoding with its own chat and folder; it builds an app when
                                    one is wanted (name: a short lowercase word like ledger)
-              open <name>          show it on the screen
+              open <name>          show it on the person's screen (when they ask to see it)
               tell <name> "<text>" a message for that Momoding
               progress "<what is there now>"
                                    from an app's own Momoding while it builds: the same line, early,
@@ -180,8 +189,9 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
               list                 the Momodings, which have an app, and what of it is on the home
                                    screen (home_screen, widget: what the launcher says)
 
-            An app's own Momoding, checking its work on the phone as the person sees it (opens it if
-            it is not on the screen; Momoding itself names the app: look <name>):
+            An app's own Momoding, checking its work on the phone as the person sees it: on their
+            screen if they have it open, else where no one sees it, so they are never interrupted
+            (Momoding itself names the app: look <name>):
               look                 a picture of it now, with what Momoding shows over it
               tap <x> <y> [--ms N] a finger on the page, in the picture's pixels (--ms 800: press and
                                    hold); what Momoding shows over it is the person's to answer

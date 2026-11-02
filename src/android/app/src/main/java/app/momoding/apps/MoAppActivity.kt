@@ -40,7 +40,7 @@ import java.io.File
  * shows while the person watches; what the app keeps is in momoding.store and survives the reload.
  * The pen opens the app's own Momoding. An error right after opening asks that Momoding to fix it.
  */
-class MoAppActivity : ComponentActivity() {
+class MoAppActivity : ComponentActivity(), AppScreen.Stage {
 
     private lateinit var app: MoApps.App
     private var web: WebView? = null
@@ -54,14 +54,15 @@ class MoAppActivity : ComponentActivity() {
     /** What Momoding shows on the page for the person (the pen, the line at the top): not the page's. */
     private val own = mutableListOf<android.view.View>()
 
-    /** Momoding's windows over the page now, bottom to top (AppScreen). */
-    /** The person is being asked something on this page (AppQuestions): only they answer it. */
-    internal fun asking(): Boolean = AppQuestions.asking(this, app, trouble.value)
+    override fun window(): android.view.Window = window
 
-    internal fun page(): WebView? = web
+    /** The person is being asked something on this page (AppQuestions): only they answer it. */
+    override fun asking(): Boolean = AppQuestions.asking(this, app, trouble.value)
+
+    override fun page(): WebView? = web
 
     /** ([x],[y]), in the window's pixels, falls on something of Momoding's over the page. */
-    internal fun ownAt(x: Float, y: Float): Boolean = own.any { v ->
+    override fun ownAt(x: Float, y: Float): Boolean = own.any { v ->
         val r = android.graphics.Rect()
         v.isShown && v.getGlobalVisibleRect(r) && r.height() > 0 && run {
             val o = IntArray(2).also { window.decorView.getLocationOnScreen(it) }

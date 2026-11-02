@@ -115,8 +115,10 @@ Open `minis://apps/<name>/` (with the trailing slash) in your browser: look at a
 tap through the main flow, run JavaScript to read state, and read `.momoding/log` for errors.
 Use a phone-sized viewport. Hand it over only when it works.
 
-Then check it where it is used: on the phone. `momoding-app look` shows it on the screen and gives
-a picture of it as the person sees it there (with what Momoding shows over it, like a question);
+Then check it where it is used: on the phone. `momoding-app look` gives a picture of it as the
+person sees it there (with what Momoding shows over it, like a question), without taking their
+screen: if they have it open it is that, else the same page where no one sees it, which asks them
+nothing (what needs them, like a permission or the camera, waits for them in the log);
 look at it with `read_image`. `momoding-app tap <x> <y>`, `swipe`, `type "<text>"` use it with a
 finger, in that picture's pixels, on the page: what Momoding shows over it (a question, the pen)
 is the person's, and your finger does not reach it. The camera, the real keyboard and screen size:
@@ -134,7 +136,8 @@ it answers `{"code":0, "preview":true}` and the `log` says what it would have do
 
 ## Commands
 
-- `momoding-app open <name>` — shows it on the screen.
+- `momoding-app open <name>` — for the main chat's Momoding, when the person asks to see it. You
+  never need it: look works as it is, and the person is never interrupted while you check.
 - `momoding-app done "<what changed>"` — when a piece of work is done and checked: one line for
   the chat that asked for it (in the person's language), and under it the app's card, where the
   person opens it and puts it, and its widget, on the home screen.

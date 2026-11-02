@@ -8,6 +8,7 @@ import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.PixelCopy
 import android.view.Window
+import android.webkit.WebView
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.json.JSONObject
@@ -18,13 +19,24 @@ import kotlin.coroutines.resumeWithException
 
 /**
  * An app as the person sees it on the phone, for its own Momoding to check its work: what is on
- * the screen (the page and what Momoding shows over it), and a finger on the page. Only Momoding's own
+ * its stage (the page and what Momoding shows over it), and a finger on the page. The stage is the
+ * person's screen when they have the app open, else one no one sees (AppStage). Only Momoding's own
  * windows: what the system shows (its permission prompt, a picker, the camera app) is not ours to
  * see; the app's log says when it is waiting on one.
  *
  * Pixels are the screen's, top-left of the app's window: the same in a picture and in a touch.
  */
 object AppScreen {
+    /** Where an app's page is: on the person's screen (MoAppActivity) or where no one sees it (AppStage). */
+    interface Stage {
+        fun window(): Window
+        fun page(): WebView?
+        /** The person is being asked something over the page: only they answer it. */
+        fun asking(): Boolean
+        /** ([x],[y]) falls on something of Momoding's over the page, the person's to tap. */
+        fun ownAt(x: Float, y: Float): Boolean
+    }
+
     private val shown = ConcurrentHashMap<String, WeakReference<MoAppActivity>>()
 
     /** [activity] is the app on the screen now (null: it left). */
@@ -35,7 +47,7 @@ object AppScreen {
     fun of(name: String): MoAppActivity? = shown[name]?.get()?.takeIf { !it.isFinishing && !it.isDestroyed }
 
     /** The page as the person sees it, with what Momoding shows over it (a question, the pen). Main thread. */
-    suspend fun picture(activity: MoAppActivity): Bitmap = copy(activity.window)
+    suspend fun picture(stage: Stage): Bitmap = copy(stage.window())
 
     private suspend fun copy(w: Window): Bitmap = suspendCancellableCoroutine { c ->
         val v = w.decorView
@@ -51,11 +63,11 @@ object AppScreen {
      * the pen) is the person's to answer, so it is not touched; while a question is up, nothing is.
      * Main thread.
      */
-    suspend fun touch(activity: MoAppActivity, x1: Float, y1: Float, x2: Float, y2: Float, ms: Long) {
-        if (activity.asking()) throw IllegalStateException("Momoding is asking the person something over the app (look shows it); only they can answer it. Wait, or tell them in a line.")
-        if (activity.ownAt(x1, y1)) throw IllegalStateException("that is Momoding's own, over the page (the pen, or a line at the top for the person); only they tap it. Say in a line what it is for.")
-        val page = activity.page() ?: throw IllegalStateException("the app's page is not there")
-        val origin = IntArray(2).also { activity.window.decorView.getLocationOnScreen(it) }
+    suspend fun touch(stage: Stage, x1: Float, y1: Float, x2: Float, y2: Float, ms: Long) {
+        if (stage.asking()) throw IllegalStateException("Momoding is asking the person something over the app (look shows it); only they can answer it. Wait, or tell them in a line.")
+        if (stage.ownAt(x1, y1)) throw IllegalStateException("that is Momoding's own, over the page (the pen, or a line at the top for the person); only they tap it. Say in a line what it is for.")
+        val page = stage.page() ?: throw IllegalStateException("the app's page is not there")
+        val origin = IntArray(2).also { stage.window().decorView.getLocationOnScreen(it) }
         val at = IntArray(2).also { page.getLocationOnScreen(it) }
         val dx = (origin[0] - at[0]).toFloat()
         val dy = (origin[1] - at[1]).toFloat()
@@ -77,10 +89,10 @@ object AppScreen {
     }
 
     /** [text] typed where the page's focus is, as a keyboard would. Main thread. */
-    suspend fun type(activity: MoAppActivity, text: String): Boolean = suspendCancellableCoroutine { c ->
+    suspend fun type(stage: Stage, text: String): Boolean = suspendCancellableCoroutine { c ->
         val script = "(()=>{const e=document.activeElement;if(!e||e===document.body)return false;" +
             "return document.execCommand('insertText',false,${JSONObject.quote(text)})})()"
-        activity.page()?.evaluateJavascript(script) { c.resume(it == "true") } ?: c.resume(false)
+        stage.page()?.evaluateJavascript(script) { c.resume(it == "true") } ?: c.resume(false)
     }
 
     private const val FRAME = 16L
