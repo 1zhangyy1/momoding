@@ -36,7 +36,7 @@ import org.json.JSONObject
 
 /**
  * How the Momodings' dealings with each other read in a chat (调研/M40), as in Grok Bot: one line,
- * the Bot's name first. Handing work over is a line of its own ("已交给 记账 · 在做…：…"), and
+ * the Bot's name first. Handing work over is a line of its own ("已交给 记账 · 在做…"), and
  * what a Bot says back starts with who it is.
  */
 object BotLines {
@@ -51,14 +51,15 @@ object BotLines {
         val m = CALL.find(command) ?: return null
         val rest = m.groupValues[3]
         val created = m.groupValues[1] == "new"
-        // what it was given: the brief's "what" when made, the message when told
-        val text = (if (created) quoted(rest, "--what") ?: quoted(rest, "--title") else quoted(rest, null)).orEmpty()
+        // what the person reads: what a new one is for. A message to a Bot is written for the Bot
+        // (its details, its commands); what was asked is the person's own line just above
+        val text = (if (created) quoted(rest, "--what") ?: quoted(rest, "--title") else null).orEmpty()
         return Handoff(m.groupValues[2], text.lineSequence().first().trim(), created)
     }
 
-    /** The first quoted argument, or the one after [flag]. */
-    private fun quoted(s: String, flag: String?): String? {
-        val from = if (flag == null) 0 else s.indexOf(flag).takeIf { it >= 0 }?.plus(flag.length) ?: return null
+    /** The quoted argument after [flag]. */
+    private fun quoted(s: String, flag: String): String? {
+        val from = s.indexOf(flag).takeIf { it >= 0 }?.plus(flag.length) ?: return null
         val m = Regex(""""((?:[^"\\]|\\.)*)"|'([^']*)'""").find(s, from) ?: return null
         return (m.groups[1]?.value?.replace("\\\"", "\"") ?: m.groups[2]?.value)
     }
@@ -81,7 +82,7 @@ object BotLines {
     }
 }
 
-/** "已交给 记账 · 在做…：把那笔改成交通" — the status only on the newest hand-over to that Bot. */
+/** "已交给 记账 · 在做…" (a new one: "新建了 取件码 · 在建…：短信来了自动记下取件码") — the status only on the newest hand-over to that Bot. */
 @Composable
 fun HandoffRow(handoff: BotLines.Handoff, live: Boolean, onOpen: (String) -> Unit) {
     val context = LocalContext.current
@@ -100,7 +101,7 @@ fun HandoffRow(handoff: BotLines.Handoff, live: Boolean, onOpen: (String) -> Uni
     ) {
         BotFace(app, 18)
         Text(
-            // who and how it stands first, then all it was given
+            // who and how it stands; for a new one, what it is for
             listOfNotNull(head, state).joinToString(" · ") + handoff.text.takeIf { it.isNotEmpty() }?.let { "：$it" }.orEmpty(),
             Modifier.padding(start = 8.dp), fontSize = Design.Size.Caption,
             color = if (status == BotStatus.Kind.WAITING) Color(AppIcon.color(app)) else ChatColors.secondaryText,
