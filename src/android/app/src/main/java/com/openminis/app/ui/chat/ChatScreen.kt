@@ -4630,7 +4630,9 @@ fun ChatScreen(
                                     )
                                     }
                                     }
-                                    momodingSplit?.let { app.momoding.ui.chat.LinkButtons(it.second, onOpen = urlClickHandler) }
+                                    val momodingContext = androidx.compose.ui.platform.LocalContext.current
+                                    val momodingLinks = remember(item.rawText) { app.momoding.ui.chat.BotLines.links(momodingContext, momodingFrom?.first, momodingSplit?.second) }
+                                    momodingLinks?.takeIf { it.isNotEmpty() }?.let { app.momoding.ui.chat.LinkButtons(it, onOpen = urlClickHandler) }
                                     }
                                 }
                             }

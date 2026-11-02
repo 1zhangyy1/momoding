@@ -136,9 +136,8 @@ it answers `{"code":0, "preview":true}` and the `log` says what it would have do
 
 - `momoding-app open <name>` — shows it on the screen.
 - `momoding-app done "<what changed>"` — when a piece of work is done and checked: one line for
-  the chat that asked for it (in the person's language). When there is something to look at, end
-  it with a link to the app on its own line (`[打开记账](minis://apps/<name>/)`): it shows as the
-  app's card, where the person opens it and puts it, and its widget, on the home screen.
+  the chat that asked for it (in the person's language), and under it the app's card, where the
+  person opens it and puts it, and its widget, on the home screen.
 - `momoding-app progress "<what is there now>"` — while building, once there is something to
   see: the same line, early. Your next line replaces it while nothing else has been said there,
   so the chat keeps one line for the work, the newest.

@@ -74,7 +74,7 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
         require(text.isNotBlank()) { "momoding-app tell <name> \"<what to do>\"" }
         if (app.botSession == null) throw IllegalStateException("${app.name} has no Momoding of its own")
         AppBots.tell(context, app, text, by = request.sessionId)
-        return ok(JSONObject().put("told", app.name).put("note", "It works on its own and reports back here; no need to wait or check. Tell the person in a line that ${app.title} has it."))
+        return ok(JSONObject().put("told", app.name).put("note", "It works on its own and reports back here, with what there is to see, when it is done; no need to wait or check. The chat already shows the hand-over."))
     }
 
     private fun done(args: OffloadArgs, request: NativeOffloadRequest): NativeOffloadResult {
@@ -174,9 +174,8 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
               progress "<what is there now>"
                                    from an app's own Momoding while it builds: the same line, early,
                                    so the person can watch it grow
-              done "<what changed>" from an app's own Momoding: one line in the chat that asked for it.
-                                   A link to the app on its own last line ([打开记账](minis://apps/<name>/))
-                                   shows as the app's card: open it, put it on the home screen
+              done "<what changed>" from an app's own Momoding: one line in the chat that asked for it,
+                                   with the app's card under it (open it, put it on the home screen)
               suggest "<improvement>" from an app's own Momoding after a review: a dot on the app
               list                 the Momodings, which have an app, and what of it is on the home
                                    screen (home_screen, widget: what the launcher says)

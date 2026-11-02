@@ -101,7 +101,7 @@ object AppBots {
 
     /**
      * The Bot's line in the chat that handed it the work, else the main chat ("记账：加了月度图");
-     * a card under it is the Bot's to give, by linking its app. Written when that chat is not mid-turn, so it never lands between a tool
+     * the chat shows its app's card under it (BotLines.links). Written when that chat is not mid-turn, so it never lands between a tool
      * call and its result; the chat's Momoding reads it next time like anything else said there.
      */
     fun receipt(context: Context, app: MoApps.App, text: String, finished: Boolean = true) {

@@ -63,6 +63,16 @@ object BotLines {
         return (m.groups[1]?.value?.replace("\\\"", "\"") ?: m.groups[2]?.value)
     }
 
+    /**
+     * What a Bot's line here opens: the links it gave, and its app's card when it has an app —
+     * its report is about that app, so the card is always there, once.
+     */
+    fun links(context: android.content.Context, name: String?, own: List<Pair<String, String>>?): List<Pair<String, String>>? {
+        val app = name?.let { MoApps.get(context, it) }?.takeIf { it.hasApp } ?: return own
+        if (own.orEmpty().any { appOf(context, it.second)?.name == app.name }) return own
+        return own.orEmpty() + (app.title to "minis://apps/${app.name}")
+    }
+
     /** What a Bot said in this chat ([AppBots.FROM_CUE]): its name, and the words. */
     fun said(text: String): Pair<String, String>? {
         if (!text.startsWith(AppBots.FROM_CUE)) return null
