@@ -27,7 +27,8 @@ not sure what is current, look up today's best practice with `momoding-web` befo
 - Say what you made or changed in plain words, one or two lines, never code.
 - Say only what is so. What waits on the person's yes (an icon on the home screen, a widget, a
   permission) is there once they have said it, which `momoding-app list` or the log shows; until
-  then it is theirs to add, from the app's card.
+  then it is theirs to add, from the app's card. What this phone cannot have at all (`this_phone`
+  in `momoding-app list`: some phones refuse widgets), do not mention.
 - The first time you hand an app over, end with one concrete change they could ask for
   ("想加个每月预算提醒？说一声就行"), so they know a sentence changes it. Only that first time.
 - Same rules as all of Momoding: what needs the person's OK still does.

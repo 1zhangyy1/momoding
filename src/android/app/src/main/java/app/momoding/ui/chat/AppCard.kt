@@ -53,12 +53,31 @@ fun AppCard(app: MoApps.App, onOpen: () -> Unit) {
     var looked by remember { mutableIntStateOf(0) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { looked++ }
     var state by remember { mutableStateOf(emptyMap<AppHome.What, Boolean>()) }
+    // what was just asked of the launcher, when, and whether its confirmation came up over the chat
+    var asked by remember { mutableStateOf<Pair<AppHome.What, Long>?>(null) }
+    var away by remember { mutableStateOf(false) }
+    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) { if (asked != null) away = true }
     LaunchedEffect(looked) {
         repeat(2) {
             state = AppHome.What.entries.filter { AppHome.can(context, app, it) || AppHome.there(context, app, it) }
                 .associateWith { AppHome.there(context, app, it) }
             delay(1500)
         }
+    }
+    // not there, and the phone answered before the person could (nothing came up, or it was gone at
+    // once): this phone refuses it, so the button goes, here and on every card
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(asked, looked) {
+        val (what, at) = asked ?: return@LaunchedEffect
+        if (away && System.currentTimeMillis() - at > REFUSED_MS) { asked = null; return@LaunchedEffect } // the person's own answer
+        delay(1500) // the launcher's answer can arrive a moment late
+        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return@LaunchedEffect // its confirmation is up: theirs to answer
+        if (!away) { delay(2500); if (away) return@LaunchedEffect }
+        if (!AppHome.there(context, app, what)) {
+            AppHome.refused(context, what)
+            state = state - what
+        }
+        asked = null
     }
     val icon = remember(app.name) { AppIcon.bitmap(context, app, 120, adaptive = false).asImageBitmap() }
     Surface(shape = RoundedCornerShape(Design.Radius.Panel), color = Tones.surface, border = BorderStroke(1.dp, Tones.hairline)) {
@@ -76,12 +95,18 @@ fun AppCard(app: MoApps.App, onOpen: () -> Unit) {
                         AppHome.What.WIDGET -> R.string.mo_app_card_widget to R.string.mo_app_card_widget_there
                     }
                     if (there) PillButton("✓ " + stringResource(done), primary = false, enabled = false) {}
-                    else PillButton(stringResource(add), primary = false) { AppHome.add(context, app, what) }
+                    else PillButton(stringResource(add), primary = false) {
+                        asked = what to System.currentTimeMillis(); away = false
+                        AppHome.add(context, app, what)
+                    }
                 }
             }
         }
     }
 }
+
+/** Back from the launcher sooner than this, with nothing added: the phone said no, not the person. */
+private const val REFUSED_MS = 2500L
 
 /** The app a `minis://apps/<name>` link opens (its front page, not a page inside it), if it has one. */
 fun appOf(context: android.content.Context, url: String): MoApps.App? {

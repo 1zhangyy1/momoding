@@ -155,7 +155,8 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
     private fun list(): NativeOffloadResult = ok(JSONObject().put("apps", JSONArray().apply {
         MoApps.list(context).forEach { put(JSONObject().put("name", it.name).put("title", it.title).put("what", it.what).put("folder", it.linuxDir).put("app", it.hasApp)
             .put("home_screen", AppHome.there(context, it, AppHome.What.ICON)).put("widget", AppHome.there(context, it, AppHome.What.WIDGET))) }
-    }))
+    }).put("this_phone", JSONObject() // what the person can put on this phone's home screen at all
+        .put("home_screen", AppHome.possible(context, AppHome.What.ICON)).put("widget", AppHome.possible(context, AppHome.What.WIDGET))))
 
     private fun <T> onMain(block: () -> T): T {
         var result: T? = null
@@ -187,7 +188,8 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
                                    with the app's card under it (open it, put it on the home screen)
               suggest "<improvement>" from an app's own Momoding after a review: a dot on the app
               list                 the Momodings, which have an app, and what of it is on the home
-                                   screen (home_screen, widget: what the launcher says)
+                                   screen (home_screen, widget: what the launcher says); this_phone:
+                                   what this phone lets the person put there at all
 
             An app's own Momoding, checking its work on the phone as the person sees it: on their
             screen if they have it open, else where no one sees it, so they are never interrupted
