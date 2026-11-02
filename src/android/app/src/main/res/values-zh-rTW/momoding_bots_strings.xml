@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The person's Momodings, in the header (app/momoding/ui/chat/BotSwitcher.kt) -->
 <resources>
-    <string name="mo_bot_chat_status">沒有 App · 就在這裡聊</string>
     <string name="mo_bots_switch">你的 Bot</string>
     <string name="mo_bots_new">新建 Bot</string>
     <string name="mo_bots_new_ask">幫我新建一個 Bot：</string>

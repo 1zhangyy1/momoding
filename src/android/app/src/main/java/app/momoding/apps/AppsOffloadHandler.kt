@@ -4,7 +4,6 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import com.openminis.app.R
-import com.openminis.app.i18n.LocaleWrap
 import com.openminis.app.sandbox.NativeOffloadHandler
 import com.openminis.app.sandbox.NativeOffloadRequest
 import com.openminis.app.sandbox.NativeOffloadResult
@@ -83,8 +82,7 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
             ?: throw IllegalStateException("done and progress are for an app's own Momoding")
         val text = args.positional.drop(1).joinToString(" ").trim()
         require(text.isNotEmpty()) { "momoding-app done \"<what changed, in one line>\"" }
-        val ui = LocaleWrap.uiContext(context)
-        AppBots.receipt(context, app, text, ui.getString(R.string.mo_app_open, app.title), finished = args.positional.firstOrNull() == "done")
+        AppBots.receipt(context, app, text, finished = args.positional.firstOrNull() == "done")
         return ok(JSONObject().put("reported", app.name))
     }
 
@@ -174,11 +172,11 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
               open <name>          show it on the screen
               tell <name> "<text>" a message for that Momoding
               progress "<what is there now>"
-                                   from an app's own Momoding while it builds: a line with an open
-                                   button, so the person can watch it grow
-              done "<what changed>" from an app's own Momoding: one line in the chat that asked for it,
-                                   with the app's card (the person opens it, and puts it on the home
-                                   screen, from there)
+                                   from an app's own Momoding while it builds: the same line, early,
+                                   so the person can watch it grow
+              done "<what changed>" from an app's own Momoding: one line in the chat that asked for it.
+                                   A link to the app on its own last line ([打开记账](minis://apps/<name>/))
+                                   shows as the app's card: open it, put it on the home screen
               suggest "<improvement>" from an app's own Momoding after a review: a dot on the app
               list                 the Momodings, which have an app, and what of it is on the home
                                    screen (home_screen, widget: what the launcher says)

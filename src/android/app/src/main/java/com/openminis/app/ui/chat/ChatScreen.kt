@@ -50,7 +50,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map // momoding
-import androidx.compose.material.icons.outlined.Schedule // momoding
 import androidx.compose.material.icons.outlined.Settings // momoding
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.sample
@@ -3266,20 +3265,18 @@ fun ChatScreen(
                     }
                 },
                 actions = {
-                    // momoding: routines and settings, as in the prototype's header
+                    // momoding: settings, as in the prototype's header; routines are in it (a dot when one is new)
                     if (!momodingShowSteps) {
-                        val routineDot = remember(messages) { app.momoding.chat.RoutinesSeen.hasNew(context) }
-                        IconButton(onClick = { runCatching { context.startActivity(app.momoding.deeplink.OwnScheme.intent(context, android.net.Uri.parse("minis://settings/scheduled"), 0)) } }) {
-                            Box {
-                                Icon(Icons.Outlined.Schedule, contentDescription = stringResource(R.string.mo_settings_routines))
-                                if (routineDot) Box(Modifier.align(Alignment.TopEnd).size(8.dp).background(app.momoding.ui.Tones.action, CircleShape))
-                            }
-                        }
+                        val bot = remember(viewModel.activeSessionId) { app.momoding.apps.MoApps.ofSession(context, viewModel.activeSessionId) }
+                        val routineDot = remember(messages) { bot == null && app.momoding.chat.RoutinesSeen.hasNew(context) }
                         // another Momoding's gear is about that Momoding: its row in Bots and apps
-                        IconButton(onClick = { runCatching { context.startActivity(app.momoding.apps.MoApps.ofSession(context, viewModel.activeSessionId)
+                        IconButton(onClick = { runCatching { context.startActivity(bot
                             ?.let { android.content.Intent(context, app.momoding.apps.AppsListActivity::class.java).putExtra(app.momoding.apps.AppsListActivity.EXTRA_NAME, it.name) }
                             ?: app.momoding.deeplink.OwnScheme.intent(context, android.net.Uri.parse("minis://settings"), 0)) } }) {
-                            Icon(Icons.Outlined.Settings, contentDescription = stringResource(R.string.settings_title))
+                            Box {
+                                Icon(Icons.Outlined.Settings, contentDescription = stringResource(R.string.settings_title))
+                                if (routineDot) Box(Modifier.align(Alignment.TopEnd).size(8.dp).background(app.momoding.ui.Tones.action, CircleShape))
+                            }
                         }
                     }
                     // momoding: the overflow menu (terminal, browser, MCP, debug…) is part of "how the work is done"
@@ -3751,10 +3748,6 @@ fun ChatScreen(
                     mutableStateOf<List<FlatChatItem>>(emptyList())
                 }
                 SideEffect { voiceScreenItems.items = flatItems }
-                // momoding: each app's card shows where the chat last mentions it; earlier mentions are a plain link
-                val momodingAppCards = remember(flatItems) {
-                    app.momoding.ui.chat.appCardsAt(flatItems.filterIsInstance<FlatChatItem.AssistantMarkdownBlock>().map { it.key to it.rawText })
-                }
                 // momoding: the newest hand-over to each Bot is the one that shows what it is doing now
                 val momodingHandoffs = remember(flatItems) {
                     flatItems.filterIsInstance<FlatChatItem.MomodingHandoff>().associate { it.handoff.name to it.key }
@@ -4604,7 +4597,7 @@ fun ChatScreen(
                                 }
                             }
                             is FlatChatItem.AssistantMarkdownBlock -> app.momoding.ui.chat.LinkLine.splitTrailing(item.rawText)?.takeIf { it.first.isBlank() }?.let { (_, links) ->
-                                app.momoding.ui.chat.LinkButtons(links, onOpen = urlClickHandler, cardAt = { momodingAppCards[it] == item.key }) // momoding: a line of links is a row of buttons
+                                app.momoding.ui.chat.LinkButtons(links, onOpen = urlClickHandler) // momoding: a line of links is a row of buttons
                             } ?: BoundsTrackedBlock(
                                 messageId = item.messageId,
                                 slotKey = "mdblock:${item.parentBlockId}:${item.blockIndex}",
@@ -4624,7 +4617,7 @@ fun ChatScreen(
                                     val momodingText = momodingFrom?.second ?: item.rawText
                                     val momodingSplit = remember(momodingText) { app.momoding.ui.chat.LinkLine.splitTrailing(momodingText) }
                                     Column {
-                                    momodingFrom?.let { app.momoding.ui.chat.FromBotHeader(it.first) }
+                                    momodingFrom?.let { app.momoding.ui.chat.FromBotHeader(it.first, onOpen = urlClickHandler) }
                                     app.momoding.ui.chat.AgentBubble(momodingSplit?.first ?: momodingText, last = item.isLastBlockOfMessage, id = "${item.messageId}:${item.parentBlockId}:${item.blockIndex}", delayMs = if (item.isStreaming) 0 else item.blockIndex * 140) {
                                     androidx.compose.runtime.CompositionLocalProvider(app.momoding.ui.chat.LocalMomodingMessage provides item.messageId, app.momoding.ui.chat.LocalMomodingLive provides (item.messageId in momodingLiveTurn)) {
                                     MarkdownBlock(
@@ -4637,7 +4630,7 @@ fun ChatScreen(
                                     )
                                     }
                                     }
-                                    momodingSplit?.let { app.momoding.ui.chat.LinkButtons(it.second, onOpen = urlClickHandler, cardAt = { momodingAppCards[it] == item.key }) }
+                                    momodingSplit?.let { app.momoding.ui.chat.LinkButtons(it.second, onOpen = urlClickHandler) }
                                     }
                                 }
                             }

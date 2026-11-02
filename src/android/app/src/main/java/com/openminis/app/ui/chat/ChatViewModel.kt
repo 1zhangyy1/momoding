@@ -17357,10 +17357,12 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
         }.let { messages ->
             // Merge consecutive assistant messages into one:
             // agent loop persists each turn separately, but UI should show them as a single message.
+            // momoding: what another Bot says here is its own message, never folded into a turn
             val merged = mutableListOf<ChatMessage>()
+            val fromBot = { m: ChatMessage -> m.content.startsWith(app.momoding.apps.AppBots.FROM_CUE) }
             for (msg in messages) {
                 val prev = merged.lastOrNull()
-                if (msg.role == "assistant" && prev?.role == "assistant") {
+                if (msg.role == "assistant" && prev?.role == "assistant" && !fromBot(msg) && !fromBot(prev)) {
                     // Merge: combine tool blocks, append text, keep the last id.
                     // Deduplicate by block.id — the agent loop may persist the same tool
                     // use in multiple consecutive turns (as it carries tool state across),

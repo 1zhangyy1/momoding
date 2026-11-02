@@ -95,7 +95,7 @@ fun BotList(expanded: Boolean, current: String?, onDismiss: () -> Unit) {
             ) {
                 Face(b, 36.dp)
                 Column(Modifier.weight(1f)) {
-                    Text(name(b) + if (b.app == null) " ★" else "", fontSize = Design.Size.Body, fontWeight = FontWeight.SemiBold, color = ChatColors.primaryText, maxLines = 1)
+                    Text(name(b), fontSize = Design.Size.Body, fontWeight = FontWeight.SemiBold, color = ChatColors.primaryText, maxLines = 1)
                     line(b)?.let { (text, accent) ->
                         Text(text, fontSize = Design.Size.Caption, color = if (accent) WAITING else ChatColors.secondaryText, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }

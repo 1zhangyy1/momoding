@@ -100,14 +100,14 @@ object AppBots {
     private val lastLine = java.util.concurrent.ConcurrentHashMap<String, Line>()
 
     /**
-     * The Bot's line in the chat that handed it the work, else the main chat ("记账：加了月度图"),
-     * with a way to it. Written when that chat is not mid-turn, so it never lands between a tool
+     * The Bot's line in the chat that handed it the work, else the main chat ("记账：加了月度图");
+     * a card under it is the Bot's to give, by linking its app. Written when that chat is not mid-turn, so it never lands between a tool
      * call and its result; the chat's Momoding reads it next time like anything else said there.
      */
-    fun receipt(context: Context, app: MoApps.App, text: String, openLabel: String, finished: Boolean = true) {
+    fun receipt(context: Context, app: MoApps.App, text: String, finished: Boolean = true) {
         val sid = app.botSession ?: return
         val link = if (app.hasApp) "minis://apps/${app.name}" else "minis://session/$sid"
-        val body = "$FROM_CUE${app.name}] ${text.trim()}\n[$openLabel]($link)"
+        val body = "$FROM_CUE${app.name}] ${text.trim()}"
         scope.launch {
             val target = handedBy(context, sid)?.takeIf { repo(context).getSession(it) != null } ?: MainChat.resolve(context, repo(context))
             if (finished) setHandedBy(app, sid, null) // done, not just progress: what it says next is its own

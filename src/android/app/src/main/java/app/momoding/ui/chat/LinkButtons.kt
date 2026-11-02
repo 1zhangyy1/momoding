@@ -58,7 +58,7 @@ object LinkLine {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun LinkButtons(links: List<Pair<String, String>>, onOpen: (String) -> Unit, cardAt: (String) -> Boolean = { true }) {
+fun LinkButtons(links: List<Pair<String, String>>, onOpen: (String) -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -67,7 +67,7 @@ fun LinkButtons(links: List<Pair<String, String>>, onOpen: (String) -> Unit, car
     ) {
         links.forEach { (label, url) ->
             if (Works.isWork(url)) { WorkCard(label, url) { onOpen(url) }; return@forEach }
-            appOf(context, url)?.takeIf { cardAt(it.name) }?.let { app -> AppCard(app) { onOpen(url) }; return@forEach }
+            appOf(context, url)?.let { app -> AppCard(app) { onOpen(url) }; return@forEach }
             Pill(label, PillKind.LINK) { onOpen(url) }
         }
     }

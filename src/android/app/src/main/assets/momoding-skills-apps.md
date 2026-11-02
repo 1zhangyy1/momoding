@@ -27,7 +27,7 @@ not sure what is current, look up today's best practice with `momoding-web` befo
 - Say what you made or changed in plain words, one or two lines, never code.
 - Say only what is so. What waits on the person's yes (an icon on the home screen, a widget, a
   permission) is there once they have said it, which `momoding-app list` or the log shows; until
-  then it is theirs to add, from the card under your line.
+  then it is theirs to add, from the app's card.
 - The first time you hand an app over, end with one concrete change they could ask for
   ("想加个每月预算提醒？说一声就行"), so they know a sentence changes it. Only that first time.
 - Same rules as all of Momoding: what needs the person's OK still does.
@@ -40,6 +40,7 @@ not sure what is current, look up today's best practice with `momoding-web` befo
 - `index.html` is where it starts. Plain HTML, CSS and JavaScript; use libraries if they help
   (vendored into the folder, so the app works offline).
 - `manifest.json` is a standard web app manifest: `short_name` is the name under the icon,
+  `description` the one line under its name in the person's list of Bots (what it is for),
   `theme_color` its colour, `icons` a square PNG (make one if the app deserves its own; without
   it the icon is the name's first letter on the theme colour). Launchers crop icons to a circle
   or a rounded square: keep the mark well inside the middle, with the colour reaching the edges.
@@ -135,8 +136,9 @@ it answers `{"code":0, "preview":true}` and the `log` says what it would have do
 
 - `momoding-app open <name>` — shows it on the screen.
 - `momoding-app done "<what changed>"` — when a piece of work is done and checked: one line for
-  the chat that asked for it (in the person's language), and under it the app's card, where the
-  person opens it and puts it, and its widget, on the home screen with a tap.
+  the chat that asked for it (in the person's language). When there is something to look at, end
+  it with a link to the app on its own line (`[打开记账](minis://apps/<name>/)`): it shows as the
+  app's card, where the person opens it and puts it, and its widget, on the home screen.
 - `momoding-app progress "<what is there now>"` — while building, once there is something to
   see: the same line, early. Your next line replaces it while nothing else has been said there,
   so the chat keeps one line for the work, the newest.

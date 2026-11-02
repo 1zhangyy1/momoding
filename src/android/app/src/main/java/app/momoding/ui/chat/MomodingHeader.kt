@@ -10,7 +10,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
@@ -46,8 +45,7 @@ import com.openminis.app.ui.theme.ChatColors
 import app.momoding.ui.Design
 
 /**
- * A Momoding's header: its face, its name, and one quiet line ("在你手机上 · 随时可以交代"); then the
- * faces of the person's other Momodings ([BotFaces]). A tap on the name opens them all ([BotList]).
+ * A Momoding's header: its face and its name; then the faces of the person's other Momodings ([BotFaces]). A tap on the name opens them all ([BotList]).
  * The same header is on the main chat, a Bot's chat, and an app's chat panel.
  * What it is doing right now is not up here: it opens the running turn in the chat
  * ([LiveStatusLine]) and folds into that turn's "做了 3 步" when it is done.
@@ -73,22 +71,15 @@ fun MomodingHeader(sessionId: String? = null) {
                 Box(Modifier.size(34.dp).clip(CircleShape)) {
                     if (face != null) Image(face, contentDescription = null, modifier = Modifier.size(34.dp))
                 }
-                Column(Modifier.weight(1f, fill = false)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            ownApp?.title ?: soul.name.ifBlank { stringResource(R.string.app_name) },
-                            fontSize = Design.Size.Title, lineHeight = Design.Line.Caption, fontWeight = FontWeight.SemiBold, color = ChatColors.primaryText, maxLines = 1,
-                            overflow = TextOverflow.Ellipsis, style = NO_FONT_PAD, modifier = Modifier.weight(1f, fill = false),
-                        )
-                        androidx.compose.material3.Icon(
-                            androidx.compose.material.icons.Icons.Outlined.ExpandMore, null, tint = ChatColors.secondaryText,
-                            modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = if (listOpen) 180f else 0f },
-                        )
-                    }
+                Row(Modifier.weight(1f, fill = false), verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        stringResource(when { ownApp == null -> R.string.mo_status_idle; ownApp.hasApp -> R.string.mo_app_chat_status; else -> R.string.mo_bot_chat_status }),
-                        fontSize = Design.Size.Caption, lineHeight = Design.Line.Micro, maxLines = 1,
-                        overflow = TextOverflow.Ellipsis, style = NO_FONT_PAD, color = ChatColors.secondaryText,
+                        ownApp?.title ?: soul.name.ifBlank { stringResource(R.string.app_name) },
+                        fontSize = Design.Size.Title, lineHeight = Design.Line.Caption, fontWeight = FontWeight.SemiBold, color = ChatColors.primaryText, maxLines = 1,
+                        overflow = TextOverflow.Ellipsis, style = NO_FONT_PAD, modifier = Modifier.weight(1f, fill = false),
+                    )
+                    androidx.compose.material3.Icon(
+                        androidx.compose.material.icons.Icons.Outlined.ExpandMore, null, tint = ChatColors.secondaryText,
+                        modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = if (listOpen) 180f else 0f },
                     )
                 }
             }

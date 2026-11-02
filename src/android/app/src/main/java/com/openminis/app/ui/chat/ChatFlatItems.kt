@@ -676,15 +676,18 @@ internal fun buildFlatChatItems(
     expandedTurns: Set<String> = emptySet(),
 ): List<FlatChatItem> {
     // momoding: a turn is the run of assistant messages after a user message; its last message
-    // carries "看过程", and opening it shows the steps of the whole run
+    // carries "看过程", and opening it shows the steps of the whole run. What another Bot says here
+    // is not part of it: it ends the turn and stands alone
     val showStepsAll = showSteps
+    fun fromBot(i: Int) = messages[i].role == "assistant" && messages[i].content.startsWith(app.momoding.apps.AppBots.FROM_CUE)
     val turnLast = IntArray(messages.size) { -1 }
     run {
         var last = -1
         for (i in messages.indices.reversed()) {
-            when (messages[i].role) {
-                "assistant" -> { if (last == -1) last = i; turnLast[i] = last }
-                "user" -> last = -1
+            when {
+                fromBot(i) -> { turnLast[i] = i; last = -1 }
+                messages[i].role == "assistant" -> { if (last == -1) last = i; turnLast[i] = last }
+                messages[i].role == "user" -> last = -1
             }
         }
     }
@@ -823,7 +826,7 @@ internal fun buildFlatChatItems(
         val isSystem = message.role == "system"
         // momoding: a finished turn that did something opens with one line summing up its steps;
         // tapped, the steps unfold right under it, in order, before the reply
-        if (!showStepsAll && message.role == "assistant" && (idx == 0 || messages[idx - 1].role != "assistant")) {
+        if (!showStepsAll && message.role == "assistant" && (idx == 0 || messages[idx - 1].role != "assistant" || fromBot(idx - 1))) {
             val last = turnLast[idx]
             if (last >= 0 && messages[last].isStreaming) {
                 // still running: the same line, live — what it is doing now (it folds into the summary)

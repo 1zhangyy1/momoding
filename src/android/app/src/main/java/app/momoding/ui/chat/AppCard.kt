@@ -83,13 +83,6 @@ fun AppCard(app: MoApps.App, onOpen: () -> Unit) {
     }
 }
 
-/** For each app, the piece of the chat (keys with their text, in order) that last links to it: where its card shows. */
-fun appCardsAt(messages: List<Pair<String, String>>): Map<String, String> = buildMap {
-    messages.forEach { (id, text) -> APP_LINK.findAll(text).forEach { put(it.groupValues[1], id) } }
-}
-
-private val APP_LINK = Regex("""minis://apps/([^/?#)\s]+)/?(?=[)?#\s]|$)""")
-
 /** The app a `minis://apps/<name>` link opens (its front page, not a page inside it), if it has one. */
 fun appOf(context: android.content.Context, url: String): MoApps.App? {
     val path = url.removePrefix("minis://apps/").takeIf { it != url }?.substringBefore('?')?.trimEnd('/') ?: return null

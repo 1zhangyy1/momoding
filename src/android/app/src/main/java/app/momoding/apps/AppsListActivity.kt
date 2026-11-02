@@ -117,7 +117,7 @@ class AppsListActivity : ComponentActivity() {
                 Spacer(Modifier.size(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(app.title, fontSize = 16.sp)
-                    Text(line(b), fontSize = 12.sp, maxLines = 1, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    line(b).takeIf { it.isNotEmpty() }?.let { Text(it, fontSize = 12.sp, maxLines = 1, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
                 Icon(Icons.Outlined.ExpandMore, null, Modifier.rotate(if (open) 180f else 0f), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -165,13 +165,14 @@ class AppsListActivity : ComponentActivity() {
         }
     }
 
+    /** What it is waiting on or doing; else what it is for (its manifest's description), the same for every Bot. */
     @Composable
     private fun line(b: BotStatus.Bot): String {
         val text = b.status.line.orEmpty()
         return when (b.status.kind) {
             BotStatus.Kind.WAITING -> stringResource(R.string.mo_bot_waiting, text)
             BotStatus.Kind.WORKING -> stringResource(R.string.mo_bot_working, text)
-            else -> b.app?.what?.ifBlank { null } ?: text
+            else -> b.app?.what.orEmpty()
         }
     }
 

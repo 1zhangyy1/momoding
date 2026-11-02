@@ -1,10 +1,8 @@
 // Ported from nanoMuse (GPL-3.0): io/github/nanomuse/ui/chat/NmRoutineWakeRow.kt
 package app.momoding.ui.chat
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -73,14 +71,17 @@ private fun RoutineNote(text: String) {
     }
 }
 
-/** What the main chat's Momoding (or the app itself) asked an app's own Momoding to do: a quiet card on the left, labelled. */
+/**
+ * What the main chat's Momoding (or the app itself) asked an app's own Momoding to do: on the
+ * left, under who said it, as in the main chat (调研/M40).
+ */
 @Composable
 private fun FromMomodingRow(label: Int, text: String) {
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
-        Text(stringResource(label), fontSize = Design.Size.Caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(
-            text, fontSize = Design.Size.Caption, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 4.dp).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp),
-        )
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        if (label == R.string.mo_app_from_momoding) FromMomodingHeader()
+        else Text(stringResource(label), Modifier.padding(start = 16.dp, top = 4.dp, bottom = 4.dp), fontSize = Design.Size.Caption, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Box(Modifier.padding(horizontal = 16.dp)) {
+            AgentBubble(text, last = true) { Text(text, fontSize = Design.Size.Body, color = MaterialTheme.colorScheme.onSurface) }
+        }
     }
 }

@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -25,7 +26,9 @@ import app.momoding.apps.AppBots
 import app.momoding.apps.AppIcon
 import app.momoding.apps.BotStatus
 import app.momoding.apps.MoApps
+import app.momoding.Identity
 import app.momoding.ui.Design
+import app.momoding.ui.Tones
 import com.openminis.app.R
 import com.openminis.app.ui.chat.AssistantBlock
 import com.openminis.app.ui.theme.ChatColors
@@ -81,9 +84,8 @@ fun HandoffRow(handoff: BotLines.Handoff, live: Boolean, onOpen: (String) -> Uni
         else -> null
     }
     val head = stringResource(if (handoff.created) R.string.mo_bot_line_made else R.string.mo_bot_line_handed, app.title)
-    val link = if (app.hasApp) "minis://apps/${app.name}" else "minis://session/${app.botSession}"
     Row(
-        Modifier.clip(RoundedCornerShape(Design.Radius.Row)).clickable { onOpen(link) }.padding(horizontal = 16.dp, vertical = 6.dp),
+        Modifier.clip(RoundedCornerShape(Design.Radius.Row)).clickable { onOpen(home(app)) }.padding(horizontal = 16.dp, vertical = 6.dp),
         verticalAlignment = Alignment.Top,
     ) {
         BotFace(app, 18)
@@ -96,16 +98,38 @@ fun HandoffRow(handoff: BotLines.Handoff, live: Boolean, onOpen: (String) -> Uni
     }
 }
 
-/** Over what a Bot said here: its face and name, in its colour. */
+/** Over what a Bot said here: its face and name, in its colour; a tap goes to it. */
 @Composable
-fun FromBotHeader(name: String) {
+fun FromBotHeader(name: String, onOpen: (String) -> Unit) {
     val context = LocalContext.current
     val app = remember(name) { MoApps.get(context, name) } ?: return
-    Row(Modifier.padding(start = 16.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        BotFace(app, 20)
-        Text(app.title, Modifier.padding(start = 6.dp), fontSize = Design.Size.Caption, fontWeight = FontWeight.SemiBold, color = Color(AppIcon.color(app)))
+    val face = remember(app.name) { AppIcon.bitmap(app, 60, adaptive = false).asImageBitmap() }
+    FromHeader(face, app.title, Color(AppIcon.color(app))) { onOpen(home(app)) }
+}
+
+/** Over what the main chat's Momoding said in a Bot's chat: the same, in Momoding's green. */
+@Composable
+fun FromMomodingHeader() {
+    val context = LocalContext.current
+    val face = remember { Identity.face(context)?.asImageBitmap() }
+    FromHeader(face, Identity.name(context), Color(Tones.ACTION_ARGB))
+}
+
+@Composable
+private fun FromHeader(face: ImageBitmap?, name: String, color: Color, onClick: (() -> Unit)? = null) {
+    Row(
+        Modifier.padding(start = 8.dp).clip(RoundedCornerShape(Design.Radius.Row))
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (face != null) Image(face, null, Modifier.size(20.dp).clip(CircleShape))
+        Text(name, Modifier.padding(start = 6.dp), fontSize = Design.Size.Caption, fontWeight = FontWeight.SemiBold, color = color)
     }
 }
+
+/** Where a Bot lives: its app, else its chat. */
+private fun home(app: MoApps.App) = if (app.hasApp) "minis://apps/${app.name}" else "minis://session/${app.botSession}"
 
 @Composable
 private fun BotFace(app: MoApps.App, size: Int) {
