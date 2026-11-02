@@ -6231,7 +6231,7 @@ class ChatViewModel(
             val config = providerRepository.config.value
             _availableGroups.value = config.modelGroups
 
-            if (isDraft) {
+            if (isDraft && realSessionId.isEmpty()) { // momoding: a draft that has become a chat reloads as one (a Bot's receipt, AppBots.receipt)
                 // Draft session: just set up provider using default group or first entry
                 _sessionTitle.value = UNTITLED_SESSION_TITLE
                 _sessionCategory.value = null
@@ -6257,7 +6257,7 @@ class ChatViewModel(
             }
 
             // Existing session: load from DB
-            val session = chatRepository.getSession(sessionId) ?: return@launch
+            val session = chatRepository.getSession(activeSessionId) ?: return@launch
             _sessionTitle.value = session.title ?: UNTITLED_SESSION_TITLE
             _sessionCategory.value = session.category
             _memoryEnabled.value = session.memoryEnabled != 0
@@ -6376,7 +6376,7 @@ class ChatViewModel(
             com.openminis.app.diagnostics.PerfLongCtx.step(sessionId, "db.query.begin")
             val loaded = withContext(Dispatchers.IO) {
                 val tIoBeforeLoad = System.currentTimeMillis()
-                val rows = chatRepository.loadMessages(sessionId)
+                val rows = chatRepository.loadMessages(activeSessionId)
                 val tIoAfterLoad = System.currentTimeMillis()
                 com.openminis.app.diagnostics.PerfLongCtx.step(
                     sessionId,
@@ -6567,7 +6567,7 @@ class ChatViewModel(
             // the folded-away context via [effectiveAgentHistory]. Also gray
             // out every UI message that falls before the marker's boundary —
             // mirrors iOS Phase 2.5 restore (AIChatViewModel.swift:3360+).
-            val marker = runCatching { chatRepository.dao.latestCompactMarker(sessionId) }
+            val marker = runCatching { chatRepository.dao.latestCompactMarker(activeSessionId) }
                 .onFailure { Log.w(TAG, "latestCompactMarker failed: ${it.message}") }
                 .getOrNull()
             _compactSummary.value = marker?.summary
