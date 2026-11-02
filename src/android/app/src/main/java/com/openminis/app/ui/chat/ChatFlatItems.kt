@@ -496,7 +496,7 @@ internal sealed class FlatChatItem {
      */
     /** momoding: work handed to another Momoding, a line of its own whether steps show or not (调研/M40). */
     data class MomodingHandoff(val messageId: String, val blockId: String, val handoff: app.momoding.ui.chat.BotLines.Handoff) : FlatChatItem() {
-        override val key = "handoff:$messageId:$blockId"
+        override val key = "handoff:$messageId:$blockId:${handoff.name}"
         override val contentType = "handoff"
     }
 
@@ -1010,7 +1010,7 @@ internal fun buildFlatChatItems(
                     block = block,
                 )))
                 else -> {
-                    app.momoding.ui.chat.BotLines.handoff(block)?.let { out.add(dedupe(FlatChatItem.MomodingHandoff(message.id, block.id, it))) }
+                    app.momoding.ui.chat.BotLines.handoffs(block).forEach { out.add(dedupe(FlatChatItem.MomodingHandoff(message.id, block.id, it))) }
                     if (showSteps) out.add(dedupe(FlatChatItem.AssistantToolUse( // momoding: a step
                         messageId = message.id,
                         block = block,
@@ -1105,7 +1105,7 @@ private fun previousTime(messages: List<ChatMessage>, idx: Int): Long? {
 /** momoding (from nanoMuse): an assistant turn that is only steps — no words, no error, nothing handed over — has nothing to show with steps hidden. */
 private fun stepsOnlyTurn(m: ChatMessage): Boolean =
     m.role == "assistant" && !m.isStreaming && m.error == null && m.content.isEmpty() &&
-        m.toolBlocks.none { app.momoding.ui.chat.BotLines.handoff(it) != null } &&
+        m.toolBlocks.none { app.momoding.ui.chat.BotLines.handoffs(it).isNotEmpty() } &&
         m.toolBlocks.isNotEmpty() && m.toolBlocks.all {
             it.kind == "tool_use" || it.kind == "thinking" || it.kind == "info" || (it.kind == "text" && it.content.isEmpty())
         }
