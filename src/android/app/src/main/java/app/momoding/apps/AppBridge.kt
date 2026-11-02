@@ -95,6 +95,9 @@ class AppBridge(private val context: Context, private val webView: WebView, priv
         val app = app(token) ?: return
         if (preview) { MoApps.log(app, "log preview", "momoding.widget($contentJson)"); return }
         runCatching { AppWidget.set(context, app, JSONObject(contentJson)) }
+        // said where it is read: on a phone that refuses widgets, this shows nowhere
+        if (!AppHome.possible(context, AppHome.What.WIDGET) && widgetNoted.add(app.name))
+            MoApps.log(app, "log", "momoding.widget: this phone's home screen refuses widgets, so it shows nowhere")
     }
 
     /** The page is loaded and its handlers are set: hand it what arrived for it (AppEvents). */
@@ -235,6 +238,9 @@ class AppBridge(private val context: Context, private val webView: WebView, priv
     }
 
     companion object {
+        /** Apps already told, since Momoding started, that this phone shows their widget nowhere (once is enough). */
+        private val widgetNoted = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
         private const val TAG = "AppBridge"
         const val GATE_PREFIX = "app:"
         const val JS_NAME = "__momodingNative"

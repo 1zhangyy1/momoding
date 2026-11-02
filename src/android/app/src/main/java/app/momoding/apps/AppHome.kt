@@ -29,6 +29,16 @@ object AppHome {
     /** The phone turned the person's tap down before they could answer (nothing came up, or it went at once). */
     fun refused(context: Context, what: What) = prefs(context).edit().putBoolean(what.name, true).apply()
 
+    /** What this phone's home screen takes, as a fact for whoever speaks of it (the Momodings' standing context). */
+    fun facts(context: Context): String {
+        val icon = possible(context, What.ICON)
+        val widget = possible(context, What.WIDGET)
+        val has = listOfNotNull("app icons".takeIf { icon }, "widgets".takeIf { widget })
+        val not = listOfNotNull("app icons".takeIf { !icon }, "widgets".takeIf { !widget })
+        return "This phone's home screen " + (if (has.isEmpty()) "takes nothing from Momoding" else "takes " + has.joinToString(" and ")) +
+            (if (not.isNotEmpty() && has.isNotEmpty()) "; it refuses " + not.joinToString(" and ") else "") + "."
+    }
+
     private fun prefs(context: Context) = context.getSharedPreferences("momoding_home_refused", Context.MODE_PRIVATE)
 
     fun there(context: Context, app: MoApps.App, what: What): Boolean = when (what) {
