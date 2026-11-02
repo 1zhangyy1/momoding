@@ -56,11 +56,22 @@ class MoAppActivity : ComponentActivity() {
     private var troubleOffered = false
     /** What Momoding shows over the page (asks, approvals), newest last. */
     private val dialogs = mutableListOf<AlertDialog>()
+    /** What Momoding shows on the page for the person (the pen, the lines at the top): not the page's. */
+    private val own = mutableListOf<android.view.View>()
 
     /** Momoding's windows over the page now, bottom to top (AppScreen). */
     internal fun over(): List<AlertDialog> = dialogs.filter { it.isShowing }
 
     internal fun page(): WebView? = web
+
+    /** ([x],[y]), in the window's pixels, falls on something of Momoding's over the page. */
+    internal fun ownAt(x: Float, y: Float): Boolean = own.any { v ->
+        val r = android.graphics.Rect()
+        v.isShown && v.getGlobalVisibleRect(r) && r.height() > 0 && run {
+            val o = IntArray(2).also { window.decorView.getLocationOnScreen(it) }
+            r.contains((x + o[0]).toInt(), (y + o[1]).toInt())
+        }
+    }
 
     private fun AlertDialog.Builder.showOver(): AlertDialog = show().also { d -> dialogs.removeAll { !it.isShowing }; dialogs += d }
 
@@ -133,11 +144,16 @@ class MoAppActivity : ComponentActivity() {
         setContentView(FrameLayout(this).apply {
             fitsSystemWindows = true
             addView(wv, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            own += pen
             addView(pen, FrameLayout.LayoutParams((36 * dp).toInt(), (36 * dp).toInt(), Gravity.BOTTOM or Gravity.END)
                 .apply { setMargins((14 * dp).toInt(), (14 * dp).toInt(), (14 * dp).toInt(), (14 * dp).toInt()) })
-            // other Momodings: done, or waiting for the person — the same line the chat shows
-            addView(androidx.compose.ui.platform.ComposeView(this@MoAppActivity).apply {
-                setContent { androidx.compose.material3.MaterialTheme { OthersBanner(this@MoAppActivity.app.botSession) } }
+            // other Momodings: done, or waiting for the person — the same line the chat shows; then what
+            // this app's Momoding offers for the home screen, which the person adds with a tap
+            addView(androidx.compose.ui.platform.ComposeView(this@MoAppActivity).also { own += it }.apply {
+                setContent { androidx.compose.material3.MaterialTheme { androidx.compose.foundation.layout.Column {
+                    OthersBanner(this@MoAppActivity.app.botSession)
+                    OfferBanner(this@MoAppActivity.app)
+                } } }
             }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP))
         })
 
@@ -261,6 +277,7 @@ class MoAppActivity : ComponentActivity() {
         super.onResume()
         AppScreen.showing(app.name, this)
         BotStatus.touch()
+        AppOffer.touch() // back from the launcher's confirmation
     }
 
     override fun onPause() {
@@ -293,18 +310,20 @@ class MoAppActivity : ComponentActivity() {
             .putExtra(EXTRA_NAME, name)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NEW_DOCUMENT)
 
-        /** Asks the launcher to put the app on the home screen; the launcher shows its own confirmation. */
+        /** Asks the launcher to put the app on the home screen; the launcher shows its own confirmation (only from the person's tap: [AppOffer]). */
         fun pin(context: Context, app: MoApps.App): Boolean {
             if (!ShortcutManagerCompat.isRequestPinShortcutSupported(context)) return false
-            val existing = ShortcutManagerCompat.getShortcuts(context, ShortcutManagerCompat.FLAG_MATCH_PINNED).any { it.id == shortcutId(app) }
-            if (existing) { ShortcutManagerCompat.updateShortcuts(context, listOf(shortcut(context, app))); return true }
+            if (onHome(context, app)) { ShortcutManagerCompat.updateShortcuts(context, listOf(shortcut(context, app))); return true }
             return runCatching { ShortcutManagerCompat.requestPinShortcut(context, shortcut(context, app), null) }.getOrDefault(false)
         }
 
+        /** Its icon is on the home screen: the launcher has it pinned. */
+        fun onHome(context: Context, app: MoApps.App): Boolean =
+            runCatching { ShortcutManagerCompat.getShortcuts(context, ShortcutManagerCompat.FLAG_MATCH_PINNED).any { it.id == shortcutId(app) } }.getOrDefault(false)
+
         /** After a rename: a pinned icon and the share entry take the new name. */
         fun relabel(context: Context, app: MoApps.App) {
-            val pinned = ShortcutManagerCompat.getShortcuts(context, ShortcutManagerCompat.FLAG_MATCH_PINNED).any { it.id == shortcutId(app) }
-            if (pinned) runCatching { ShortcutManagerCompat.updateShortcuts(context, listOf(shortcut(context, app))) }
+            if (onHome(context, app)) runCatching { ShortcutManagerCompat.updateShortcuts(context, listOf(shortcut(context, app))) }
             AppShare.publish(context, app)
         }
 

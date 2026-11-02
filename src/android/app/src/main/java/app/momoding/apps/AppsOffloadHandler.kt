@@ -1,6 +1,8 @@
 package app.momoding.apps
 
+import android.appwidget.AppWidgetManager
 import android.content.Context
+import androidx.core.content.pm.ShortcutManagerCompat
 import android.os.Handler
 import android.os.Looper
 import com.openminis.app.R
@@ -23,7 +25,7 @@ import java.util.concurrent.TimeUnit
  * `momoding-app` — the person's other Momodings and their apps, from the shell (调研/M27, M34):
  *
  *     momoding-app new <name> --title "<title>" --what "<what it takes care of>" --brief "<what the person wants>"
- *     momoding-app install <name>        put it on the home screen
+ *     momoding-app install <name>        offer it for the home screen (the person taps it on the app's page)
  *     momoding-app open <name>           show it on the screen
  *     momoding-app tell <name> "<text>"  a message for that app's Momoding
  *     momoding-app progress "<what is there now>"  (from an app's Momoding, while building) the same, early
@@ -70,16 +72,26 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
 
     private fun install(app: MoApps.App): NativeOffloadResult {
         if (!app.index.isFile) throw IllegalStateException("${app.linuxDir}/index.html does not exist yet")
-        val asked = onMain { MoAppActivity.pin(context, app) }
         AppShare.publish(context, app)
-        return ok(JSONObject().put("app", app.name).put("home_screen", if (asked) "asked" else "unsupported")
-            .put("note", if (asked) "The launcher shows its own confirmation; once the person adds it, the icon opens the app." else "This launcher cannot add icons; it opens with momoding-app open."))
+        return offer(app, AppOffer.What.HOME, ShortcutManagerCompat.isRequestPinShortcutSupported(context), "home_screen")
     }
 
-    private fun widget(app: MoApps.App): NativeOffloadResult {
-        val asked = onMain { AppWidget.requestPin(context, app) }
-        return ok(JSONObject().put("app", app.name).put("widget", if (asked) "asked" else "unsupported")
-            .put("note", if (asked) "The launcher shows its own confirmation. The widget shows what the app sets with momoding.widget." else "This launcher cannot add widgets this way; the person can add \"Momoding App\" from the widget list."))
+    private fun widget(app: MoApps.App) =
+        offer(app, AppOffer.What.WIDGET, AppWidgetManager.getInstance(context).isRequestPinAppWidgetSupported, "widget")
+
+    /** Offered on the app's own page; the person taps it and the launcher asks them. It is there once [AppOffer.there] says so. */
+    private fun offer(app: MoApps.App, what: AppOffer.What, supported: Boolean, field: String): NativeOffloadResult {
+        val o = JSONObject().put("app", app.name)
+        when {
+            AppOffer.there(context, app, what) -> o.put(field, "there")
+            !supported -> o.put(field, "unsupported").put("note", "This launcher cannot add it; the app opens with momoding-app open.")
+            else -> {
+                AppOffer.offer(context, app, what)
+                o.put(field, "offered").put("note", "The app's page now shows a line for it at the top; the person taps it and the phone asks them to confirm. " +
+                    "It is not there yet: say so in those words (tap it in the app), never that it is done. momoding-app list shows when it is.")
+            }
+        }
+        return ok(o)
     }
 
     private fun open(app: MoApps.App): NativeOffloadResult {
@@ -163,7 +175,8 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
     private suspend fun settled(): NativeOffloadResult { delay(SETTLE); return ok(JSONObject().put("done", true).put("note", "look shows what it did")) }
 
     private fun list(): NativeOffloadResult = ok(JSONObject().put("apps", JSONArray().apply {
-        MoApps.list(context).forEach { put(JSONObject().put("name", it.name).put("title", it.title).put("what", it.what).put("folder", it.linuxDir).put("app", it.hasApp)) }
+        MoApps.list(context).forEach { put(JSONObject().put("name", it.name).put("title", it.title).put("what", it.what).put("folder", it.linuxDir).put("app", it.hasApp)
+            .put("home_screen", AppOffer.there(context, it, AppOffer.What.HOME)).put("widget", AppOffer.there(context, it, AppOffer.What.WIDGET))) }
     }))
 
     private fun <T> onMain(block: () -> T): T {
@@ -187,9 +200,11 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
               new <name> --title "<title>" --what "<what it takes care of>" --brief "<what the person wants>"
                                    a new Momoding with its own chat and folder; it builds an app when
                                    one is wanted (name: a short lowercase word like ledger)
-              install <name>       put it on the home screen
+              install <name>       offer it for the home screen: a line on the app's page the
+                                   person taps; the phone then asks them (list says when it is there)
               open <name>          show it on the screen
-              widget <name>        offer a home-screen widget of it (shows what the app sets with momoding.widget)
+              widget <name>        offer a home-screen widget of it, the same way (it shows what the
+                                   app sets with momoding.widget)
               tell <name> "<text>" a message for that Momoding
               progress "<what is there now>"
                                    from an app's own Momoding while it builds: a line with an open
@@ -201,7 +216,8 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
             An app's own Momoding, checking its work on the phone as the person sees it (opens it if
             it is not on the screen; Momoding itself names the app: look <name>):
               look                 a picture of it now, with what Momoding shows over it
-              tap <x> <y> [--ms N] a finger, in the picture's pixels (--ms 800: press and hold)
+              tap <x> <y> [--ms N] a finger on the page, in the picture's pixels (--ms 800: press and
+                                   hold); what Momoding shows over it is the person's to answer
               swipe <x1> <y1> <x2> <y2> [--ms N]
               type "<text>"        typed where the page's focus is (tap the field first)
         """.trimIndent() + "\n"

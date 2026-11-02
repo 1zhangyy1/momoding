@@ -335,9 +335,9 @@ fun OthersBanner(own: String?) {
     if (other != null) ElsewhereBanner(other) else app.momoding.ui.chat.BotDoneBanner(own)
 }
 
-/** One line over the composer about another Momoding, and a way there. */
+/** One line over the composer about another Momoding, and a way there (or what its button does). */
 @Composable
-fun BannerPill(text: String, onOpen: () -> Unit) {
+fun BannerPill(text: String, action: String = stringResource(R.string.mo_risk_view), onOpen: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -359,7 +359,7 @@ fun BannerPill(text: String, onOpen: () -> Unit) {
             overflow = TextOverflow.Ellipsis,
         )
         TextButton(onClick = onOpen) {
-            Text(stringResource(R.string.mo_risk_view), color = Tones.action, fontWeight = FontWeight.SemiBold)
+            Text(action, color = Tones.action, fontWeight = FontWeight.SemiBold)
         }
     }
 }

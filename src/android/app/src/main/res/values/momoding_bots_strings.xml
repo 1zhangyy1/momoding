@@ -23,4 +23,8 @@
     <string name="mo_bot_delete">Delete this Bot</string>
     <string name="mo_bot_deleted">Deleted %1$s</string>
     <string name="mo_bot_undo">Undo</string>
+    <string name="mo_app_offer_home">Put %1$s on your home screen</string>
+    <string name="mo_app_offer_home_action">Add</string>
+    <string name="mo_app_offer_widget">Add a %1$s widget to your home screen</string>
+    <string name="mo_app_offer_widget_action">Add</string>
 </resources>
