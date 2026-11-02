@@ -1,8 +1,6 @@
 package app.momoding.apps
 
 import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Color
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -10,7 +8,6 @@ import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.PixelCopy
 import android.view.Window
-import android.view.WindowManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.json.JSONObject
@@ -37,19 +34,8 @@ object AppScreen {
 
     fun of(name: String): MoAppActivity? = shown[name]?.get()?.takeIf { !it.isFinishing && !it.isDestroyed }
 
-    /** The page, and each of Momoding's own windows over it as the person sees them (dimmed behind). Main thread. */
-    suspend fun picture(activity: MoAppActivity): Bitmap {
-        val out = copy(activity.window)
-        val canvas = Canvas(out)
-        val origin = IntArray(2).also { activity.window.decorView.getLocationOnScreen(it) }
-        for (w in activity.over().mapNotNull { it.window }) {
-            if (w.attributes.flags and WindowManager.LayoutParams.FLAG_DIM_BEHIND != 0)
-                canvas.drawColor(Color.argb((w.attributes.dimAmount * 255).toInt(), 0, 0, 0))
-            val at = IntArray(2).also { w.decorView.getLocationOnScreen(it) }
-            canvas.drawBitmap(copy(w), (at[0] - origin[0]).toFloat(), (at[1] - origin[1]).toFloat(), null)
-        }
-        return out
-    }
+    /** The page as the person sees it, with what Momoding shows over it (a question, the pen). Main thread. */
+    suspend fun picture(activity: MoAppActivity): Bitmap = copy(activity.window)
 
     private suspend fun copy(w: Window): Bitmap = suspendCancellableCoroutine { c ->
         val v = w.decorView
@@ -66,7 +52,7 @@ object AppScreen {
      * Main thread.
      */
     suspend fun touch(activity: MoAppActivity, x1: Float, y1: Float, x2: Float, y2: Float, ms: Long) {
-        if (activity.over().isNotEmpty()) throw IllegalStateException("Momoding is asking the person something over the app (look shows it); only they can answer it. Wait, or tell them in a line.")
+        if (activity.asking()) throw IllegalStateException("Momoding is asking the person something over the app (look shows it); only they can answer it. Wait, or tell them in a line.")
         if (activity.ownAt(x1, y1)) throw IllegalStateException("that is Momoding's own, over the page (the pen, or a line at the top for the person); only they tap it. Say in a line what it is for.")
         val page = activity.page() ?: throw IllegalStateException("the app's page is not there")
         val origin = IntArray(2).also { activity.window.decorView.getLocationOnScreen(it) }

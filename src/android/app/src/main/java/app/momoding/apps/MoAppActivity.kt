@@ -3,7 +3,6 @@ package app.momoding.apps
 import app.momoding.ui.guard.OthersBanner
 import android.annotation.SuppressLint
 import android.app.ActivityManager
-import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -31,8 +30,6 @@ import androidx.core.graphics.drawable.IconCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import app.momoding.guard.RiskDecision
-import app.momoding.guard.RiskGate
 import com.openminis.app.R
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -55,12 +52,14 @@ class MoAppActivity : ComponentActivity() {
     private var deliver: ((List<org.json.JSONObject>) -> Unit)? = null
     private var troubleOffered = false
     /** What Momoding shows over the page (asks, approvals), newest last. */
-    private val dialogs = mutableListOf<AlertDialog>()
+    /** What broke right after the page loaded, while the person is offered a fix. */
+    private val trouble = androidx.compose.runtime.mutableStateOf<String?>(null)
     /** What Momoding shows on the page for the person (the pen, the line at the top): not the page's. */
     private val own = mutableListOf<android.view.View>()
 
     /** Momoding's windows over the page now, bottom to top (AppScreen). */
-    internal fun over(): List<AlertDialog> = dialogs.filter { it.isShowing }
+    /** The person is being asked something on this page (AppQuestions): only they answer it. */
+    internal fun asking(): Boolean = AppQuestions.asking(this, app, trouble.value)
 
     internal fun page(): WebView? = web
 
@@ -73,7 +72,6 @@ class MoAppActivity : ComponentActivity() {
         }
     }
 
-    private fun AlertDialog.Builder.showOver(): AlertDialog = show().also { d -> dialogs.removeAll { !it.isShowing }; dialogs += d }
 
     @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -151,70 +149,24 @@ class MoAppActivity : ComponentActivity() {
             addView(androidx.compose.ui.platform.ComposeView(this@MoAppActivity).also { own += it }.apply {
                 setContent { androidx.compose.material3.MaterialTheme { OthersBanner(this@MoAppActivity.app.botSession) } }
             }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP))
+            // what the page asks the person: the chat's own cards, at the bottom (AppQuestions)
+            addView(androidx.compose.ui.platform.ComposeView(this@MoAppActivity).apply {
+                setContent { androidx.compose.material3.MaterialTheme {
+                    AppQuestionsHost(this@MoAppActivity.app, trouble.value,
+                        onFix = {
+                            val what = trouble.value.orEmpty()
+                            trouble.value = null
+                            AppBots.tell(this@MoAppActivity, this@MoAppActivity.app, getString(R.string.mo_app_fix_brief, what), AppBots.From.PERSON)
+                            AppChat.open(this@MoAppActivity, this@MoAppActivity.app, "")
+                        },
+                        onDismissTrouble = { trouble.value = null })
+                } }
+            }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         })
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() { if (wv.canGoBack()) wv.goBack() else finish() }
         })
-
-        // the app's own commands may wait on an approval: shown here too, since the chat is not on screen
-        lifecycleScope.launch {
-            var shown: AlertDialog? = null
-            RiskGate.open.map { all -> all.firstOrNull { it.sessionId == app.botSession || it.sessionId == AppBridge.GATE_PREFIX + app.name } }
-                .distinctUntilChanged().collect { r ->
-                // the card goes when its request does (answered in the chat, or no answer in time)
-                shown?.dismiss()
-                shown = null
-                if (r == null) return@collect
-                shown = AlertDialog.Builder(this@MoAppActivity)
-                    .setTitle(app.title)
-                    .setMessage(r.summary ?: r.preview)
-                    .setPositiveButton(R.string.mo_risk_allow_once) { _, _ -> RiskGate.decide(r.id, RiskDecision.ALLOW_ONCE) }
-                    .setNegativeButton(R.string.mo_risk_deny) { _, _ -> RiskGate.decide(r.id, RiskDecision.DENY) }
-                    .setOnCancelListener { RiskGate.decide(r.id, RiskDecision.DENY) }
-                    .showOver()
-            }
-        }
-
-        // the person's answer on what this app may use (AppPermissions)
-        lifecycleScope.launch {
-            var shown: AlertDialog? = null
-            AppPermissions.pending.collect { q ->
-                shown?.dismiss()
-                shown = null
-                if (q == null || q.app.name != app.name) return@collect
-                val what = AppPermissions.label(q.command)?.let { getString(it) } ?: q.command
-                shown = AlertDialog.Builder(this@MoAppActivity)
-                    .setMessage(getString(R.string.mo_app_cap_ask, app.title, what))
-                    .setPositiveButton(R.string.mo_app_cap_allow) { _, _ -> q.answer(true) }
-                    .setNegativeButton(R.string.mo_app_cap_deny) { _, _ -> q.answer(false) }
-                    .setOnCancelListener { q.answer(false) }
-                    .showOver()
-            }
-        }
-
-        // a key Momoding lacks, typed into Momoding's own field: the page never has it (AppKeys)
-        lifecycleScope.launch {
-            var shown: AlertDialog? = null
-            AppKeys.pending.collect { q ->
-                shown?.dismiss()
-                shown = null
-                if (q == null || q.app.name != app.name) return@collect
-                val field = android.widget.EditText(this@MoAppActivity).apply {
-                    inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-                    hint = q.name
-                }
-                val pad = (20 * resources.displayMetrics.density).toInt()
-                shown = AlertDialog.Builder(this@MoAppActivity)
-                    .setTitle(getString(R.string.mo_app_key_ask, app.title, q.name))
-                    .setMessage(getString(R.string.mo_app_key_why, q.why.ifEmpty { q.name }, q.site))
-                    .setView(FrameLayout(this@MoAppActivity).apply { setPadding(pad, 0, pad, 0); addView(field) })
-                    .setPositiveButton(R.string.mo_app_key_save) { _, _ -> q.answer(field.text.toString()) }
-                    .setNegativeButton(android.R.string.cancel) { _, _ -> q.answer(null) }
-                    .setOnCancelListener { q.answer(null) }
-                    .showOver()
-            }
-        }
 
         AppBots.opened(this, app)
         AppShare.publish(this, app)
@@ -255,18 +207,7 @@ class MoAppActivity : ComponentActivity() {
         MoApps.log(app, "ERROR", what)
         if (troubleOffered || System.currentTimeMillis() - loadedAt > 8000) return
         troubleOffered = true
-        runOnUiThread {
-            if (isFinishing) return@runOnUiThread
-            AlertDialog.Builder(this)
-                .setTitle(app.title)
-                .setMessage(R.string.mo_app_broken)
-                .setPositiveButton(R.string.mo_app_fix) { _, _ ->
-                    AppBots.tell(this, app, getString(R.string.mo_app_fix_brief, what), AppBots.From.PERSON)
-                    AppChat.open(this, app, "")
-                }
-                .setNegativeButton(android.R.string.cancel, null)
-                .showOver()
-        }
+        runOnUiThread { trouble.value = what }
     }
 
     override fun onResume() {

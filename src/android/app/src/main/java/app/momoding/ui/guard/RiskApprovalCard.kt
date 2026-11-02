@@ -103,7 +103,7 @@ fun RiskScrim(sessionId: String) {
 }
 
 @Composable
-private fun RiskApprovalCard(request: RiskRequest) {
+internal fun RiskApprovalCard(request: RiskRequest) {
     val context = LocalContext.current
     // by the name of the Momoding that asks: here it may be one this chat handed work to
     val name = app.momoding.apps.BotStatus.name(context, app.momoding.apps.BotStatus.botOf(context, request.sessionId))
