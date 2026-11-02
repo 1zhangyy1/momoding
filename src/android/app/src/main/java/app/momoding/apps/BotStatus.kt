@@ -139,7 +139,8 @@ object BotStatus {
         val recent = repo.loadMessagePage(sid, offset = maxOf(0, total - 12), limit = 12, maxChars = max + 20, includeTools = true)
         val text = recent.lastOrNull { it.role == role && it.toolResults.isEmpty() && said(it.text).isNotEmpty() }?.text ?: return null
         val cues = listOf(AppBots.WAKE_CUE, AppBots.APP_CUE, AppBots.REVIEW_CUE)
-        return cues.fold(said(text)) { t, c -> t.removePrefix(c).trim() }.lineSequence().first().take(max).ifBlank { null }
+        val words = app.momoding.ui.chat.BotLines.said(said(text))?.second ?: said(text)
+        return cues.fold(words) { t, c -> t.removePrefix(c).trim() }.lineSequence().first().take(max).ifBlank { null }
     }
 
     /** What a row says, without the notes the app adds for the model (`<system-reminder>`): nobody said those. */

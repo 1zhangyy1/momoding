@@ -30,6 +30,8 @@ object AppBots {
     const val APP_CUE = "[from the app]"
     /** The weekly look at how the app is used, asked by its host. */
     const val REVIEW_CUE = "[app review]"
+    /** What an app's Momoding said in another chat starts `[from bot:<name>]` (ui/chat/BotLines). */
+    const val FROM_CUE = "[from bot:"
 
     /** Who a message for an app's Momoding is from. */
     enum class From(val cue: String?) { MOMODING(WAKE_CUE), PERSON(null), APP(APP_CUE), REVIEW(REVIEW_CUE) }
@@ -104,9 +106,8 @@ object AppBots {
      */
     fun receipt(context: Context, app: MoApps.App, text: String, openLabel: String, finished: Boolean = true) {
         val sid = app.botSession ?: return
-        val line = text.trim().let { if (it.startsWith(app.title)) it else "${app.title}：$it" }
         val link = if (app.hasApp) "minis://apps/${app.name}" else "minis://session/$sid"
-        val body = "$line\n[$openLabel]($link)"
+        val body = "$FROM_CUE${app.name}] ${text.trim()}\n[$openLabel]($link)"
         scope.launch {
             val target = handedBy(context, sid)?.takeIf { repo(context).getSession(it) != null } ?: MainChat.resolve(context, repo(context))
             if (finished) setHandedBy(app, sid, null) // done, not just progress: what it says next is its own
@@ -206,7 +207,7 @@ You are the Momoding called "${app.title}".$what The main Momoding in the person
             append("What is kept and looked at belongs to the Momoding whose app keeps it, and that app takes in what feeds it (texts, notifications) itself — don't set up a routine of yours to write into it. ")
             append("Notice when one would help before they think of it, from what really happens, not what might: the same kind of thing asked of you again and again (\"这周第三次让我查快递了\"), or the same kind of text or notification the person keeps acting on (bank charges, pickup codes, school notices). ")
             append("A single ask is just a task. Once the pattern is there, offer — say what you noticed and what the app would do by itself, in a line, once in the conversation; if they don't take it up, saying nothing included, it's their call — don't raise it again. ")
-            append("To give one work, `momoding-app tell <name> \"<what to do>\"`: it works on its own and reports back. ")
+            append("To give one work, `momoding-app tell <name> \"<what to do>\"`: it works on its own and reports back; the chat shows the hand-over as a line of its own. A message here starting ${FROM_CUE}<name>] is that Momoding's report, not something you said. ")
             append("What they keep you can read: a question about something one looks after (\"这个月花了多少\"), answer from its folder — its NOTES.md, and its app's data — rather than asking it or working it out again; tell it only when something has to be done.")
             if (apps.isNotEmpty()) append("\nThe person's Momodings:\n").append(apps.joinToString("\n") { a ->
                 "- ${a.name}: ${a.title}" + a.what.ifBlank { null }?.let { " — $it" }.orEmpty() +

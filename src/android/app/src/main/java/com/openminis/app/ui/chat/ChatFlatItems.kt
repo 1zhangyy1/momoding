@@ -494,6 +494,12 @@ internal sealed class FlatChatItem {
      * assistant turn. Emitted last so the flat path ends a turn exactly the way
      * AssistantMessageView does, keeping the two renderers in step.
      */
+    /** momoding: work handed to another Momoding, a line of its own whether steps show or not (调研/M40). */
+    data class MomodingHandoff(val messageId: String, val blockId: String, val handoff: app.momoding.ui.chat.BotLines.Handoff) : FlatChatItem() {
+        override val key = "handoff:$messageId:$blockId"
+        override val contentType = "handoff"
+    }
+
     /** momoding: the screenshots of one hands run, under its step (the trail the person can look back at). */
     data class MomodingHandsTrail(val messageId: String, val blockId: String, val lastScreen: String) : FlatChatItem() {
         override val key = "trail:$messageId:$blockId"
@@ -730,6 +736,7 @@ internal fun buildFlatChatItems(
             is FlatChatItem.MomodingTimeDivider -> item.copy(messageId = "${item.messageId}#$n")
             is FlatChatItem.MomodingStepsToggle -> item.copy(messageId = "${item.messageId}#$n")
             is FlatChatItem.MomodingHandsTrail -> item.copy(messageId = "${item.messageId}#$n")
+            is FlatChatItem.MomodingHandoff -> item.copy(messageId = "${item.messageId}#$n")
             is FlatChatItem.AssistantLegacyContent -> FlatChatItem.AssistantLegacyContent(
                 messageId = "${item.messageId}#$n",
                 content = item.content,
@@ -999,15 +1006,16 @@ internal fun buildFlatChatItems(
                     messageId = message.id,
                     block = block,
                 )))
-                else -> if (showSteps) {
-                    out.add(dedupe(FlatChatItem.AssistantToolUse( // momoding: a step
+                else -> {
+                    app.momoding.ui.chat.BotLines.handoff(block)?.let { out.add(dedupe(FlatChatItem.MomodingHandoff(message.id, block.id, it))) }
+                    if (showSteps) out.add(dedupe(FlatChatItem.AssistantToolUse( // momoding: a step
                         messageId = message.id,
                         block = block,
                         allToolBlocks = toolPillBlocks,
                         isLastCancelled = block.id == lastCancelledToolId,
                     )))
                     // momoding: a hands run leaves its screenshots under the step
-                    handsLastScreen(block)?.let { out.add(dedupe(FlatChatItem.MomodingHandsTrail(message.id, block.id, it))) }
+                    if (showSteps) handsLastScreen(block)?.let { out.add(dedupe(FlatChatItem.MomodingHandsTrail(message.id, block.id, it))) }
                 }
             }
         }
@@ -1091,9 +1099,10 @@ private fun previousTime(messages: List<ChatMessage>, idx: Int): Long? {
     return null
 }
 
-/** momoding (from nanoMuse): an assistant turn that is only steps — no words, no error — has nothing to show with steps hidden. */
+/** momoding (from nanoMuse): an assistant turn that is only steps — no words, no error, nothing handed over — has nothing to show with steps hidden. */
 private fun stepsOnlyTurn(m: ChatMessage): Boolean =
     m.role == "assistant" && !m.isStreaming && m.error == null && m.content.isEmpty() &&
+        m.toolBlocks.none { app.momoding.ui.chat.BotLines.handoff(it) != null } &&
         m.toolBlocks.isNotEmpty() && m.toolBlocks.all {
             it.kind == "tool_use" || it.kind == "thinking" || it.kind == "info" || (it.kind == "text" && it.content.isEmpty())
         }

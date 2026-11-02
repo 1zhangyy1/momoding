@@ -1464,6 +1464,7 @@ internal fun HelperTranscript(
                 is FlatChatItem.MomodingTimeDivider -> app.momoding.ui.chat.TimeDivider(item.at) // momoding
                 is FlatChatItem.MomodingStepsToggle -> Unit // momoding: sub agent transcripts show their steps
                 is FlatChatItem.MomodingHandsTrail -> Unit // momoding
+                is FlatChatItem.MomodingHandoff -> Unit // momoding
                 is FlatChatItem.AssistantUsage -> {
                     // Strip the "#n" the flattener appends to keep duplicate
                     // keys unique (ChatFlatItems dedupe): the toggle is keyed

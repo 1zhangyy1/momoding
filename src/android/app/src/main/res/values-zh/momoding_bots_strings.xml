@@ -28,4 +28,9 @@
     <string name="mo_app_card_icon_there">已在桌面</string>
     <string name="mo_app_card_widget">加小组件</string>
     <string name="mo_app_card_widget_there">已有小组件</string>
+    <string name="mo_bot_line_handed">已交给 %1$s</string>
+    <string name="mo_bot_line_made">新建了 %1$s</string>
+    <string name="mo_bot_line_working">在做…</string>
+    <string name="mo_bot_line_building">在建…</string>
+    <string name="mo_bot_line_waiting">等你</string>
 </resources>
