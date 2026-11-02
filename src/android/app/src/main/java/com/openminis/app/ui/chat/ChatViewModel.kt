@@ -4006,7 +4006,7 @@ class ChatViewModel(
             // drain after compact (loop-end / cancel / tool-boundary are the
             // only drain triggers), so a prompt sitting in the queue when a
             // compact ran stayed in the dashed "queued" state forever. Reuse
-            // resumeQueueAfterCancel: it re-checks queue-non-empty + not-
+            // drainQueueWhenIdle: it re-checks queue-non-empty + not-
             // streaming + not-compacting after its grace delay (so an ✕ tap at
             // the compact-finish instant is a clean no-op), refreshes OAuth,
             // and drains through the normal stream-slot machinery — no new
@@ -4014,7 +4014,7 @@ class ChatViewModel(
             // false. Mirrors the iOS fix for the same report.
             if (compactSucceeded && _promptQueue.value.isNotEmpty()) {
                 AppLogger.info(TAG, "[Compact] success with ${_promptQueue.value.size} queued prompt(s) — kicking drain")
-                resumeQueueAfterCancel()
+                drainQueueWhenIdle()
             }
         }
     }
@@ -5809,6 +5809,7 @@ class ChatViewModel(
 
     init {
         loadSession()
+        restoreInbox()
         // [T-android-context-usage-hint] Loop-END path for the usage line.
         //
         // Driven off the isStreaming EDGE rather than hooked into each
@@ -7178,11 +7179,11 @@ class ChatViewModel(
         //
         // Prompts the user queued behind the cancelled retry must still drain
         // under the NEW model rather than sit as dashed bubbles.
-        // resumeQueueAfterCancel re-resolves the provider after a 200ms delay,
+        // drainQueueWhenIdle re-resolves the provider after a 200ms delay,
         // by which time the caller has rebound it.
         if (_promptQueue.value.isNotEmpty()) {
             AppLogger.info(TAG_STREAM, "[SwitchModel] ${_promptQueue.value.size} queued prompt(s) remain, restarting drain")
-            resumeQueueAfterCancel()
+            drainQueueWhenIdle()
         }
     }
 
@@ -8054,7 +8055,7 @@ class ChatViewModel(
 
         // Truncate UI messages: keep up to and including this user message.
         // T189: if the retried bubble was still in the queued state (manual
-        // retry of a queued message before resumeQueueAfterCancel's grace
+        // retry of a queued message before drainQueueWhenIdle's grace
         // window — or fallback when auto-resume is disabled), flip it out of
         // queued visuals and drop its queue entry so the upcoming send
         // doesn't double up against a later auto-drain.
@@ -8062,6 +8063,7 @@ class ChatViewModel(
             if (m.id == messageId && m.isQueued) {
                 m.queuedPromptId?.let { pid ->
                     _promptQueue.value = _promptQueue.value.filterNot { it.id == pid }
+                    app.momoding.task.Inbox.drop(context, listOf(pid))
                 }
                 m.copy(isQueued = false, queuedPromptId = null)
             } else m
@@ -8171,6 +8173,7 @@ class ChatViewModel(
         for (m in deletedMessages) {
             m.queuedPromptId?.let { pid ->
                 _promptQueue.value = _promptQueue.value.filterNot { it.id == pid }
+                app.momoding.task.Inbox.drop(context, listOf(pid))
             }
         }
         _messages.value = retainedHead
@@ -8613,7 +8616,7 @@ class ChatViewModel(
         // take would fail just as surely a turn later.
 
         val prompt = QueuedPrompt(
-            id = "queued_${System.currentTimeMillis()}_${(Math.random() * 1_000_000).toInt()}",
+            id = java.util.UUID.randomUUID().toString(),
             text = trimmed,
             attachments = pendingAttachments,
             origin = origin,
@@ -8631,43 +8634,53 @@ class ChatViewModel(
             if (superseded.isNotEmpty()) {
                 _promptQueue.value = _promptQueue.value.filterNot { it.id in superseded }
                 _messages.value = _messages.value.filterNot { it.queuedPromptId in superseded }
+                app.momoding.task.Inbox.drop(context, superseded)
                 Log.i(TAG, "Scheduled task $taskId fired again before delivery — replaced ${superseded.size} older queued fire(s)")
             }
         }
         _promptQueue.value = _promptQueue.value + prompt
-
-        val attachmentNames = pendingAttachments.map { it.fileName }
-        val imageUris = pendingAttachments.filter { it.isImage }.map { it.uri }
-        val attachmentUris = pendingAttachments.filterNot { it.isImage }.map { it.uri }
-        val chatMsg = ChatMessage(
-            id = "queued_msg_${prompt.id}",
-            role = "user",
-            content = trimmed,
-            imageUris = imageUris,
-            attachmentNames = attachmentNames,
-            attachmentUris = attachmentUris,
-            isQueued = true,
-            queuedPromptId = prompt.id,
-        )
-        _messages.value = _messages.value + chatMsg
+        app.momoding.task.Inbox.put(context, activeSessionId, prompt) // momoding: stored before anything can lose it (调研/M39 2.2)
+        _messages.value = _messages.value + prompt.bubble()
         if (origin == QueuedPromptOrigin.USER) clearAttachments()
         Log.i(TAG, "Enqueued prompt (${trimmed.length}ch, ${pendingAttachments.size} attachments, origin=$origin), queue=${_promptQueue.value.size}")
     }
 
-    /** Remove a queued prompt and its chat message by prompt id. */
+    /** The bubble a queued prompt shows as until it is read. */
+    private fun QueuedPrompt.bubble() = ChatMessage(
+        id = "queued_msg_$id",
+        role = "user",
+        content = text,
+        imageUris = attachments.filter { it.isImage }.map { it.uri },
+        attachmentNames = attachments.map { it.fileName },
+        attachmentUris = attachments.filterNot { it.isImage }.map { it.uri },
+        isQueued = true,
+        queuedPromptId = id,
+    )
+
+    /** Remove a queued prompt and its chat message by prompt id; it will never be read. */
     fun removeQueuedPrompt(promptId: String) {
         _promptQueue.value = _promptQueue.value.filterNot { it.id == promptId }
         _messages.value = _messages.value.filterNot { it.queuedPromptId == promptId }
+        app.momoding.task.Inbox.drop(context, listOf(promptId))
     }
 
-    /** Withdraw a queued message before it gets injected into the agent loop. */
-    fun withdrawQueuedMessage(messageId: String) {
-        val msg = _messages.value.firstOrNull { it.id == messageId } ?: return
-        if (!msg.isQueued) return
-        val pid = msg.queuedPromptId ?: return
-        _promptQueue.value = _promptQueue.value.filterNot { it.id == pid }
-        _messages.value = _messages.value.filterNot { it.id == messageId }
-        Log.i(TAG, "Withdrew queued message, queue=${_promptQueue.value.size}")
+    /**
+     * Momoding (调研/M39 2.2): words that reached this chat but were never read — the process died
+     * first — come back as they were, and go out as soon as the chat is free. A loop the phone cut
+     * off mid-way is left to [resume] (WorkResume), whose drain carries them.
+     */
+    private fun restoreInbox() {
+        viewModelScope.launch {
+            sessionLoaded.first { it }
+            val sid = realSessionId.ifEmpty { return@launch }
+            val known = _promptQueue.value.mapTo(HashSet()) { it.id }
+            val back = app.momoding.task.Inbox.unread(context, sid).filterNot { it.id in known }
+            if (back.isEmpty()) return@launch
+            AppLogger.info(TAG, "restoreInbox: ${back.size} unread prompt(s) back for $sid")
+            _promptQueue.value = _promptQueue.value + back
+            _messages.value = _messages.value + back.map { it.bubble() }
+            if (!_isStreaming.value && !_canResume.value) drainQueueWhenIdle()
+        }
     }
 
     /**
@@ -8729,45 +8742,12 @@ class ChatViewModel(
         // their user row is persisted (see the dequeue after appendMessage
         // below). This used to empty the queue here, ahead of four suspension
         // points; a Stop inside that window made cancelStream find an empty
-        // queue, so resumeQueueAfterCancel never ran and the message was
+        // queue, so drainQueueWhenIdle never ran and the message was
         // neither sent nor saved (its dashed bubble vanished on reopen).
 
-        // [T-android-queued-message-duplicated-on-inject] REMOVE the queued
-        // placeholder bubbles (the ones enqueuePrompt added with
-        // id="queued_msg_…") for the prompts we're injecting. Step (c) below
-        // appends a single combined user bubble (id=userEntity.id) for the same
-        // text — so flipping isQueued=false and KEEPING the placeholders (the
-        // old behaviour) rendered the message TWICE: once as the un-queued
-        // placeholder, once as the injected bubble. drainQueuedPrompts reuses
-        // its placeholders and never re-appends, so it didn't dupe; this mid-
-        // loop inject path appends a fresh bubble, so the placeholders must go.
+        // Momoding: the queued bubbles stay where they are and simply turn into sent ones, linked
+        // to the row the batch is persisted as (as the drain does) — no bubble moves or flashes.
         val queuedIds = queued.map { it.id }.toSet()
-        // [T-android-midtask-msg-vanishes] Only the ID SET is captured here.
-        //
-        // This used to also snapshot `_messages.value` into `msgsAfterUnqueue`
-        // and assign that snapshot back on Main ~100 lines below. Between the
-        // two points this function suspends four times — ensureSession(),
-        // prepareUserAttachments() (which copies attachments), buildPastedParts()
-        // and chatRepository.appendMessage() (a DB write) — and that gap is
-        // seconds wide in a real session (measured 4.8s in the reported repro).
-        //
-        // Anything appended to _messages during that gap was silently
-        // overwritten by the stale snapshot: a read-modify-write race. The
-        // user-visible symptom was the reported bug — you type a message while
-        // a task is running, it IS accepted and IS persisted (the model even
-        // answers it), but its bubble vanishes from the chat until you leave
-        // the session and come back. enqueuePrompt() appends the queued bubble
-        // to _messages immediately, so a message sent inside the window had its
-        // bubble erased milliseconds later.
-        //
-        // Agent callbacks make the window easy to hit: they enqueue
-        // PROGRAMMATIC prompts on the same queue, so in the repro log a user
-        // prompt landed as queue=2 next to a 9070-char callback twice within
-        // four minutes.
-        //
-        // The filter is now applied to the LIVE list at assignment time
-        // (below), which is what drainQueuedPrompts already does
-        // (`_messages.value.map { … }`) and why that path never showed the bug.
 
         // Build the combined user message from all queued prompts.
         val sid = ensureSession()
@@ -8804,6 +8784,7 @@ class ChatViewModel(
                 "injectQueuedPromptsAsNewTurn: ${queued.size} queued prompt(s) produced no content, skipping",
             )
             _promptQueue.value = _promptQueue.value.filterNot { it.id in queuedIds }
+            app.momoding.task.Inbox.drop(context, queuedIds)
             return null
         }
 
@@ -8847,7 +8828,7 @@ class ChatViewModel(
             prepared.attachedFilesXml,
             bodyPartsJson = queuedPaste?.partsJson,
         )
-        val userEntity = chatRepository.appendMessage(sid, "user", userPartsJson)
+        val userEntity = app.momoding.task.Inbox.take(context, queuedIds) { chatRepository.appendMessage(sid, "user", userPartsJson) }
         // [T-queue-dequeue-after-persist] Dequeue only now that the row exists,
         // with no suspension point in between. Filter by id rather than
         // emptying: a prompt enqueued during the window above stays queued.
@@ -8874,21 +8855,13 @@ class ChatViewModel(
             ),
         )
 
-        // Finalize the just-finished assistant bubble in the UI on Main:
-        // (a) un-queue the queued chat bubbles, (b) flush the side-channel
-        // delta into the canonical row and clear isStreaming /
-        // isAwaitingModelResponse, then (c) append the freshly-created
-        // queued user ChatMessage + a NEW empty assistant placeholder so
-        // the next iteration's streaming writes target the new bubble.
+        // Finalize the just-finished assistant bubble, mark the queued bubbles sent (on the LIVE
+        // list — anything appended during the suspends above stays), and open a new assistant
+        // placeholder for the next iteration's stream.
         val newAssistantId = "assistant_${System.currentTimeMillis()}"
         withContext(Dispatchers.Main) {
-            // (a) + (b) one emit: build the post-finalize list.
-            // Filter the LIVE list, not a snapshot taken before the suspends —
-            // see [T-android-midtask-msg-vanishes] above. Any bubble appended
-            // while we were persisting (another enqueue, a system notice) is
-            // preserved; only the placeholders we are replacing are removed.
-            _messages.value = _messages.value.filterNot { m ->
-                m.queuedPromptId != null && queuedIds.contains(m.queuedPromptId)
+            _messages.value = _messages.value.map { m ->
+                if (m.queuedPromptId in queuedIds) m.copy(isQueued = false, queuedPromptId = null, sourceDbIds = listOf(userEntity.id)) else m
             }
             updateAssistantMessage(
                 finishedAssistantId,
@@ -8897,18 +8870,7 @@ class ChatViewModel(
                 finishedAllToolBlocks,
                 isAwaitingModelResponse = false,
             )
-            // (c) — append the queued user bubble + the new assistant
-            // placeholder. Mirrors sendMessage's user-bubble append shape so
-            // attachments / images / file chips render the same.
-            val queuedUserMsg = ChatMessage(
-                id = userEntity.id,
-                role = "user",
-                content = userText,
-                imageUris = prepared.imageUris,
-                attachmentNames = prepared.attachmentNames,
-                attachmentUris = prepared.nonImageUris,
-            )
-            val nextAssistantMsg = ChatMessage(
+            _messages.value = _messages.value + ChatMessage(
                 id = newAssistantId,
                 role = "assistant",
                 content = "",
@@ -8916,14 +8878,6 @@ class ChatViewModel(
                 isAwaitingModelResponse = true,
                 thinkingLevel = _thinkingLevel.value,
             )
-            _messages.value = _messages.value + queuedUserMsg + nextAssistantMsg
-            // Note: ChatScreen's `lastUserAppendMs` (the trailing-row
-            // ScrollPin send-grace window) is updated reactively by
-            // ChatScreen's `LaunchedEffect(messages.size)` user-send hook
-            // when messages.size grows — appending the queuedUserMsg above
-            // bumps the size, so the pin window opens just like a normal
-            // send. No direct write needed from here (and we couldn't —
-            // `lastUserAppendMs` lives in ChatScreen's composition scope).
         }
 
         AppLogger.info(
@@ -8959,7 +8913,7 @@ class ChatViewModel(
             // [T-queue-dequeue-after-persist] Same as injectQueuedPromptsAsNewTurn:
             // the prompts leave the queue (and their bubbles flip to "sent") only
             // after appendMessage below, so a Stop during the suspending persist
-            // leaves them queued for cancelStream's resumeQueueAfterCancel instead
+            // leaves them queued for cancelStream's drainQueueWhenIdle instead
             // of losing them.
             Log.i(TAG, "📨[DRAIN] Draining ${queued.size} queued prompt(s): " +
                 queued.joinToString(", ") { "${it.id}=\"${it.text.take(20)}...\"" })
@@ -9004,7 +8958,7 @@ class ChatViewModel(
                 prepared.attachedFilesXml,
                 bodyPartsJson = drainPaste?.partsJson,
             )
-            val drainedRow = chatRepository.appendMessage(sid, "user", userPartsJson)
+            val drainedRow = app.momoding.task.Inbox.take(context, queuedIds) { chatRepository.appendMessage(sid, "user", userPartsJson) }
             _promptQueue.value = _promptQueue.value.filterNot { it.id in queuedIds }
             // Flip isQueued=false on corresponding chat messages so they render as sent.
             // T189: also clear queuedPromptId so a later retry of this bubble
@@ -9048,7 +9002,7 @@ class ChatViewModel(
             } catch (e: CancellationException) {
                 Log.d(TAG, "Agent loop (queued-drain) cancelled")
                 // Cancel mid-drain: cancelStream() will check _promptQueue
-                // and call resumeQueueAfterCancel() if anything's still pending,
+                // and call drainQueueWhenIdle() if anything's still pending,
                 // so just propagate.
                 throw e
             } catch (e: Exception) {
@@ -16553,13 +16507,13 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
         val pending = _promptQueue.value
         if (pending.isNotEmpty()) {
             AppLogger.info(TAG_STREAM, "cancel — ${pending.size} queued prompt(s) remain, restarting drain")
-            resumeQueueAfterCancel()
+            drainQueueWhenIdle()
         }
     }
 
     /**
      * T189: spawn a fresh agent loop to drain whatever the user queued during
-     * the cancelled stream. 200ms delay matches iOS resumeQueueAfterCancel
+     * the cancelled stream. 200ms delay matches iOS drainQueueWhenIdle
      * (Task.sleep(200_000_000)) — gives the cancelled streamJob's finally block
      * room to release the concurrency slot + write back state. Race-guards on
      * entry: empty queue (user withdrew) or already streaming (user manually
@@ -16569,7 +16523,7 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
      * verbatim (incl. OAuth token refresh + Claude Code prefix), so a queued
      * prompt drain after cancel uses the same plumbing as a fresh send.
      */
-    private fun resumeQueueAfterCancel() {
+    private fun drainQueueWhenIdle() {
         viewModelScope.launch {
             kotlinx.coroutines.delay(200)
             if (_promptQueue.value.isEmpty()) return@launch
@@ -16580,13 +16534,13 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
             // function from its own tail, so a deferred drain is never lost
             // (and a failed compact leaves the queue pending by design).
             if (_isCompacting.value) {
-                AppLogger.info(TAG, "resumeQueueAfterCancel: compact in flight — deferring to its completion kick")
+                AppLogger.info(TAG, "drainQueueWhenIdle: compact in flight — deferring to its completion kick")
                 return@launch
             }
 
             val initialProvider = currentProvider
             if (initialProvider == null) {
-                AppLogger.warning(TAG, "resumeQueueAfterCancel: no provider, dropping queue")
+                AppLogger.warning(TAG, "drainQueueWhenIdle: no provider, dropping queue")
                 _promptQueue.value = emptyList()
                 _messages.value = _messages.value.filterNot { it.isQueued }
                 return@launch
@@ -16620,7 +16574,7 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
                         }
                     }
                 } catch (e: Exception) {
-                    Log.w(TAG, "OAuth token refresh failed (resumeQueueAfterCancel): ${e.message}")
+                    Log.w(TAG, "OAuth token refresh failed (drainQueueWhenIdle): ${e.message}")
                 }
             }
 
@@ -16634,16 +16588,16 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
             // T145: claim the streaming flag synchronously before launching
             // the streamJob so a concurrent send/retry tap is rejected by the
             // entry guard. Mirrors sendMessage discipline.
-            AppLogger.info(TAG_STREAM, "resumeQueueAfterCancel _isStreaming=true (sync, sid=$activeSessionId)")
+            AppLogger.info(TAG_STREAM, "drainQueueWhenIdle _isStreaming=true (sync, sid=$activeSessionId)")
             _isStreaming.value = true
             _canResume.value = false
             _error.value = null
 
             streamJob = launch(Dispatchers.IO) {
-                AppLogger.info(TAG_STREAM, "resumeQueueAfterCancel streamJob ENTER sid=$activeSessionId")
+                AppLogger.info(TAG_STREAM, "drainQueueWhenIdle streamJob ENTER sid=$activeSessionId")
                 try {
                     SessionConcurrencyManager.acquireSlot(activeSessionId)
-                    AppLogger.debug(TAG_STREAM, "resumeQueueAfterCancel streamJob slot acquired")
+                    AppLogger.debug(TAG_STREAM, "drainQueueWhenIdle streamJob slot acquired")
                     SessionActivityTracker.setActive(
                     activeSessionId,
                     onStop = { cancelStream() },
@@ -16660,22 +16614,22 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
                     val fallbackProviders = buildFallbackProviders(provider)
 
                     try {
-                        AppLogger.info(TAG_STREAM, "resumeQueueAfterCancel drainQueuedPrompts CALL")
+                        AppLogger.info(TAG_STREAM, "drainQueueWhenIdle drainQueuedPrompts CALL")
                         drainQueuedPrompts(
                             provider = provider,
                             systemPrompt = systemPrompt,
                             fallbackProviders = fallbackProviders,
                             fallbackStrategy = activeFallbackStrategy,
                         )
-                        AppLogger.info(TAG_STREAM, "resumeQueueAfterCancel drainQueuedPrompts RETURN")
+                        AppLogger.info(TAG_STREAM, "drainQueueWhenIdle drainQueuedPrompts RETURN")
                     } catch (e: CancellationException) {
-                        AppLogger.info(TAG_STREAM, "resumeQueueAfterCancel drain CANCELLED")
+                        AppLogger.info(TAG_STREAM, "drainQueueWhenIdle drain CANCELLED")
                     } catch (e: Exception) {
-                        AppLogger.error(TAG_STREAM, "resumeQueueAfterCancel drain EXCEPTION ${e.javaClass.simpleName}: ${e.message}")
-                        Log.e(TAG, "Queued drain error (resumeQueueAfterCancel)", e)
+                        AppLogger.error(TAG_STREAM, "drainQueueWhenIdle drain EXCEPTION ${e.javaClass.simpleName}: ${e.message}")
+                        Log.e(TAG, "Queued drain error (drainQueueWhenIdle)", e)
                         setInlineError(e.message ?: "Unknown error")
                     } finally {
-                        AppLogger.info(TAG_STREAM, "resumeQueueAfterCancel streamJob FINALLY enter")
+                        AppLogger.info(TAG_STREAM, "drainQueueWhenIdle streamJob FINALLY enter")
                         // [T-android-overlay-reply-status-34599] Surface
                         // the assistant's most recent reply text to the
                         // overlay BEFORE setInactive so the post-completion
@@ -16686,19 +16640,19 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
                         publishOverlayReplyExcerpt(activeSessionId)
                         SessionActivityTracker.setInactive(activeSessionId)
                         SessionConcurrencyManager.releaseSlot(activeSessionId)
-                        AppLogger.info(TAG_STREAM, "resumeQueueAfterCancel streamJob FINALLY exit")
+                        AppLogger.info(TAG_STREAM, "drainQueueWhenIdle streamJob FINALLY exit")
                     }
                 } catch (e: CancellationException) {
-                    AppLogger.info(TAG_STREAM, "resumeQueueAfterCancel streamJob CANCELLED waiting for slot")
+                    AppLogger.info(TAG_STREAM, "drainQueueWhenIdle streamJob CANCELLED waiting for slot")
                 }
                 // [T-android-stale-streamjob-clears-isstreaming] guard.
                 if (streamJob === coroutineContext[Job]) {
-                    AppLogger.info(TAG_STREAM, "resumeQueueAfterCancel _isStreaming=false (about to set)")
+                    AppLogger.info(TAG_STREAM, "drainQueueWhenIdle _isStreaming=false (about to set)")
                     _isStreaming.value = false
                 } else {
-                    AppLogger.info(TAG_STREAM, "resumeQueueAfterCancel _isStreaming SKIPPED (stale job)")
+                    AppLogger.info(TAG_STREAM, "drainQueueWhenIdle _isStreaming SKIPPED (stale job)")
                 }
-                AppLogger.info(TAG_STREAM, "resumeQueueAfterCancel streamJob EXIT")
+                AppLogger.info(TAG_STREAM, "drainQueueWhenIdle streamJob EXIT")
             }
         }
     }

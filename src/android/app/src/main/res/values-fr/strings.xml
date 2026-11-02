@@ -1621,7 +1621,6 @@
     <string name="image_budget_total_exceeded">La taille totale des images dépasse 25 Mo ; les images suivantes ont été abandonnées</string>
     <string name="image_budget_request_elided">%1$d image(s) plus ancienne(s) retirée(s) de la requête pour respecter la limite de 25 Mo</string>
     <string name="composer_swipe_release_to_send">Relâcher pour envoyer</string>
-    <string name="composer_swipe_release_to_queue">Relâcher pour mettre en file</string>
     <string name="chat_message_large_collapsed_title">Contenu volumineux (%1$s)</string>
     <string name="chat_message_large_expand">Touchez pour développer</string>
     <string name="chat_message_large_export">Exporter vers un fichier</string>

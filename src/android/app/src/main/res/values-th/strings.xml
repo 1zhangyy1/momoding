@@ -1621,7 +1621,6 @@
     <string name="image_budget_total_exceeded">ขนาดรูปภาพรวมเกิน 25MB ระบบจึงข้ามรูปที่เหลือ</string>
     <string name="image_budget_request_elided">นำรูปภาพเก่า %1$d รูปออกจากคำขอเพื่อให้อยู่ในขีดจำกัด 25MB</string>
     <string name="composer_swipe_release_to_send">ปล่อยเพื่อส่ง</string>
-    <string name="composer_swipe_release_to_queue">ปล่อยเพื่อเข้าคิว</string>
     <string name="chat_message_large_collapsed_title">เนื้อหาขนาดใหญ่ (%1$s)</string>
     <string name="chat_message_large_expand">แตะเพื่อขยาย</string>
     <string name="chat_message_large_export">ส่งออกเป็นไฟล์</string>

@@ -1623,7 +1623,6 @@
     <string name="image_budget_total_exceeded">画像の合計サイズが 25MB を超えたため、以降の画像は除外しました</string>
     <string name="image_budget_request_elided">25MB の上限に収めるため、古い画像 %1$d 件をリクエストから省きました</string>
     <string name="composer_swipe_release_to_send">離して送信</string>
-    <string name="composer_swipe_release_to_queue">離してキューに追加</string>
     <string name="chat_message_large_collapsed_title">サイズの大きい内容（%1$s）</string>
     <string name="chat_message_large_expand">タップして展開</string>
     <string name="chat_message_large_export">ファイルに書き出す</string>

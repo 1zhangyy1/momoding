@@ -1629,7 +1629,6 @@
     <string name="image_budget_total_exceeded">Общий размер изображений превышает 25 МБ; последующие изображения отброшены</string>
     <string name="image_budget_request_elided">Старых изображений исключено из запроса для соблюдения лимита 25 МБ: %1$d</string>
     <string name="composer_swipe_release_to_send">Отпустите, чтобы отправить</string>
-    <string name="composer_swipe_release_to_queue">Отпустите, чтобы поставить в очередь</string>
     <string name="chat_message_large_collapsed_title">Большое содержимое (%1$s)</string>
     <string name="chat_message_large_expand">Нажмите, чтобы развернуть</string>
     <string name="chat_message_large_export">Экспортировать в файл</string>

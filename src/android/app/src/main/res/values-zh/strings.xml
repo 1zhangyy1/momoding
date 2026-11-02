@@ -1717,7 +1717,6 @@
     <string name="image_budget_total_exceeded">图片总大小超过 25MB，已丢弃后续图片</string>
     <string name="image_budget_request_elided">为适配 25MB 请求预算，已省略 %1$d 张历史图片</string>
     <string name="composer_swipe_release_to_send">松开发送</string>
-    <string name="composer_swipe_release_to_queue">松开排队</string>
     <string name="chat_message_large_collapsed_title">内容较大（%1$s）</string>
     <string name="chat_message_large_expand">点击展开</string>
     <string name="chat_message_large_export">导出为文件</string>

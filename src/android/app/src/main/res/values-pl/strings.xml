@@ -1628,7 +1628,6 @@
     <string name="image_budget_total_exceeded">Łączny rozmiar obrazów przekracza 25 MB; kolejne obrazy pominięto</string>
     <string name="image_budget_request_elided">Usunięto z żądania starszych obrazów: %1$d, aby zmieścić się w limicie 25 MB</string>
     <string name="composer_swipe_release_to_send">Puść, aby wysłać</string>
-    <string name="composer_swipe_release_to_queue">Puść, aby dodać do kolejki</string>
     <string name="chat_message_large_collapsed_title">Duża treść (%1$s)</string>
     <string name="chat_message_large_expand">Dotknij, aby rozwinąć</string>
     <string name="chat_message_large_export">Wyeksportuj do pliku</string>

@@ -1625,7 +1625,6 @@
     <string name="image_budget_total_exceeded">Total ukuran gambar melebihi 25MB; gambar berikutnya dilewati</string>
     <string name="image_budget_request_elided">%1$d gambar lama dikeluarkan dari permintaan agar muat dalam batas 25MB</string>
     <string name="composer_swipe_release_to_send">Lepaskan untuk mengirim</string>
-    <string name="composer_swipe_release_to_queue">Lepaskan untuk mengantrekan</string>
     <string name="chat_message_large_collapsed_title">Konten besar (%1$s)</string>
     <string name="chat_message_large_expand">Ketuk untuk membentangkan</string>
     <string name="chat_message_large_export">Ekspor ke berkas</string>

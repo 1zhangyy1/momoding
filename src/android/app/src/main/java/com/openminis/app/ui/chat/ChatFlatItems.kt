@@ -811,7 +811,7 @@ internal fun buildFlatChatItems(
             // momoding: the reaction comes from the turn this message started (Instinct reacts first, ✅ when done)
             val turnEnd = messages.getOrNull(idx + 1)?.takeIf { it.role == "assistant" }?.let { turnLast[idx + 1] } ?: -1
             val reaction = when {
-                turnEnd < 0 -> null
+                turnEnd < 0 || message.isQueued -> null // not read yet: no 👀 (调研/M39 2.2)
                 messages[turnEnd].isStreaming -> "👀"
                 turnHasSteps(turnEnd) -> "✅"
                 else -> null

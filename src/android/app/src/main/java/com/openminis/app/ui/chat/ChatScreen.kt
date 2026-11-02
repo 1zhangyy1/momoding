@@ -4540,9 +4540,6 @@ fun ChatScreen(
                                         inputFocusRequester.requestFocus()
                                     }
                                 }),
-                                onWithdraw = if (item.message.isQueued) {
-                                    { safeMutate { viewModel.withdrawQueuedMessage(item.message.id) } }
-                                } else null,
                                 onPreviewFile = { uri, name ->
                                     // T150: turn the persisted file:// URI back
                                     // into a FileItem and hand off to the host
@@ -4565,7 +4562,7 @@ fun ChatScreen(
                                 },
                             )
                             // momoding: 👀 the moment its turn starts (the cached list catches up only when the turn ends)
-                            val liveReaction = if (isStreaming && messages.lastOrNull { it.role == "user" }?.id == item.message.id.substringBefore('#')) "👀" else item.reaction
+                            val liveReaction = if (isStreaming && messages.lastOrNull { it.role == "user" && !it.isQueued }?.id == item.message.id.substringBefore('#')) "👀" else item.reaction
                             liveReaction?.let { app.momoding.ui.chat.MessageReaction(it) }
                             }} // momoding: close RoutineWakeRow
                             } // close UserBubble SideEffect + UserMessageBubble block
@@ -7475,13 +7472,6 @@ fun ChatScreen(
                     location = sendSwipeLocation,
                     hoverAbovePx = swipeHapticOffsetPx,
                     arrowHalfPx = swipeArrowHalfPx,
-                    // While streaming, sendMessage() routes the prompt
-                    // through enqueuePrompt() instead — surface that in
-                    // the hint so the user knows the gesture still works
-                    // mid-stream (mirrors the send-button's send/enqueue
-                    // toggle, since on Android there's no separate visual
-                    // state for the queued case).
-                    isEnqueue = isStreaming,
                 )
             } // end swipe-to-send Box wrapping the composer Column
 

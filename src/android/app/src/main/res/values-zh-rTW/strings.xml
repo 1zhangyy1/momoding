@@ -1715,7 +1715,6 @@
     <string name="image_budget_total_exceeded">圖片總大小超過 25MB，已捨棄後續圖片</string>
     <string name="image_budget_request_elided">為配合 25MB 請求額度，已省略 %1$d 張歷史圖片</string>
     <string name="composer_swipe_release_to_send">放開以傳送</string>
-    <string name="composer_swipe_release_to_queue">放開以加入佇列</string>
     <string name="chat_message_large_collapsed_title">大型內容（%1$s）</string>
     <string name="chat_message_large_expand">點擊以展開</string>
     <string name="chat_message_large_export">匯出成檔案</string>

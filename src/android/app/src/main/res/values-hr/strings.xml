@@ -1777,7 +1777,6 @@
     <!-- T-request-imgsize: request-level image-budget Snackbar message -->
     <string name="image_budget_request_elided">Starijih slika izostavljeno iz zahtjeva radi ograničenja od 25 MB: %1$d</string>
     <string name="composer_swipe_release_to_send">Pustite za slanje</string>
-    <string name="composer_swipe_release_to_queue">Pustite za stavljanje u red</string>
 
     <!-- T-android-gc-storm-issue17: render-side safe mode for large messages -->
     <string name="chat_message_large_collapsed_title">Veliki sadržaj (%1$s)</string>

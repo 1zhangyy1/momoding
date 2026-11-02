@@ -1620,7 +1620,6 @@
     <string name="image_budget_total_exceeded">Toplam görsel boyutu 25MB\'ı aşıyor; sonraki görseller atlandı</string>
     <string name="image_budget_request_elided">25MB sınırına sığması için %1$d eski görsel istekten çıkarıldı</string>
     <string name="composer_swipe_release_to_send">Göndermek için bırakın</string>
-    <string name="composer_swipe_release_to_queue">Sıraya almak için bırakın</string>
     <string name="chat_message_large_collapsed_title">Büyük içerik (%1$s)</string>
     <string name="chat_message_large_expand">Genişletmek için dokunun</string>
     <string name="chat_message_large_export">Dosyaya aktar</string>

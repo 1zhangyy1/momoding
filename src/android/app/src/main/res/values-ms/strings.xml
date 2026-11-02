@@ -1620,7 +1620,6 @@
     <string name="image_budget_total_exceeded">Jumlah saiz imej melebihi 25MB; imej berikutnya dilangkau</string>
     <string name="image_budget_request_elided">%1$d imej lama dikeluarkan daripada permintaan agar muat dalam had 25MB</string>
     <string name="composer_swipe_release_to_send">Lepaskan untuk menghantar</string>
-    <string name="composer_swipe_release_to_queue">Lepaskan untuk membariskan</string>
     <string name="chat_message_large_collapsed_title">Kandungan besar (%1$s)</string>
     <string name="chat_message_large_expand">Ketik untuk mengembangkan</string>
     <string name="chat_message_large_export">Eksport ke fail</string>

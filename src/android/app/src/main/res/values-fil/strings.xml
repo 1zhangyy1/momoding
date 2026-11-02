@@ -1620,7 +1620,6 @@
     <string name="image_budget_total_exceeded">Lumampas sa 25MB ang kabuuang laki ng larawan; nilaktawan ang mga sumunod</string>
     <string name="image_budget_request_elided">%1$d lumang larawan ang inalis sa request para kasya sa 25MB</string>
     <string name="composer_swipe_release_to_send">Bitawan para ipadala</string>
-    <string name="composer_swipe_release_to_queue">Bitawan para ipila</string>
     <string name="chat_message_large_collapsed_title">Malaking nilalaman (%1$s)</string>
     <string name="chat_message_large_expand">I-tap para i-expand</string>
     <string name="chat_message_large_export">I-export sa file</string>

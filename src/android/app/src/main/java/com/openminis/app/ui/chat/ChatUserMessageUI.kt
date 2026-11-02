@@ -298,11 +298,9 @@ internal fun UserMessageBubble(
     // (iOS parity: ChatMessageViews.swift's `onCompact`). Null hides the
     // action — same streaming gate as Retry/Edit/Delete From Here.
     onCompactAbove: (() -> Unit)? = null,
-    onWithdraw: (() -> Unit)? = null,
     onPreviewFile: (Uri, String) -> Unit = { _, _ -> },
 ) {
     var showMenu by remember { mutableStateOf(false) }
-    val isQueued = message.isQueued
     val haptics = LocalHapticFeedback.current
 
     BoxWithConstraints(
@@ -370,94 +368,41 @@ internal fun UserMessageBubble(
                 }
 
                 if (message.content.isNotBlank()) {
-                    // Queued: transparent bg + dashed border + dimmed text +
-                    // a red withdraw button alongside. Mirrors iOS
-                    // AIChatView.swift queued-bubble overlay.
-                    val secondaryTextColor = ChatColors.secondaryText
+                    // momoding: a word not read yet looks like any other — it is stored, so it will be (调研/M39 2.2)
                     val userBubbleColor = app.momoding.ui.Tones.userBubble // momoding: Momoding green
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        val textColor = if (isQueued) secondaryTextColor else MaterialTheme.colorScheme.onSurface
-                        val bubbleBg = if (isQueued) Color.Transparent else userBubbleColor
-                        val shape = app.momoding.ui.chat.BubbleShape.user() // momoding: iMessage-like tail corner
-                        val dashedStroke = if (isQueued) {
-                            Modifier.drawBehind {
-                                val stroke = androidx.compose.ui.graphics.drawscope.Stroke(
-                                    width = 1.5.dp.toPx(),
-                                    pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(
-                                        floatArrayOf(6.dp.toPx(), 4.dp.toPx()), 0f
-                                    ),
-                                )
-                                val r = 18.dp.toPx()
-                                drawRoundRect(
-                                    color = secondaryTextColor.copy(alpha = 0.5f),
-                                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(r, r),
-                                    style = stroke,
-                                )
-                            }
-                        } else Modifier
-                        // The whole LazyColumn is wrapped in a SelectionContainer,
-                        // which by default starts text-selection on long-press. We
-                        // want long-press on a user bubble to open the Copy/Retry
-                        // menu instead, with NO selection ever registered against
-                        // this Text. If we let selection register and the user
-                        // taps "Retry", retryFromMessage truncates the list and
-                        // the SelectionManager toolbar update then sorts stale
-                        // LayoutCoordinates → IllegalArgumentException
-                        // ("layouts are not part of the same hierarchy").
-                        // DisableSelection scopes the bubble out of selection.
-                        // Long-press is captured on the outer Box (above) so
-                        // press coords share a LayoutCoordinates space with the
-                        // menu anchor.
-                        androidx.compose.foundation.text.selection.DisableSelection {
-                            // T167: when queued, leave room for the 44dp cancel
-                            // IconButton sibling. Without weight(1f, fill=false)
-                            // a wide bubble would consume the full 80% width
-                            // cap and squeeze the cancel button off-screen.
-                            val bubbleModifier = if (isQueued && onWithdraw != null) {
-                                Modifier.weight(1f, fill = false)
-                            } else Modifier
-                            // T-android-gc-storm-issue17: long user messages (rare,
-                            // but legacy sessions can carry pasted log dumps) blow
-                            // up text layout the same way large assistant content
-                            // does. User bubbles never stream so isStreaming=false.
-                            LargeContentGuard(
-                                content = message.content,
-                                isStreaming = false,
-                                stableKey = "user:${message.id}",
-                            ) {
-                                Text(
-                                    text = message.content,
-                                    color = textColor,
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 16.sp, lineHeight = 22.sp), // momoding
-                                    modifier = bubbleModifier
-                                        .background(bubbleBg, shape)
-                                        .clip(shape)
-                                        .then(dashedStroke)
-                                        .padding(horizontal = 14.dp, vertical = 9.dp),
-                                )
-                            }
-                        }
-                        if (isQueued && onWithdraw != null) {
-                            // T52: bring the withdraw target up to Material's
-                            // 44dp recommended minimum so it can be hit
-                            // reliably from the soft-IME-keyboard region;
-                            // 28dp was below the spec and frustrating on
-                            // Pixel-class displays. Icon nudged to 24dp to
-                            // stay visually centred in the larger ring.
-                            IconButton(
-                                onClick = onWithdraw,
-                                modifier = Modifier.size(44.dp),
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Cancel,
-                                    contentDescription = "Withdraw queued message",
-                                    tint = Color(0xFFFF3B30),
-                                    modifier = Modifier.size(24.dp),
-                                )
-                            }
+                    val shape = app.momoding.ui.chat.BubbleShape.user() // momoding: iMessage-like tail corner
+                    // The whole LazyColumn is wrapped in a SelectionContainer,
+                    // which by default starts text-selection on long-press. We
+                    // want long-press on a user bubble to open the Copy/Retry
+                    // menu instead, with NO selection ever registered against
+                    // this Text. If we let selection register and the user
+                    // taps "Retry", retryFromMessage truncates the list and
+                    // the SelectionManager toolbar update then sorts stale
+                    // LayoutCoordinates → IllegalArgumentException
+                    // ("layouts are not part of the same hierarchy").
+                    // DisableSelection scopes the bubble out of selection.
+                    // Long-press is captured on the outer Box (above) so
+                    // press coords share a LayoutCoordinates space with the
+                    // menu anchor.
+                    androidx.compose.foundation.text.selection.DisableSelection {
+                        // T-android-gc-storm-issue17: long user messages (rare,
+                        // but legacy sessions can carry pasted log dumps) blow
+                        // up text layout the same way large assistant content
+                        // does. User bubbles never stream so isStreaming=false.
+                        LargeContentGuard(
+                            content = message.content,
+                            isStreaming = false,
+                            stableKey = "user:${message.id}",
+                        ) {
+                            Text(
+                                text = message.content,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 16.sp, lineHeight = 22.sp), // momoding
+                                modifier = Modifier
+                                    .background(userBubbleColor, shape)
+                                    .clip(shape)
+                                    .padding(horizontal = 14.dp, vertical = 9.dp),
+                            )
                         }
                     }
                 }

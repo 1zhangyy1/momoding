@@ -1017,11 +1017,6 @@ internal fun SwipeToSendHint(
     location: Offset,
     hoverAbovePx: Float,
     arrowHalfPx: Float,
-    /** When true, the capsule advertises "Release to queue" instead of
-     *  "Release to send" — used while the agent is mid-stream, when the
-     *  gesture routes through `enqueuePrompt()` instead of an immediate
-     *  send. Lets the user see the gesture still works mid-stream. */
-    isEnqueue: Boolean = false,
 ) {
     if (progress <= 0f) return
     val palette = ChatColors
@@ -1078,10 +1073,7 @@ internal fun SwipeToSendHint(
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                text = stringResource(
-                    if (isEnqueue) R.string.composer_swipe_release_to_queue
-                    else R.string.composer_swipe_release_to_send,
-                ),
+                text = stringResource(R.string.composer_swipe_release_to_send),
                 color = chipFg,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
