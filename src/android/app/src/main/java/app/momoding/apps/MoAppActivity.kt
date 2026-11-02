@@ -21,7 +21,6 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
-import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.core.content.pm.ShortcutInfoCompat
@@ -32,8 +31,6 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.openminis.app.R
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -117,33 +114,14 @@ class MoAppActivity : ComponentActivity() {
             }
         }
 
-        val pen = TextView(this).apply {
-            text = "✎"
-            textSize = 15f
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-            alpha = 0.6f
-            background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = 999f; setColor(0x99000000.toInt()) }
-            contentDescription = getString(R.string.mo_app_chat, app.title)
-            setOnClickListener { AppChat.open(this@MoAppActivity, app, "") }
-        }
-        // the pen shows what the app's Momoding is doing: waiting for the person, working, or something new for them
-        lifecycleScope.launch {
-            repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
-                BotStatus.all(this@MoAppActivity).map { all -> all.firstOrNull { it.app?.name == app.name }?.status?.kind }
-                    .distinctUntilChanged().collect { kind ->
-                        pen.text = when (kind) { BotStatus.Kind.WAITING -> "✎!"; BotStatus.Kind.WORKING -> "✎…"; BotStatus.Kind.NEWS -> "✎•"; else -> "✎" }
-                        pen.alpha = if (kind == null || kind == BotStatus.Kind.NONE) 0.6f else 0.95f
-                        (pen.background as android.graphics.drawable.GradientDrawable).setColor(if (kind == BotStatus.Kind.WAITING) 0xE6E8590C.toInt() else 0x99000000.toInt())
-                    }
-            }
-        }
         val dp = resources.displayMetrics.density
         setContentView(FrameLayout(this).apply {
             fitsSystemWindows = true
             addView(wv, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-            own += pen
-            addView(pen, FrameLayout.LayoutParams((36 * dp).toInt(), (36 * dp).toInt(), Gravity.BOTTOM or Gravity.END)
+            // the way to its Momoding (AppPen)
+            addView(androidx.compose.ui.platform.ComposeView(this@MoAppActivity).also { own += it }.apply {
+                setContent { androidx.compose.material3.MaterialTheme { AppPen(this@MoAppActivity.app) { AppChat.open(this@MoAppActivity, this@MoAppActivity.app, "") } } }
+            }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.END)
                 .apply { setMargins((14 * dp).toInt(), (14 * dp).toInt(), (14 * dp).toInt(), (14 * dp).toInt()) })
             // other Momodings: done, or waiting for the person — the same line the chat shows
             addView(androidx.compose.ui.platform.ComposeView(this@MoAppActivity).also { own += it }.apply {
