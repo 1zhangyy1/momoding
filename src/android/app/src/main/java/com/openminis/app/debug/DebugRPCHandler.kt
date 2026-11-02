@@ -266,6 +266,8 @@ class DebugRPCHandler(private val context: Context) {
                 )
                 JSONObject().put("fired", com.openminis.app.scheduled.ScheduledNotificationTriggers.dispatch(context, posted))
             }
+            // momoding: the main chat's inbox and tasks as stored (调研/M39)
+            "task.dump" -> app.momoding.task.TaskEngine.dump(context, params.optInt("limit", 50))
             "momoding.reset" -> {
                 if (!params.optBoolean("confirm", false)) throw RPCException(-32602, "confirm must be true")
                 app.momoding.debug.TestReset.reset(context)

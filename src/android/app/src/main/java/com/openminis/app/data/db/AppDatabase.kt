@@ -14,8 +14,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         CompactMarkerEntity::class,
         WebAppShortcutEntity::class,
         FolderEntity::class,
+        app.momoding.task.InboxEntity::class,
+        app.momoding.task.TaskEntity::class,
+        app.momoding.task.TaskLogEntity::class,
     ],
-    version = 14,
+    version = 15,
     // [T-android-downgrade-compat] Kept ON so MigrationTestHelper and CI can
     // validate every migration (and its downgrade counterpart) against the
     // committed schema json. Without it the upgrade/downgrade chain has no
@@ -25,6 +28,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 abstract class AppDatabase : RoomDatabase() {
     abstract fun chatDao(): ChatDao
     abstract fun webAppShortcutDao(): WebAppShortcutDao
+    abstract fun taskDao(): app.momoding.task.TaskDao
 
     companion object {
         @Volatile
@@ -376,6 +380,33 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Momoding (调研/M39): the main chat's three tables — `inbox`, `task`, `task_log` (see
+         * [app.momoding.task.InboxEntity]). Additive only. The SQL is Room's own from 15.json; it
+         * must match the entities exactly or Room refuses to open the database.
+         */
+        val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `inbox` (`id` TEXT NOT NULL, `to_session` TEXT NOT NULL, `task_id` TEXT, `sender` TEXT NOT NULL, `text` TEXT NOT NULL, `attachments` TEXT, `prefill` TEXT, `arrived_at` INTEGER NOT NULL, `read_at` INTEGER, PRIMARY KEY(`id`), FOREIGN KEY(`to_session`) REFERENCES `sessions`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_inbox_to_session_read_at` ON `inbox` (`to_session`, `read_at`)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS `task` (`id` TEXT NOT NULL, `conversation` TEXT NOT NULL, `source_message_id` TEXT, `title` TEXT NOT NULL, `hand` TEXT NOT NULL, `state` TEXT NOT NULL, `progress` TEXT, `ask` TEXT, `hold` TEXT, `outcome` TEXT, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`conversation`) REFERENCES `sessions`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_task_conversation` ON `task` (`conversation`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_task_hand` ON `task` (`hand`)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS `task_log` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `task_id` TEXT NOT NULL, `at` INTEGER NOT NULL, `kind` TEXT NOT NULL, `body` TEXT NOT NULL, FOREIGN KEY(`task_id`) REFERENCES `task`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_task_log_task_id` ON `task_log` (`task_id`)")
+            }
+        }
+
+        /**
+         * Same no-op downgrade as [MIGRATION_12_11]: an older build validates only the tables it
+         * knows, so the three new ones simply stay (and still cascade when a chat is deleted).
+         */
+        val MIGRATION_15_14 = object : Migration(15, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Intentionally empty — see above.
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -390,7 +421,7 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
                         MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
                         MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_12, MIGRATION_12_11,
-                        MIGRATION_13_14, MIGRATION_14_13,
+                        MIGRATION_13_14, MIGRATION_14_13, MIGRATION_14_15, MIGRATION_15_14,
                     )
                     .build()
                     .also { INSTANCE = it }

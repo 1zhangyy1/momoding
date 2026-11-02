@@ -971,6 +971,13 @@ object DebugMethodRegistry {
             example = ex("task" to "Open Settings and read the Android version", "app" to "Settings"),
         ),
         MethodSpec(
+            name = "task.dump",
+            description = "The main chat's stored inbox rows and tasks (with each task's log), newest first.",
+            params = listOf(ParamSpec("limit", "int", required = false, default = 50, description = "Rows per table.")),
+            returns = "{tasks:[{id, conversation, source, title, hand, state, progress, ask, hold, outcome, log:[{at, kind, body}]}], inbox:[{id, to, task, from, text, arrived, read}]}",
+            example = ex("limit" to 10),
+        ),
+        MethodSpec(
             name = "momoding.reset",
             description = "Momoding's own state back to a fresh install's: routines, notes and USER.md, remembered approvals, rule hits, card states. Keeps providers, keys and system grants. Delete chats with chat.session.delete.",
             params = listOf(ParamSpec("confirm", "bool", required = true, default = false, description = "Must be true.")),
