@@ -43,18 +43,21 @@ object BotLines {
     /** Work handed to a Bot: `momoding-app new|tell <name> …` in a step. */
     data class Handoff(val name: String, val text: String, val created: Boolean)
 
-    private val CALL = Regex("""momoding-app\s+(new|tell)\s+([a-z0-9_-]+)\s*(.*)""", RegexOption.DOT_MATCHES_ALL)
+    private val CALL = Regex("""momoding-app\s+(new|tell)\s+([a-z0-9_-]+)""")
 
-    fun handoff(block: AssistantBlock): Handoff? {
-        if (block.kind != "tool_use") return null
-        val command = runCatching { JSONObject(block.toolArgs).optString("command") }.getOrNull() ?: return null
-        val m = CALL.find(command) ?: return null
-        val rest = m.groupValues[3]
-        val created = m.groupValues[1] == "new"
-        // what the person reads: what a new one is for. A message to a Bot is written for the Bot
-        // (its details, its commands); what was asked is the person's own line just above
-        val text = (if (created) quoted(rest, "--what") ?: quoted(rest, "--title") else null).orEmpty()
-        return Handoff(m.groupValues[2], text.lineSequence().first().trim(), created)
+    /** Every hand-over in a step: one command may hand work to several Bots. */
+    fun handoffs(block: AssistantBlock): List<Handoff> {
+        if (block.kind != "tool_use") return emptyList()
+        val command = runCatching { JSONObject(block.toolArgs).optString("command") }.getOrNull() ?: return emptyList()
+        val calls = CALL.findAll(command).toList()
+        return calls.mapIndexed { i, m ->
+            val rest = command.substring(m.range.last + 1, calls.getOrNull(i + 1)?.range?.first ?: command.length)
+            val created = m.groupValues[1] == "new"
+            // what the person reads: what a new one is for. A message to a Bot is written for the Bot
+            // (its details, its commands); what was asked is the person's own line just above
+            val text = (if (created) quoted(rest, "--what") ?: quoted(rest, "--title") else null).orEmpty()
+            Handoff(m.groupValues[2], text.lineSequence().first().trim(), created)
+        }
     }
 
     /** The quoted argument after [flag]. */
