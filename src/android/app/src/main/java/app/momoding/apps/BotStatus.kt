@@ -120,7 +120,7 @@ object BotStatus {
         val last = recent.lastOrNull() ?: return false
         if (last.role != "assistant" || last.toolUses.isNotEmpty()) return false
         // what started this turn: the last row someone wrote, not a tool's result
-        val asked = recent.lastOrNull { it.role == "user" && it.toolResults.isEmpty() }?.text ?: return false
+        val asked = recent.lastOrNull { it.role == "user" && it.toolResults.isEmpty() && said(it.text).isNotEmpty() }?.text ?: return false
         return !asked.startsWith(AppBots.WAKE_CUE) && !asked.startsWith(AppBots.REVIEW_CUE)
     }
 
@@ -137,8 +137,11 @@ object BotStatus {
         val repo = (context.applicationContext as MinisApp).chatRepository
         val total = repo.messageCount(sid)
         val recent = repo.loadMessagePage(sid, offset = maxOf(0, total - 12), limit = 12, maxChars = max + 20, includeTools = true)
-        val text = recent.lastOrNull { it.role == role && it.toolResults.isEmpty() && it.text.isNotBlank() }?.text ?: return null
+        val text = recent.lastOrNull { it.role == role && it.toolResults.isEmpty() && said(it.text).isNotEmpty() }?.text ?: return null
         val cues = listOf(AppBots.WAKE_CUE, AppBots.APP_CUE, AppBots.REVIEW_CUE)
-        return cues.fold(text.trim()) { t, c -> t.removePrefix(c).trim() }.lineSequence().first().take(max)
+        return cues.fold(said(text)) { t, c -> t.removePrefix(c).trim() }.lineSequence().first().take(max).ifBlank { null }
     }
+
+    /** What a row says, without the notes the app adds for the model (`<system-reminder>`): nobody said those. */
+    private fun said(text: String) = text.substringBefore("<system-reminder>").trim()
 }
