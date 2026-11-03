@@ -27,7 +27,12 @@ A 32-second demo with audio: describe two apps, get separate Bot reports, add ho
 
 https://github.com/user-attachments/assets/0a3510e2-9135-49eb-9305-b3e89139fd5a
 
-[Watch the portrait version](https://github.com/user-attachments/assets/23a38fc7-352b-4260-b561-b34490856553)
+<details>
+<summary>Portrait version</summary>
+
+https://github.com/user-attachments/assets/23a38fc7-352b-4260-b561-b34490856553
+
+</details>
 
 <p align="center">
   <img src="docs/assets/hero-en.jpg" alt="Momoding: turn your phone into an AI phone" width="960" />

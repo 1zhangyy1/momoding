@@ -27,7 +27,12 @@
 
 https://github.com/user-attachments/assets/0a3510e2-9135-49eb-9305-b3e89139fd5a
 
-[观看竖版视频](https://github.com/user-attachments/assets/23a38fc7-352b-4260-b561-b34490856553)
+<details>
+<summary>竖版视频</summary>
+
+https://github.com/user-attachments/assets/23a38fc7-352b-4260-b561-b34490856553
+
+</details>
 
 <p align="center">
   <img src="docs/assets/hero-zh.jpg" alt="Momoding：把你的手机变成 AI 手机" width="960" />
