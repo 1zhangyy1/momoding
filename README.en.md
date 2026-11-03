@@ -21,6 +21,14 @@ Add a home-screen shortcut, use it, and ask its own Bot for changes as you go.</
   <a href="https://github.com/1zhangyy1/momoding/stargazers"><img alt="stars" src="https://img.shields.io/github/stars/1zhangyy1/momoding?style=social" /></a>
 </p>
 
+## Product demo
+
+A 32-second demo with audio: describe two apps, get separate Bot reports, add home-screen shortcuts, then open and keep improving each app. The video uses the Chinese interface.
+
+https://github.com/user-attachments/assets/0a3510e2-9135-49eb-9305-b3e89139fd5a
+
+[Watch the portrait version](https://github.com/user-attachments/assets/23a38fc7-352b-4260-b561-b34490856553)
+
 <p align="center">
   <img src="docs/assets/hero-en.jpg" alt="Momoding: turn your phone into an AI phone" width="960" />
 </p>

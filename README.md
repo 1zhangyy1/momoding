@@ -21,6 +21,14 @@
   <a href="https://github.com/1zhangyy1/momoding/stargazers"><img alt="stars" src="https://img.shields.io/github/stars/1zhangyy1/momoding?style=social" /></a>
 </p>
 
+## 产品演示
+
+32 秒有声演示：一句话交代两个 App，两个 Bot 分别回报，放到桌面后打开使用、继续修改。
+
+https://github.com/user-attachments/assets/0a3510e2-9135-49eb-9305-b3e89139fd5a
+
+[观看竖版视频](https://github.com/user-attachments/assets/23a38fc7-352b-4260-b561-b34490856553)
+
 <p align="center">
   <img src="docs/assets/hero-zh.jpg" alt="Momoding：把你的手机变成 AI 手机" width="960" />
 </p>
