@@ -21,19 +21,6 @@
   <a href="https://github.com/1zhangyy1/momoding/stargazers"><img alt="stars" src="https://img.shields.io/github/stars/1zhangyy1/momoding?style=social" /></a>
 </p>
 
-## 产品演示
-
-32 秒有声演示：一句话交代两个 App，两个 Bot 分别回报，放到桌面后打开使用、继续修改。
-
-https://github.com/user-attachments/assets/0a3510e2-9135-49eb-9305-b3e89139fd5a
-
-<details>
-<summary>竖版视频</summary>
-
-https://github.com/user-attachments/assets/23a38fc7-352b-4260-b561-b34490856553
-
-</details>
-
 <p align="center">
   <img src="docs/assets/hero-zh.jpg" alt="Momoding：把你的手机变成 AI 手机" width="960" />
 </p>
@@ -62,6 +49,10 @@ https://github.com/user-attachments/assets/23a38fc7-352b-4260-b561-b34490856553
 你可以从这样的想法开始：「做个能转着看的 3D 地标画廊」「做个用自己照片设计海报的工具」，或者一个适合自己习惯的记账本。Momoding 把需求交给专门的 Bot；做好后，Bot 在原来的对话里带着 App 卡片回来。
 
 小 App 在 Momoding 内运行，可以添加手机桌面快捷入口。下次点图标就能用，不需要再找上次的生成结果；它不是独立安装的 APK。
+
+**小 App 与多 Bot 演示 · 32 秒，有声**
+
+https://github.com/user-attachments/assets/23a38fc7-352b-4260-b561-b34490856553
 
 <p align="center"><img src="docs/assets/multi-bot-zh.jpg" alt="Momoding：多个 Bot 分别回报，打开自己的小 App" width="960" /></p>
 

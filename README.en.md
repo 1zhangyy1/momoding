@@ -21,19 +21,6 @@ Add a home-screen shortcut, use it, and ask its own Bot for changes as you go.</
   <a href="https://github.com/1zhangyy1/momoding/stargazers"><img alt="stars" src="https://img.shields.io/github/stars/1zhangyy1/momoding?style=social" /></a>
 </p>
 
-## Product demo
-
-A 32-second demo with audio: describe two apps, get separate Bot reports, add home-screen shortcuts, then open and keep improving each app. The video uses the Chinese interface.
-
-https://github.com/user-attachments/assets/0a3510e2-9135-49eb-9305-b3e89139fd5a
-
-<details>
-<summary>Portrait version</summary>
-
-https://github.com/user-attachments/assets/23a38fc7-352b-4260-b561-b34490856553
-
-</details>
-
 <p align="center">
   <img src="docs/assets/hero-en.jpg" alt="Momoding: turn your phone into an AI phone" width="960" />
 </p>
@@ -62,6 +49,10 @@ https://github.com/user-attachments/assets/23a38fc7-352b-4260-b561-b34490856553
 Try an idea like “make a 3D landmark gallery I can rotate,” “build a poster tool using my photos,” or an expense tracker that fits your habits. Momoding hands the request to a dedicated Bot, which reports back in the original conversation with a card to open the app.
 
 Small apps run inside Momoding and can have a home-screen shortcut. Tap the icon next time to keep using it. They are not standalone APKs.
+
+**Small apps and multiple Bots · 32 seconds, with audio · Chinese interface**
+
+https://github.com/user-attachments/assets/23a38fc7-352b-4260-b561-b34490856553
 
 <p align="center"><img src="docs/assets/multi-bot-en.jpg" alt="Momoding: separate Bot reports and a small app you can open" width="960" /></p>
 
