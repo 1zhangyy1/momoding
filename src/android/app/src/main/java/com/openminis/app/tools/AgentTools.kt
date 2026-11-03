@@ -3,7 +3,6 @@ package com.openminis.app.tools
 import com.openminis.app.browser.BrowserAction
 import com.openminis.app.data.model.AgentToolDefinition
 import com.openminis.app.data.model.AgentToolParam
-import com.openminis.app.data.model.SubAgentDefinition
 
 /**
  * Central registry of all agent tool definitions.
@@ -28,24 +27,13 @@ object AgentTools {
         // attempt those calls. Mirrors the iOS gate at
         // AIChatViewModel.makeAgentTools(memoryEnabled:).
         memoryEnabled: Boolean = true,
-        // [T-p1-delegate-task] True for a helper (child) vm. Depth = 1: a
-        // helper never sees delegate_task; it also loses memory_write (design
+        // [T-p1-delegate-task] True for a helper (child) vm: it loses memory_write (design
         // §4.3 — helpers have no long-term memory). memory_get stays so a
         // helper can still LOOK things up.
         isHelper: Boolean = false,
-        // [T-p2-agent-settings] Settings › Agents can remove delegation globally.
-        delegateEnabled: Boolean = true,
         // [T-tools-granular-switches] Settings › Agent Tools can remove
-        // browser_use globally. Separate from delegateEnabled because the two
-        // are independent user choices; mirrors iOS AgentToolSwitch.browser.
+        // browser_use globally; mirrors iOS AgentToolSwitch.browser.
         browserEnabled: Boolean = true,
-        // [T-sub-agents-v1] The names of the enabled sub agents, in roster
-        // order. These become `subagent_task.agent`'s enum, and the caller
-        // rebuilds them every turn: the schema is not cached, so a rename takes
-        // effect on the next request and the model cannot emit a name that
-        // would fail to resolve. Empty falls back to the built-in's name so the
-        // enum is never an empty list (which some providers reject).
-        rosterNames: List<String> = listOf(SubAgentDefinition.BUILT_IN_NAME),
     ): List<AgentToolDefinition> = buildList {
         add(shellExecuteDefinition())
         add(FileReadTool.definition())
@@ -59,55 +47,7 @@ object AgentTools {
             if (!isHelper) add(memoryWriteDefinition())
             add(memoryGetDefinition())
         }
-        if (!isHelper && delegateEnabled) {
-            add(subAgentTaskDefinition(rosterNames))
-        }
     }
-
-    /**
-     * [T-sub-agents-v1] The one sub agent tool: delegate, and inspect or stop
-     * what you delegated.
-     *
-     * Replaces `delegate_task` + `agent_status`. The separate status tool is
-     * folded in as an `action`, so the model sees ONE tool — the shape iOS
-     * settled on. Description text is byte-identical to iOS
-     * `AIChatViewModel+ToolDefinitions.swift`; the two clients present one
-     * contract to the same models, so these strings are copied, never
-     * paraphrased.
-     *
-     * [rosterNames] are the enabled sub agents' names, rebuilt every turn
-     * (the schema is not cached), so a rename takes effect on the next request
-     * and the model cannot invent a name that would fail to resolve.
-     *
-     * `task` is deliberately NOT in [required]: it is required for
-     * action=delegate and meaningless for status/cancel, which JSON Schema
-     * cannot express here. The dispatcher rejects a delegate call with no task.
-     */
-    private fun subAgentTaskDefinition(rosterNames: List<String>): AgentToolDefinition =
-        AgentToolDefinition(
-            name = SubAgentDefinition.TOOL_NAME,
-            description = "Delegate a self-contained task to a sub agent — its own isolated context and tool loop, in a hidden child session running concurrently with you — and inspect or stop the ones you started. `action` defaults to `delegate`.\n\nDELEGATE work needing many rounds of exploration (reading lots of files or pages, trial-and-error), producing bulk output you only need a conclusion from, or splitting into independent sub-problems you can run in parallel (several calls in one turn). DO NOT delegate what you can finish in one or two tool calls, what needs the user's confirmation mid-way, or work depending on nuances of this conversation you cannot restate. A sub agent cannot see this conversation and has no memory: write `task` as a complete brief for a capable colleague who just walked in — goal, constraints, where things are, what exactly to return. It costs a full model run, so nothing trivial. Only 3 run at once, but delegate everything you need anyway: extras return status=queued and start as slots free, so never re-delegate a queued task or wait for a slot.\n\nwait=false (default) returns at once with status=running and a job_id; the result arrives later as a NEW MESSAGE prefixed [Background task finished …] (also on cancel/timeout/failure). End your turn when you have nothing else to do — never poll in a loop, never promise to report back. You do NOT need action=status to receive results.",
-            parameters = mapOf(
-            "tool_title" to AgentToolParam("string", "A concise 5-10 word summary shown to the user on the block in the tool bar and in the transcript (e.g. 'Survey repo test layout', 'Check on the research agent'). Use the same language as the user."),
-            "action" to AgentToolParam("string", "\"delegate\" (default): start a sub agent on `task`. \"status\": report this conversation's sub agents — state (queued/running/done/cancelled/failed/interrupted), current tool, elapsed, model, finished results; `job_id` for one, omit for all. \"steer\": course-correct a RUNNING one without stopping it (see `message`). \"cancel\": stop the one named by `job_id`; its partial result is still posted back. \"resume\": restart runs the app lost when it was killed (they report `interrupted`); `job_id`/`child_session_id` for one, omit both for all.", enumValues = listOf("delegate", "status", "steer", "cancel", "resume")),
-            "task" to AgentToolParam("string", "action=delegate only, required. The complete, self-contained brief: goal, success criteria, relevant paths/URLs, constraints, and exactly what to return. The sub agent sees nothing else."),
-            "agent" to AgentToolParam("string", "action=delegate only. Which sub agent runs this task. Pick the one whose description matches the work; omit it to use the general one.", enumValues = rosterNames),
-            "model_choice" to AgentToolParam("string", "action=delegate only, and only when the chosen sub agent is set to Auto — one the user pinned to a group ignores it. DEFAULT TO \"same_as_me\". The user picked the model this conversation runs on, and that choice covers the work you delegate from it: a sub agent on a different model can cost far more, or be far weaker, than what they chose, and they never see it happen. Only depart from it when the task itself gives you a specific reason, judged by what the task demands and not by how long it will take. \"same_as_me\" (default): this conversation's model — anything continuing the work at hand, and every case where you are unsure. \"default_model\": the user's strongest group — only when this task clearly needs more capability than the current model, e.g. multi-step reasoning, design judgment, ambiguous requirements where a wrong answer is expensive. \"sub_model\": the user's light group — only when the task is clearly mechanical and well-bounded, verifiable at a glance (collecting files against a list, format conversion, fixed commands, lookups).", enumValues = listOf("same_as_me", "default_model", "sub_model")),
-            "context" to AgentToolParam("string", "action=delegate only. Optional raw material to hand over verbatim (file excerpts, error output, a list of paths). Appended to the task."),
-            "max_minutes" to AgentToolParam("integer", "action=delegate only. Wall-clock budget in minutes (default 10, maximum 60). The sub agent is stopped when it runs out and whatever it produced so far is returned with status=timeout."),
-            "wait" to AgentToolParam("boolean", "action=delegate only. false (default): return at once with status=running; the result is posted here as a new message when done. true: block until it finishes and return the result here — only when the next step cannot proceed without it. If the user sends a message while you wait, the run moves to the background and the call returns status=running."),
-            "progress_report" to AgentToolParam("string", "action=delegate only. Mid-run [Background task progress …] messages (status, current tool, elapsed, latest message). \"none\" (default): final result only. \"frequent\": every 15s when something changed. \"moderate\": once a minute. Each costs you a turn — leave at none unless the user asked to follow along or you must react mid-way. Answer one with at most a short sentence, or just carry on; never re-delegate or poll because of one. Ignored when wait=true.", enumValues = listOf("none", "frequent", "moderate")),
-            "job_id" to AgentToolParam("string", "action=status/steer/cancel. The job_id this tool returned when it started the sub agent (a prefix is accepted). Required for steer and cancel; omit on status to list every sub agent of this conversation."),
-            "message" to AgentToolParam("string", "action=steer only, required. The correction, phrased as an instruction to the running sub agent (e.g. 'focus on pricing, skip the migration notes'). Use when new information changes what it should do — it keeps the work already done, unlike cancelling and re-delegating. Read at its next turn, so a running tool call is not interrupted; if the run finishes first the result reports the steer as missed."),
-            "child_session_id" to AgentToolParam("string", "action=resume only, optional. The child_session_id of one interrupted sub agent to restart. Omit to resume every interrupted sub agent in this conversation."),
-            ),
-            required = listOf("tool_title"),
-            propertyOrdering = listOf(
-                "tool_title", "action", "task", "agent", "model_choice", "context",
-                "max_minutes", "wait", "progress_report", "job_id", "message",
-                "child_session_id",
-            ),
-        )
 
     // Aligned with iOS AIChatViewModel.swift:4982-4993
     private fun shellExecuteDefinition(): AgentToolDefinition = AgentToolDefinition(

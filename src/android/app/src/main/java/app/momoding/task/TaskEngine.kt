@@ -7,7 +7,6 @@ import app.momoding.apps.MoApps
 import com.openminis.app.MinisApp
 import com.openminis.app.debug.HeadlessChatRunner
 import com.openminis.app.logging.AppLogger
-import com.openminis.app.service.SessionActivityTracker
 import com.openminis.app.ui.chat.ChatViewModelStore
 import com.openminis.app.ui.chat.QueuedPromptOrigin
 import com.openminis.app.ui.chat.rendersAsUserBubble
@@ -42,25 +41,19 @@ object TaskEngine {
 
     fun dao(context: Context): TaskDao = (context.applicationContext as MinisApp).database.taskDao()
 
-    /** At startup: keep [recent] current, and close a task whose hand stopped without a report. */
+    /** Keep the UI's view of the persisted tasks current. A loop reports its own end explicitly. */
     fun start(context: Context) {
         val app = context.applicationContext
         scope.launch { dao(app).recentFlow(200).collect { _recent.value = it } }
-        scope.launch {
-            var before = emptySet<String>()
-            SessionActivityTracker.activeSessions.collect { now ->
-                (before - now).forEach { settle(app, it) }
-                before = now
-            }
-        }
     }
 
     /** The task the person's words started: a new one for [hand], or in line behind the one it is on. */
     suspend fun open(context: Context, conversation: String, title: String, hand: String, brief: String): TaskEntity {
         val source = ChatViewModelStore.existing(conversation)?.messages?.value
             ?.lastOrNull { it.rendersAsUserBubble() && !it.isQueued }
+        val helper = Helpers.isHelper(context, hand)
         return change(context) { dao, after ->
-            val busy = dao.heldBy(hand) != null
+            val busy = !free(dao, hand, helper)
             val now = System.currentTimeMillis()
             val task = TaskEntity(
                 id = newId(), conversation = conversation, sourceMessageId = source?.id, title = title.trim(), hand = hand,
@@ -69,7 +62,7 @@ object TaskEngine {
             dao.insertTask(task)
             source?.content?.let { log(dao, task.id, TaskLogEntity.Kind.AUTHORIZED, it) }
             log(dao, task.id, TaskLogEntity.Kind.PASSED_ON, brief)
-            if (!busy) after += { deliver(context, hand, brief) }
+            if (!busy) after += { deliver(context, task, brief) }
             task
         }
     }
@@ -78,21 +71,33 @@ object TaskEngine {
      * More words for a task's hand. It reads them before its next step when it is at work; they
      * answer what it waits on; a task that is done or did not work picks up again with the same hand.
      */
-    suspend fun tell(context: Context, id: String, text: String): TaskEntity = change(context) { dao, after ->
+    suspend fun tell(context: Context, id: String, text: String): TaskEntity {
+        val helper = dao(context).task(id)?.let { Helpers.isHelper(context, it.hand) } ?: false
+        return change(context) { dao, after -> tellIn(context, dao, after, id, text, helper) }
+    }
+
+    private suspend fun tellIn(context: Context, dao: TaskDao, after: MutableList<suspend () -> Unit>, id: String, text: String, helper: Boolean): TaskEntity {
         val task = dao.task(id) ?: throw IllegalArgumentException("no task $id (the table of tasks lists them)")
         if (task.outcome == TaskEntity.Outcome.STOPPED.name) throw IllegalStateException("task $id was stopped: open a new one")
         log(dao, id, TaskLogEntity.Kind.PASSED_ON, text)
         val state = when (TaskEntity.State.valueOf(task.state)) {
             TaskEntity.State.QUEUED -> TaskEntity.State.QUEUED // read when it starts, with the brief
-            TaskEntity.State.ENDED -> if (dao.heldBy(task.hand) != null) TaskEntity.State.QUEUED else TaskEntity.State.RUNNING
+            TaskEntity.State.ENDED -> if (free(dao, task.hand, helper)) TaskEntity.State.RUNNING else TaskEntity.State.QUEUED
             else -> TaskEntity.State.RUNNING
         }
-        if (state == TaskEntity.State.RUNNING) after += { deliver(context, task.hand, text) }
-        task.copy(state = state.name, ask = null, outcome = null, updatedAt = System.currentTimeMillis()).also { dao.updateTask(it) }
+        val next = task.copy(state = state.name, ask = null, outcome = null, updatedAt = System.currentTimeMillis())
+        dao.updateTask(next)
+        if (state == TaskEntity.State.RUNNING) after += { deliver(context, next, text) }
+        return next
     }
 
     /** What [hand] says of the task it is on. Progress only changes the task's row; the rest wake its conversation. */
-    suspend fun report(context: Context, hand: String, kind: Report, text: String): TaskEntity = change(context) { dao, after ->
+    suspend fun report(context: Context, hand: String, kind: Report, text: String): TaskEntity {
+        val helper = Helpers.isHelper(context, hand)
+        return change(context) { dao, after -> reportIn(context, dao, after, hand, kind, text, helper) }
+    }
+
+    private suspend fun reportIn(context: Context, dao: TaskDao, after: MutableList<suspend () -> Unit>, hand: String, kind: Report, text: String, helper: Boolean): TaskEntity {
         val task = dao.heldBy(hand) ?: throw IllegalStateException("you are on no task: just answer in your chat")
         val now = System.currentTimeMillis()
         val next = when (kind) {
@@ -107,13 +112,16 @@ object TaskEngine {
         if (kind != Report.PROGRESS) {
             log(dao, task.id, if (next.state == TaskEntity.State.ENDED.name) TaskLogEntity.Kind.END else TaskLogEntity.Kind.REPORT, text)
             val words = "$REPORT_CUE${task.id} · ${handName(context, hand)} · ${kind.name.lowercase()}] $text"
-            after += { deliver(context, task.conversation, words, QueuedPromptOrigin.PROGRAMMATIC) }
+            after += { tellChat(context, task.conversation, words) }
             if (next.state == TaskEntity.State.ENDED.name) {
-                after += { MoApps.ofSession(context, hand)?.let { AppBots.reported(context, it, task.conversation, text) } }
-                startNext(context, dao, hand, after)
+                after += {
+                    MoApps.ofSession(context, hand)?.let { AppBots.reported(context, it, task.conversation, text) }
+                }
+                // The hand may still be inside the report's shell call. Start its next task only
+                // when the loop actually returns, so that old tools cannot act for a new task.
             }
         }
-        next
+        return next
     }
 
     /** The conversation whose task [hand] is on, if any: where its questions to the person show. */
@@ -130,7 +138,9 @@ object TaskEngine {
         val ended = mine.filter { it.state == TaskEntity.State.ENDED.name }.take(3)
         if (open.isEmpty() && ended.isEmpty()) return null
         return buildString {
-            append("## Tasks\nWork handed on from this chat (`momoding-task tell <id> \"…\"` passes words to its hand):\n")
+            append("## Tasks\nWork handed on from this chat. A message starting $REPORT_CUE<id> · <hand> · done|ask|failed] is that task's report, not the person: ")
+            append("tell the person what came of it in your own words, in a line or two (with a link to open a Momoding's app when there is something to see); for an ask, ask the person. ")
+            append("Their answer, or anything more they want of a task, goes to its hand with `momoding-task tell <id> \"<their words>\"`.\n")
             (open + ended).forEach { t ->
                 append("- ").append(t.id).append(" · ").append(handName(context, t.hand)).append(" · ").append(t.title).append(" · ")
                 append(t.outcome?.lowercase() ?: t.state.lowercase())
@@ -141,44 +151,69 @@ object TaskEngine {
         }.trimEnd()
     }
 
-    /** The name the person knows a hand by. */
-    fun handName(context: Context, hand: String): String = MoApps.ofSession(context, hand)?.title ?: hand
+    /** The name a hand goes by: its Momoding's, else it is a helper. */
+    fun handName(context: Context, hand: String): String = MoApps.ofSession(context, hand)?.title ?: "helper"
 
-    /** A hand's turn ended while its task is still on: what it said last is its report, so no task hangs. */
-    private suspend fun settle(context: Context, hand: String) {
-        val task = dao(context).heldBy(hand)?.takeIf { it.state == TaskEntity.State.RUNNING.name } ?: return
-        if (ChatViewModelStore.existing(hand)?.isStreaming?.value == true) return
-        val last = lastWords(context, hand)
-        AppLogger.info(TAG, "${task.id}: ${hand.take(8)} stopped without a report — its last words stand in")
-        // not a report: the chat's Momoding judges from the words what came of it
-        val words = last?.let { "it stopped without a report; what it said last: $it" } ?: "it stopped without a word"
-        runCatching { report(context, hand, if (last != null) Report.DONE else Report.FAILED, words) }
-            .onFailure { AppLogger.warning(TAG, "settle ${task.id}: ${it.message}") }
+    /**
+     * The loop that actually ran hands back its result, tied to the task it started on. An
+     * explicit report already settled it; unread follow-ups are still owed another loop.
+     * Never infer success from a session becoming idle or from an older transcript message.
+     */
+    suspend fun turnFinished(context: Context, hand: String, taskId: String?, completion: TaskCompletion, hasFollowUp: Boolean) {
+        val helper = Helpers.isHelper(context, hand)
+        change(context) { dao, after ->
+            val current = taskId?.let { dao.task(it) }
+            if (current?.hand == hand && current.state == TaskEntity.State.RUNNING.name && !hasFollowUp) {
+                reportIn(context, dao, after, hand, if (completion.done) Report.DONE else Report.FAILED, completion.words, helper)
+            }
+            if (helper && current != null && dao.task(current.id)?.state == TaskEntity.State.ENDED.name) {
+                after += { Helpers.ended(context, hand, current.conversation) }
+            }
+            if (dao.heldBy(hand) == null) {
+                val next = if (helper && dao.helpersAtWork() < Helpers.SLOTS) dao.nextForHelpers()
+                    else if (!helper) dao.nextFor(hand) else null
+                next?.let { start(dao, it, after, context) }
+            }
+        }
     }
 
-    private suspend fun lastWords(context: Context, session: String): String? {
-        val repo = (context.applicationContext as MinisApp).chatRepository
-        val total = repo.messageCount(session)
-        return repo.loadMessagePage(session, offset = maxOf(0, total - 6), limit = 6, maxChars = 2000, includeTools = true)
-            .lastOrNull { it.role == "assistant" && it.text.isNotBlank() }?.text?.trim()
-    }
+    /** Whether [hand] can start a task now: it holds none, and a helper has a slot. */
+    private suspend fun free(dao: TaskDao, hand: String, helper: Boolean) =
+        dao.heldBy(hand) == null && ChatViewModelStore.existing(hand)?.isStreaming?.value != true &&
+            (!helper || dao.helpersAtWork() < Helpers.SLOTS)
 
-    /** The next task in line for [hand], started once this change commits. */
-    private suspend fun startNext(context: Context, dao: TaskDao, hand: String, after: MutableList<suspend () -> Unit>) {
-        val next = dao.nextFor(hand) ?: return
-        dao.updateTask(next.copy(state = TaskEntity.State.RUNNING.name, updatedAt = System.currentTimeMillis()))
-        val brief = dao.log(next.id).filter { it.kind == TaskLogEntity.Kind.PASSED_ON.name }.joinToString("\n\n") { it.body }
-        after += { deliver(context, hand, brief) }
+    /** A task that waited its turn starts once this change commits, with everything passed on for it. */
+    private suspend fun start(dao: TaskDao, task: TaskEntity, after: MutableList<suspend () -> Unit>, context: Context) {
+        val next = task.copy(state = TaskEntity.State.RUNNING.name, updatedAt = System.currentTimeMillis())
+        dao.updateTask(next)
+        val brief = dao.log(task.id).filter { it.kind == TaskLogEntity.Kind.PASSED_ON.name }.joinToString("\n\n") { it.body }
+        after += { deliver(context, next, brief) }
     }
 
     /**
-     * Words for a session: into its turn when it is at work, else a new turn. A hand's own work
-     * comes from Momoding ([AppBots.WAKE_CUE]) and goes in at its next step, like the person's words.
+     * Words for a task's hand: into its turn at its next step when it is at work, else a new turn.
+     * A Bot reads them as from Momoding ([AppBots.WAKE_CUE]); a helper is set up as one first.
      */
-    private suspend fun deliver(context: Context, to: String, text: String, origin: QueuedPromptOrigin = QueuedPromptOrigin.USER) {
-        val words = if (origin == QueuedPromptOrigin.USER && MoApps.ofSession(context, to) != null) "${AppBots.WAKE_CUE} $text" else text
-        runCatching { HeadlessChatRunner.prompt(context.applicationContext, to, words, wait = false, timeoutMs = 0, origin = origin) }
-            .onFailure { AppLogger.warning(TAG, "deliver to ${to.take(8)}: ${it.message}") }
+    private suspend fun deliver(context: Context, task: TaskEntity, text: String) {
+        val words = if (MoApps.ofSession(context, task.hand) != null) "${AppBots.WAKE_CUE} $text" else text
+        runCatching {
+            if (Helpers.isHelper(context, task.hand)) Helpers.ready(context, task.hand, task)
+            val result = HeadlessChatRunner.prompt(context.applicationContext, task.hand, words, wait = false, timeoutMs = 0, origin = QueuedPromptOrigin.USER)
+            check(result.status == "Running" || result.status == "Queued") { result.responseText ?: result.status }
+        }.onFailure {
+            if (it is kotlinx.coroutines.CancellationException) throw it
+            AppLogger.warning(TAG, "deliver to ${task.hand.take(8)}: ${it.message}")
+            turnFinished(context, task.hand, task.id, TaskCompletion(false, "The hand could not start: ${it.message}"), hasFollowUp = false)
+        }
+    }
+
+    /** A hand's report for the chat it works for: read when that chat's turn ends, or a turn of its own. */
+    private suspend fun tellChat(context: Context, chat: String, text: String) {
+        runCatching {
+            val result = HeadlessChatRunner.prompt(context.applicationContext, chat, text, wait = false, timeoutMs = 0)
+            check(result.status == "Running" || result.status == "Queued") { result.responseText ?: result.status }
+        }
+            .onFailure { AppLogger.warning(TAG, "report to ${chat.take(8)}: ${it.message}") }
     }
 
     /** One change: [block] in a transaction, then what it set off. */

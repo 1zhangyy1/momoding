@@ -124,23 +124,6 @@ class SubAgentSteerResumeTest {
         assertFalse(HelperRunner.shouldContinueForSteer(isHelper = true, isEmptyTurn = true, turn = 3, turnCap = 20, pendingSteers = 1))
     }
 
-    @Test
-    fun `the loop consults the steer queue before its no-tool-call exit`() {
-        // Source guard: the decision above only matters if runAgentLoop asks
-        // it on the path that ends a turn with no tool calls, BEFORE breaking.
-        val vm = com.openminis.app.ProductionSources.read("ui/chat/ChatViewModel.kt")
-        val loop = vm.substring(vm.indexOf("for (turn in 0 until turnCap)"))
-        val check = loop.indexOf("HelperRunner.shouldContinueForSteer(")
-        assertTrue("runAgentLoop must call shouldContinueForSteer", check > 0)
-        val exit = loop.indexOf("loopExitedNormally = true\n                break")
-        assertTrue("the no-tool-call exit must still exist", exit > 0)
-        assertTrue("the steer check must come before the normal exit", check < exit)
-        assertTrue(
-            "it must pass the real queue size",
-            loop.substring(check, check + 400).contains("pendingSteers = pendingSteerMessages.size"),
-        )
-    }
-
     // ── Resume ──────────────────────────────────────────────────────────────
 
     @Test

@@ -12,7 +12,7 @@ import org.json.JSONObject
 /**
  * `momoding-task` — work that takes more than a step, from the shell (调研/M39):
  *
- *     momoding-task new --to bot:<name> --title "<a few words>" "<what to do>"   (a chat) hand work on
+ *     momoding-task new --to helper|bot:<name> --title "<a few words>" "<what to do>"   (a chat) hand work on
  *     momoding-task tell <id> "<words>"                                          (a chat) more for that hand
  *     momoding-task report progress|ask|done|failed "<words>"                    (a hand) on the task it is on
  *
@@ -36,17 +36,22 @@ class TaskOffloadHandler(private val context: Context) : NativeOffloadHandler {
 
     private fun new(args: OffloadArgs, sid: String): NativeOffloadResult {
         if (MoApps.ofSession(context, sid) != null) throw IllegalStateException("an app's Momoding hands no work on: do it yourself, or say what is needed")
+        if (runBlocking { Helpers.isHelper(context, sid) }) throw IllegalStateException("a helper hands no work on: do it yourself")
         val to = args.get("to")?.trim().orEmpty()
         val brief = args.positional.drop(1).joinToString(" ").trim()
-        require(brief.isNotEmpty()) { "momoding-task new --to bot:<name> --title \"…\" \"<what to do>\"" }
+        require(brief.isNotEmpty()) { "momoding-task new --to helper|bot:<name> --title \"…\" \"<what to do>\"" }
+        val title = args.get("title")?.trim().orEmpty().ifEmpty { brief.lineSequence().first().take(30) }
         val hand = when {
+            to == "helper" -> {
+                check(com.openminis.app.tools.AgentToolSwitch.AGENTS.isEnabled(context)) { "helpers are turned off in settings" }
+                runBlocking { Helpers.create(context, sid, title) }
+            }
             to.startsWith("bot:") -> {
                 val app = MoApps.get(context, to.removePrefix("bot:")) ?: throw IllegalArgumentException("no Momoding called ${to.removePrefix("bot:")} (momoding-app list)")
                 app.botSession ?: throw IllegalStateException("${app.name} has no chat of its own")
             }
-            else -> throw IllegalArgumentException("--to bot:<name>")
+            else -> throw IllegalArgumentException("--to helper | bot:<name>")
         }
-        val title = args.get("title")?.trim().orEmpty().ifEmpty { brief.lineSequence().first().take(30) }
         val task = runBlocking { TaskEngine.open(context, sid, title, hand, brief) }
         return ok(JSONObject().put("task", task.id).put("state", task.state.lowercase())
             .put("note", "It has its own line in this chat and reports back here when there is a result, a question or a problem; no need to wait or check."))
@@ -79,6 +84,10 @@ class TaskOffloadHandler(private val context: Context) : NativeOffloadHandler {
             that handed it on, and its hand works on one task at a time (the next waits its turn).
 
             From a chat:
+              new --to helper --title "<a few words>" "<a complete brief>"
+                                   a helper: its own chat, no memory, nothing of this one; it works
+                                   on its own and its final answer comes back here. At most 3 at
+                                   once, the rest wait their turn
               new --to bot:<name> --title "<a few words>" "<what to do>"
                                    hand work to that Momoding; it reports back to this chat
               tell <id> "<words>"  more for the task's hand (the person's change of mind, their answer

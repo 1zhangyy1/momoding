@@ -28,6 +28,7 @@
     <string name="mo_app_card_widget">加小组件</string>
     <string name="mo_app_card_widget_there">已有小组件</string>
     <string name="mo_task_handed">交给 %1$s</string>
+    <string name="mo_task_helper">帮手</string>
     <string name="mo_task_running">在办</string>
     <string name="mo_task_queued">排队</string>
     <string name="mo_task_waiting">等你</string>

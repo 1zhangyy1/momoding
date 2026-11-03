@@ -47,39 +47,20 @@ class AgentToolSwitchTest {
     }
 
     @Test
-    fun `disabling a switch removes its tools from the schema`() {
-        fun names(browser: Boolean, delegate: Boolean) =
-            AgentTools.makeAgentTools(browserEnabled = browser, delegateEnabled = delegate)
-                .map { it.name }.toSet()
-
-        // [T-sub-agents-v1] delegate_task + agent_status became the single
-        // subagent_task tool; the switch still governs the whole capability.
-        val all = names(browser = true, delegate = true)
-        assertTrue(all.containsAll(listOf("browser_use", "subagent_task")))
-
-        val noBrowser = names(browser = false, delegate = true)
+    fun `disabling the browser removes it from the schema`() {
+        fun names(browser: Boolean) = AgentTools.makeAgentTools(browserEnabled = browser).map { it.name }.toSet()
+        assertTrue("browser_use" in names(browser = true))
+        val noBrowser = names(browser = false)
         assertFalse("browser_use must be absent, not merely refused", "browser_use" in noBrowser)
-        assertTrue("the agents tool is independent", "subagent_task" in noBrowser)
-
-        val noAgents = names(browser = true, delegate = false)
-        assertFalse("subagent_task" in noAgents)
-        assertTrue("browser_use is independent", "browser_use" in noAgents)
-
-        // Both off: only the core tools remain, and shell/file access survives.
-        val neither = names(browser = false, delegate = false)
-        assertTrue("shell_execute" in neither && "file_read" in neither)
-        for (gated in listOf("browser_use", "subagent_task")) {
-            assertFalse(gated in neither)
-        }
+        assertTrue("shell_execute" in noBrowser && "file_read" in noBrowser)
     }
 
     @Test
-    fun `a helper never gets delegation even with the switch on`() {
-        // Depth cap: helpers must not spawn helpers. The switch must not be
-        // able to re-open that path.
-        val helperTools = AgentTools.makeAgentTools(isHelper = true, delegateEnabled = true)
-            .map { it.name }
-        assertFalse("delegate_task" in helperTools)
-        assertFalse("agent_status" in helperTools)
+    fun `no schema has a delegation tool`() {
+        // momoding (调研/M39): work is handed on with `momoding-task new --to helper`, a command
+        for (helper in listOf(false, true)) {
+            val names = AgentTools.makeAgentTools(isHelper = helper).map { it.name }
+            for (gone in listOf("subagent_task", "delegate_task", "agent_status")) assertFalse(gone in names)
+        }
     }
 }

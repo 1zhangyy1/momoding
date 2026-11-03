@@ -143,6 +143,13 @@ interface TaskDao {
     @Query("SELECT * FROM task WHERE hand = :hand AND state = 'QUEUED' ORDER BY created_at LIMIT 1")
     suspend fun nextFor(hand: String): TaskEntity?
 
+    /** Helpers (hidden child chats) on a task now; they share [Helpers.SLOTS]. */
+    @Query("SELECT COUNT(*) FROM task t JOIN sessions s ON s.id = t.hand WHERE s.parent_session_id IS NOT NULL AND t.state IN ('RUNNING', 'WAITING')")
+    suspend fun helpersAtWork(): Int
+
+    @Query("SELECT t.* FROM task t JOIN sessions s ON s.id = t.hand WHERE s.parent_session_id IS NOT NULL AND t.state = 'QUEUED' ORDER BY t.created_at LIMIT 1")
+    suspend fun nextForHelpers(): TaskEntity?
+
     @Insert
     suspend fun insertLog(row: TaskLogEntity)
 

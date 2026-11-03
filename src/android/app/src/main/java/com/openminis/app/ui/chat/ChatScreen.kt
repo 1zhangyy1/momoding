@@ -4692,64 +4692,7 @@ fun ChatScreen(
                                     allToolBlocks = item.allToolBlocks,
                                     onOpenDetail = { viewModel.openToolDetail(it) },
                                 )
-                            } else if (com.openminis.app.agent.jobs.HelperRunner.isSubAgentToolName(item.block.toolName)) HelperToolBlock(
-                                block = item.block,
-                                onOpenDetail = { viewModel.openToolDetail(it) },
-                                // Stop the AGENT (child), not the parent's stream:
-                                // through the registry so the runner reads CANCELLED.
-                                onStop = {
-                                    val childId = com.openminis.app.agent.jobs.HelperRunner.childSessionIdFrom(item.block.content)
-                                    val job = childId?.let { com.openminis.app.agent.jobs.AgentJobRegistry.jobForSession(it) }
-                                    // [T-android-stop-sibling-subagent] Stop the whole
-                                    // fan-out, not just this card's job: the siblings are
-                                    // the same piece of work and the user cannot see them.
-                                    if (job != null && job.isActive) {
-                                        com.openminis.app.agent.jobs.AgentJobRegistry.cancelSiblings(
-                                            childId!!, "user-stop-block",
-                                        )
-                                    }
-                                    // [T-android-vm-store-child-tag-survives-evict] CHILD pool: an
-                                    // evicted child must not come back as NORMAL here.
-                                    else if (childId != null) runCatching {
-                                        com.openminis.app.debug.HeadlessChatRunner.viewModelFor(
-                                            context, childId, ChatViewModelStore.PoolKind.CHILD,
-                                        ).cancelStream()
-                                    }
-                                },
-                                // [T-android-neverstarted-not-running] A block
-                                // whose delegation died on the queue can be run
-                                // from the card. Shown only for that phase —
-                                // HelperToolBlock decides, not this call site.
-                                onStart = {
-                                    val started = viewModel.startNeverStartedDelegation(item.block)
-                                    if (!started) {
-                                        android.widget.Toast.makeText(
-                                            context,
-                                            context.getString(R.string.helper_start_failed),
-                                            android.widget.Toast.LENGTH_SHORT,
-                                        ).show()
-                                    }
-                                },
-                                // [T-android-subagent-card-resume] An interrupted
-                                // run can be restarted from its card, as on iOS.
-                                // Shown only for that status; HelperToolBlock
-                                // decides. Queued and refused say so, since the
-                                // card itself does not change for either.
-                                onResume = {
-                                    val outcome = viewModel.resumeInterruptedFromCard(item.block)
-                                    val note = when (outcome) {
-                                        ChatViewModel.CardResume.STARTED -> null
-                                        ChatViewModel.CardResume.QUEUED -> R.string.helper_resume_queued
-                                        ChatViewModel.CardResume.REFUSED -> R.string.helper_resume_failed
-                                    }
-                                    note?.let {
-                                        android.widget.Toast.makeText(
-                                            context, context.getString(it), android.widget.Toast.LENGTH_SHORT,
-                                        ).show()
-                                    }
-                                    outcome != ChatViewModel.CardResume.REFUSED
-                                },
-                            ) else if (!momodingShowSteps) /* momoding: a step in plain words */ app.momoding.ui.chat.StepLine(item.block) else ToolCallPill(
+                            } else if (!momodingShowSteps) /* momoding: a step in plain words */ app.momoding.ui.chat.StepLine(item.block) else ToolCallPill(
                                 block = item.block,
                                 allToolBlocks = item.allToolBlocks,
                                 onRetry = if (item.isLastCancelled && !isStreaming && !canResume) ({ safeMutate { viewModel.retryLast() } }) else null,

@@ -30,7 +30,7 @@ class TaskTablesMigrationTest {
     @Test
     fun upgrade14to15_keepsSessionsAndCascades() {
         helper.createDatabase(dbName, 14).use { db ->
-            db.execSQL("INSERT INTO sessions (id, title, model_id, created_at, updated_at, memory_enabled) VALUES ('s1', 't', 'm', 1, 1, 1)")
+            db.execSQL("INSERT INTO sessions (id, title, model_id, created_at, updated_at, memory_enabled, edit_count) VALUES ('s1', 't', 'm', 1, 1, 1, 0)")
         }
         helper.runMigrationsAndValidate(dbName, 15, true, AppDatabase.MIGRATION_14_15).use { db ->
             db.execSQL("PRAGMA foreign_keys = ON")
@@ -47,11 +47,17 @@ class TaskTablesMigrationTest {
     @Test
     fun downgrade15to14_keepsTheTables() {
         helper.createDatabase(dbName, 15).use { db ->
-            db.execSQL("INSERT INTO sessions (id, title, model_id, created_at, updated_at, memory_enabled) VALUES ('s1', 't', 'm', 1, 1, 1)")
+            db.execSQL("INSERT INTO sessions (id, title, model_id, created_at, updated_at, memory_enabled, edit_count) VALUES ('s1', 't', 'm', 1, 1, 1, 0)")
             db.execSQL("INSERT INTO inbox (id, to_session, sender, text, arrived_at) VALUES ('i1', 's1', 'USER', 'hi', 1)")
+            db.execSQL("INSERT INTO task (id, conversation, title, hand, state, created_at, updated_at) VALUES ('t1', 's1', 'keep me', 'screen', 'RUNNING', 1, 1)")
+            db.execSQL("INSERT INTO task_log (task_id, at, kind, body) VALUES ('t1', 1, 'AUTHORIZED', 'original words')")
         }
-        helper.runMigrationsAndValidate(dbName, 14, true, AppDatabase.MIGRATION_15_14).use { db ->
+        // A no-op downgrade intentionally retains the additive tables. Validate the old schema
+        // without requiring their deletion, then check the retained rows and integrity ourselves.
+        helper.runMigrationsAndValidate(dbName, 14, false, AppDatabase.MIGRATION_15_14).use { db ->
             db.query("SELECT text FROM inbox WHERE id='i1'").use { c -> assertTrue(c.moveToFirst()); assertEquals("hi", c.getString(0)) }
+            db.query("SELECT title FROM task WHERE id='t1'").use { c -> assertTrue(c.moveToFirst()); assertEquals("keep me", c.getString(0)) }
+            db.query("SELECT body FROM task_log WHERE task_id='t1'").use { c -> assertTrue(c.moveToFirst()); assertEquals("original words", c.getString(0)) }
             db.query("PRAGMA integrity_check").use { c -> assertTrue(c.moveToFirst()); assertEquals("ok", c.getString(0)) }
         }
     }

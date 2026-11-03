@@ -1,6 +1,8 @@
 package app.momoding.chat
 
 import android.content.Context
+import app.momoding.task.Helpers
+import app.momoding.task.TaskEngine
 import com.openminis.app.MinisApp
 import com.openminis.app.debug.HeadlessChatRunner
 import com.openminis.app.logging.AppLogger
@@ -72,6 +74,8 @@ object WorkResume {
     private suspend fun resume(context: Context, sid: String, attempt: Int) {
         val repo = (context as MinisApp).chatRepository
         if (repo.getSession(sid) == null) return
+        // a helper comes back as one, and only while its task is on
+        if (Helpers.isHelper(context, sid)) Helpers.ready(context, sid, TaskEngine.dao(context).heldBy(sid) ?: return)
         pendingTries[sid] = attempt
         val vm = withContext(Dispatchers.Main) { HeadlessChatRunner.viewModelFor(context, sid) }
         // the chat loads its history and tells whether a loop was left between tool calls

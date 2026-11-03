@@ -28,6 +28,7 @@
     <string name="mo_app_card_widget">加小工具</string>
     <string name="mo_app_card_widget_there">已有小工具</string>
     <string name="mo_task_handed">交給 %1$s</string>
+    <string name="mo_task_helper">幫手</string>
     <string name="mo_task_running">在辦</string>
     <string name="mo_task_queued">排隊</string>
     <string name="mo_task_waiting">等你</string>
