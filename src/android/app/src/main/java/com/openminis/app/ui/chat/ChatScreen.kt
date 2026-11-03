@@ -704,7 +704,10 @@ fun ChatScreen(
     // Hoisted to ChatViewModel so it survives ChatScreen disposal/recomposition
     // across forward navigation (file preview, env vars, etc.); see
     // ChatViewModel.listState for the why.
-    val listState = viewModel.listState
+    // The app's chat is a separate window. Its viewport must not share a
+    // LazyListState with another still-composed screen for the same session:
+    // the other list can replace its measurement and scroll target.
+    val listState = if (momodingOver) rememberLazyListState() else viewModel.listState
     // [T-android-voice-viewport-context] The rows the chat list is rendering,
     // for voice correction's on-screen context. Filled next to `flatItems`.
     val voiceScreenItems = remember(sessionId) { VoiceScreenItemsHolder() }
