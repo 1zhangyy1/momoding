@@ -740,6 +740,8 @@ class MinisApp : Application(), ImageLoaderFactory {
         NativeOffloadServer.register("momoding-web", app.momoding.web.WebOffloadHandler())
         // momoding: momoding-app — Momoding Apps, each with its own Momoding (调研/M27)
         NativeOffloadServer.register("momoding-app", app.momoding.apps.AppsOffloadHandler(this))
+        // momoding: momoding-task — work that takes more than a step (调研/M39)
+        NativeOffloadServer.register("momoding-task", app.momoding.task.TaskOffloadHandler(this))
         // momoding: android-sms — reading the texts the phone received
         NativeOffloadServer.register("android-sms", app.momoding.tools.SmsOffloadHandler(this))
 
@@ -762,6 +764,7 @@ class MinisApp : Application(), ImageLoaderFactory {
         // reconcile. Runs after init() so it merges with the restored queues.
         // momoding: work the phone cut off picks up by itself (app/momoding/chat/WorkResume.kt)
         app.momoding.chat.WorkResume.start(this)
+        app.momoding.task.TaskEngine.start(this)
         app.momoding.task.Inbox.wakeAll(this) // momoding: words a chat never read go out now (调研/M39 2.2)
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
             val interrupted = runCatching { chatRepository.interruptedSessionIds() }.getOrElse { emptySet() }

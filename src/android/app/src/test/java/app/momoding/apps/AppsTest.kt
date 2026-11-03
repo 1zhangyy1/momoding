@@ -101,7 +101,7 @@ class AppsTest {
         listOf("index.html", "NOTES.md", "app.js").forEach { File(dir, it).writeText("x") }
         File(dir, "manifest.json").writeText("""{"name":"记账","short_name":"记账","description":"银行短信来了记一笔","icons":[{"src":"i.png"}],"momoding":{"share":true,"listen":[{"app":"sms"}]}}""")
         File(dir, "lib").mkdirs(); File(dir, "lib/chart.js").writeText("x")
-        app.setBot("s1", null)
+        app.setBot("s1")
         File(app.vault, "ledger.json").writeText("{}")
         File(app.vault, "ledger-other.json").writeText("{}")
         assertTrue(app.hasApp)

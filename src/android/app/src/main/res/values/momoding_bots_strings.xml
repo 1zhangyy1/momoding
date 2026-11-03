@@ -27,9 +27,11 @@
     <string name="mo_app_card_icon_there">On home screen</string>
     <string name="mo_app_card_widget">Add widget</string>
     <string name="mo_app_card_widget_there">Widget added</string>
-    <string name="mo_bot_line_handed">Handed to %1$s</string>
-    <string name="mo_bot_line_made">Made %1$s</string>
-    <string name="mo_bot_line_working">working…</string>
-    <string name="mo_bot_line_building">building…</string>
-    <string name="mo_bot_line_waiting">waiting for you</string>
+    <string name="mo_task_handed">Handed to %1$s</string>
+    <string name="mo_task_running">working</string>
+    <string name="mo_task_queued">waiting its turn</string>
+    <string name="mo_task_waiting">waiting for you</string>
+    <string name="mo_task_done">done</string>
+    <string name="mo_task_failed">didn\'t work</string>
+    <string name="mo_task_stopped">stopped</string>
 </resources>

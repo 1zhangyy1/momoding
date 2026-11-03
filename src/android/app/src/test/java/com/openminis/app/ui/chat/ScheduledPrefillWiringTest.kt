@@ -31,15 +31,15 @@ class ScheduledPrefillWiringTest {
     @Test
     fun `the headless runner forwards the prefill into the send funnel`() {
         val src = ProductionSources.read("debug/HeadlessChatRunner.kt")
-        assertTrue(src.contains("val outcome = vm.submitPrompt(text, prefill)"))
+        assertTrue(src.contains("val outcome = vm.submitPrompt(text, prefill, origin)"))
     }
 
     @Test
     fun `every way a prompt can reach the loop keeps its prefill`() {
         // Idle session: straight into the loop it starts.
-        assertTrue(vm.contains("sendMessage(text, skipContextCheck = false, headless = true, prefill = prefill)"))
+        assertTrue(vm.contains("sendMessage(text, skipContextCheck = false, headless = true, prefill = prefill, origin = origin)"))
         // Busy session: rides the queue.
-        assertTrue(vm.contains("QueuedPromptOrigin.USER, prefill)"))
+        assertTrue(vm.contains("QueuedPromptOrigin.USER, prefill)") || vm.contains("else QueuedPromptOrigin.USER, prefill)"))
         assertTrue(vm.contains("prefill = queued.flatMap { it.prefill },"))
         // Mid-loop injection re-arms the one-shot for the next turn.
         assertTrue(vm.contains("return InjectedTurn(newAssistantId, queued.flatMap { it.prefill })"))

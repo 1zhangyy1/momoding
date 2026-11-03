@@ -146,7 +146,8 @@ class Review0923SubAgentQueueInvariantsTest {
     @Test
     fun `the inject emit filters the live message list, not a snapshot`() {
         val b = body("injectQueuedPromptsAsNewTurn")
-        assertTrue(b.contains("_messages.value = _messages.value.filterNot"))
+        // momoding (调研/M39): read bubbles stay where they are, so the emit maps the live list
+        assertTrue(b.contains("_messages.value = _messages.value.map"))
         assertTrue("no stale snapshot variable", !b.contains("msgsAfterUnqueue ="))
     }
 }

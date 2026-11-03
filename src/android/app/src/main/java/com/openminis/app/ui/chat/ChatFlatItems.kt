@@ -494,10 +494,10 @@ internal sealed class FlatChatItem {
      * assistant turn. Emitted last so the flat path ends a turn exactly the way
      * AssistantMessageView does, keeping the two renderers in step.
      */
-    /** momoding: work handed to another Momoding, a line of its own whether steps show or not (调研/M40). */
-    data class MomodingHandoff(val messageId: String, val blockId: String, val handoff: app.momoding.ui.chat.BotLines.Handoff) : FlatChatItem() {
-        override val key = "handoff:$messageId:$blockId:${handoff.name}"
-        override val contentType = "handoff"
+    /** momoding: a task handed on in a step, a line of its own whether steps show or not (调研/M39). */
+    data class MomodingTask(val messageId: String, val blockId: String, val taskId: String) : FlatChatItem() {
+        override val key = "task:$messageId:$blockId:$taskId"
+        override val contentType = "task"
     }
 
     /** momoding: the screenshots of one hands run, under its step (the trail the person can look back at). */
@@ -647,6 +647,7 @@ internal fun ChatMessage.rendersAsUserBubble(): Boolean {
     if (role != "user") return false
     if (com.openminis.app.scheduled.ScheduledTaskMarker.parse(content) != null) return false
     if (com.openminis.app.agent.jobs.AgentCallback.isCallbackText(content)) return false
+    if (content.startsWith(app.momoding.task.TaskEngine.REPORT_CUE)) return false // momoding: a hand's report
     return true
 }
 
@@ -739,7 +740,7 @@ internal fun buildFlatChatItems(
             is FlatChatItem.MomodingTimeDivider -> item.copy(messageId = "${item.messageId}#$n")
             is FlatChatItem.MomodingStepsToggle -> item.copy(messageId = "${item.messageId}#$n")
             is FlatChatItem.MomodingHandsTrail -> item.copy(messageId = "${item.messageId}#$n")
-            is FlatChatItem.MomodingHandoff -> item.copy(messageId = "${item.messageId}#$n")
+            is FlatChatItem.MomodingTask -> item.copy(messageId = "${item.messageId}#$n")
             is FlatChatItem.AssistantLegacyContent -> FlatChatItem.AssistantLegacyContent(
                 messageId = "${item.messageId}#$n",
                 content = item.content,
@@ -798,6 +799,8 @@ internal fun buildFlatChatItems(
                 out.add(dedupe(FlatChatItem.AgentCallbackCard(message, callback)))
                 continue
             }
+            // momoding: a hand's report is for the chat's Momoding; the person sees it on the task's line
+            if (message.content.startsWith(app.momoding.task.TaskEngine.REPORT_CUE)) continue
             // [T-android-candidate-bubble-gap] Flag when the previous message
             // is also a user message so the bubble can add a separating top
             // gap — back-to-back candidate / queued sends otherwise have no
@@ -1010,7 +1013,7 @@ internal fun buildFlatChatItems(
                     block = block,
                 )))
                 else -> {
-                    app.momoding.ui.chat.BotLines.handoffs(block).forEach { out.add(dedupe(FlatChatItem.MomodingHandoff(message.id, block.id, it))) }
+                    tasksHandedOn(block).forEach { out.add(dedupe(FlatChatItem.MomodingTask(message.id, block.id, it))) }
                     if (showSteps) out.add(dedupe(FlatChatItem.AssistantToolUse( // momoding: a step
                         messageId = message.id,
                         block = block,
@@ -1105,10 +1108,17 @@ private fun previousTime(messages: List<ChatMessage>, idx: Int): Long? {
 /** momoding (from nanoMuse): an assistant turn that is only steps — no words, no error, nothing handed over — has nothing to show with steps hidden. */
 private fun stepsOnlyTurn(m: ChatMessage): Boolean =
     m.role == "assistant" && !m.isStreaming && m.error == null && m.content.isEmpty() &&
-        m.toolBlocks.none { app.momoding.ui.chat.BotLines.handoffs(it).isNotEmpty() } &&
+        m.toolBlocks.none { tasksHandedOn(it).isNotEmpty() } &&
         m.toolBlocks.isNotEmpty() && m.toolBlocks.all {
             it.kind == "tool_use" || it.kind == "thinking" || it.kind == "info" || (it.kind == "text" && it.content.isEmpty())
         }
+
+/** momoding: the tasks a step handed on (`momoding-task new`, `momoding-app new`), from its JSON result. */
+internal fun tasksHandedOn(block: AssistantBlock): List<String> {
+    if (block.kind != "tool_use" || !block.toolArgs.contains(" new")) return emptyList()
+    if (!block.toolArgs.contains("momoding-task") && !block.toolArgs.contains("momoding-app")) return emptyList()
+    return Regex(""""task"\s*:\s*"([0-9a-f]{6})"""").findAll(block.content).map { it.groupValues[1] }.distinct().toList()
+}
 
 /** momoding: the last screenshot of a finished `momoding-hands run` step, from its JSON result. */
 internal fun handsLastScreen(block: AssistantBlock): String? {

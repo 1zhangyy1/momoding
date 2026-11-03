@@ -42,12 +42,12 @@ object MoApps {
 
         fun manifest(): JSONObject = runCatching { JSONObject(File(dir, "manifest.json").readText()) }.getOrDefault(JSONObject())
 
-        /** The app's Bot: its chat session, and the chat that asked for the app. */
+        /** The app's Bot: its chat session. */
         fun bot(): JSONObject = runCatching { JSONObject(File(platform, "bot.json").readText()) }.getOrDefault(JSONObject())
         val botSession: String? get() = bot().optString("session").ifBlank { null }
 
-        fun setBot(session: String, askedIn: String?) {
-            File(platform, "bot.json").writeText(bot().put("session", session).put("askedIn", askedIn ?: "").toString(2))
+        fun setBot(session: String) {
+            File(platform, "bot.json").writeText(bot().put("session", session).apply { remove("askedIn") }.toString(2))
         }
     }
 

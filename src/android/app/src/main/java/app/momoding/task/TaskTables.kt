@@ -8,7 +8,9 @@ import androidx.room.Index
 import androidx.room.Insert
 import androidx.room.PrimaryKey
 import androidx.room.Query
+import androidx.room.Update
 import com.openminis.app.data.db.ChatSessionEntity
+import kotlinx.coroutines.flow.Flow
 
 /**
  * Momoding (调研/M39): the three tables the main chat runs on.
@@ -124,8 +126,22 @@ interface TaskDao {
     @Query("SELECT * FROM task WHERE id = :id")
     suspend fun task(id: String): TaskEntity?
 
+    @Update
+    suspend fun updateTask(row: TaskEntity)
+
     @Query("SELECT * FROM task ORDER BY created_at DESC LIMIT :limit")
     suspend fun recentTasks(limit: Int): List<TaskEntity>
+
+    /** The newest tasks, kept current: what the rows and the main chat's table show. */
+    @Query("SELECT * FROM task ORDER BY updated_at DESC LIMIT :limit")
+    fun recentFlow(limit: Int): Flow<List<TaskEntity>>
+
+    /** The task [hand] is on: one at a time, so its session is enough to find it. */
+    @Query("SELECT * FROM task WHERE hand = :hand AND state IN ('RUNNING', 'WAITING') LIMIT 1")
+    suspend fun heldBy(hand: String): TaskEntity?
+
+    @Query("SELECT * FROM task WHERE hand = :hand AND state = 'QUEUED' ORDER BY created_at LIMIT 1")
+    suspend fun nextFor(hand: String): TaskEntity?
 
     @Insert
     suspend fun insertLog(row: TaskLogEntity)

@@ -226,6 +226,8 @@ internal object HeadlessChatRunner {
         // of the loop this prompt starts, before any model request. Empty =
         // an ordinary prompt.
         prefill: List<com.openminis.app.scheduled.PrefilledToolCall> = emptyList(),
+        // momoding: how it waits when the session is at work; null = PROGRAMMATIC (until the turn ends)
+        origin: com.openminis.app.ui.chat.QueuedPromptOrigin? = null,
     ): PromptResult = ChatViewModelStore.holdingForSend(sessionId) {
         withContext(Dispatchers.Main) {
             val vm = viewModel(context, sessionId)
@@ -291,7 +293,7 @@ internal object HeadlessChatRunner {
             val rowsBeforeSubmit = if (com.openminis.app.scheduled.ScheduledTaskMarker.isMarkerText(text)) {
                 app(context).chatRepository.dao.loadMessages(sessionId).size
             } else -1
-            val outcome = vm.submitPrompt(text, prefill)
+            val outcome = vm.submitPrompt(text, prefill, origin)
             if (outcome is ChatViewModel.SubmitOutcome.Rejected) {
                 return@withContext PromptResult(status = "Rejected", responseText = outcome.reason, timedOut = false)
             }

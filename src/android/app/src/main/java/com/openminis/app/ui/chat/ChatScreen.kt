@@ -3748,10 +3748,6 @@ fun ChatScreen(
                     mutableStateOf<List<FlatChatItem>>(emptyList())
                 }
                 SideEffect { voiceScreenItems.items = flatItems }
-                // momoding: the newest hand-over to each Bot is the one that shows what it is doing now
-                val momodingHandoffs = remember(flatItems) {
-                    flatItems.filterIsInstance<FlatChatItem.MomodingHandoff>().associate { it.handoff.name to it.key }
-                }
                 // [T-android-coldload-offmain-parse] Composition-snapshot
                 // prewarmer (captures the markdown palette) used by the
                 // flatten effect below to warm the parse caches for the
@@ -4083,7 +4079,7 @@ fun ChatScreen(
                     is FlatChatItem.MomodingTimeDivider -> false
                     is FlatChatItem.MomodingStepsToggle -> false
                     is FlatChatItem.MomodingHandsTrail -> false
-                    is FlatChatItem.MomodingHandoff -> false
+                    is FlatChatItem.MomodingTask -> false
                     is FlatChatItem.AssistantLegacyContent -> grayedMap[originalMessageId(messageId)] == true
                 }
                 // SelectionContainer must wrap the WHOLE LazyColumn — placing
@@ -4859,7 +4855,7 @@ fun ChatScreen(
                             }
                             is FlatChatItem.MomodingRuleNotice -> app.momoding.ui.chat.RuleNoticeRow(item.labels) // momoding
                             is FlatChatItem.MomodingTimeDivider -> app.momoding.ui.chat.TimeDivider(item.at) // momoding
-                            is FlatChatItem.MomodingHandoff -> app.momoding.ui.chat.HandoffRow(item.handoff, live = momodingHandoffs[item.handoff.name] == item.key, onOpen = urlClickHandler) // momoding
+                            is FlatChatItem.MomodingTask -> app.momoding.ui.chat.TaskRow(item.taskId, onOpen = urlClickHandler) // momoding
                             is FlatChatItem.MomodingHandsTrail -> app.momoding.ui.chat.HandsTrail(item.lastScreen, viewModel.currentSessionId, onOpen = urlClickHandler) // momoding
                             is FlatChatItem.MomodingStepsToggle -> if (item.live) app.momoding.ui.chat.LiveStatusLine( // momoding: the running turn's status, in place
                                 sessionId = viewModel.currentSessionId, isStreaming = isStreaming, replying = momodingReplying, request = momodingRequest,

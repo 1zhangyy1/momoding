@@ -2,25 +2,21 @@ package app.momoding.apps
 
 import android.content.Context
 import app.momoding.home.MainChat
+import app.momoding.task.TaskEngine
 import com.openminis.app.MinisApp
 import com.openminis.app.debug.HeadlessChatRunner
 import com.openminis.app.logging.AppLogger
-import com.openminis.app.service.SessionActivityTracker
-import com.openminis.app.ui.chat.ChatViewModelStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 /**
  * Each app's own Momoding (Grok Bot's many Bots, 调研/M27): an ordinary chat, marked
  * `source = "app:<name>"`, with the same Momoding and the same rules, plus a standing note on
- * which app it is. Bots talk asynchronously: [tell] wakes one with a message; [receipt] puts the
- * app Bot's one line into the chat that asked for the app, without a model turn there.
+ * which app it is. Work the main chat hands it is a task (app.momoding.task); [tell] is a message for
+ * it in its own chat.
  */
 object AppBots {
     private const val TAG = "AppBots"
@@ -30,7 +26,7 @@ object AppBots {
     const val APP_CUE = "[from the app]"
     /** The weekly look at how the app is used, asked by its host. */
     const val REVIEW_CUE = "[app review]"
-    /** What an app's Momoding said in another chat starts `[from bot:<name>]` (ui/chat/BotLines). */
+    /** What an app's Momoding said in another chat started `[from bot:<name>]`, before its reports became tasks (ui/chat/BotLines). */
     const val FROM_CUE = "[from bot:"
 
     /** Who a message for an app's Momoding is from. */
@@ -42,45 +38,21 @@ object AppBots {
 
     /**
      * The Bot's chat, bound to no model of its own, so it uses Momoding's (and changes when the person
-     * changes that); then it is handed the brief and starts.
+     * changes that); then it is handed the brief as its first task, which reports back to [askedIn].
+     * Returns that task's id.
      */
     suspend fun create(context: Context, app: MoApps.App, askedIn: String?, brief: String): String {
         val repo = repo(context)
         val session = repo.createSession(modelId = "", title = app.title)
         repo.dao.updateSource(session.id, SOURCE_PREFIX + app.name)
-        app.setBot(session.id, null)
-        tell(context, app, brief, by = askedIn)
-        return session.id
+        app.setBot(session.id)
+        val chat = askedIn?.takeIf { repo.getSession(it) != null } ?: MainChat.resolve(context, repo)
+        return TaskEngine.open(context, chat, app.title, session.id, brief).id
     }
 
-    /**
-     * Who handed each Bot the work it is on (Bot's chat → the chat that told it): where its result
-     * goes and where its questions for the person show, until that work is done. Kept in bot.json
-     * (`askedIn`), so it outlives the process; this is its cache.
-     */
-    private val handedBy = java.util.concurrent.ConcurrentHashMap<String, String>()
-
-    fun handedBy(context: Context, botSession: String): String? = handedBy.getOrPut(botSession) {
-        MoApps.ofSession(context, botSession)?.bot()?.optString("askedIn").orEmpty()
-    }.ifBlank { null }
-
-    private fun setHandedBy(app: MoApps.App, sid: String, by: String?) {
-        app.setBot(sid, by)
-        handedBy[sid] = by.orEmpty()
-    }
-
-    /** What a stop in a chat reaches: the Bots it handed work to in the turn still running (asker → Bots). */
-    private val handedThisTurn = java.util.concurrent.ConcurrentHashMap<String, MutableSet<String>>()
-
-    /** A message for the Bot; it answers on its own turn, in its own chat. [by]: the chat that hands it work. */
-    fun tell(context: Context, app: MoApps.App, text: String, from: From = From.MOMODING, by: String? = null) {
+    /** A message for the Bot in its own chat (the person, its app, its weekly look); it answers there. */
+    fun tell(context: Context, app: MoApps.App, text: String, from: From) {
         val sid = app.botSession ?: return
-        if (by != null && by != sid) {
-            setHandedBy(app, sid, by)
-            handedThisTurn.getOrPut(by) { java.util.concurrent.ConcurrentHashMap.newKeySet() }.add(sid)
-            // once the asker's turn is over, stopping it later no longer reaches this Bot
-            scope.launch { SessionActivityTracker.activeSessions.first { by !in it }; handedThisTurn[by]?.remove(sid) }
-        }
         scope.launch {
             runCatching {
                 HeadlessChatRunner.prompt(context.applicationContext, sid, from.cue?.let { "$it $text" } ?: text, wait = false, timeoutMs = 30 * 60_000L)
@@ -88,50 +60,16 @@ object AppBots {
         }
     }
 
-    /** Stopping [session] stops the Bots it handed work to in this turn that are still at it. */
-    fun stopHandedBy(session: String) {
-        handedThisTurn.remove(session).orEmpty()
-            .filter { it in SessionActivityTracker.activeSessions.value }
-            .forEach { ChatViewModelStore.existing(it)?.cancelStream() }
-    }
-
-    private data class Line(val chat: String, val id: String, val order: Int)
-    /** The line an app's Momoding last wrote in a chat for the work at hand (progress, until done). */
-    private val lastLine = java.util.concurrent.ConcurrentHashMap<String, Line>()
-
     /**
-     * The Bot's line in the chat that handed it the work, else the main chat ("记账：加了月度图");
-     * the chat shows its app's card under it (BotLines.links). Written when that chat is not mid-turn, so it never lands between a tool
-     * call and its result; the chat's Momoding reads it next time like anything else said there.
+     * A task of the Bot's for [chat] ended: its icon and name on the home screen follow its manifest,
+     * its state shows, and the person hears of it when they are not in that chat.
      */
-    fun receipt(context: Context, app: MoApps.App, text: String, finished: Boolean = true) {
-        val sid = app.botSession ?: return
-        val link = if (app.hasApp) "minis://apps/${app.name}" else "minis://session/$sid"
-        val body = "$FROM_CUE${app.name}] ${text.trim()}"
-        scope.launch {
-            val target = handedBy(context, sid)?.takeIf { repo(context).getSession(it) != null } ?: MainChat.resolve(context, repo(context))
-            if (finished) setHandedBy(app, sid, null) // done, not just progress: what it says next is its own
-            repeat(600) {
-                val vm = ChatViewModelStore.existing(target)
-                if (vm == null || !vm.isStreaming.value) {
-                    // one line per piece of work: while it is still the newest in that chat, the next report replaces it
-                    val parts = """[{"type":"text","value":${JSONObject.quote(body)}}]"""
-                    val last = lastLine[app.name]?.takeIf { it.chat == target && it.order == repo(context).dao.nextSortOrder(target) - 1 }
-                    if (last != null) repo(context).updateMessageParts(last.id, parts)
-                    else repo(context).appendMessage(target, "assistant", parts).let { lastLine[app.name] = Line(target, it.id, it.sortOrder) }
-                    if (finished) lastLine.remove(app.name)
-                    if (app.hasApp) MoAppActivity.relabel(context, app) // its icon and name on the home screen follow its manifest
-                    vm?.let { withContext(Dispatchers.Main) { it.reloadFromDisk() } }
-                    // done for the person: the banner in Momoding (via the state), a notification outside it
-                    BotStatus.touch()
-                    if (!BotStatus.looking(target) && !BotStatus.quiet(context, sid))
-                        (context.applicationContext as MinisApp).backgroundTaskNotifier.notifyReceipt(target, app.title, text.trim(), android.net.Uri.parse(link))
-                    return@launch
-                }
-                delay(2000)
-            }
-            AppLogger.warning(TAG, "receipt for ${app.name} dropped: the chat stayed busy")
-        }
+    suspend fun reported(context: Context, app: MoApps.App, chat: String, text: String) {
+        if (app.hasApp) MoAppActivity.relabel(context, app)
+        BotStatus.touch()
+        if (BotStatus.looking(chat) || BotStatus.quiet(context, app.botSession ?: return)) return
+        val link = if (app.hasApp) "minis://apps/${app.name}" else "minis://session/${app.botSession}"
+        (context.applicationContext as MinisApp).backgroundTaskNotifier.notifyReceipt(chat, app.title, text.trim(), android.net.Uri.parse(link))
     }
 
     // ── how the app is used ───────────────────────────────────────────────────
@@ -181,7 +119,7 @@ object AppBots {
 You are the Momoding called "${app.title}".$what The main Momoding in the person's main chat made you; you work on your own, in this chat.
 - Your folder is ${app.linuxDir} (a git repository). ${app.linuxDir}/NOTES.md is your memory: why you exist, what the person asked for, what was decided, how they use you. Read it when you start, keep it current.
 - Messages that start with $WAKE_CUE come from the Momoding in the person's main chat, not from the person.
-- When a piece of work the main Momoding gave you is done, tell the main chat in one line: `momoding-app done "<what came of it>"`."""
+- Work the main Momoding hands you (its message starts with $WAKE_CUE) is a task, with its own line in the main chat. `momoding-task report progress "<where it stands>"` keeps that line current and sends no message; when it is done, `momoding-task report done "<what came of it, in a line or two>"`; when only the person can decide, `report ask "<the question>"`; when it cannot be done, `report failed "<why>"`. The main Momoding tells the person. What the person asks you here, in your own chat, you answer here."""
         if (!app.hasApp) return home + """
 - You have no app. When the person wants something to keep and use again, build it as your app in your folder (read the momoding-apps skill first); it opens from the person's list of Momodings."""
         return home + """
@@ -208,7 +146,8 @@ You are the Momoding called "${app.title}".$what The main Momoding in the person
             append("What is kept and looked at belongs to the Momoding whose app keeps it, and that app takes in what feeds it (texts, notifications) itself — don't set up a routine of yours to write into it. ")
             append("Notice when one would help before they think of it, from what really happens, not what might: the same kind of thing asked of you again and again (\"这周第三次让我查快递了\"), or the same kind of text or notification the person keeps acting on (bank charges, pickup codes, school notices). ")
             append("A single ask is just a task. Once the pattern is there, offer — say what you noticed and what the app would do by itself, in a line, once in the conversation; if they don't take it up, saying nothing included, it's their call — don't raise it again. ")
-            append("To give one work, `momoding-app tell <name> \"<what to do>\"`: it works on its own and reports back; the chat shows the hand-over as a line of its own. A message here starting ${FROM_CUE}<name>] is that Momoding's report, not something you said. ")
+            append("To give one work, `momoding-task new --to bot:<name> --title \"<a few words>\" \"<what to do>\"`: it becomes a task with its own line in this chat, and the Momoding works on it on its own, one task at a time. ")
+            append("A message here starting ${TaskEngine.REPORT_CUE}<id> · <name> · done|ask|failed] is its report, not the person: tell the person what came of it in your own words, in a line or two, with a link to its app when there is something to see; for an ask, ask the person, and pass their answer on with `momoding-task tell <id> \"<their words>\"`, as anything more they want of that task. ")
             append("What they keep you can read: a question about something one looks after (\"这个月花了多少\"), answer from its folder — its NOTES.md, and its app's data — rather than asking it or working it out again; tell it only when something has to be done.")
             if (apps.isNotEmpty()) append("\nThe person's Momodings:\n").append(apps.joinToString("\n") { a ->
                 "- ${a.name}: ${a.title}" + a.what.ifBlank { null }?.let { " — $it" }.orEmpty() +

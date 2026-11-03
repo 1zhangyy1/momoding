@@ -23,9 +23,6 @@ import java.util.concurrent.TimeUnit
  *
  *     momoding-app new <name> --title "<title>" --what "<what it takes care of>" --brief "<what the person wants>"
  *     momoding-app open <name>           show it on the person's screen (when they ask to see it)
- *     momoding-app tell <name> "<text>"  a message for that app's Momoding
- *     momoding-app progress "<what is there now>"  (from an app's Momoding, while building) the same, early
- *     momoding-app done "<what changed>" (from an app's Momoding) one line in the chat that asked for it
  *     momoding-app list
  *     momoding-app look | tap <x> <y> | swipe <x1> <y1> <x2> <y2> | type "<text>"   (an app's Momoding) its app on the phone (AppScreen)
  */
@@ -38,8 +35,7 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
                 null, "help", "--help", "-h" -> NativeOffloadResult(0, HELP)
                 "new" -> new(args, request)
                 "open" -> open(app(args), request)
-                "tell" -> tell(app(args), args.positional.drop(2).joinToString(" "), request)
-                "done", "progress" -> done(args, request)
+                "tell", "done", "progress" -> NativeOffloadResult(2, "momoding-app $sub: work for a Momoding is a task now — momoding-task --help\n")
                 "suggest" -> suggest(args, request)
                 "list" -> list()
                 "look", "tap", "swipe", "type" -> screen(sub, args, request)
@@ -59,8 +55,8 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
         val brief = args.get("brief")?.trim().orEmpty()
         require(brief.isNotEmpty()) { "--brief: what the person wants, in their words, with anything you know that helps" }
         val app = MoApps.create(context, name, title, args.get("what")?.trim().orEmpty())
-        runBlocking { AppBots.create(context, app, request.sessionId, brief) }
-        return ok(JSONObject().put("app", name).put("folder", app.linuxDir)
+        val task = runBlocking { AppBots.create(context, app, request.sessionId, brief) }
+        return ok(JSONObject().put("app", name).put("folder", app.linuxDir).put("task", task)
             .put("tell_user", "It is starting now and reports back here. Say so in one line; do not do its work yourself."))
     }
 
@@ -76,22 +72,6 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
         }
         onMain { context.startActivity(MoAppActivity.intent(context, app.name)); true }
         return ok(JSONObject().put("opened", app.name))
-    }
-
-    private fun tell(app: MoApps.App, text: String, request: NativeOffloadRequest): NativeOffloadResult {
-        require(text.isNotBlank()) { "momoding-app tell <name> \"<what to do>\"" }
-        if (app.botSession == null) throw IllegalStateException("${app.name} has no Momoding of its own")
-        AppBots.tell(context, app, text, by = request.sessionId)
-        return ok(JSONObject().put("told", app.name).put("note", "It works on its own and reports back here, with what there is to see, when it is done; no need to wait or check. The chat already shows the hand-over."))
-    }
-
-    private fun done(args: OffloadArgs, request: NativeOffloadRequest): NativeOffloadResult {
-        val app = request.sessionId?.let { MoApps.ofSession(context, it) }
-            ?: throw IllegalStateException("done and progress are for an app's own Momoding")
-        val text = args.positional.drop(1).joinToString(" ").trim()
-        require(text.isNotEmpty()) { "momoding-app done \"<what changed, in one line>\"" }
-        AppBots.receipt(context, app, text, finished = args.positional.firstOrNull() == "done")
-        return ok(JSONObject().put("reported", app.name))
     }
 
     private fun suggest(args: OffloadArgs, request: NativeOffloadRequest): NativeOffloadResult {
@@ -185,18 +165,15 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
 
               new <name> --title "<title>" --what "<what it takes care of>" --brief "<what the person wants>"
                                    a new Momoding with its own chat and folder; it builds an app when
-                                   one is wanted (name: a short lowercase word like ledger)
+                                   one is wanted (name: a short lowercase word like ledger); what
+                                   you brief it with is its first task
               open <name>          show it on the person's screen (when they ask to see it)
-              tell <name> "<text>" a message for that Momoding
-              progress "<what is there now>"
-                                   from an app's own Momoding while it builds: the same line, early,
-                                   so the person can watch it grow
-              done "<what changed>" from an app's own Momoding: one line in the chat that asked for it,
-                                   with the app's card under it (open it, put it on the home screen)
               suggest "<improvement>" from an app's own Momoding after a review: a dot on the app
               list                 the Momodings, which have an app, and what of it is on the home
                                    screen (home_screen, widget: what the launcher says); this_phone:
                                    what this phone lets the person put there at all
+
+            More work for a Momoding, and its reports on that work: momoding-task.
 
             An app's own Momoding, checking its work on the phone as the person sees it: on their
             screen if they have it open, else where no one sees it, so they are never interrupted

@@ -232,7 +232,7 @@ class SwitchModelGhostRetryTest {
                 "the resumable pause on an ordinary model switch",
             code.contains("handleUserCancelledCleanup()"),
         )
-        assertTrue("queued prompts must still drain under the new model", body.contains("resumeQueueAfterCancel()"))
+        assertTrue("queued prompts must still drain under the new model", body.contains("drainQueueWhenIdle()"))
     }
 
     @Test

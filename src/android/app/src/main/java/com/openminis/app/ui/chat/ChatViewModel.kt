@@ -4141,12 +4141,6 @@ class ChatViewModel(
         loadSession()
     }
 
-    /** momoding: a row written from outside this chat (an app Bot's receipt, apps/AppBots.kt) shows now. */
-    fun reloadFromDisk() {
-        if (_isStreaming.value) return
-        reloadSessionFromDb()
-    }
-
     /**
      * Produce the LLM-facing view of agentHistory. Mirrors iOS
      * `effectiveAgentHistory` (AIChatViewModel.swift:3843-3876):
@@ -6232,7 +6226,7 @@ class ChatViewModel(
             val config = providerRepository.config.value
             _availableGroups.value = config.modelGroups
 
-            if (isDraft && realSessionId.isEmpty()) { // momoding: a draft that has become a chat reloads as one (a Bot's receipt, AppBots.receipt)
+            if (isDraft && realSessionId.isEmpty()) { // momoding: a draft that has become a chat reloads as one
                 // Draft session: just set up provider using default group or first entry
                 _sessionTitle.value = UNTITLED_SESSION_TITLE
                 _sessionCategory.value = null
@@ -9058,8 +9052,9 @@ class ChatViewModel(
         // [T-scheduled-tool-prefill] Tool calls executed as the loop's first
         // turn, before any model request (a scheduled task's prefilled call).
         prefill: List<com.openminis.app.scheduled.PrefilledToolCall> = emptyList(),
+        origin: QueuedPromptOrigin? = null,
     ): SubmitOutcome =
-        sendMessage(text, skipContextCheck = false, headless = true, prefill = prefill)
+        sendMessage(text, skipContextCheck = false, headless = true, prefill = prefill, origin = origin)
 
     /**
      * @param skipContextCheck set by the pre-send context dialog's own actions,
@@ -9073,6 +9068,7 @@ class ChatViewModel(
         skipContextCheck: Boolean,
         headless: Boolean = false,
         prefill: List<com.openminis.app.scheduled.PrefilledToolCall> = emptyList(),
+        origin: QueuedPromptOrigin? = null,
     ): SubmitOutcome {
         // [T-android-mute-reset-on-drain] Headless submits (submitPrompt, a
         // scheduled fire into an idle chat) reach this funnel without the
@@ -9103,7 +9099,7 @@ class ChatViewModel(
             val before = _promptQueue.value.size
             // [T-p2-gentle-injection] A headless send is PROGRAMMATIC: it waits
             // for the running loop to finish instead of interrupting it.
-            enqueuePrompt(text, if (headless) QueuedPromptOrigin.PROGRAMMATIC else QueuedPromptOrigin.USER, prefill)
+            enqueuePrompt(text, origin ?: if (headless) QueuedPromptOrigin.PROGRAMMATIC else QueuedPromptOrigin.USER, prefill)
             return if (_promptQueue.value.size == before + 1) SubmitOutcome.Queued
             else SubmitOutcome.Rejected("enqueue_declined")
         }
@@ -15197,10 +15193,11 @@ Memory system (currently DISABLED):
                         listOfNotNull(
                             app.momoding.chat.SessionAddenda.forPrompt(sid),
                             app.momoding.apps.AppBots.standingNote(context, sid) ?: app.momoding.apps.AppBots.directory(context),
+                            app.momoding.task.TaskEngine.table(context, sid),
                         ).joinToString("\n\n").ifBlank { null }
                     },
                     askName = memoryOn && app.momoding.memory.UserFile.shouldAskName(context),
-                    lastUserText = _messages.value.lastOrNull { it.role == "user" }?.content, // momoding
+                    lastUserText = _messages.value.lastOrNull { it.rendersAsUserBubble() }?.content, // momoding: the person's words, not a report
                 ),
             ).let(app.momoding.prompt.MomodingRules::rebrand)
                 .also { app.momoding.prompt.PromptDump.write(context, it) }
@@ -16439,7 +16436,6 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
 
     fun cancelStream() {
         AppLogger.info(TAG_STREAM, "cancelStream invoked _isStreaming=false (sid=$activeSessionId)")
-        app.momoding.apps.AppBots.stopHandedBy(activeSessionId) // momoding: the Momodings it handed work to stop too
         // [T-android-context-usage-hint] Suppress this turn's usage line — see
         // [lastTurnWasCancelled]. Set before `_isStreaming = false` below, so
         // the edge collector observes the flag already raised.
