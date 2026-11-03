@@ -3,6 +3,7 @@ package com.openminis.app.ui.chat
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.json.JSONObject
 
 /** momoding: with steps hidden the chat keeps what was said and drops how it was done. */
 class MomodingShowStepsTest {
@@ -73,5 +74,24 @@ class MomodingShowStepsTest {
         assertEquals(2, open.count { it is FlatChatItem.AssistantToolUse }) // the steps-only message a1 belongs to the same turn
         assertTrue(open.filterIsInstance<FlatChatItem.MomodingStepsToggle>().single().expanded)
         assertTrue(buildFlatChatItems(transcript, showSteps = true).none { it is FlatChatItem.MomodingStepsToggle })
+    }
+
+    @Test fun `one step handing work to two Bots shows both handoffs with steps hidden`() {
+        val step = AssistantBlock(id = "handoffs", kind = "tool_use", content = "",
+            toolArgs = JSONObject().put("command", "momoding-app tell ledger '记一笔'\nmomoding-app tell water '加一杯'").toString())
+        val rows = buildFlatChatItems(listOf(user("u", "记账，再记一杯水"), assistant("a", step)), showSteps = false)
+        val handoffs = rows.filterIsInstance<FlatChatItem.MomodingHandoff>()
+        assertEquals(listOf("ledger", "water"), handoffs.map { it.handoff.name })
+        assertEquals(2, handoffs.map { it.key }.toSet().size)
+        assertTrue(rows.none { it is FlatChatItem.AssistantToolUse })
+    }
+
+    @Test fun `two Bots created in one step keep their separate descriptions`() {
+        val step = AssistantBlock(id = "create", kind = "tool_use", content = "",
+            toolArgs = JSONObject().put("command", "momoding-app new ledger --what '管记账'\nmomoding-app new water --what '管喝水'").toString())
+        val rows = buildFlatChatItems(listOf(user("u", "做两个小 App"), assistant("a", step)), showSteps = false)
+        val handoffs = rows.filterIsInstance<FlatChatItem.MomodingHandoff>()
+        assertEquals(listOf("管记账", "管喝水"), handoffs.map { it.handoff.text })
+        assertTrue(handoffs.all { it.handoff.created })
     }
 }
