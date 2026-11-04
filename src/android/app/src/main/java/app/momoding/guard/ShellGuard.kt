@@ -96,19 +96,38 @@ object ShellGuard {
     // ── one simple command ─────────────────────────────────────────────────────────────────
 
     private fun assessSimple(text: String, depth: Int): RiskAssessment {
-        val heredoc = Regex("<<-?\\s*['\"]?(\\w+)['\"]?\\s*\\n").find(text)
-        val head = if (heredoc != null) text.substring(0, heredoc.range.first) else text
-        val body = if (heredoc != null) text.substring(heredoc.range.last + 1).substringBefore("\n" + heredoc.groupValues[1]) else null
+        val doc = findHereDocument(text)
+        if (doc != null) {
+            val head = text.substring(0, doc.lineEnd).removeRange(doc.operatorStart, doc.operatorEnd)
+            val body = text.substring(doc.lineEnd + 1, doc.bodyEnd)
+            var result = assess(head, depth)
+            for (part in splitPipelines(head).flatMap(::splitPipes)) {
+                val program = unwrap(tokenize(part)).firstOrNull()?.let(::basename) ?: continue
+                val input = when (program) {
+                    in shells -> assess(body, depth + 1)
+                    in interpreters -> assessInline(body, depth, program.startsWith("python"))
+                    else -> RiskAssessment.SAFE // stdin data is not another shell command
+                }
+                result = RiskAssessment.merge(result, input)
+            }
+            // An unquoted heredoc expands shell substitutions even for data readers such as cat.
+            if (!doc.quoted) {
+                for (m in Regex("\\$\\(([^)]*)\\)|`([^`]*)`").findAll(body)) {
+                    result = RiskAssessment.merge(result, assess(m.groupValues[1].ifEmpty { m.groupValues[2] }, depth + 1))
+                }
+            }
+            return result
+        }
+        val head = text
 
         val tokens = unwrap(tokenize(head))
-        if (tokens.isEmpty()) return if (body != null) assessInline(body, depth) else RiskAssessment.SAFE
+        if (tokens.isEmpty()) return RiskAssessment.SAFE
         val program = basename(tokens[0])
         val args = tokens.drop(1)
 
-        val fromBody = if (body != null && (program in shells || program in interpreters)) assessInline(body, depth) else RiskAssessment.SAFE
         val own = when {
             program in shells -> shellWrapper(args, depth)
-            program in interpreters -> interpreterInline(args, depth)
+            program in interpreters -> interpreterInline(args, depth, program.startsWith("python"))
             program == "xargs" -> assessSimple(dropOptions(args, xargsValueOptions).joinToString(" ") { quote(it) } + " ?", depth)
             program == "rm" -> rm(args)
             program == "find" -> find(args)
@@ -130,7 +149,7 @@ object ShellGuard {
                 program !in setOf("notify-send") -> RiskAssessment(RiskClass.OUTBOUND, "$program sends a message", program)
             else -> RiskAssessment.SAFE
         }
-        val merged = RiskAssessment.merge(own, fromBody)
+        val merged = own
         // Money words on an outbound call make it a payment.
         return if (merged.riskClass == RiskClass.OUTBOUND && moneyWords.containsMatchIn(text)) {
             merged.copy(riskClass = RiskClass.MONEY, reason = "looks like a payment: " + merged.reason)
@@ -143,9 +162,9 @@ object ShellGuard {
         return RiskAssessment.SAFE // running a script file: judged by what the file does when it runs
     }
 
-    private fun interpreterInline(args: List<String>, depth: Int): RiskAssessment {
+    private fun interpreterInline(args: List<String>, depth: Int, python: Boolean): RiskAssessment {
         val i = args.indexOfFirst { it == "-c" || it == "-e" || it == "--eval" || it == "-r" }
-        if (i >= 0 && i + 1 < args.size) return assessInline(args[i + 1], depth)
+        if (i >= 0 && i + 1 < args.size) return assessInline(args[i + 1], depth, python)
         // `python -m pip install`, `python -m twine upload`
         val m = args.indexOf("-m")
         if (m >= 0 && m + 1 < args.size) return assessSimple((listOf(args[m + 1]) + args.drop(m + 2)).joinToString(" ") { quote(it) }, depth)
@@ -153,20 +172,49 @@ object ShellGuard {
     }
 
     /** Inline code: judged by what it can reach, not by parsing it. */
-    private fun assessInline(code: String, depth: Int): RiskAssessment {
+    private fun assessInline(code: String, depth: Int, python: Boolean = false): RiskAssessment {
+        val executable = if (python) pythonCode(code) else code
+        fun runs(pattern: Regex) = pattern.findAll(code).any { !executable[it.range.first].isWhitespace() }
         var r = RiskAssessment.SAFE
         // A heredoc or -c string that is itself shell gets the full treatment.
-        if (Regex("(^|\\n|;|&&)\\s*(rm|curl|wget|git|apk|apt|pip|npm|find|lark-cli|gh|ssh|scp|rsync)\\b").containsMatchIn(code)) {
+        if (Regex("(^|\\n|;|&&)\\s*(rm|curl|wget|git|apk|apt|pip|npm|find|lark-cli|gh|ssh|scp|rsync)\\b").containsMatchIn(executable)) {
             r = RiskAssessment.merge(r, assess(code, depth + 1))
         }
-        if (codeDeletes.containsMatchIn(code)) r = RiskAssessment.merge(r, RiskAssessment(RiskClass.DESTRUCTIVE, "code deletes files", null))
-        if (codeSends.containsMatchIn(code)) {
+        if (runs(codeDeletes)) r = RiskAssessment.merge(r, RiskAssessment(RiskClass.DESTRUCTIVE, "code deletes files", null))
+        if (runs(codeSends)) {
             val host = urlRegex.find(code)?.groupValues?.get(1)
             r = RiskAssessment.merge(r, RiskAssessment(RiskClass.OUTBOUND, "code sends data" + (host?.let { " to $it" } ?: ""), host))
         }
-        if (codeInstalls.containsMatchIn(code)) r = RiskAssessment.merge(r, RiskAssessment(RiskClass.INSTALL, "code installs packages", null))
+        if (runs(codeInstalls)) r = RiskAssessment.merge(r, RiskAssessment(RiskClass.INSTALL, "code installs packages", null))
         if (r.riskClass == RiskClass.OUTBOUND && moneyWords.containsMatchIn(code)) r = r.copy(riskClass = RiskClass.MONEY, reason = "looks like a payment: " + r.reason)
         return r
+    }
+
+    /** Keep offsets, but exclude Python literals/comments from effect-name matching. */
+    private fun pythonCode(code: String): String {
+        val out = code.toCharArray()
+        fun blank(from: Int, until: Int) { for (p in from until until) if (out[p] != '\n') out[p] = ' ' }
+        var i = 0
+        while (i < code.length) {
+            val c = code[i]
+            if (c == '#') {
+                val end = code.indexOf('\n', i).takeIf { it >= 0 } ?: code.length
+                blank(i, end); i = end; continue
+            }
+            if (c != '\'' && c != '"') { i++; continue }
+            val quote = if (code.startsWith(c.toString().repeat(3), i)) c.toString().repeat(3) else c.toString()
+            val prefix = code.substring(0, i).takeLastWhile { it.isLetter() }.lowercase()
+            var end = i + quote.length
+            while (end < code.length) {
+                if (code[end] == '\\') { end = (end + 2).coerceAtMost(code.length); continue }
+                if (code.startsWith(quote, end)) { end += quote.length; break }
+                end++
+            }
+            // f-string substitutions execute code: conservatively keep their contents visible.
+            if (prefix !in setOf("f", "fr", "rf")) blank(i, end)
+            i = end
+        }
+        return String(out)
     }
 
     // ── programs ───────────────────────────────────────────────────────────────────────────
@@ -455,6 +503,38 @@ object ShellGuard {
         if (s[i] == '|' && (i + 1 >= s.length || s[i + 1] != '|') && (i == 0 || s[i - 1] != '|')) 1 else 0
     }
 
+    private data class HereDocument(
+        val operatorStart: Int, val operatorEnd: Int, val lineEnd: Int,
+        val bodyEnd: Int, val end: Int, val quoted: Boolean,
+    )
+
+    private fun findHereDocument(text: String): HereDocument? {
+        var quote: Char? = null
+        var i = 0
+        while (i < text.length && text[i] != '\n') {
+            val c = text[i]
+            if (c == '\\' && quote != '\'') { i += 2; continue }
+            if (quote != null) { if (c == quote) quote = null }
+            else if (c == '\'' || c == '"' || c == '`') quote = c
+            else if (c == '<') hereDocument(text, i)?.let { return it }
+            i++
+        }
+        return null
+    }
+
+    /** A heredoc body is stdin; its quotes, semicolons and pipes are not shell syntax. */
+    private fun hereDocument(text: String, at: Int): HereDocument? {
+        if (at < 0 || text.startsWith("<<<", at)) return null
+        val opening = Regex("<<(-?)[ \t]*(?:'([^'\n]+)'|\"([^\"\n]+)\"|([A-Za-z_][A-Za-z0-9_-]*))").find(text, at)
+            ?.takeIf { it.range.first == at } ?: return null
+        val delimiter = opening.groupValues.drop(2).first { it.isNotEmpty() }
+        val lineEnd = text.indexOf('\n', opening.range.last + 1).takeIf { it >= 0 } ?: return null
+        val tabs = if (opening.groupValues[1] == "-") "\\t*" else ""
+        val close = Regex("(?m)^" + tabs + Regex.escape(delimiter) + "\\r?$").find(text, lineEnd + 1) ?: return null
+        return HereDocument(at, opening.range.last + 1, lineEnd, close.range.first, close.range.last + 1,
+            opening.groupValues[2].isNotEmpty() || opening.groupValues[3].isNotEmpty())
+    }
+
     private fun splitOn(text: String, sep: (String, Int) -> Int): List<String> {
         val out = ArrayList<String>()
         val cur = StringBuilder()
@@ -468,6 +548,15 @@ object ShellGuard {
                 if (c == '\\' && quote == '"' && i + 1 < text.length) { cur.append(text[i + 1]); i += 2; continue }
                 if (c == quote) quote = null
                 i++; continue
+            }
+            // Skip stdin as a unit before quote/separator handling sees its source code.
+            if (c == '<' && text.startsWith("<<", i)) {
+                val doc = hereDocument(text, i)
+                if (doc != null) {
+                    cur.append(text, i, doc.end)
+                    i = doc.end
+                    continue
+                }
             }
             when {
                 c == '\\' && i + 1 < text.length -> { cur.append(c).append(text[i + 1]); i += 2; continue }
