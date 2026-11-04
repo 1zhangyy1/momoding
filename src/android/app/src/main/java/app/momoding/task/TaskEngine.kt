@@ -247,6 +247,7 @@ object TaskEngine {
             append("## Tasks\nWork tracked in this chat. A message starting $REPORT_CUE<id> · <hand> · done|ask|failed|stopped] is that task's report, not the person: ")
             append("tell the person what came of it in your own words, in a line or two (with a link to open a Momoding's app when there is something to see); for an ask, ask the person. ")
             append("A command_result is a background tool result for the current task: use it to continue before reporting the task done. ")
+            append("A late_result is a return from an earlier interrupted or ended operation: tell the person once, reconcile it with the stop snapshot, and do not restart that operation. A stop snapshot records checkpoints and returns, not independent delivery confirmation. ")
             append("Their answer, or anything more they want of a task, goes to its hand with `momoding-task tell <id> \"<their words>\"`.\n")
             (open + ended).forEach { t ->
                 append("- ").append(t.id).append(" · ").append(if (t.hand == t.conversation) "this chat" else handName(context, t.hand)).append(" · ").append(t.title).append(" · ")
@@ -369,19 +370,42 @@ object TaskEngine {
         if (action.command != null) {
             commandFinished(context, action.taskId, action.command, com.openminis.app.tools.ToolExecutionResult(output, success),
                 announce = false, unknown = unknown)
-        } else change(context) { dao, _ ->
-            if (actionResultIn(dao, action.taskId, action.id, output, success, unknown) && unknown) {
-                dao.task(action.taskId)?.takeIf { it.state != TaskEntity.State.ENDED.name }?.let { actionUnknownIn(dao, it, output) }
-            }
+        } else change(context) { dao, after ->
+            actionFinishedIn(dao, action, output, success, unknown)?.let { owner -> after += { tellChat(context, owner) } }
         }
     }
 
+    internal suspend fun actionFinishedIn(dao: TaskDao, action: TaskAction, output: String, success: Boolean, unknown: Boolean = false): String? {
+        val task = dao.task(action.taskId) ?: return null
+        val history = dao.log(task.id)
+        val previous = TaskReceipt.result(history, TaskLogEntity.Kind.RESULT, action.id)
+        if (!actionResultIn(dao, task.id, action.id, output, success, unknown)) return null
+        val late = task.state == TaskEntity.State.ENDED.name || previous?.optBoolean("unknown") == true ||
+            TaskReceipt.belongsToEarlierAttempt(history, TaskLogEntity.Kind.ABOUT_TO, action.id)
+        if (late && !unknown) return lateReceiptIn(dao, task, "action", action.id, output, success)
+        if (unknown && !late) actionUnknownIn(dao, task, output)
+        return null
+    }
+
     internal suspend fun actionResultIn(dao: TaskDao, task: String, id: String, output: String, success: Boolean, unknown: Boolean = false): Boolean {
-        if (TaskAction.pending(dao.log(task)).none { it.request.id == id }) return false
+        val history = dao.log(task)
+        if (history.none { it.kind == TaskLogEntity.Kind.ABOUT_TO.name && JSONObject(it.body).getString("id") == id }) return false
+        val previous = TaskReceipt.result(history, TaskLogEntity.Kind.RESULT, id)
+        if (previous != null && (!previous.optBoolean("unknown") || unknown)) return false
         val result = JSONObject().put("id", id).put("output", output)
         if (unknown) result.put("unknown", true) else result.put("success", success)
         log(dao, task, TaskLogEntity.Kind.RESULT, result.toString())
         return true
+    }
+
+    /** The result write and this delivery share the caller's transaction. Never reopen work. */
+    internal suspend fun lateReceiptIn(dao: TaskDao, task: TaskEntity, kind: String, id: String, output: String, success: Boolean): String? {
+        val target = TaskReceipt.target(dao, task) ?: return null
+        val words = TaskReceipt.late(task, kind, id, output, success)
+        log(dao, task.id, TaskLogEntity.Kind.REPORT, words)
+        Inbox.post(dao, target.conversation, "$REPORT_CUE${target.task} · $kind · late_result] $words", target.task,
+            id = "late:${task.id}:$kind:$id")
+        return target.conversation
     }
 
     private suspend fun actionUnknownIn(dao: TaskDao, task: TaskEntity, words: String) {
@@ -439,17 +463,21 @@ object TaskEngine {
     }
 
     /** State commits first; cancellation reaches only these runs, never the next task on a Bot. */
-    suspend fun stop(context: Context, id: String, reason: String = "Stopped by the person.", outcome: TaskEntity.Outcome = TaskEntity.Outcome.STOPPED): TaskEntity? = change(context) { dao, after ->
-        val root = dao.task(id) ?: return@change null
-        val unread = dao.unread(root.hand).filter { it.taskId == id }.map { it.text }
+    suspend fun stop(context: Context, id: String, reason: String = "Stopped by the person.", outcome: TaskEntity.Outcome = TaskEntity.Outcome.STOPPED): TaskEntity? =
+        change(context) { dao, after -> stopIn(context, dao, after, id, reason, outcome) }
+
+    internal suspend fun stopIn(context: Context, dao: TaskDao, after: MutableList<suspend () -> Unit>, id: String,
+        reason: String = "Stopped by the person.", outcome: TaskEntity.Outcome = TaskEntity.Outcome.STOPPED,
+    ): TaskEntity? {
+        val root = dao.task(id) ?: return null
         stopTree(context, dao, after, id, reason)
         if (root.state != TaskEntity.State.ENDED.name) {
             if (outcome != TaskEntity.Outcome.STOPPED) dao.task(id)?.let { dao.updateTask(it.copy(outcome = outcome.name)) }
-            val words = reason + if (unread.isEmpty()) "" else "\nInstructions the hand had not read:\n" + unread.joinToString("\n\n")
+            val words = dao.log(id).last { it.kind == TaskLogEntity.Kind.END.name }.body
             Inbox.post(dao, root.conversation, "$REPORT_CUE$id · ${handName(context, root.hand)} · ${outcome.name.lowercase()}] $words", id)
             after += { tellChat(context, root.conversation) }
         }
-        dao.task(id)
+        return dao.task(id)
     }
 
     private suspend fun stopTree(context: Context, dao: TaskDao, after: MutableList<suspend () -> Unit>, id: String, reason: String) {
@@ -457,9 +485,10 @@ object TaskEngine {
         for (task in descendants(dao, listOf(root))) {
             if (task.state == TaskEntity.State.ENDED.name) continue
             val commands = ShellWork.pending(dao.log(task.id))
+            val words = reason + "\n" + TaskReceipt.stopped(dao, task)
             dao.updateTask(task.copy(state = TaskEntity.State.ENDED.name, outcome = TaskEntity.Outcome.STOPPED.name,
                 ask = null, updatedAt = System.currentTimeMillis()))
-            log(dao, task.id, TaskLogEntity.Kind.END, reason)
+            log(dao, task.id, TaskLogEntity.Kind.END, words)
             dao.deleteTaskInbox(task.id)
             commands.forEach { command -> after += { ShellWork.stop(command.process) } }
             if (task.hand == TaskEntity.SCREEN) after += { ScreenWork.stop(task.id, reason) }
@@ -579,24 +608,33 @@ object TaskEngine {
         return true
     }
 
-    suspend fun screenFinished(context: Context, id: String, result: app.momoding.hands.HandsOperator.Result) = change(context) { dao, after ->
-        var task = dao.task(id) ?: return@change
+    suspend fun screenFinished(context: Context, id: String, result: app.momoding.hands.HandsOperator.Result) =
+        change(context) { dao, after -> screenFinishedIn(context, dao, after, id, result) }
+
+    internal suspend fun screenFinishedIn(context: Context, dao: TaskDao, after: MutableList<suspend () -> Unit>, id: String, result: app.momoding.hands.HandsOperator.Result) {
+        var task = dao.task(id) ?: return
+        val recorded = dao.log(id).any { it.kind == TaskLogEntity.Kind.SCREEN_RESULT.name &&
+            runCatching { JSONObject(it.body).optString("run_id") == result.runId }.getOrDefault(false) }
+        if (recorded && task.state == TaskEntity.State.ENDED.name) return
         if (task.state != TaskEntity.State.ENDED.name && TaskAction.pending(dao.log(id)).isNotEmpty() &&
             result.outcome !is app.momoding.hands.HandsOperator.Outcome.Stopped) {
             recoverActionsIn(dao, task)
-            task = dao.task(id) ?: return@change
+            task = dao.task(id) ?: return
         }
         val uncertain = task.ask?.let { JSONObject(it).takeIf { a -> a.optString("kind") == "action_outcome_unknown" }?.optString("question") }
         val observed = if (uncertain != null && result.outcome !is app.momoding.hands.HandsOperator.Outcome.Stopped)
             result.copy(outcome = app.momoding.hands.HandsOperator.Outcome.NeedsUser(uncertain)) else result
         val body = ScreenWork.resultJson(observed).toString()
-        if (dao.log(id).none { it.kind == TaskLogEntity.Kind.SCREEN_RESULT.name && runCatching { JSONObject(it.body).optString("run_id") == result.runId }.getOrDefault(false) }) {
-            log(dao, id, TaskLogEntity.Kind.SCREEN_RESULT, body)
+        if (!recorded) log(dao, task.id, TaskLogEntity.Kind.SCREEN_RESULT, body)
+        if (task.state == TaskEntity.State.ENDED.name) {
+            if (result.outcome !is app.momoding.hands.HandsOperator.Outcome.Stopped)
+                lateReceiptIn(dao, task, "screen", result.runId, body, result.outcome is app.momoding.hands.HandsOperator.Outcome.Done)
+                    ?.let { owner -> after += { tellChat(context, owner) } }
+            return
         }
-        if (task.state == TaskEntity.State.ENDED.name) return@change
         if (requeueScreenFollowUp(dao, id, result.instructionsThrough)) {
             after += { ScreenWork.wake() }
-            return@change
+            return
         }
         val question = (observed.outcome as? app.momoding.hands.HandsOperator.Outcome.NeedsUser)?.question
         val outcome = when (observed.outcome) {
@@ -609,8 +647,8 @@ object TaskEngine {
         else dao.updateTask(task.copy(state = TaskEntity.State.ENDED.name, ask = null,
             outcome = outcome.name, progress = null, updatedAt = System.currentTimeMillis()))
         log(dao, id, if (question == null) TaskLogEntity.Kind.END else TaskLogEntity.Kind.REPORT, body)
-        val parent = screenSpec(context, id).parent
-        if (parent != null && dao.task(parent)?.state !in listOf(TaskEntity.State.RUNNING.name, TaskEntity.State.WAITING.name)) return@change
+        val parent = ScreenWork.Spec.parse(requireNotNull(dao.screenSpec(id))).parent
+        if (parent != null && dao.task(parent)?.state !in listOf(TaskEntity.State.RUNNING.name, TaskEntity.State.WAITING.name)) return
         if (question != null && parent != null) dao.task(parent)?.let {
             setAskIn(dao, it, JSONObject().put("kind", "screen_question").put("screen", id).put("question", question).toString())
         }
@@ -632,7 +670,8 @@ object TaskEngine {
         // A pause/resume is still the same attempt. Only an END separates an explicit retry.
         val current = history.drop(history.indexOfLast { it.kind == TaskLogEntity.Kind.END.name } + 1)
         val commands = current.filter { it.kind == TaskLogEntity.Kind.COMMAND_RESULT.name }
-            .mapNotNull { runCatching { JSONObject(it.body) }.getOrNull() }.filter { !it.optBoolean("success", true) }
+            .mapNotNull { runCatching { JSONObject(it.body) }.getOrNull() }
+            .filter { !it.optBoolean("success", true) && !TaskReceipt.belongsToEarlierAttempt(history, TaskLogEntity.Kind.COMMAND, it.optString("id")) }
         val childIds = current.filter { it.kind == TaskLogEntity.Kind.CHILD.name }.map { it.body }.toSet()
         val children = dao.children(id).filter { it.id in childIds && it.outcome in listOf(TaskEntity.Outcome.FAILED.name, TaskEntity.Outcome.STOPPED.name) }
         val result = when {
@@ -931,28 +970,40 @@ object TaskEngine {
     internal suspend fun commandFinished(context: Context, id: String, command: ShellWork.Command,
         result: com.openminis.app.tools.ToolExecutionResult, budgetExpired: Boolean = false, announce: Boolean = true,
         unknown: Boolean = false, onlyIfNotStarted: Boolean = false,
-    ) = change(context) { dao, after ->
-        val task = dao.task(id) ?: return@change
+    ) = change(context) { dao, after -> commandFinishedIn(context, dao, after, id, command, result, budgetExpired, announce, unknown, onlyIfNotStarted) }
+
+    internal suspend fun commandFinishedIn(context: Context, dao: TaskDao, after: MutableList<suspend () -> Unit>, id: String,
+        command: ShellWork.Command, result: com.openminis.app.tools.ToolExecutionResult, budgetExpired: Boolean = false,
+        announce: Boolean = true, unknown: Boolean = false, onlyIfNotStarted: Boolean = false,
+    ) {
+        val task = dao.task(id) ?: return
         val history = dao.log(id)
-        if (onlyIfNotStarted && history.any { it.kind == TaskLogEntity.Kind.ABOUT_TO.name && JSONObject(it.body).getString("id") == command.id }) return@change
-        if (ShellWork.pending(history).none { it.id == command.id }) return@change
+        val previous = TaskReceipt.result(history, TaskLogEntity.Kind.COMMAND_RESULT, command.id)
+        if (history.none { it.kind == TaskLogEntity.Kind.COMMAND.name && ShellWork.Command.parse(it.body) == command }) return
+        if (onlyIfNotStarted && history.any { it.kind == TaskLogEntity.Kind.ABOUT_TO.name && JSONObject(it.body).getString("id") == command.id }) return
+        if (previous != null && (!previous.optBoolean("unknown") || unknown)) return
         val row = JSONObject().put("id", command.id).put("output", result.output)
         if (unknown) row.put("unknown", true) else row.put("success", result.success)
         log(dao, id, TaskLogEntity.Kind.COMMAND_RESULT, row.toString())
         actionResultIn(dao, id, command.id, result.output, result.success, unknown)
-        if (task.state == TaskEntity.State.ENDED.name) return@change
+        val late = task.state == TaskEntity.State.ENDED.name || previous?.optBoolean("unknown") == true ||
+            TaskReceipt.belongsToEarlierAttempt(history, TaskLogEntity.Kind.COMMAND, command.id)
+        if (late) {
+            if (!unknown) lateReceiptIn(dao, task, "command", command.id, result.output, result.success)?.let { owner -> after += { tellChat(context, owner) } }
+            return
+        }
         if (unknown) {
             val words = "The command was interrupted; its outward effect is unknown. Verify what happened before repeating it.\n" + result.output
             actionUnknownIn(dao, task, words)
             Inbox.post(dao, task.conversation, "$REPORT_CUE$id · command · ask] $words", id)
             after += { tellChat(context, task.conversation) }
-            return@change
+            return
         }
         if (budgetExpired) {
             reportIn(context, dao, after, task.hand, Report.FAILED, result.output, helper = true)
             after += { Helpers.ended(context, task.hand, task.conversation) }
             after += { handIdle(context, task.hand) }
-            return@change
+            return
         }
         refreshBudget(dao, id)
         val closed = completeOwnIn(dao, id, if (result.success) TaskEntity.Outcome.DONE else TaskEntity.Outcome.FAILED, result.output)

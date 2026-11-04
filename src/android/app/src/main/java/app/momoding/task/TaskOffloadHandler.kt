@@ -82,7 +82,8 @@ class TaskOffloadHandler(private val context: Context) : NativeOffloadHandler {
         val task = runBlocking { TaskEngine.dao(context).task(id) } ?: throw IllegalArgumentException("no task $id")
         require(task.conversation == sid) { "task $id belongs to another chat" }
         val stopped = runBlocking { TaskEngine.stop(context, id) } ?: error("the task was deleted")
-        return ok(JSONObject().put("task", id).put("state", stopped.state.lowercase()).put("outcome", stopped.outcome?.lowercase()))
+        val receipt = runBlocking { TaskEngine.dao(context).log(id).lastOrNull { it.kind == TaskLogEntity.Kind.END.name }?.body }
+        return ok(JSONObject().put("task", id).put("state", stopped.state.lowercase()).put("outcome", stopped.outcome?.lowercase()).put("receipt", receipt))
     }
 
     private fun ok(o: JSONObject) = NativeOffloadResult(0, o.toString(2) + "\n")

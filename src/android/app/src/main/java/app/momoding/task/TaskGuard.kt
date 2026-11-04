@@ -40,6 +40,9 @@ object TaskGuard {
         if (outward && binding.message != null) {
             val input = dao.inputForCall(binding.hand, binding.message)
             if (input != null) {
+                if (input.sender != InboxEntity.Sender.USER.name && input.text.contains(" · late_result]") &&
+                    (targetTaskId == null || dao.task(targetTaskId)?.state != TaskEntity.State.RUNNING.name))
+                    return "This is a late receipt, not permission to restart work. Report it once; wait for the person before any new outward action."
                 val sourceWork = dao.sourceTasks(binding.hand, input.id) + listOfNotNull(input.taskId?.let { dao.task(it) }
                     ?.takeIf { it.conversation == binding.hand })
                 val work = when {
@@ -48,7 +51,8 @@ object TaskGuard {
                     else -> listOfNotNull(dao.task(targetTaskId)?.takeIf { it.conversation == binding.hand })
                 }
                 for (task in work.distinctBy { it.id }) {
-                    if (task.hand == binding.hand && task.state == TaskEntity.State.ENDED.name && task.outcome == TaskEntity.Outcome.STOPPED.name)
+                    if ((task.hand == binding.hand || (input.sender != InboxEntity.Sender.USER.name && input.taskId == task.id)) &&
+                        task.state == TaskEntity.State.ENDED.name && task.outcome == TaskEntity.Outcome.STOPPED.name)
                         return "Task ${task.id} was stopped. Do not start more work from this old input."
                     val approvedWait = allowWaiting && Approval.pending(task.ask).isNotEmpty()
                     if (task.hold != null || (!approvedWait && (task.state == TaskEntity.State.WAITING.name || task.ask != null)))

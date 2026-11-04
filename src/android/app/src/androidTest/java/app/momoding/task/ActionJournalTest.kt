@@ -73,6 +73,26 @@ class ActionJournalTest {
         assertTrue(TaskAction.pending(dao.log(action.taskId)).isEmpty())
     }
 
+    @Test fun anObservedReceiptCanFollowUnknownOnceWithoutResumingTheTask(): Unit = runBlocking {
+        val action = start()
+        db.withTransaction { TaskEngine.recoverActionsIn(dao, dao.task(action.taskId)!!) }
+        assertTrue(db.withTransaction { TaskEngine.actionResultIn(dao, action.taskId, action.id, "late observed receipt", true) })
+        assertFalse(db.withTransaction { TaskEngine.actionResultIn(dao, action.taskId, action.id, "duplicate", true) })
+        assertEquals(2, dao.log(action.taskId).count { it.kind == "RESULT" })
+        assertEquals("WAITING", dao.task(action.taskId)!!.state)
+        assertTrue(dao.log(action.taskId).none { it.kind == "END" })
+    }
+
+    @Test fun anObservedReceiptCanFollowUnknownAfterAStop(): Unit = runBlocking {
+        val action = start(); val task = dao.task(action.taskId)!!
+        dao.updateTask(task.copy(state = "ENDED", outcome = "STOPPED"))
+        mark(task.id, "END", "stopped")
+        db.withTransaction { TaskEngine.actionResultIn(dao, task.id, action.id, "unobserved before cancellation", false, unknown = true) }
+        assertTrue(db.withTransaction { TaskEngine.actionResultIn(dao, task.id, action.id, "actual late receipt", true) })
+        assertEquals("STOPPED", dao.task(task.id)!!.outcome)
+        assertEquals(1, dao.log(task.id).count { it.kind == "END" })
+    }
+
     @Test fun aMissingResultBecomesAnUnknownAskAndIsNotReplayedOnASecondRecovery() = runBlocking {
         val action = start()
         assertNotNull(db.withTransaction { TaskEngine.recoverActionsIn(dao, dao.task(action.taskId)!!) })
