@@ -58,7 +58,7 @@ class ShellParityFixesTest {
         assertTrue(vm.contains("const val SHELL_TIMEOUT_MAX_SEC = 3600"))
         assertFalse("no silent 900 s cap left", vm.contains("coerceIn(1, 900)"))
         val tools = ProductionSources.read("tools/AgentTools.kt")
-        assertTrue(tools.contains("Timeout in seconds (default: 900, maximum: 3600 — larger values are capped at 3600)."))
+        assertTrue(tools.contains("Execution budget in seconds (default: 900, maximum: 3600)."))
     }
 
     // ── stdin reads /dev/null ───────────────────────────────────────────────

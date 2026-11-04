@@ -396,9 +396,26 @@ object SessionActivityTracker {
      */
     fun shouldRunServiceNow(): Boolean = shouldRunService()
 
+    private data class BackgroundExecution(val chat: String, val stop: () -> Unit)
+    private val backgroundExecutions = java.util.concurrent.ConcurrentHashMap<String, BackgroundExecution>()
+    fun hasBackgroundWork(): Boolean = backgroundExecutions.isNotEmpty()
+
+    /** OS lifetime only; business state remains in the task table. */
+    fun keepBackgroundWork(id: String, chat: String, stop: () -> Unit) = synchronized(serviceLock) {
+        backgroundExecutions[id] = BackgroundExecution(chat, stop)
+        startServiceIfNeeded()
+    }
+
+    fun finishBackgroundWork(id: String) = synchronized(serviceLock) {
+        backgroundExecutions.remove(id)
+        if (shouldRunService()) updateService() else stopService()
+    }
+
+    private fun workingChats(): Set<String> = _activeSessions.value + backgroundExecutions.values.map { it.chat }
+
     private fun shouldRunService(): Boolean =
         _activeSessions.value.isNotEmpty() || _presentSessions.value.isNotEmpty() ||
-            _overlayCompletionPending.value
+            _overlayCompletionPending.value || hasBackgroundWork()
 
     /**
      * [T-android-overlay-completion-survives-stop] True while a finished turn
@@ -712,7 +729,7 @@ object SessionActivityTracker {
      * so iterating the live map would ConcurrentModificationException.
      */
     fun cancelAllActiveStreams() {
-        val snapshot = synchronized(streamCancellers) { streamCancellers.values.toList() }
+        val snapshot = synchronized(streamCancellers) { streamCancellers.values.toList() } + backgroundExecutions.values.map { it.stop }
         Log.d(TAG, "cancelAllActiveStreams: dispatching to ${snapshot.size} session(s)")
         for (cancel in snapshot) {
             try {
@@ -928,7 +945,7 @@ object SessionActivityTracker {
      * double-counting a session that's both present and streaming.
      */
     private fun sessionCountForNotification(): Int =
-        if (_activeSessions.value.isNotEmpty()) _activeSessions.value.size
+        if (workingChats().isNotEmpty()) workingChats().size
         else _presentSessions.value.size
 
     /**
@@ -946,7 +963,7 @@ object SessionActivityTracker {
      */
     private fun statusForNotification(): String {
         val ctx = appContext
-        val activeCount = _activeSessions.value.size
+        val activeCount = workingChats().size
         return when {
             activeCount > 0 -> {
                 val tool = _currentToolStatus.value

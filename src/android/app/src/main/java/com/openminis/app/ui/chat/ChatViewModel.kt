@@ -8070,7 +8070,7 @@ class ChatViewModel(
         observeInbox(sid)
         val ready = withTimeoutOrNull(5000) { _activeEntryId.first { it != null } }
         check(ready != null) { "no provider resolved for the unread message" }
-        if (!_isStreaming.value) app.momoding.task.TaskEngine.dao(context).heldBy(sid)?.let { runningTaskId = it.id }
+        if (!_isStreaming.value) runningTaskId = app.momoding.task.TaskEngine.modelTask(context, sid)?.id
         refreshInbox()
         if (!_isStreaming.value) drainQueueWhenIdle()
     }
@@ -8154,7 +8154,7 @@ class ChatViewModel(
             val retrying = app.momoding.task.Inbox.failed(context, activeSessionId,
                 terminal = error is CancellationException, ids = batch.map { it.id })
             refreshInbox()
-            val task = app.momoding.task.TaskEngine.dao(context).heldBy(activeSessionId)
+            val task = app.momoding.task.TaskEngine.modelTask(context, activeSessionId)
             app.momoding.task.TaskEngine.turnFinished(context, activeSessionId, task?.id,
                 app.momoding.task.TaskCompletion(false, "The hand could not start: ${error.message}"), hasFollowUp = retrying)
             retrying
@@ -9583,7 +9583,7 @@ class ChatViewModel(
         // loop's first turn. See [pendingScriptedTurn] below.
         prefill: List<com.openminis.app.scheduled.PrefilledToolCall> = emptyList(),
     ) {
-        val taskAtStart = app.momoding.task.TaskEngine.dao(context).heldBy(activeSessionId)?.id
+        val taskAtStart = app.momoding.task.TaskEngine.modelTask(context, activeSessionId)?.id
         if (runningTaskId != null && runningTaskId != taskAtStart) throw CancellationException("The task ended before its run started.")
         runningTaskId = taskAtStart
         val previousTail = agentHistory.lastOrNull()
@@ -9596,6 +9596,7 @@ class ChatViewModel(
             kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.currentCoroutineContext()),
             wrapUp = { helperWrapUpRequested = true },
             expire = { runningJob?.cancel(CancellationException("The helper's time budget was exhausted.")) },
+            elapsedMs = app.momoding.task.TaskEngine.elapsed(context, taskAtStart),
         ) else null
         try {
         AppLogger.info(TAG_STREAM, "runAgentLoop ENTER provider=${provider.javaClass.simpleName} historySize=${agentHistory.size}")
@@ -12298,6 +12299,23 @@ class ChatViewModel(
         assistantId: String,
         currentText: String,
     ): ToolExecutionResult {
+        val args = runCatching { JSONObject(argsJson) }.getOrElse { return ToolExecutionResult("Error: ${it.message}", false) }
+        val command = args.optString("command", "")
+        val title = args.optString("tool_title").ifBlank { command.lineSequence().firstOrNull().orEmpty().take(60) }
+        return app.momoding.task.ShellWork.run(context, activeSessionId, runningTaskId, title, command) { process, foreground ->
+            executeShellCommandForeground(argsJson, toolId, toolBlocks, assistantId, currentText, process, foreground)
+        }
+    }
+
+    private suspend fun executeShellCommandForeground(
+        argsJson: String,
+        toolId: String,
+        toolBlocks: MutableList<AssistantBlock>,
+        assistantId: String,
+        currentText: String,
+        processId: String,
+        foreground: () -> Boolean,
+    ): ToolExecutionResult {
         return try {
             val args = JSONObject(argsJson)
             var command = args.optString("command", "")
@@ -12322,7 +12340,7 @@ class ChatViewModel(
             when (val gate = app.momoding.guard.RiskGate.checkShell(activeSessionId, command, toolTitle.takeIf { it != "shell_execute" })) {
                 is app.momoding.guard.GateOutcome.Denied -> {
                     val idx = toolBlocks.indexOfFirst { it.id == toolId }
-                    if (idx >= 0) toolBlocks[idx] = toolBlocks[idx].copy(content = "")
+                    if (foreground() && idx >= 0) toolBlocks[idx] = toolBlocks[idx].copy(content = "")
                     return ToolExecutionResult(gate.message, false, toolTitle = toolTitle)
                 }
                 is app.momoding.guard.GateOutcome.Allowed -> approvalNotice = gate.notice
@@ -12342,19 +12360,19 @@ class ChatViewModel(
             if (delaySec > 0) {
                 for (remaining in delaySec downTo 1) {
                     val idx = toolBlocks.indexOfFirst { it.id == toolId }
-                    if (idx >= 0) {
+                    if (foreground() && idx >= 0) {
                         val mm = remaining / 60
                         val ss = remaining % 60
                         val countdown = if (mm > 0) String.format("%d:%02d", mm, ss) else "${ss}s"
                         toolBlocks[idx] = toolBlocks[idx].copy(content = "⏳ Waiting $countdown before executing...")
                         withContext(Dispatchers.Main) {
-                            updateAssistantMessage(assistantId, currentText, true, toolBlocks)
+                            if (foreground()) updateAssistantMessage(assistantId, currentText, true, toolBlocks)
                         }
                     }
                     kotlinx.coroutines.delay(1000)
                 }
                 val idx = toolBlocks.indexOfFirst { it.id == toolId }
-                if (idx >= 0) {
+                if (foreground() && idx >= 0) {
                     toolBlocks[idx] = toolBlocks[idx].copy(content = "")
                 }
             }
@@ -12363,7 +12381,7 @@ class ChatViewModel(
             // of the Chinese-emoji filename "disappears" bug. `activeSessionId`
             // resolves to the persisted id once `ensureSession()` has run, so
             // every shell runs in a directory that survives VM recreation.
-            val dispatchSessionId = activeSessionId
+            val dispatchSessionId = processId
             android.util.Log.w("ShellExecDiag",
                 "executeShell dispatch=$dispatchSessionId rawSessionId=$sessionId realSessionId=$realSessionId isDraft=$isDraft cmd=${command.take(120).replace('\n', ' ')}")
 
@@ -12380,7 +12398,7 @@ class ChatViewModel(
             var bashScript: String? = null   // set when we bash-wrapped; enables M5 self-heal retry
             if (bashism.needsBash) {
                 val executor = OnDemandBash.Executor { c, t ->
-                    ExecutionCoordinator.execute(sessionId = dispatchSessionId, command = c, timeout = t, fsSessionId = fsSessionId).exitCode
+                    ExecutionCoordinator.execute(sessionId = dispatchSessionId, command = c, timeout = t, fsSessionId = fsSessionId, chatSessionId = activeSessionId).exitCode
                 }
                 when (val outcome = OnDemandBash.ensureBash(context, executor)) {
                     is OnDemandBash.Outcome.Available -> {
@@ -12403,6 +12421,7 @@ class ChatViewModel(
             var result = ExecutionCoordinator.execute(
                 sessionId = dispatchSessionId,
                 fsSessionId = fsSessionId,
+                chatSessionId = activeSessionId,
                 command = command,
                 timeout = timeoutSec * 1000L,
                 lineCallback = lc@{ rawLine ->
@@ -12417,14 +12436,14 @@ class ChatViewModel(
                     if (cleanedLine.isEmpty() && rawLine.isNotEmpty()) return@lc
 
                     val idx = toolBlocks.indexOfFirst { it.id == toolId }
-                    if (idx >= 0) {
+                    if (foreground() && idx >= 0) {
                         val current = toolBlocks[idx].content
                         val updated = if (current.isEmpty()) cleanedLine else "$current\n$cleanedLine"
                         // Keep last 50 lines for display
                         val trimmed = updated.lines().takeLast(50).joinToString("\n")
                         toolBlocks[idx] = toolBlocks[idx].copy(content = trimmed)
                         viewModelScope.launch(Dispatchers.Main) {
-                            updateAssistantMessage(assistantId, currentText, true, toolBlocks)
+                            if (foreground()) updateAssistantMessage(assistantId, currentText, true, toolBlocks)
                         }
                     }
                 },
@@ -12440,12 +12459,12 @@ class ChatViewModel(
                     result.exitCode == (BASH_MISSING_SENTINEL shl 8)) && bashScript != null) {
                 OnDemandBash.markDisappeared()
                 val executor = OnDemandBash.Executor { c, t ->
-                    ExecutionCoordinator.execute(sessionId = dispatchSessionId, command = c, timeout = t, fsSessionId = fsSessionId).exitCode
+                    ExecutionCoordinator.execute(sessionId = dispatchSessionId, command = c, timeout = t, fsSessionId = fsSessionId, chatSessionId = activeSessionId).exitCode
                 }
                 val healed = OnDemandBash.ensureBash(context, executor)
                 command = if (healed is OnDemandBash.Outcome.Available) wrapForBash(bashScript!!) else bashScript!!
                 result = ExecutionCoordinator.execute(
-                    sessionId = dispatchSessionId, command = command, timeout = timeoutSec * 1000L, fsSessionId = fsSessionId)
+                    sessionId = dispatchSessionId, command = command, timeout = timeoutSec * 1000L, fsSessionId = fsSessionId, chatSessionId = activeSessionId)
             }
 
             // Also scrub markers from the aggregated one-shot output and

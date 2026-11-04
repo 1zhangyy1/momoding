@@ -1,0 +1,108 @@
+package app.momoding.task
+
+import android.content.Context
+import com.openminis.app.logging.AppLogger
+import com.openminis.app.sandbox.ExecutionCoordinator
+import com.openminis.app.tools.ToolExecutionResult
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import org.json.JSONObject
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
+
+/** A shell keeps its existing process; after ten seconds its task owns the wait and result.
+ * Only cancellation handles live here. Task state and completion receipts live in Room. */
+object ShellWork {
+    const val FOREGROUND_MS = 10_000L
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val runs = ConcurrentHashMap<String, Deferred<ToolExecutionResult>>()
+
+    data class Command(val id: String, val process: String, val text: String) {
+        fun json(): String = JSONObject().put("id", id).put("process", process).put("text", text).toString()
+        companion object {
+            fun parse(text: String): Command? = runCatching {
+                val row = JSONObject(text)
+                Command(row.getString("id"), row.getString("process"), row.getString("text"))
+            }.getOrNull()
+        }
+    }
+
+    internal fun pending(log: List<TaskLogEntity>): List<Command> {
+        val finished = log.filter { it.kind == TaskLogEntity.Kind.COMMAND_RESULT.name }.map { runCatching { JSONObject(it.body).getString("id") }.getOrDefault(it.body) }.toSet()
+        return log.filter { it.kind == TaskLogEntity.Kind.COMMAND.name }.mapNotNull { Command.parse(it.body) }
+            .filter { it.id !in finished }
+    }
+
+    suspend fun run(context: Context, chat: String, taskAtStart: String?, title: String, text: String,
+        execute: suspend (process: String, foreground: () -> Boolean) -> ToolExecutionResult,
+    ): ToolExecutionResult {
+        val id = java.util.UUID.randomUUID().toString()
+        val command = Command(id, "$chat~command~$id", text)
+        val foreground = AtomicBoolean(true)
+        val budgetExpired = AtomicBoolean(false)
+        val remaining = if (taskAtStart != null && Helpers.isHelper(context, chat)) {
+            app.momoding.prompt.MomodingHelper.MAX_MINUTES * 60_000L +
+                com.openminis.app.agent.jobs.HelperRunner.WRAP_UP_GRACE_MS - TaskEngine.elapsed(context, taskAtStart)
+        } else null
+        val execution = scope.async(start = CoroutineStart.LAZY) {
+            if (remaining == null) execute(command.process, foreground::get)
+            else (if (remaining <= 0) null else withTimeoutOrNull(remaining) { execute(command.process, foreground::get) }) ?: run {
+                budgetExpired.set(true)
+                ExecutionCoordinator.stopCurrentCommand(command.process)
+                ToolExecutionResult("The helper's time budget was exhausted while its command was running.", false, timedOut = true)
+            }
+        }
+        runs[command.process] = execution
+        execution.invokeOnCompletion { runs.remove(command.process, execution) }
+        execution.start()
+        var handedOn = false
+        try {
+            withTimeoutOrNull(FOREGROUND_MS) { execution.await() }?.let { return it }
+            foreground.set(false)
+            return withContext(NonCancellable) {
+                val task = TaskEngine.commandStarted(context, chat, taskAtStart, title, command)
+                com.openminis.app.service.SessionActivityTracker.keepBackgroundWork(command.process, chat) {
+                    scope.launch { stop(command.process) }
+                }
+                scope.launch {
+                    val result = runCatching { execution.await() }.getOrElse {
+                        ToolExecutionResult("The command was interrupted: ${it.message}", false)
+                    }
+                    try {
+                        runCatching { TaskEngine.commandFinished(context, task.id, command, result, budgetExpired.get()) }
+                            .onFailure { AppLogger.warning("ShellWork", "completion ${task.id}: ${it.message}") }
+                    } finally {
+                        com.openminis.app.service.SessionActivityTracker.finishBackgroundWork(command.process)
+                        ExecutionCoordinator.sessionDidTerminate(command.process)
+                    }
+                }
+                handedOn = true
+                ToolExecutionResult(
+                    "The command is still running for task ${task.id}. Its result will arrive here automatically. " +
+                        "Do not run it again or wait/poll for it; you can answer other messages meanwhile.",
+                    true, toolTitle = title,
+                )
+            }
+        } finally {
+            foreground.set(false)
+            if (!handedOn && !execution.isCompleted) withContext(NonCancellable) { stop(command.process) }
+            if (!handedOn) ExecutionCoordinator.sessionDidTerminate(command.process)
+        }
+    }
+
+    suspend fun stop(process: String) {
+        val execution = runs[process]
+        execution?.cancel()
+        ExecutionCoordinator.stopCurrentCommand(process)
+        execution?.join()
+        ExecutionCoordinator.sessionDidTerminate(process)
+    }
+}

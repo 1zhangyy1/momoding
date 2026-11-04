@@ -26,10 +26,11 @@ object Helpers {
     const val SLOTS = 3
 
     /** Ask for the deliverable at the budget, then cancel only after the existing grace period. */
-    internal fun watchBudget(scope: CoroutineScope, wrapUp: () -> Unit, expire: () -> Unit) = scope.launch {
-        delay(MomodingHelper.MAX_MINUTES * 60_000L)
+    internal fun watchBudget(scope: CoroutineScope, wrapUp: () -> Unit, expire: () -> Unit, elapsedMs: Long = 0) = scope.launch {
+        val workLeft = (MomodingHelper.MAX_MINUTES * 60_000L - elapsedMs).coerceAtLeast(0)
+        delay(workLeft)
         wrapUp()
-        delay(HelperRunner.WRAP_UP_GRACE_MS)
+        delay((MomodingHelper.MAX_MINUTES * 60_000L + HelperRunner.WRAP_UP_GRACE_MS - elapsedMs - workLeft).coerceAtLeast(0))
         expire()
     }
 

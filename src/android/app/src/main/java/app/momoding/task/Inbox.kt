@@ -92,6 +92,7 @@ object Inbox {
     suspend fun wake(context: Context, to: String) = withContext(Dispatchers.Main) {
         if (Helpers.isHelper(context, to)) {
             val task = TaskEngine.dao(context).heldBy(to) ?: return@withContext
+            if (task.state == TaskEntity.State.WAITING.name && task.ask?.let { runCatching { JSONObject(it).optString("kind") }.getOrNull() } == "command_outcome_unknown") return@withContext
             Helpers.ready(context, to, task)
         }
         HeadlessChatRunner.viewModelFor(context, to).receiveInbox()

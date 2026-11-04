@@ -67,6 +67,7 @@ object ExecutionCoordinator {
         timeout: Long,
         lineCallback: ((String) -> Unit)?,
         fsSessionId: String?,
+        chatSessionId: String,
     ): CommandResult {
         val startTime = System.currentTimeMillis()
         val bindMounts = buildSessionBindMounts(fsSessionId ?: sessionId)
@@ -78,6 +79,7 @@ object ExecutionCoordinator {
                 sessionId = sessionId,
                 sessionBindMounts = bindMounts,
                 useNoSeccomp = noSeccomp,
+                chatSessionId = chatSessionId,
             )
             // [T-android-shell-fresh-process] Step 5. Register before running so
             // stopCurrentCommand() can reach this command. A fresh shell is owned
@@ -226,6 +228,8 @@ object ExecutionCoordinator {
          *  binds (a helper's PARENT). The shell process itself stays keyed by
          *  [sessionId], so stop / cleanup never reach the parent's shell. */
         fsSessionId: String? = null,
+        /** An independently stoppable command still acts for its original chat. */
+        chatSessionId: String = sessionId,
     ): CommandResult {
         // [T-android-concurrent-shell] Pick a FREE shell from this session's
         // pool instead of queueing behind its one shell.
@@ -286,6 +290,7 @@ object ExecutionCoordinator {
         // [mountedSessionIdFor].
         if (fsSessionId != null && fsSessionId != sessionId) {
             mountedSessionIds[sessionId] = fsSessionId
+            mountedSessionIds[chatSessionId] = fsSessionId
         }
 
         // [T-android-shell-fresh-process] Step 3: route through the strategy.
@@ -304,9 +309,9 @@ object ExecutionCoordinator {
             isStartFailure = ::isStartFailure,
         ) {
             if (executionStrategy == ShellExecutionStrategy.FRESH_PROCESS) {
-                executeFresh(sessionId, command, timeout, lineCallback, fsSessionId)
+                executeFresh(sessionId, command, timeout, lineCallback, fsSessionId, chatSessionId)
             } else {
-                executeWarm(sessionId, command, timeout, lineCallback, fsSessionId)
+                executeWarm(sessionId, command, timeout, lineCallback, fsSessionId, chatSessionId)
             }
         }
         return when (outcome) {
@@ -352,8 +357,9 @@ object ExecutionCoordinator {
         timeout: Long,
         lineCallback: ((String) -> Unit)?,
         fsSessionId: String?,
+        chatSessionId: String,
     ): CommandResult {
-        val lease = acquireShellLease(sessionId, fsSessionId ?: sessionId)
+        val lease = acquireShellLease(sessionId, fsSessionId ?: sessionId, chatSessionId)
 
         return try {
             val startTime = System.currentTimeMillis()
@@ -448,7 +454,7 @@ object ExecutionCoordinator {
      * Falls back to slot 0 when every slot is busy and the pool is full, so a
      * 5th concurrent command queues instead of failing.
      */
-    private suspend fun acquireShellLease(sessionId: String, fsSessionId: String): ShellLease {
+    private suspend fun acquireShellLease(sessionId: String, fsSessionId: String, chatSessionId: String): ShellLease {
         // Claim a slot ATOMICALLY, before doing anything slow.
         //
         // The first cut here scanned for a slot whose Mutex was not `isLocked`
@@ -471,7 +477,7 @@ object ExecutionCoordinator {
             // still holding the claim so no one else spawns into it too.
             val existing = shells[key]
             val shell = if (existing != null && existing.isAlive) existing
-            else getOrCreateShell(key, fsSessionId, chatSessionId = sessionId)
+            else getOrCreateShell(key, fsSessionId, chatSessionId = chatSessionId)
             return ShellLease(key, shell, mutex)
         }
         // Pool exhausted: every slot is genuinely busy. Wait for slot 0 — the
@@ -481,7 +487,7 @@ object ExecutionCoordinator {
         mutex.lock()
         val existing = shells[key]
         val shell = if (existing != null && existing.isAlive) existing
-        else getOrCreateShell(key, fsSessionId, chatSessionId = sessionId)
+        else getOrCreateShell(key, fsSessionId, chatSessionId = chatSessionId)
         return ShellLease(key, shell, mutex)
     }
 

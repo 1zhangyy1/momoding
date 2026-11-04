@@ -35,4 +35,29 @@ class HelperBudgetTest {
         runCurrent()
         assertEquals(emptyList<String>(), events)
     }
+
+    @Test fun `resuming after a command uses the remaining task budget`() = runTest {
+        val events = mutableListOf<String>()
+        val remaining = 20_000L
+        Helpers.watchBudget(this, { events += "wrap up" }, { events += "expired" },
+            elapsedMs = MomodingHelper.MAX_MINUTES * 60_000L - remaining)
+        advanceTimeBy(remaining)
+        runCurrent()
+        assertEquals(listOf("wrap up"), events)
+        advanceTimeBy(HelperRunner.WRAP_UP_GRACE_MS)
+        runCurrent()
+        assertEquals(listOf("wrap up", "expired"), events)
+    }
+
+    @Test fun `resuming during grace does not grant a fresh grace period`() = runTest {
+        val events = mutableListOf<String>()
+        val remaining = 500L
+        Helpers.watchBudget(this, { events += "wrap up" }, { events += "expired" },
+            elapsedMs = MomodingHelper.MAX_MINUTES * 60_000L + HelperRunner.WRAP_UP_GRACE_MS - remaining)
+        runCurrent()
+        assertEquals(listOf("wrap up"), events)
+        advanceTimeBy(remaining)
+        runCurrent()
+        assertEquals(listOf("wrap up", "expired"), events)
+    }
 }

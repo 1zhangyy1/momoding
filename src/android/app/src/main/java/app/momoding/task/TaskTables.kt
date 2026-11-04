@@ -99,7 +99,7 @@ data class TaskLogEntity(
     val kind: String,
     val body: String,
 ) {
-    enum class Kind { AUTHORIZED, PASSED_ON, ROUTINE, ROUTINE_RECORDED, ABOUT_TO, RESULT, REPORT, END }
+    enum class Kind { AUTHORIZED, PASSED_ON, STARTED, ROUTINE, ROUTINE_RECORDED, COMMAND, COMMAND_RESULT, ABOUT_TO, RESULT, REPORT, END }
 }
 
 @Dao
@@ -200,6 +200,12 @@ interface TaskDao {
     /** The task [hand] is on: one at a time, so its session is enough to find it. */
     @Query("SELECT * FROM task WHERE hand = :hand AND state IN ('RUNNING', 'WAITING') LIMIT 1")
     suspend fun heldBy(hand: String): TaskEntity?
+
+    @Query("SELECT * FROM task WHERE hand = :hand AND state IN ('RUNNING', 'WAITING') ORDER BY created_at")
+    suspend fun onHand(hand: String): List<TaskEntity>
+
+    @Query("SELECT * FROM task WHERE state != 'ENDED' AND id IN (SELECT task_id FROM task_log WHERE kind = 'COMMAND')")
+    suspend fun commandTasks(): List<TaskEntity>
 
     @Query("SELECT * FROM task WHERE hand = :hand AND state = 'QUEUED' ORDER BY created_at LIMIT 1")
     suspend fun nextFor(hand: String): TaskEntity?

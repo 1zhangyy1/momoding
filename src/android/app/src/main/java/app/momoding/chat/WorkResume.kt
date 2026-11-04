@@ -74,6 +74,10 @@ object WorkResume {
     private suspend fun resume(context: Context, sid: String, attempt: Int) {
         val repo = (context as MinisApp).chatRepository
         if (repo.getSession(sid) == null) return
+        val held = TaskEngine.dao(context).heldBy(sid)
+        // A detached command is not a model loop to replay, and an unanswered ask stays an ask.
+        if (held != null && (held.state == app.momoding.task.TaskEntity.State.WAITING.name ||
+                app.momoding.task.ShellWork.pending(TaskEngine.dao(context).log(held.id)).isNotEmpty())) return
         // a helper comes back as one, and only while its task is on
         if (Helpers.isHelper(context, sid)) Helpers.ready(context, sid, TaskEngine.dao(context).heldBy(sid) ?: return)
         pendingTries[sid] = attempt

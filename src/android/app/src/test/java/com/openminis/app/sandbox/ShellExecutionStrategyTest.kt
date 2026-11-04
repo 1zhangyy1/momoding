@@ -220,7 +220,7 @@ class ShellExecutionStrategyTest {
     fun `the fresh path reuses the same bind mounts and env source`() {
         val body = coordSrc.substringAfter("private suspend fun executeFresh").substringBefore("\n    }")
         assertTrue("same mounts", body.contains("buildSessionBindMounts("))
-        assertTrue("same env repository", body.contains("envVarRepository?.allAsDict()"))
+        assertTrue("same env repository", body.contains("envVarRepository?.sandboxDict()"))
         assertTrue("same sanitising", body.contains("TerminalSanitizer.sanitize("))
         assertTrue("same truncation", body.contains("TerminalSanitizer.truncateIfNeeded("))
     }

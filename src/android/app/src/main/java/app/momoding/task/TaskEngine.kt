@@ -49,6 +49,7 @@ object TaskEngine {
             _parentsWithWork.value = it.map { task -> task.conversation }.toSet()
         } }
         scope.launch {
+            recoverCommands(app)
             kotlinx.coroutines.delay(3000)
             dao(app).queuedHands().forEach { hand -> handIdle(app, hand) }
         }
@@ -72,6 +73,7 @@ object TaskEngine {
             dao.insertTask(task)
             source?.content?.let { log(dao, task.id, TaskLogEntity.Kind.AUTHORIZED, it) }
             log(dao, task.id, TaskLogEntity.Kind.PASSED_ON, brief)
+            if (!busy) log(dao, task.id, TaskLogEntity.Kind.STARTED, "started")
             routine?.let { log(dao, task.id, TaskLogEntity.Kind.ROUTINE, it.json()) }
             // Each helper has its own chat: its queued payload can safely be stored now.
             // A busy Bot must not see another task's instructions until that task starts.
@@ -103,6 +105,7 @@ object TaskEngine {
         dao.updateTask(next)
         if (helper || state == TaskEntity.State.RUNNING) postForHand(context, dao, next, text)
         if (state == TaskEntity.State.RUNNING) {
+            if (task.state == TaskEntity.State.ENDED.name || task.state == TaskEntity.State.WAITING.name) log(dao, id, TaskLogEntity.Kind.STARTED, "resumed")
             if (task.state == TaskEntity.State.ENDED.name) dao.retryTaskInbox(task.id, task.hand)
             after += { deliver(context, next) }
         }
@@ -117,6 +120,9 @@ object TaskEngine {
 
     private suspend fun reportIn(context: Context, dao: TaskDao, after: MutableList<suspend () -> Unit>, hand: String, kind: Report, text: String, helper: Boolean): TaskEntity {
         val task = dao.heldBy(hand) ?: throw IllegalStateException("you are on no task: just answer in your chat")
+        if (kind == Report.DONE && ShellWork.pending(dao.log(task.id)).isNotEmpty()) {
+            throw IllegalStateException("A command for this task is still running. Its result will arrive automatically; do not report done yet.")
+        }
         if (kind == Report.DONE && dao.unread(hand).isNotEmpty()) {
             throw IllegalStateException("There are unread instructions for this hand. Read them at the next step before reporting done.")
         }
@@ -159,11 +165,12 @@ object TaskEngine {
         val (open, ended) = db.withTransaction { dao(context).openIn(conversation) to dao(context).endedIn(conversation) }
         if (open.isEmpty() && ended.isEmpty()) return null
         return buildString {
-            append("## Tasks\nWork handed on from this chat. A message starting $REPORT_CUE<id> · <hand> · done|ask|failed|stopped] is that task's report, not the person: ")
+            append("## Tasks\nWork tracked in this chat. A message starting $REPORT_CUE<id> · <hand> · done|ask|failed|stopped] is that task's report, not the person: ")
             append("tell the person what came of it in your own words, in a line or two (with a link to open a Momoding's app when there is something to see); for an ask, ask the person. ")
+            append("A command_result is a background tool result for the current task: use it to continue before reporting the task done. ")
             append("Their answer, or anything more they want of a task, goes to its hand with `momoding-task tell <id> \"<their words>\"`.\n")
             (open + ended).forEach { t ->
-                append("- ").append(t.id).append(" · ").append(handName(context, t.hand)).append(" · ").append(t.title).append(" · ")
+                append("- ").append(t.id).append(" · ").append(if (t.hand == t.conversation) "this chat" else handName(context, t.hand)).append(" · ").append(t.title).append(" · ")
                 append(t.outcome?.lowercase() ?: t.state.lowercase())
                 t.progress?.takeIf { t.state == TaskEntity.State.RUNNING.name }?.let { append(" (").append(it).append(")") }
                 t.ask?.let { runCatching { JSONObject(it).optString("question") }.getOrNull() }?.let { append(" — asks: ").append(it) }
@@ -182,6 +189,7 @@ object TaskEngine {
         val tasks = dao.relatedTo(ids)
         val unfinished = tasks.filter { it.state != TaskEntity.State.ENDED.name }
         for (task in unfinished) {
+            ShellWork.pending(dao.log(task.id)).forEach { command -> after += { ShellWork.stop(command.process) } }
             val words = "Stopped because the conversation or its hand was deleted."
             dao.updateTask(task.copy(state = TaskEntity.State.ENDED.name, outcome = TaskEntity.Outcome.STOPPED.name,
                 ask = null, updatedAt = System.currentTimeMillis()))
@@ -195,6 +203,81 @@ object TaskEngine {
         // The FK cascades remove messages, inbox and tasks owned by these sessions.
         for (id in ids) app.database.chatDao().deleteSession(id)
         DeletedSessions(ids, tasks, unfinished.size)
+    }
+
+    /** A local command does not turn an unrelated new message into that command's model turn. */
+    suspend fun modelTask(context: Context, hand: String): TaskEntity? =
+        (context.applicationContext as MinisApp).database.withTransaction {
+            val dao = dao(context)
+            dao.onHand(hand).firstOrNull { task ->
+                task.conversation != hand || (task.ask == null && ShellWork.pending(dao.log(task.id)).isEmpty())
+            }
+        }
+
+    internal suspend fun elapsed(context: Context, id: String): Long {
+        val dao = dao(context)
+        val at = dao.log(id).lastOrNull { it.kind == TaskLogEntity.Kind.STARTED.name }?.at ?: dao.task(id)?.createdAt
+        return at?.let { (System.currentTimeMillis() - it).coerceAtLeast(0) } ?: 0
+    }
+
+    internal suspend fun commandStarted(context: Context, chat: String, taskAtStart: String?, title: String,
+        command: ShellWork.Command,
+    ): TaskEntity = change(context) { dao, _ ->
+        val existing = taskAtStart?.let { id ->
+            dao.task(id)?.also { check(it.state != TaskEntity.State.ENDED.name) { "the task ended before the command was handed on" } }
+                ?: error("the task was deleted")
+        }
+        val source = ChatViewModelStore.existing(chat)?.messages?.value?.lastOrNull { it.rendersAsUserBubble() && !it.unread }
+        val now = System.currentTimeMillis()
+        val task = existing ?: TaskEntity(newId(), chat, source?.id, title, chat, TaskEntity.State.RUNNING.name,
+            createdAt = now, updatedAt = now).also {
+            dao.insertTask(it)
+            source?.content?.let { words -> log(dao, it.id, TaskLogEntity.Kind.AUTHORIZED, words) }
+            log(dao, it.id, TaskLogEntity.Kind.PASSED_ON, command.text)
+        }
+        log(dao, task.id, TaskLogEntity.Kind.COMMAND, command.json())
+        task
+    }
+
+    internal suspend fun commandFinished(context: Context, id: String, command: ShellWork.Command,
+        result: com.openminis.app.tools.ToolExecutionResult, budgetExpired: Boolean = false,
+    ) = change(context) { dao, after ->
+        val task = dao.task(id) ?: return@change
+        if (task.state == TaskEntity.State.ENDED.name || ShellWork.pending(dao.log(id)).none { it.id == command.id }) return@change
+        log(dao, id, TaskLogEntity.Kind.COMMAND_RESULT, JSONObject().put("id", command.id).put("success", result.success).put("output", result.output).toString())
+        if (budgetExpired) {
+            reportIn(context, dao, after, task.hand, Report.FAILED, result.output, helper = true)
+            after += { Helpers.ended(context, task.hand, task.conversation) }
+            after += { handIdle(context, task.hand) }
+            return@change
+        }
+        val ownCommand = task.conversation == task.hand
+        val kind = if (result.success) "done" else "failed"
+        if (ownCommand && ShellWork.pending(dao.log(id)).isEmpty()) {
+            dao.updateTask(task.copy(state = TaskEntity.State.ENDED.name,
+                outcome = (if (result.success) TaskEntity.Outcome.DONE else TaskEntity.Outcome.FAILED).name,
+                updatedAt = System.currentTimeMillis()))
+            log(dao, id, TaskLogEntity.Kind.END, result.output)
+        }
+        val words = "$REPORT_CUE$id · command · ${if (ownCommand) kind else "command_result"}] ${result.output}"
+        Inbox.post(dao, task.hand, words, id, sender = InboxEntity.Sender.COMMAND)
+        after += { tellChat(context, task.hand) }
+    }
+
+    /** A killed process cannot prove a command's effect. Keep it waiting for verification. */
+    private suspend fun recoverCommands(context: Context) = change(context) { dao, after ->
+        for (task in dao.commandTasks()) {
+            val commands = ShellWork.pending(dao.log(task.id))
+            if (commands.isEmpty()) continue
+            val words = "The app restarted while a command was running; its outcome is unknown. Verify what happened before running it again."
+            commands.forEach { log(dao, task.id, TaskLogEntity.Kind.COMMAND_RESULT, JSONObject().put("id", it.id).put("unknown", true).toString()) }
+            dao.updateTask(task.copy(state = TaskEntity.State.WAITING.name,
+                ask = JSONObject().put("question", words).put("kind", "command_outcome_unknown").toString(),
+                updatedAt = System.currentTimeMillis()))
+            log(dao, task.id, TaskLogEntity.Kind.REPORT, words)
+            Inbox.post(dao, task.conversation, "$REPORT_CUE${task.id} · command · ask] $words", task.id)
+            after += { tellChat(context, task.conversation) }
+        }
     }
 
     /** A routine's history/notification consumer acknowledged this persisted completion. */
@@ -216,7 +299,7 @@ object TaskEngine {
         val helper = Helpers.isHelper(context, hand)
         change(context) { dao, after ->
             val current = taskId?.let { dao.task(it) }
-            if (current?.hand == hand && current.state == TaskEntity.State.RUNNING.name && !hasFollowUp) {
+            if (current?.hand == hand && current.state == TaskEntity.State.RUNNING.name && !hasFollowUp && ShellWork.pending(dao.log(current.id)).isEmpty()) {
                 reportIn(context, dao, after, hand, if (completion.done) Report.DONE else Report.FAILED, completion.words, helper)
             }
             if (helper && current != null && dao.task(current.id)?.state == TaskEntity.State.ENDED.name) {
@@ -255,6 +338,7 @@ object TaskEngine {
     private suspend fun start(dao: TaskDao, task: TaskEntity, after: MutableList<suspend () -> Unit>, context: Context) {
         val next = task.copy(state = TaskEntity.State.RUNNING.name, updatedAt = System.currentTimeMillis())
         dao.updateTask(next)
+        log(dao, task.id, TaskLogEntity.Kind.STARTED, "started")
         val brief = dao.log(task.id).filter { it.kind == TaskLogEntity.Kind.PASSED_ON.name }.joinToString("\n\n") { it.body }
         dao.retryTaskInbox(task.id, task.hand)
         if (dao.unread(task.hand).none { it.taskId == task.id }) postForHand(context, dao, next, brief)

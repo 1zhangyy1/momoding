@@ -55,14 +55,14 @@ object AgentTools {
         description = "Execute a command in an isolated Linux process (Alpine Linux via PRoot). " +
             "The command runs via /bin/sh -c with stdout and stderr merged. " +
             "Each invocation spawns a fresh process — there is no shared terminal session. " +
-            "Default timeout is 15 minutes.",
+            "The execution budget defaults to 15 minutes. After 10 seconds the command continues as a task and its result arrives automatically; do not repeat or poll it.",
         parameters = mapOf(
             "tool_title" to AgentToolParam("string", "A concise 5-10 word summary of what this tool call does, shown to the user (e.g. 'Install Python data analysis packages', 'List files in home directory'). Use the same language as the user."),
             "command" to AgentToolParam("string", "The shell command to execute. Supports multi-line commands directly — no special escaping needed. Keep under 1000 chars; for longer scripts, write to a file with file_write first, then run it."),
             // [T-android-parity-fixes] State the ceiling. It used to say only "use
             // a larger value" while values above 900 were silently cut to 900.
-            "timeout" to AgentToolParam("integer", "Timeout in seconds (default: 900, maximum: 3600 — larger values are capped at 3600). Use a larger value for long-running commands like package installs."),
-            "delay" to AgentToolParam("integer", "Delay in seconds before execution begins. The tool blocks the agent flow during this wait WITHOUT occupying the shell, so other concurrent tasks can use it. Use this instead of sleep commands to avoid resource contention."),
+            "timeout" to AgentToolParam("integer", "Execution budget in seconds (default: 900, maximum: 3600). The call waits at most 10 seconds; a longer command keeps running as a task and delivers its result automatically. Do not repeat or poll it."),
+            "delay" to AgentToolParam("integer", "Delay in seconds before execution begins, without occupying a shell. This wait shares the 10-second foreground window; a longer wait continues in the background."),
         ),
         required = listOf("tool_title", "command"),
         propertyOrdering = listOf("tool_title", "command", "timeout", "delay"),

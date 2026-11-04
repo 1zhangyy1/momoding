@@ -386,7 +386,7 @@ class AgentForegroundService : Service() {
         println(
             "[T-STALL-DIAG] FGS onTaskRemoved pid=${android.os.Process.myPid()} " +
                 "activeSessions=${activeAtRemoval.size}[${activeAtRemoval.joinToString(",")}] " +
-                "decision=${if (activeAtRemoval.isEmpty()) "stopSelf" else "KEEP-ALIVE"} " +
+                "decision=${if (activeAtRemoval.isEmpty() && !SessionActivityTracker.hasBackgroundWork()) "stopSelf" else "KEEP-ALIVE"} " +
                 "slots=${SessionConcurrencyManager.diagSnapshot()}",
         )
         // T166: swiping from recents kills the Activity but the FG
@@ -395,7 +395,7 @@ class AgentForegroundService : Service() {
         // longer a reason to keep alive — they explicitly dismissed
         // the app, so clear presence here and re-evaluate.
         SessionActivityTracker.clearPresence()
-        if (SessionActivityTracker.activeSessions.value.isEmpty()) {
+        if (SessionActivityTracker.activeSessions.value.isEmpty() && !SessionActivityTracker.hasBackgroundWork()) {
             Log.d(TAG, "onTaskRemoved with no active sessions, stopping self")
             stopSelf()
             return
@@ -901,7 +901,7 @@ class AgentForegroundService : Service() {
                 delay(CHIP_TICK_MS)
                 if (!isPromotedChipActive()) break
                 val finished = SessionActivityTracker.lastTaskFinishedAtMs.value != null &&
-                    SessionActivityTracker.activeSessions.value.isEmpty()
+                    SessionActivityTracker.activeSessions.value.isEmpty() && !SessionActivityTracker.hasBackgroundWork()
                 if (finished) break
                 if (!SessionActivityTracker.shouldRunServiceNow()) break
                 refreshOngoingNotification()
@@ -1064,7 +1064,7 @@ class AgentForegroundService : Service() {
         // uptime forever — the reported bug was a completed task whose dynamic
         // island kept ticking as though it were still running.
         val finishedAtMs = SessionActivityTracker.lastTaskFinishedAtMs.value
-        val isCompleted = finishedAtMs != null && SessionActivityTracker.activeSessions.value.isEmpty()
+        val isCompleted = finishedAtMs != null && SessionActivityTracker.activeSessions.value.isEmpty() && !SessionActivityTracker.hasBackgroundWork()
         val endMs = if (isCompleted) finishedAtMs!! else SystemClock.elapsedRealtime()
         // Anchor to the current run's start, not the service's. The service is
         // created once per presence window and outlives individual tasks, so
@@ -1127,7 +1127,7 @@ class AgentForegroundService : Service() {
         val toolName = SessionActivityTracker.currentToolName.value
         val toolTitle = SessionActivityTracker.currentToolTitle.value
         val isToolRunning = SessionActivityTracker.isToolRunning.value
-        val hasActiveSessions = SessionActivityTracker.activeSessions.value.isNotEmpty()
+        val hasActiveSessions = SessionActivityTracker.activeSessions.value.isNotEmpty() || SessionActivityTracker.hasBackgroundWork()
 
         // [T-android-live-update-content] One phase drives icon, title and
         // text, resolved by the same pure function the unit tests cover.
