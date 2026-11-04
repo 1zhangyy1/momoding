@@ -92,7 +92,7 @@ sealed class ScheduledTargetMode {
     /**
      * [T-p2-agent-series] ≈ iOS `minis-scheduled --target child-of-current`:
      * run the prompt as an AGENT in a hidden child session of [sessionId],
-     * and post the result back into that chat as an <agent_callback>
+     * with a persisted task whose report returns to that chat through its inbox
      * message (rendered as a callback card — there is no delegate block).
      */
     data class ChildOfCurrent(val sessionId: String) : ScheduledTargetMode()

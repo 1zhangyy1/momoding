@@ -20,36 +20,8 @@ class ScheduledPrefillWiringTest {
 
     private val vm by lazy { ProductionSources.read("ui/chat/ChatViewModel.kt") }
 
-    @Test
-    fun `the runner stamps the envelope and passes the prefill to every prompting target`() {
-        val src = ProductionSources.read("scheduled/ScheduledAgentRunner.kt")
-        assertTrue(src.contains("prefilledTool = prefill.firstOrNull()?.toolName,"))
-        // NewSession / AppendToSession and ChildOfCurrent both prompt; rerun does not.
-        assertEquals(2, Regex("""prefill = prefill,""").findAll(src).count())
-    }
-
-    @Test
-    fun `the headless runner forwards the prefill into the send funnel`() {
-        val src = ProductionSources.read("debug/HeadlessChatRunner.kt")
-        assertTrue(src.contains("val outcome = vm.submitPrompt(text, prefill, origin)"))
-    }
-
-    @Test
-    fun `every way a prompt can reach the loop keeps its prefill`() {
-        // Idle session: straight into the loop it starts.
-        assertTrue(vm.contains("sendMessage(text, skipContextCheck = false, headless = true, prefill = prefill, origin = origin)"))
-        // Busy session: rides the queue.
-        assertTrue(vm.contains("QueuedPromptOrigin.USER, prefill)") || vm.contains("else QueuedPromptOrigin.USER, prefill)"))
-        assertTrue(vm.contains("prefill = queued.flatMap { it.prefill },"))
-        // Mid-loop injection re-arms the one-shot for the next turn.
-        assertTrue(vm.contains("return InjectedTurn(newAssistantId, queued.flatMap { it.prefill })"))
-        assertTrue(vm.contains("scriptedTurnFor(handled.prefill)?.let { pendingScriptedTurn = it }"))
-        // Auto-compact before send parks it with the text and sends it after.
-        assertTrue(vm.contains("pendingSendPrefill = prefill"))
-        // f8cb6f989 threads `headless` through the same two calls; what this
-        // pins is that the prefill still rides along.
-        assertEquals(2, Regex("""sendMessage\(text, skipContextCheck = true, (headless = headless, )?prefill = prefill\)""").findAll(vm).count())
-    }
+    // Reception, queued helper prefill and delivery are exercised through real Room and
+    // the Android routine probe. The removed source-text checks pinned the old memory queue.
 
     @Test
     fun `the first turn streams the scripted calls in place of the provider request`() {

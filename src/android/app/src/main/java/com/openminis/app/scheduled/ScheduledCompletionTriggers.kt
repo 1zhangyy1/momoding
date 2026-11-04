@@ -1,32 +1,17 @@
 package com.openminis.app.scheduled
 
 import android.content.Context
-import com.openminis.app.agent.jobs.AgentJobRegistry
+import app.momoding.task.TaskLogEntity
+import app.momoding.task.TaskEngine
 import com.openminis.app.logging.AppLogger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.combine
 import java.util.concurrent.atomic.AtomicBoolean
 
-/**
- * [T-android-scheduled-triggers] Fires [ScheduledTriggerKind.ON_COMPLETION]
- * tasks. Port of iOS ScheduledJobRunner's `.onCompletion` arm, which waits for
- * `agentJobDidFinish` naming the upstream job and then fires once with
- * `{{result}}` replaced.
- *
- * Two kinds of upstream finish here:
- *  - another scheduled task's SCHEDULE ends: [ScheduledAgentRunner] calls
- *    [onScheduledRunFinished] after recording each scheduled run, and it
- *    releases the waiting tasks only after the last one;
- *  - an agent job (a background sub agent, `subagent_task` wait:false) closes
- *    in [AgentJobRegistry]: its `completions` flow, collected once per process
- *    by [ensureListening].
- *
- * Agent jobs live in memory, so a task waiting on one from a previous process
- * never fires; it stays listed as waiting until deleted. Scheduled tasks are
- * persisted, so waiting on one survives a restart.
- */
+/** Routine dependencies watch persisted task completion, including the initial snapshot after restart. */
 object ScheduledCompletionTriggers {
 
     private const val TAG = "ScheduledCompletion"
@@ -37,16 +22,23 @@ object ScheduledCompletionTriggers {
     private val listening = AtomicBoolean(false)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    /** Start collecting agent-job completions. Idempotent; cheap to call often. */
+    /** Observe task ends and routine definitions once the repositories are ready. */
     fun ensureListening(context: Context) {
-        if (!listening.compareAndSet(false, true)) return
-        val app = context.applicationContext
+        val app = context.applicationContext as? com.openminis.app.MinisApp ?: return
+        // Alarm rescheduling also runs before the chat database is initialized.
+        // MinisApp calls again once the repositories are ready.
+        if (!app.subsystemsReady() || !listening.compareAndSet(false, true)) return
         scope.launch {
-            AgentJobRegistry.completions.collect { c ->
-                val result = AgentJobRegistry.job(c.jobId)?.resultText
-                runCatching { onUpstreamFinished(app, c.jobId, result) }
-                    .onFailure { AppLogger.warning(TAG, "on-completion for job ${c.jobId.take(8)} failed: ${it.message}") }
-            }
+            combine(TaskEngine.dao(app).endedFlow(), ScheduledTaskStore(app).observe()) { ended, routines -> ended to routines }
+                .collect { (ended, routines) ->
+                    for (work in ended) runCatching {
+                        ScheduledAgentRunner.recordChildCompletion(app, work)
+                        if (dependents(routines, work.id).isNotEmpty()) {
+                            val text = TaskEngine.dao(app).log(work.id).lastOrNull { it.kind == TaskLogEntity.Kind.END.name }?.body
+                            onUpstreamFinished(app, work.id, text)
+                        }
+                    }.onFailure { AppLogger.warning(TAG, "completion ${work.id}: ${it.message}") }
+                }
         }
     }
 

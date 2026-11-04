@@ -4,6 +4,12 @@ import app.momoding.chat.FireIf
 import app.momoding.chat.NotifyDecision
 import app.momoding.chat.RoutineAttention
 import app.momoding.chat.RoutineWakes // momoding (a local `app` shadows the package root here)
+import app.momoding.apps.MoApps
+import app.momoding.task.Helpers
+import app.momoding.task.RoutineFire
+import app.momoding.task.TaskEngine
+import app.momoding.task.TaskEntity
+import app.momoding.task.TaskLogEntity
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -18,6 +24,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * [T-android-scheduled-tasks-design] Headless agent launch for scheduled
@@ -29,8 +39,8 @@ import kotlinx.coroutines.withContext
  *  - hand the result preview back to [ScheduledTaskManager] for the row
  *
  * Concurrency: serialised per-session by [HeadlessChatRunner]'s VM cache —
- * two scheduled prompts hitting the same session id are queued via
- * ChatViewModel.enqueuePrompt.
+ * receives for the same chat enter its persisted inbox in arrival order.
+ * Helpers additionally share TaskEngine's three slots.
  */
 object ScheduledAgentRunner {
 
@@ -43,6 +53,7 @@ object ScheduledAgentRunner {
      * agent loop + completion notification finish even after the user leaves.
      */
     private val bgScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val completionMutex = Mutex()
 
     /**
      * Fire a scheduled task.
@@ -150,7 +161,8 @@ object ScheduledAgentRunner {
         )
 
         if (waitForCompletion) {
-            val result = dispatch(app, task, sessionId, wait = true, firedAt = firedAt)
+            val result = dispatch(app, task, sessionId, wait = true, firedAt = firedAt, scheduledFire = scheduledFire)
+            if (task.targetMode is ScheduledTargetMode.ChildOfCurrent) return sessionId
             val ok = result.status != "Error" && result.status != "Timeout" && result.status != "Rejected"
             // momoding: the routine's reply says whether it is worth a notification (NotifyDecision)
             val decision = NotifyDecision.decide(result.responseText, failed = !ok)
@@ -171,7 +183,8 @@ object ScheduledAgentRunner {
         // "task started" without blocking on the agent loop. Leaving the editor
         // can't cancel it because bgScope outlives the screen.
         bgScope.launch {
-            val result = dispatch(app, task, sessionId, wait = true, firedAt = firedAt)
+            val result = dispatch(app, task, sessionId, wait = true, firedAt = firedAt, scheduledFire = scheduledFire)
+            if (task.targetMode is ScheduledTargetMode.ChildOfCurrent) return@launch
             val ok = result.status != "Error" && result.status != "Timeout" && result.status != "Rejected"
             // momoding: the routine's reply says whether it is worth a notification (NotifyDecision)
             val decision = NotifyDecision.decide(result.responseText, failed = !ok)
@@ -202,6 +215,7 @@ object ScheduledAgentRunner {
         sessionId: String,
         wait: Boolean,
         firedAt: Long,
+        scheduledFire: Boolean,
     ): HeadlessChatRunner.PromptResult = runCatching {
         // [T-android-scheduled-task-card] Wrap the prompt so the transcript can
         // tell it apart from something the user typed. Without this the fired
@@ -229,21 +243,17 @@ object ScheduledAgentRunner {
 
         val mode = task.targetMode
         if (mode is ScheduledTargetMode.ChildOfCurrent) {
-            val r = HeadlessChatRunner.prompt(
-                context = app,
-                sessionId = sessionId,
-                text = marked,
-                attachments = emptyList(),
-                // [T-android-scheduled-task-thinking] Was hardcoded null, so a
-                // task could not run with any reasoning effort. null still means
-                // "inherit" inside HeadlessChatRunner.
-                thinkingLevel = task.thinkingLevel,
-                wait = wait,
-                timeoutMs = com.openminis.app.agent.jobs.HelperRunner.MAX_MINUTES * 60_000L,
-                prefill = prefill,
-            )
-            closeChildJob(app, sessionId, r)
-            r
+            val work = TaskEngine.open(app, mode.sessionId, task.label.ifBlank { task.prompt.take(40) }, sessionId,
+                marked, prefill = prefill, routine = RoutineFire(task.id, firedAt, scheduledFire))
+            if (!wait) HeadlessChatRunner.PromptResult(status = if (work.state == TaskEntity.State.QUEUED.name) "Queued" else "Running",
+                responseText = null, timedOut = false)
+            else {
+                val ended = TaskEngine.dao(app).taskFlow(work.id).filterNotNull().first { it.state == TaskEntity.State.ENDED.name }
+                recordChildCompletion(app, ended)
+                val words = TaskEngine.dao(app).log(work.id).lastOrNull { it.kind == TaskLogEntity.Kind.END.name }?.body
+                HeadlessChatRunner.PromptResult(status = if (ended.outcome == TaskEntity.Outcome.DONE.name) "Completed" else "Error",
+                    responseText = words, timedOut = false)
+            }
         } else if (mode is ScheduledTargetMode.RerunMessage) {
             HeadlessChatRunner.retry(
                 context = app,
@@ -369,95 +379,43 @@ object ScheduledAgentRunner {
         }
     }
 
-    // Mirrors ChatViewModel.restoreFromBinding's JSON shape. Robust against
-    // malformed JSON — both parsers return null and the caller fall-backs.
-    /**
-     * [T-p2-agent-series] Mirror of iOS ScheduledJobRunner's `.childOfCurrent`:
-     * a hidden agent child of [parentSid] on the parent's primary tier, with
-     * the helper config (turn cap, no memory, parent's browser tabs, shared
-     * workspace) and a registry job whose `then = FollowUpParent` posts the
-     * result back into the parent as an <agent_callback>. The prompt itself
-     * is dispatched by [dispatch] on the child session id; [closeChildJob]
-     * closes the job when that returns.
-     */
+    /** A routine's helper is an ordinary persisted task hand, with the same model and slots. */
     private suspend fun resolveChildOfCurrent(app: MinisApp, task: ScheduledTask, parentSid: String): String? {
-        // [T-tools-granular-switches] A child-of-current task IS a helper: a
-        // hidden session with helper config that reports back to the parent.
-        // The user who turned Agents off must not keep getting them from a
-        // scheduled task set up earlier. Checked at fire time, not at
-        // creation, so flipping the switch takes effect on the next run.
-        // Mirrors iOS ScheduledJobRunner's AgentToolSwitch.agents guard.
         if (!com.openminis.app.tools.AgentToolSwitch.AGENTS.isEnabled(app)) {
-            AppLogger.warning(TAG, "task ${task.id}: agents are turned off in settings — abort child-of-current")
+            AppLogger.warning(TAG, "task ${task.id}: agents are turned off — abort child-of-current")
             return null
         }
-        val parentRow = app.chatRepository.getSession(parentSid)
-        if (parentRow == null) {
-            AppLogger.warning(TAG, "task ${task.id}: parent session ${parentSid} gone — abort")
+        val parent = app.chatRepository.getSession(parentSid) ?: return null
+        if (parent.isChild || MoApps.ofSession(app, parentSid) != null) {
+            AppLogger.warning(TAG, "task ${task.id}: only the main chat can start helpers")
             return null
         }
-        val resolution = com.openminis.app.agent.jobs.ModelTierResolver.resolve(
-            tier = com.openminis.app.agent.jobs.HelperModelTier.PRIMARY, repo = app.providerRepository,
-            parentBindingJson = parentRow.modelBinding, parentModelId = parentRow.modelId, parentActiveEntryId = null,
-        ) ?: run {
-            AppLogger.warning(TAG, "task ${task.id}: parent has no model — abort")
-            return null
-        }
-        val title = task.label.ifBlank { task.prompt.take(40) }
-        val child = app.chatRepository.createSession(
-            modelId = resolution.seedModelId,
-            title = com.openminis.app.agent.jobs.HelperRunner.childSessionTitle(app, title),
-            memoryEnabled = false,
-            parentSessionId = parentSid,
-            parentToolUseId = null,
-        )
-        app.chatRepository.dao.updateSource(child.id, "scheduled")
-        resolution.bindingJson?.let { app.chatRepository.updateSessionBinding(child.id, it, resolution.seedModelId) }
-        val registry = com.openminis.app.agent.jobs.AgentJobRegistry
-        val job = registry.register(
-            title = title, label = task.label.ifBlank { null },
-            origin = com.openminis.app.agent.jobs.AgentJobOrigin.SCHEDULED,
-            trigger = com.openminis.app.agent.jobs.AgentJobTrigger.Immediate,
-            target = com.openminis.app.agent.jobs.AgentJobTarget.ChildOfCurrent(parentSid, null),
-            prompt = task.prompt, then = com.openminis.app.agent.jobs.AgentJobThen.FollowUpParent(null),
-        )
-        registry.setTierUsed(job.id, resolution.tierUsed.wire)
-        withContext(Dispatchers.Main) {
-            val parentVm = HeadlessChatRunner.viewModelFor(app, parentSid)
-            // [T-android-vm-store-dual-pool] The CHILD is tagged; `parentVm`
-            // above is a normal session and deliberately keeps the default.
-            HeadlessChatRunner.viewModelFor(
-                app, child.id, com.openminis.app.ui.chat.ChatViewModelStore.PoolKind.CHILD,
-            ).also {
-                it.helperConfig = com.openminis.app.agent.jobs.HelperConfig(
-                    parentSessionId = parentSid, parentToolUseId = "", jobId = job.id,
-                    maxTurns = com.openminis.app.agent.jobs.HelperRunner.MAX_TURNS, title = title, tierUsed = resolution.tierUsed,
-                )
-                it.adoptBrowserTabPool(parentVm.browserTabPool)
-                registry.markRunning(job.id, child.id) { if (it.isStreaming.value) it.cancelStream() }
-            }
-        }
-        AppLogger.info(TAG, "task ${task.id}: child ${child.id.take(8)} of ${parentSid.take(8)} job=${job.id.take(8)} tier=${resolution.tierUsed.wire}")
-        return child.id
+        val child = Helpers.create(app, parentSid, task.label.ifBlank { task.prompt.take(40) })
+        app.chatRepository.dao.updateSource(child, "scheduled")
+        task.thinkingLevel?.let { app.chatRepository.dao.updateThinkingOverride(child, it.name) }
+        return child
     }
 
-    /** Close a child-of-current job after its prompt returned; `then` posts the callback. */
-    private suspend fun closeChildJob(app: MinisApp, childId: String, result: HeadlessChatRunner.PromptResult) {
-        val registry = com.openminis.app.agent.jobs.AgentJobRegistry
-        val job = registry.jobForSession(childId)?.takeIf { it.isActive } ?: return
-        val hr = com.openminis.app.agent.jobs.HelperRunner
-        // [T-agent-port-round2] The headless wait gave up but the child may still
-        // be running: stop it, or it would keep working as an orphan after the
-        // job is closed (and the callback would report a stale partial).
-        if (result.timedOut) runCatching { HeadlessChatRunner.cancel(app, childId) }
-        val facts = hr.childRunFacts(app.chatRepository.dao.loadMessages(childId))
-        registry.setSummaryLine(job.id, hr.runSummaryLine(facts.toolNames, facts.turns, facts.input, facts.output, facts.cacheRead))
-        val state = when {
-            result.timedOut || result.status == "Timeout" -> com.openminis.app.agent.jobs.AgentJobState.TIMEOUT
-            result.status == "Error" || result.status == "Rejected" -> com.openminis.app.agent.jobs.AgentJobState.FAILED
-            else -> com.openminis.app.agent.jobs.AgentJobState.DONE
+    /** Replayed from the task log at startup too. The record and acknowledgement are idempotent. */
+    suspend fun recordChildCompletion(context: Context, work: TaskEntity) = completionMutex.withLock {
+        val logs = TaskEngine.dao(context).log(work.id)
+        if (logs.any { it.kind == TaskLogEntity.Kind.ROUTINE_RECORDED.name }) return@withLock
+        val fire = logs.firstOrNull { it.kind == TaskLogEntity.Kind.ROUTINE.name }?.body?.let(RoutineFire::parse)
+            ?: return@withLock
+        val manager = ScheduledTaskManager(context)
+        val routine = manager.get(fire.routineId)
+        if (routine != null) {
+            val text = logs.lastOrNull { it.kind == TaskLogEntity.Kind.END.name }?.body
+            val decision = NotifyDecision.decide(text, failed = work.outcome != TaskEntity.Outcome.DONE.name)
+            if (manager.markFired(routine.id, work.hand, decision.body, ok = work.outcome == TaskEntity.Outcome.DONE.name, firedAt = fire.firedAt)) {
+                if (decision.notify) postCompletionNotification(context, routine, work.conversation, decision.body)
+                if (fire.scheduled) RoutineAttention.afterScheduledFire(context, routine, work.conversation, (context.applicationContext as MinisApp).isAppForeground())
+            }
+            // The history may already have been committed before process death.
+            // Claiming downstream schedules is itself idempotent, so replay this part.
+            if (fire.scheduled) ScheduledCompletionTriggers.onScheduledRunFinished(context, routine.id, text)
         }
-        registry.finish(job.id, state, facts.lastText)
+        TaskEngine.routineRecorded(context, work.id)
     }
 
     private fun parseGroupIdFromBinding(json: String): String? = runCatching {

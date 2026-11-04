@@ -6619,6 +6619,9 @@ class ChatViewModel(
         return if (oauth) "$prefix\n\n$bare" else bare
     }
 
+    private suspend fun systemPromptWithTasks(base: String?): String? =
+        listOfNotNull(base, app.momoding.task.TaskEngine.table(context, activeSessionId)).joinToString("\n\n").ifBlank { null }
+
     private fun isBoundToAbandonedModel(): Boolean =
         _autoRetryAttempt.value > 0 || _autoRetryCountdown.value > 0
 
@@ -6634,10 +6637,7 @@ class ChatViewModel(
      * may be registered under either.
      */
     fun hasWorkInFlight(): Boolean {
-        val registry = com.openminis.app.agent.jobs.AgentJobRegistry
-        val agentWork = setOf(activeSessionId, sessionId, realSessionId)
-            .filter { it.isNotEmpty() }
-            .any { registry.hasAgentWork(it) }
+        val agentWork = listOf(sessionId, activeSessionId).any { it in app.momoding.task.TaskEngine.parentsWithWork.value }
         return EvictionGuard.hasWorkInFlight(
             isStreaming = _isStreaming.value,
             streamJobActive = streamJob?.isActive == true,
@@ -8470,7 +8470,7 @@ class ChatViewModel(
                     // [T-p1-delegate-task] Helpers bypass the pool (design §4.4):
                     // the parent awaiting them already holds a slot, so routing
                     // children through the same 5 would deadlock every parent
-                    // behind its own helpers. AgentJobRegistry caps helpers at 3.
+                    // behind its own helpers. TaskEngine caps helpers at three.
                     if (helperConfig == null) SessionConcurrencyManager.acquireSlot(activeSessionId)
                     AppLogger.debug(TAG_STREAM, "send streamJob slot acquired")
                     SessionActivityTracker.setActive(
@@ -9944,7 +9944,7 @@ class ChatViewModel(
             // drops the tools) so the guards and the calibration pair see the
             // real fixed share.
             contextFixedTokens = ContextSizeMeter.estimateFixedTokens(
-                loopSystemPrompt,
+                systemPromptWithTasks(loopSystemPrompt),
                 if (helperWrapUpInjected) emptyList() else agentTools,
             )
             effectiveContextWindowTokens()?.takeIf { it > 0 }?.let { window ->
@@ -10326,6 +10326,8 @@ class ChatViewModel(
                         // [T-ctx-measure-outbound] Record our estimate of THIS request
                         // (pre-budget, like every measurement) so the provider's count
                         // for it calibrates the meter, and size max_tokens from it.
+                        val requestSystemPrompt = systemPromptWithTasks(loopSystemPrompt)
+                        contextFixedTokens = ContextSizeMeter.estimateFixedTokens(requestSystemPrompt, if (helperWrapUpInjected) emptyList() else agentTools)
                         val outboundHistory = effectiveAgentHistory()
                         val dispatchInputTokens = recordContextDispatch(outboundHistory, currentProvider.model)
                         AppLogger.info(
@@ -10343,7 +10345,7 @@ class ChatViewModel(
                                     outboundHistory,
                                 ),
                             ),
-                            loopSystemPrompt, dynamicMaxTokens(currentProvider, dispatchInputTokens),
+                            requestSystemPrompt, dynamicMaxTokens(currentProvider, dispatchInputTokens),
                             tools = if (helperWrapUpInjected) emptyList() else agentTools,
                             // [T-switch-model-thinking-gate] Gate on the provider that
                             // serves THIS turn. selectEntry swaps the class-level
@@ -13230,7 +13232,6 @@ Memory system (currently DISABLED):
                         listOfNotNull(
                             app.momoding.chat.SessionAddenda.forPrompt(sid),
                             app.momoding.apps.AppBots.standingNote(context, sid) ?: app.momoding.apps.AppBots.directory(context),
-                            app.momoding.task.TaskEngine.table(context, sid),
                         ).joinToString("\n\n").ifBlank { null }
                     },
                     askName = memoryOn && app.momoding.memory.UserFile.shouldAskName(context),

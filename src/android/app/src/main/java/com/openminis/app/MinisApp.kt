@@ -493,30 +493,6 @@ class MinisApp : Application(), ImageLoaderFactory {
         }
         database = AppDatabase.getInstance(this)
         chatRepository = ChatRepository(database.chatDao())
-        // [T-p2-agent-series] How a background agent's completion reaches its
-        // parent: submit the <agent_callback> as a PROGRAMMATIC prompt on the
-        // parent's ViewModel (queued behind a running loop, never interrupting).
-        com.openminis.app.agent.jobs.AgentJobRegistry.followUpDispatcher = { parentId, text, jobId ->
-            // [T-agent-port-round2] HeadlessChatRunner.prompt (not a bare
-            // submitPrompt): it waits up to 5 s for the parent's provider to
-            // resolve when the VM is freshly created (a scheduled child firing
-            // while the parent chat is not open), and reports a real outcome.
-            // A parent that no longer exists gets nothing — submitting would
-            // re-create rows for a deleted session.
-            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-                runCatching {
-                    if (chatRepository.getSession(parentId) == null) {
-                        com.openminis.app.logging.AppLogger.warning("AgentJobRegistry", "followUp ${jobId.take(8)} dropped — parent ${parentId.take(8)} no longer exists")
-                        return@launch
-                    }
-                    val r = com.openminis.app.debug.HeadlessChatRunner.prompt(
-                        context = this@MinisApp, sessionId = parentId, text = text,
-                        attachments = emptyList(), thinkingLevel = null, wait = false, timeoutMs = 0L,
-                    )
-                    com.openminis.app.logging.AppLogger.info("AgentJobRegistry", "followUp ${jobId.take(8)} → parent ${parentId.take(8)} outcome=${r.status}")
-                }.onFailure { com.openminis.app.logging.AppLogger.warning("AgentJobRegistry", "followUp ${jobId.take(8)} failed: ${it.message}") }
-            }
-        }
         com.openminis.app.agent.jobs.AgentCallbackLabels.install(this)
         providerRepository = ProviderRepository(this)
         envVarRepository = EnvVarRepository(this)
@@ -765,6 +741,7 @@ class MinisApp : Application(), ImageLoaderFactory {
         // momoding: work the phone cut off picks up by itself (app/momoding/chat/WorkResume.kt)
         app.momoding.chat.WorkResume.start(this)
         app.momoding.task.TaskEngine.start(this)
+        com.openminis.app.scheduled.ScheduledCompletionTriggers.ensureListening(this)
         app.momoding.task.Inbox.wakeAll(this) // momoding: words a chat never read go out now (调研/M39 2.2)
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
             val interrupted = runCatching { chatRepository.interruptedSessionIds() }.getOrElse { emptySet() }

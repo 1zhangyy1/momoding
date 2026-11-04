@@ -75,7 +75,7 @@ class SwitchModelNextRequestTest {
 
     @Test
     fun `the request carries the loop's prompt, and a stale flag is cleared when the turn starts`() {
-        assertTrue(vm.contains("loopSystemPrompt, dynamicMaxTokens(currentProvider, dispatchInputTokens),"))
+        assertTrue(vm.contains("requestSystemPrompt, dynamicMaxTokens(currentProvider, dispatchInputTokens),"))
         assertTrue(vm.contains("if (this@ChatViewModel.currentProvider === provider) pendingModelSwitch = false"))
     }
 

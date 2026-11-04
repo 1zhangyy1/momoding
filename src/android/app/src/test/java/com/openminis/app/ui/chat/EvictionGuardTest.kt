@@ -77,7 +77,7 @@ class EvictionGuardTest {
     fun `the view model probe covers the stream job, agent work and queued prompts`() {
         val probe = vmSrc.substringAfter("fun hasWorkInFlight(): Boolean").substringBefore("fun selectGroup(")
         assertTrue(probe.contains("streamJob?.isActive == true"))
-        assertTrue(probe.contains("hasAgentWork("))
+        assertTrue(probe.contains("TaskEngine.parentsWithWork.value"))
         assertTrue(probe.contains("_unreadInbox.value.isNotEmpty()"))
     }
 

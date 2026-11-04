@@ -429,6 +429,10 @@ internal object ChatMutationMethods {
             prompt = prompt,
             targetMode = com.openminis.app.scheduled.ScheduledTargetMode.ChildOfCurrent(sessionId),
             enabled = false,
+            thinkingLevel = parseThinkingLevel(params),
+            prefillToolCall = params.optString("command").takeIf { it.isNotBlank() }?.let {
+                com.openminis.app.scheduled.PrefilledToolCall("shell_execute", JSONObject().put("command", it).toString())
+            },
         )
         com.openminis.app.scheduled.ScheduledTaskManager(app).create(task)
         val childId = com.openminis.app.scheduled.ScheduledAgentRunner.run(app, task, waitForCompletion = false)

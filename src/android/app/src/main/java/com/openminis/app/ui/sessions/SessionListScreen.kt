@@ -147,7 +147,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import com.openminis.app.agent.jobs.AgentJobRegistry
+import app.momoding.task.TaskEngine
 import com.openminis.app.service.SessionActivityTracker
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -698,7 +698,7 @@ fun SessionListScreen(
     // conversation that had delegated everything out went dark while its work
     // continued.
     val streamingSessionIds by SessionActivityTracker.activeSessions.collectAsState()
-    val agentWorkParents by AgentJobRegistry.parentsWithAgentWork.collectAsState()
+    val agentWorkParents by TaskEngine.parentsWithWork.collectAsState()
     val activeSessionIds = remember(streamingSessionIds, agentWorkParents) {
         if (agentWorkParents.isEmpty()) streamingSessionIds else streamingSessionIds + agentWorkParents
     }
@@ -2927,7 +2927,7 @@ private fun SessionRow(
         // [T-android-sidebar-subagent-running] See the folder aggregate above:
         // running sub agents count as this session working.
         val activeSessions by SessionActivityTracker.activeSessions.collectAsState()
-        val agentWorkParents by AgentJobRegistry.parentsWithAgentWork.collectAsState()
+        val agentWorkParents by TaskEngine.parentsWithWork.collectAsState()
         val isActive = session.id in activeSessions || session.id in agentWorkParents
         // [T-android-session-paused-badge] Head of this session's badge queue
         // — null for the common case. Renders as an overlay in the icon's

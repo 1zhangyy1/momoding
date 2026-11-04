@@ -120,7 +120,7 @@ class ScheduledTaskManager(private val context: Context) {
         }
         var count = 0
         // [T-android-scheduled-triggers] On-completion tasks have no alarm; they
-        // need the agent-job completion stream collected in this process.
+        // observe persisted task completion in this process.
         if (tasks.any { it.enabled && it.triggerKind == ScheduledTriggerKind.ON_COMPLETION }) {
             ScheduledCompletionTriggers.ensureListening(context)
         }
@@ -182,33 +182,24 @@ class ScheduledTaskManager(private val context: Context) {
         return true
     }
 
+    /** Record the same fire once, including when completion is replayed after process death. */
     fun markFired(
-        taskId: String,
-        sessionId: String?,
-        resultPreview: String?,
-        ok: Boolean = true,
-        // [T-scheduled-task-detail] When the fire STARTED. The run record used
-        // to be stamped at completion, which could be minutes later and could
-        // not be matched to the fire's envelope (which carries the start).
+        taskId: String, sessionId: String?, resultPreview: String?, ok: Boolean = true,
         firedAt: Long = System.currentTimeMillis(),
-    ) {
+    ): Boolean {
         val now = firedAt
-        // [T-android-scheduled-tasks-run-records] Prepend a run record
-        // (newest-first), capped at MAX_RUN_HISTORY. lastResult* are kept in
-        // sync for back-compat but are no longer surfaced in the list UI.
         val run = ScheduledRun(firedAt = now, sessionId = sessionId, preview = resultPreview, ok = ok)
-        // [T-android-scheduled-fire-claim] Atomic: a run finishing minutes
-        // after its fire must not write back a count / anchor the next fire
-        // has moved on since.
-        store.update(taskId) { t ->
-            t.copy(
-                lastFiredAt = now,
-                lastResultPreview = resultPreview,
-                lastResultSessionId = sessionId,
-                runHistory = (listOf(run) + t.runHistory).take(ScheduledTask.MAX_RUN_HISTORY),
-                fireCount = t.firesSoFar + 1,
-            )
+        var added = false
+        store.update(taskId) { task ->
+            if (task.runHistory.any { it.firedAt == firedAt && it.sessionId == sessionId }) null
+            // Older records outside the retained window cannot become "new" on a replay.
+            else if (task.runHistory.size >= ScheduledTask.MAX_RUN_HISTORY && firedAt < task.runHistory.last().firedAt) null
+            else {
+                added = true
+                recordRun(task, run)
+            }
         }
+        return added
     }
 
     private fun registerAlarm(task: ScheduledTask) {
@@ -266,6 +257,14 @@ class ScheduledTaskManager(private val context: Context) {
     }
 
     companion object {
+        internal fun recordRun(task: ScheduledTask, run: ScheduledRun): ScheduledTask {
+            if (task.runHistory.any { it.firedAt == run.firedAt && it.sessionId == run.sessionId }) return task
+            val history = (task.runHistory + run).sortedByDescending { it.firedAt }.take(ScheduledTask.MAX_RUN_HISTORY)
+            val latest = history.first()
+            return task.copy(lastFiredAt = latest.firedAt, lastResultPreview = latest.preview,
+                lastResultSessionId = latest.sessionId, runHistory = history, fireCount = task.firesSoFar + 1)
+        }
+
         private const val TAG = "ScheduledTaskManager"
 
         /**

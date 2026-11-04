@@ -79,11 +79,12 @@ object Inbox {
     suspend fun retry(context: Context, id: String) = TaskEngine.dao(context).retryInbox(id)
 
     /** A transaction can post work or a result with the task state that authorized it. */
-    suspend fun post(dao: TaskDao, to: String, text: String, taskId: String? = null, sender: InboxEntity.Sender = InboxEntity.Sender.HAND) {
+    suspend fun post(dao: TaskDao, to: String, text: String, taskId: String? = null, sender: InboxEntity.Sender = InboxEntity.Sender.HAND, prefill: List<PrefilledToolCall> = emptyList()) {
         dao.insertInbox(InboxEntity(
             id = java.util.UUID.randomUUID().toString(), toSession = to, taskId = taskId,
             sender = sender.name, text = text, arrivedAt = System.currentTimeMillis(),
             partsJson = JSONArray().put(JSONObject().put("type", "text").put("value", text)).toString(),
+            prefill = prefill.takeIf { it.isNotEmpty() }?.let { JSONArray(it.map { call -> call.toJson() }).toString() },
         ))
     }
 

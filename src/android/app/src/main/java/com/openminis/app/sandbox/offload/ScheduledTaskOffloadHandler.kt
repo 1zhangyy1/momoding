@@ -197,8 +197,8 @@ class ScheduledTaskOffloadHandler(private val context: Context) : NativeOffloadH
             if (byLabel.size == 1) return byLabel.first().id
             if (byLabel.size > 1) throw IllegalArgumentException("--of '$raw' matches ${byLabel.size} tasks by label; use its id")
         }
-        if (com.openminis.app.agent.jobs.AgentJobRegistry.job(raw) != null) return raw
-        throw IllegalArgumentException("--of: no scheduled task or agent job with id or label '$raw' (see `minis-scheduled list`)")
+        if (runBlocking { app.momoding.task.TaskEngine.dao(context).task(raw) } != null) return raw
+        throw IllegalArgumentException("--of: no routine or task with id or label '$raw' (see `minis-scheduled list`)")
     }
 
     private fun handleDelete(args: OffloadArgs): NativeOffloadResult {

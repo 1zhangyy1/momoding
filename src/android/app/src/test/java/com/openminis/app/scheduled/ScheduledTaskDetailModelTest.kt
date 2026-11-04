@@ -324,7 +324,7 @@ class ScheduledTaskDetailModelTest {
         assertTrue(runner.contains("firedAtMs = firedAt,"))
         assertEquals(2, Regex("""markFired\(task\.id, sessionId, decision\.body, ok = ok, firedAt = firedAt\)""").findAll(runner).count())
         val manager = ProductionSources.read("scheduled/ScheduledTaskManager.kt")
-        assertTrue(manager.contains("fireCount = t.firesSoFar + 1,"))
+        assertTrue(manager.contains("fireCount = task.firesSoFar + 1"))
         assertTrue(manager.contains("val now = firedAt"))
     }
 

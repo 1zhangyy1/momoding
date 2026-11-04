@@ -73,7 +73,7 @@ class ScheduledTaskStore(private val context: Context) {
     private fun write(tasks: List<ScheduledTask>) {
         val arr = JSONArray()
         for (t in tasks) arr.put(t.toJson())
-        prefs.edit().putString(KEY_TASKS, arr.toString()).apply()
+        check(prefs.edit().putString(KEY_TASKS, arr.toString()).commit()) { "could not persist routine settings" }
     }
 
     /**

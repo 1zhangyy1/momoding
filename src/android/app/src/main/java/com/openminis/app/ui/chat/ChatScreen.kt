@@ -298,7 +298,7 @@ import com.openminis.app.data.model.ProviderConfig
 import com.openminis.app.data.model.ProviderType
 import com.openminis.app.data.model.RoutingStrategy
 import com.openminis.app.data.model.ThinkingLevel
-import com.openminis.app.agent.jobs.AgentJobRegistry
+import app.momoding.task.TaskEngine
 import com.openminis.app.data.repository.ChatRepository
 import com.openminis.app.data.repository.MemoryRepository
 import com.openminis.app.data.repository.ProviderRepository
@@ -7363,7 +7363,7 @@ fun ChatScreen(
                         // inside composition would not recompose when the work
                         // starts or ends, so the button would appear late and
                         // linger after everything stopped.
-                        val agentWorkParents by AgentJobRegistry.parentsWithAgentWork.collectAsState()
+                        val agentWorkParents by TaskEngine.parentsWithWork.collectAsState()
                         val sessionBusy = isStreaming ||
                             viewModel.currentSessionId in agentWorkParents
                         val showStop = sessionBusy && !hasContent

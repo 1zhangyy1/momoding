@@ -33,24 +33,36 @@ object TaskEngine {
     enum class Report { PROGRESS, ASK, DONE, FAILED }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val _recent = MutableStateFlow<List<TaskEntity>>(emptyList())
-    /** The newest tasks of every conversation, newest change first; read by the rows and the main chat's table. */
-    val recent: StateFlow<List<TaskEntity>> = _recent.asStateFlow()
+    private val _active = MutableStateFlow<List<TaskEntity>>(emptyList())
+    val active: StateFlow<List<TaskEntity>> = _active.asStateFlow()
 
     fun dao(context: Context): TaskDao = (context.applicationContext as MinisApp).database.taskDao()
 
-    /** Keep the UI's view of the persisted tasks current. A loop reports its own end explicitly. */
+    private val _parentsWithWork = MutableStateFlow<Set<String>>(emptySet())
+    val parentsWithWork: StateFlow<Set<String>> = _parentsWithWork.asStateFlow()
+
+    /** Keep the UI's view of persisted work current; a loop explicitly reports its end. */
     fun start(context: Context) {
         val app = context.applicationContext
-        scope.launch { dao(app).recentFlow(200).collect { _recent.value = it } }
+        scope.launch { dao(app).activeFlow().collect {
+            _active.value = it
+            _parentsWithWork.value = it.map { task -> task.conversation }.toSet()
+        } }
+        scope.launch {
+            kotlinx.coroutines.delay(3000)
+            dao(app).queuedHands().forEach { hand -> handIdle(app, hand) }
+        }
     }
 
     /** The task the person's words started: a new one for [hand], or in line behind the one it is on. */
-    suspend fun open(context: Context, conversation: String, title: String, hand: String, brief: String): TaskEntity {
-        val source = ChatViewModelStore.existing(conversation)?.messages?.value
+    suspend fun open(context: Context, conversation: String, title: String, hand: String, brief: String,
+        prefill: List<com.openminis.app.scheduled.PrefilledToolCall> = emptyList(), routine: RoutineFire? = null,
+    ): TaskEntity {
+        val source = if (routine != null) null else ChatViewModelStore.existing(conversation)?.messages?.value
             ?.lastOrNull { it.rendersAsUserBubble() && !it.unread }
         val helper = Helpers.isHelper(context, hand)
         return change(context) { dao, after ->
+            if (helper) check(dao.heldBy(hand) == null) { "a helper keeps one task; use tell to add instructions" }
             val busy = !free(dao, hand, helper)
             val now = System.currentTimeMillis()
             val task = TaskEntity(
@@ -60,10 +72,11 @@ object TaskEngine {
             dao.insertTask(task)
             source?.content?.let { log(dao, task.id, TaskLogEntity.Kind.AUTHORIZED, it) }
             log(dao, task.id, TaskLogEntity.Kind.PASSED_ON, brief)
-            if (!busy) {
-                postForHand(context, dao, task, brief)
-                after += { deliver(context, task) }
-            }
+            routine?.let { log(dao, task.id, TaskLogEntity.Kind.ROUTINE, it.json()) }
+            // Each helper has its own chat: its queued payload can safely be stored now.
+            // A busy Bot must not see another task's instructions until that task starts.
+            if (helper || !busy) postForHand(context, dao, task, brief, prefill)
+            if (!busy) after += { deliver(context, task) }
             task
         }
     }
@@ -88,9 +101,9 @@ object TaskEngine {
         }
         val next = task.copy(state = state.name, ask = null, outcome = null, updatedAt = System.currentTimeMillis())
         dao.updateTask(next)
+        if (helper || state == TaskEntity.State.RUNNING) postForHand(context, dao, next, text)
         if (state == TaskEntity.State.RUNNING) {
             if (task.state == TaskEntity.State.ENDED.name) dao.retryTaskInbox(task.id, task.hand)
-            postForHand(context, dao, next, text)
             after += { deliver(context, next) }
         }
         return next
@@ -135,16 +148,15 @@ object TaskEngine {
 
     /** The conversation whose task [hand] is on, if any: where its questions to the person show. */
     fun conversationOf(hand: String): String? =
-        _recent.value.firstOrNull { it.hand == hand && it.state != TaskEntity.State.ENDED.name && it.state != TaskEntity.State.QUEUED.name }?.conversation
+        _active.value.firstOrNull { it.hand == hand && it.state != TaskEntity.State.ENDED.name && it.state != TaskEntity.State.QUEUED.name }?.conversation
 
     /**
      * The main chat's table of tasks, at the end of every request: what is open, and what ended
      * lately (it can be picked up again with tell), so the model never has to look them up.
      */
-    fun table(context: Context, conversation: String): String? {
-        val mine = _recent.value.filter { it.conversation == conversation }
-        val open = mine.filter { it.state != TaskEntity.State.ENDED.name }
-        val ended = mine.filter { it.state == TaskEntity.State.ENDED.name }.take(3)
+    suspend fun table(context: Context, conversation: String): String? {
+        val db = (context.applicationContext as MinisApp).database
+        val (open, ended) = db.withTransaction { dao(context).openIn(conversation) to dao(context).endedIn(conversation) }
         if (open.isEmpty() && ended.isEmpty()) return null
         return buildString {
             append("## Tasks\nWork handed on from this chat. A message starting $REPORT_CUE<id> · <hand> · done|ask|failed] is that task's report, not the person: ")
@@ -158,6 +170,13 @@ object TaskEngine {
                 append("\n")
             }
         }.trimEnd()
+    }
+
+    /** A routine's history/notification consumer acknowledged this persisted completion. */
+    suspend fun routineRecorded(context: Context, id: String) = change(context) { dao, _ ->
+        if (dao.task(id) != null && dao.log(id).none { it.kind == TaskLogEntity.Kind.ROUTINE_RECORDED.name }) {
+            log(dao, id, TaskLogEntity.Kind.ROUTINE_RECORDED, "recorded")
+        }
     }
 
     /** The name a hand goes by: its Momoding's, else it is a helper. */
@@ -208,7 +227,7 @@ object TaskEngine {
         dao.updateTask(next)
         val brief = dao.log(task.id).filter { it.kind == TaskLogEntity.Kind.PASSED_ON.name }.joinToString("\n\n") { it.body }
         dao.retryTaskInbox(task.id, task.hand)
-        postForHand(context, dao, next, brief)
+        if (dao.unread(task.hand).none { it.taskId == task.id }) postForHand(context, dao, next, brief)
         after += { deliver(context, next) }
     }
 
@@ -216,9 +235,11 @@ object TaskEngine {
      * Words for a task's hand: into its turn at its next step when it is at work, else a new turn.
      * A Bot reads them as from Momoding ([AppBots.WAKE_CUE]); a helper is set up as one first.
      */
-    private suspend fun postForHand(context: Context, dao: TaskDao, task: TaskEntity, text: String) {
+    private suspend fun postForHand(context: Context, dao: TaskDao, task: TaskEntity, text: String,
+        prefill: List<com.openminis.app.scheduled.PrefilledToolCall> = emptyList(),
+    ) {
         val words = if (MoApps.ofSession(context, task.hand) != null) "${AppBots.WAKE_CUE} $text" else text
-        Inbox.post(dao, task.hand, words, task.id)
+        Inbox.post(dao, task.hand, words, task.id, prefill = prefill)
     }
 
     private suspend fun deliver(context: Context, task: TaskEntity) {

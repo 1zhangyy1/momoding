@@ -99,7 +99,7 @@ data class TaskLogEntity(
     val kind: String,
     val body: String,
 ) {
-    enum class Kind { AUTHORIZED, PASSED_ON, ABOUT_TO, RESULT, REPORT, END }
+    enum class Kind { AUTHORIZED, PASSED_ON, ROUTINE, ROUTINE_RECORDED, ABOUT_TO, RESULT, REPORT, END }
 }
 
 @Dao
@@ -166,6 +166,25 @@ interface TaskDao {
     @Query("SELECT * FROM task WHERE id = :id")
     suspend fun task(id: String): TaskEntity?
 
+    @Query("SELECT * FROM task WHERE id = :id")
+    fun taskFlow(id: String): Flow<TaskEntity?>
+
+    @Query("SELECT * FROM task WHERE state = 'ENDED' ORDER BY updated_at")
+    fun endedFlow(): Flow<List<TaskEntity>>
+
+    @Query("SELECT DISTINCT hand FROM task WHERE state = 'QUEUED'")
+    suspend fun queuedHands(): List<String>
+
+    @Query("SELECT * FROM task WHERE state != 'ENDED' ORDER BY created_at")
+    fun activeFlow(): Flow<List<TaskEntity>>
+
+    @Query("SELECT * FROM task WHERE conversation = :conversation AND state != 'ENDED' ORDER BY created_at")
+    suspend fun openIn(conversation: String): List<TaskEntity>
+
+    @Query("SELECT * FROM task WHERE conversation = :conversation AND state = 'ENDED' ORDER BY updated_at DESC LIMIT 3")
+    suspend fun endedIn(conversation: String): List<TaskEntity>
+
+
     @Update
     suspend fun updateTask(row: TaskEntity)
 
@@ -173,9 +192,6 @@ interface TaskDao {
     suspend fun recentTasks(limit: Int): List<TaskEntity>
 
     /** The newest tasks, kept current: what the rows and the main chat's table show. */
-    @Query("SELECT * FROM task ORDER BY updated_at DESC LIMIT :limit")
-    fun recentFlow(limit: Int): Flow<List<TaskEntity>>
-
     /** The task [hand] is on: one at a time, so its session is enough to find it. */
     @Query("SELECT * FROM task WHERE hand = :hand AND state IN ('RUNNING', 'WAITING') LIMIT 1")
     suspend fun heldBy(hand: String): TaskEntity?

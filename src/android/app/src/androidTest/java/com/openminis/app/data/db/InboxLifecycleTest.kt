@@ -102,6 +102,31 @@ class InboxLifecycleTest {
         assertEquals("setup-failure", db.chatDao().loadMessages(sid).single().id)
     }
 
+    @Test fun queuedWorkRetainsItsPrefillAndRoutineOriginInTheSameCommit() = runBlocking {
+        val task = TaskEntity("routine-work", sid, title = "fixture", hand = sid, state = "QUEUED", createdAt = 1, updatedAt = 1)
+        val fire = app.momoding.task.RoutineFire("routine", 1234, true)
+        db.withTransaction {
+            db.taskDao().insertTask(task)
+            db.taskDao().insertLog(app.momoding.task.TaskLogEntity(taskId = task.id, at = 1, kind = "ROUTINE", body = fire.json()))
+            Inbox.post(db.taskDao(), sid, "fixture", task.id,
+                prefill = listOf(com.openminis.app.scheduled.PrefilledToolCall("shell_execute", "{\"command\":\"printf fixture\"}")))
+        }
+        val row = db.taskDao().unread(sid).single()
+        assertEquals(task.id, row.taskId)
+        assertEquals("printf fixture", org.json.JSONArray(row.prefill!!).getJSONObject(0).getJSONObject("args").getString("command"))
+        assertEquals(fire, app.momoding.task.RoutineFire.parse(db.taskDao().log(task.id).single().body))
+    }
+
+    @Test fun activeWorkIsNotLostBehindTwoHundredNewerTasks() = runBlocking {
+        val other = repo.createSession("fixture").id
+        db.taskDao().insertTask(TaskEntity("older-open", sid, title = "older", hand = sid, state = "RUNNING", createdAt = 1, updatedAt = 1))
+        for (n in 1..205) db.taskDao().insertTask(TaskEntity("newer-$n", other, title = "newer", hand = other,
+            state = "ENDED", outcome = "DONE", createdAt = n + 1L, updatedAt = n + 1L))
+        assertTrue(db.taskDao().recentTasks(200).none { it.id == "older-open" })
+        assertEquals(listOf("older-open"), db.taskDao().openIn(sid).map { it.id })
+        assertEquals(listOf("newer-205", "newer-204", "newer-203"), db.taskDao().endedIn(other).map { it.id })
+    }
+
     @Test fun successCannotDiscardANewerUnreadMessage() = runBlocking {
         receive("read")
         consume("read")

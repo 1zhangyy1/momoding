@@ -8,7 +8,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,9 +32,8 @@ import com.openminis.app.ui.theme.ChatColors
 @Composable
 fun TaskRow(taskId: String, onOpen: (String) -> Unit) {
     val context = LocalContext.current
-    val recent by TaskEngine.recent.collectAsState()
-    val older by produceState<TaskEntity?>(null, taskId) { value = TaskEngine.dao(context).task(taskId) }
-    val task = recent.firstOrNull { it.id == taskId } ?: older ?: return
+    val row by remember(taskId) { TaskEngine.dao(context).taskFlow(taskId) }.collectAsState(initial = null)
+    val task = row ?: return
     val app = remember(task.hand) { MoApps.ofSession(context, task.hand) }
     val state = when (task.state) {
         TaskEntity.State.RUNNING.name -> task.progress ?: stringResource(R.string.mo_task_running)

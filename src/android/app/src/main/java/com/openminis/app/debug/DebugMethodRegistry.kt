@@ -938,11 +938,13 @@ object DebugMethodRegistry {
         ),
         MethodSpec(
             name = "scheduled.runAgentChild",
-            description = "[T-agent-port-round3] Create a scheduled task with target mode CHILD_OF (agent task in a chat) and fire it now — the callback CARD path (no delegate block). Debug/e2e only.",
+            description = "Create a disabled routine with a helper target and fire it now through TaskEngine. Debug/e2e only.",
             params = listOf(
                 ParamSpec("sessionId", "string", required = true, description = "Parent chat the agent child belongs to."),
                 ParamSpec("prompt", "string", required = true, description = "The agent's task."),
                 ParamSpec("label", "string", required = false, description = "Task label (becomes the agent title)."),
+                ParamSpec("command", "string", required = false, description = "Prefilled shell command for this routine's first step."),
+                ParamSpec("thinkingLevel", "string", required = false, description = "Thinking override for the helper; omit to inherit."),
             ),
             returns = "{taskId, childSessionId}",
             example = ex("sessionId" to "6D0F…", "prompt" to "echo hi"),
