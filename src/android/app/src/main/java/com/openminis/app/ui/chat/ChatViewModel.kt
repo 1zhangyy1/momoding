@@ -9605,7 +9605,46 @@ class ChatViewModel(
             expire = { runningJob?.cancel(CancellationException("The helper's time budget was exhausted.")) },
             elapsedMs = app.momoding.task.TaskEngine.elapsed(context, taskAtStart),
         ) else null
+        // Keep lifecycle cleanup outside the large stream/tool state machine. Its
+        // suspensions and error exits must all return through this small wrapper.
         try {
+            runAgentLoopBody(provider, systemPrompt, fallbackProviders, fallbackStrategy, prefill)
+            loopReturned = true
+        } catch (e: Throwable) {
+            loopFailure = e.message ?: e.javaClass.simpleName
+            loopCancelled = e is CancellationException
+            throw e
+        } finally {
+            helperBudget?.cancel()
+            val error = loopFailure ?: if (!loopReturned) "The run was interrupted."
+                else if (_canResume.value) "The run ended before delivering a final answer."
+                else _messages.value.lastOrNull { it.role == "assistant" }?.error
+            withContext(kotlinx.coroutines.NonCancellable) {
+                val retrying = if (error != null) app.momoding.task.Inbox.failed(context, activeSessionId, terminal = loopCancelled)
+                    else { app.momoding.task.Inbox.complete(context, activeSessionId); false }
+                refreshInbox()
+                runCatching {
+                    app.momoding.task.TaskEngine.turnFinished(
+                        context, activeSessionId, taskAtStart,
+                        app.momoding.task.TaskCompletion.fromHistory(isHelper, previousTail, agentHistory.lastOrNull(), error),
+                        hasFollowUp = retrying || app.momoding.task.Inbox.unread(context, activeSessionId).isNotEmpty(),
+                    )
+                }.onFailure { AppLogger.warning(TAG, "task closeout: ${it.message}") }
+                if (runningTaskId == taskAtStart) runningTaskId = null
+                if ((!loopReturned || retrying) && _unreadInbox.value.isNotEmpty()) {
+                    withContext(Dispatchers.Main) { drainQueueWhenIdle() }
+                }
+            }
+        }
+    }
+
+    private suspend fun runAgentLoopBody(
+        provider: LLMProvider,
+        systemPrompt: String?,
+        fallbackProviders: List<FallbackCandidate>,
+        fallbackStrategy: com.openminis.app.data.model.FallbackStrategy,
+        prefill: List<com.openminis.app.scheduled.PrefilledToolCall>,
+    ) {
         AppLogger.info(TAG_STREAM, "runAgentLoop ENTER provider=${provider.javaClass.simpleName} historySize=${agentHistory.size}")
         // [T-android-mem-probe-trust] Send-path context shape. The existing
         // `messages-shape` probe only runs on session LOAD, so the 2026-08-15
@@ -11993,33 +12032,6 @@ class ChatViewModel(
             }
         } else {
             AppLogger.info(TAG_STREAM, "runAgentLoop EXIT (loop body ended naturally)")
-        }
-        loopReturned = true
-        } catch (e: Throwable) {
-            loopFailure = e.message ?: e.javaClass.simpleName
-            loopCancelled = e is CancellationException
-            throw e
-        } finally {
-            helperBudget?.cancel()
-            val error = loopFailure ?: if (!loopReturned) "The run was interrupted."
-                else if (_canResume.value) "The run ended before delivering a final answer."
-                else _messages.value.lastOrNull { it.role == "assistant" }?.error
-            withContext(kotlinx.coroutines.NonCancellable) {
-                val retrying = if (error != null) app.momoding.task.Inbox.failed(context, activeSessionId, terminal = loopCancelled)
-                    else { app.momoding.task.Inbox.complete(context, activeSessionId); false }
-                refreshInbox()
-                runCatching {
-                    app.momoding.task.TaskEngine.turnFinished(
-                        context, activeSessionId, taskAtStart,
-                        app.momoding.task.TaskCompletion.fromHistory(isHelper, previousTail, agentHistory.lastOrNull(), error),
-                        hasFollowUp = retrying || app.momoding.task.Inbox.unread(context, activeSessionId).isNotEmpty(),
-                    )
-                }.onFailure { AppLogger.warning(TAG, "task closeout: ${it.message}") }
-                if (runningTaskId == taskAtStart) runningTaskId = null
-                if ((!loopReturned || retrying) && _unreadInbox.value.isNotEmpty()) {
-                    withContext(Dispatchers.Main) { drainQueueWhenIdle() }
-                }
-            }
         }
     }
 
