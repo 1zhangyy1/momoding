@@ -839,6 +839,7 @@ object DebugMethodRegistry {
             params = listOf(
                 ParamSpec("prompt", "string", required = true, description = "User message text."),
                 ParamSpec("sessionId", "string", required = false, description = "Existing session id; omit to create a new one (source=debug)."),
+                ParamSpec("title", "string", required = false, description = "Initial title for a new session; skips automatic title generation. Ignored for existing sessions."),
                 ParamSpec("attachments", "[object]", required = false, description = "Array of {name, data, mime?}; data is base64."),
                 ParamSpec("modelEntryId", "string", required = false, description = "Pin to a specific model entry (mutually exclusive with modelGroupId)."),
                 ParamSpec("modelGroupId", "string", required = false, description = "Pin to a model group."),

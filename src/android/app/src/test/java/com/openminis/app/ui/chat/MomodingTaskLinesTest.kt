@@ -34,4 +34,32 @@ class MomodingTaskLinesTest {
         assertEquals(1, rows.count { it is FlatChatItem.UserBubble })
         assertEquals(listOf("a1b2c3"), rows.filterIsInstance<FlatChatItem.MomodingTask>().map { it.taskId })
     }
+    @Test fun `a failed visible receive has one retry on its bubble`() {
+        val rows = buildFlatChatItems(listOf(
+            ChatMessage(id = "receive", role = "user", content = "keep these words", inboxId = "receive", inboxFailed = true),
+            ChatMessage(id = "failure", role = "assistant", content = "", error = "provider failed"),
+        ), showSteps = false)
+        assertEquals("receive", rows.filterIsInstance<FlatChatItem.UserBubble>().single().message.inboxId)
+        assertTrue(rows.none { it is FlatChatItem.AssistantError })
+    }
+
+    @Test fun `a hidden hand report retries the original receive from its error row`() {
+        val rows = buildFlatChatItems(listOf(
+            ChatMessage(id = "report", role = "user", content = "${TaskEngine.REPORT_CUE}a1b2c3 · helper · done] result",
+                inboxId = "report", inboxFailed = true),
+            ChatMessage(id = "failure", role = "assistant", content = "", error = "provider failed"),
+        ), showSteps = false)
+        assertTrue(rows.none { it is FlatChatItem.UserBubble })
+        assertEquals("report", rows.filterIsInstance<FlatChatItem.AssistantError>().single().retryInboxId)
+    }
+
+    @Test fun `an unrelated later error does not retry an earlier failed receive`() {
+        val rows = buildFlatChatItems(listOf(
+            ChatMessage(id = "old", role = "user", content = "old words", inboxId = "old", inboxFailed = true),
+            ChatMessage(id = "new", role = "user", content = "new words"),
+            ChatMessage(id = "failure", role = "assistant", content = "", error = "unrelated failure"),
+        ), showSteps = false)
+        assertEquals(null, rows.filterIsInstance<FlatChatItem.AssistantError>().single().retryInboxId)
+    }
+
 }

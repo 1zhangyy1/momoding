@@ -540,7 +540,12 @@ class ChatRepository(internal val dao: ChatDao) {
         tokenUsage: String? = null,
         reasoningContent: String? = null,
         modelSnapshot: ModelAttributionSnapshot? = null,
+        id: String? = null,
     ): MessageEntity {
+        if (id != null) dao.message(id)?.let {
+            check(it.sessionId == sessionId && it.role == role) { "message id belongs to another turn" }
+            return it
+        }
         val sortOrder = dao.nextSortOrder(sessionId)
         val now = System.currentTimeMillis()
         // Cap the body so a runaway tool_result (e.g. a 13 MB browser_use
@@ -555,7 +560,7 @@ class ChatRepository(internal val dao: ChatDao) {
             partsJson
         }
         val message = MessageEntity(
-            id = UUID.randomUUID().toString(),
+            id = id ?: UUID.randomUUID().toString(),
             sessionId = sessionId,
             role = role,
             partsJson = capped,

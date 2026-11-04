@@ -42,8 +42,12 @@ data class InboxEntity(
     val attachments: String? = null,
     /** JSON array of tool calls a routine fire runs before the model is asked. */
     val prefill: String? = null,
+    /** Prepared transcript parts, including durable media references, captured before acceptance. */
+    @ColumnInfo(name = "parts_json") val partsJson: String? = null,
     @ColumnInfo(name = "arrived_at") val arrivedAt: Long,
     @ColumnInfo(name = "read_at") val readAt: Long? = null,
+    @ColumnInfo(defaultValue = "0") val tries: Int = 0,
+    @ColumnInfo(name = "failed_at") val failedAt: Long? = null,
 ) {
     enum class Sender { USER, HAND, COMMAND, ROUTINE }
 }
@@ -104,14 +108,50 @@ interface TaskDao {
     @Insert
     suspend fun insertInbox(row: InboxEntity)
 
-    @Query("SELECT * FROM inbox WHERE to_session = :to AND read_at IS NULL ORDER BY arrived_at, rowid")
+    @Query("SELECT * FROM inbox WHERE to_session = :to AND read_at IS NULL AND failed_at IS NULL ORDER BY arrived_at, rowid")
     suspend fun unread(to: String): List<InboxEntity>
 
-    @Query("SELECT DISTINCT to_session FROM inbox WHERE read_at IS NULL")
+    @Query("SELECT * FROM inbox WHERE to_session = :to ORDER BY arrived_at, rowid")
+    suspend fun inboxFor(to: String): List<InboxEntity>
+
+    @Query("SELECT * FROM inbox WHERE to_session = :to ORDER BY arrived_at, rowid")
+    fun inboxFlow(to: String): Flow<List<InboxEntity>>
+
+    @Query("SELECT * FROM inbox WHERE id = :id")
+    suspend fun inbox(id: String): InboxEntity?
+
+    @Query("SELECT DISTINCT to_session FROM inbox WHERE read_at IS NULL AND failed_at IS NULL")
     suspend fun sessionsWithUnread(): List<String>
 
     @Query("UPDATE inbox SET read_at = :at WHERE id IN (:ids)")
     suspend fun markRead(ids: List<String>, at: Long)
+
+    @Query("DELETE FROM inbox WHERE to_session = :to AND read_at IS NOT NULL")
+    suspend fun completeRead(to: String)
+
+    @Query("UPDATE inbox SET read_at = NULL, tries = tries + 1, failed_at = CASE WHEN :terminal OR tries + 1 >= 3 THEN :at ELSE NULL END WHERE to_session = :to AND read_at IS NOT NULL")
+    suspend fun failRead(to: String, at: Long, terminal: Boolean)
+
+    @Query("UPDATE inbox SET read_at = NULL, tries = tries + 1, failed_at = CASE WHEN :terminal OR tries + 1 >= 3 THEN :at ELSE NULL END WHERE id IN (:ids) AND failed_at IS NULL")
+    suspend fun failInbox(ids: List<String>, at: Long, terminal: Boolean)
+
+    @Query("UPDATE inbox SET read_at = NULL, tries = 0, failed_at = NULL WHERE id = :id")
+    suspend fun retryInbox(id: String)
+
+    @Query("UPDATE inbox SET failed_at = :at WHERE id = :id AND read_at IS NULL")
+    suspend fun rejectInbox(id: String, at: Long)
+
+    @Query("UPDATE inbox SET failed_at = :at WHERE task_id = :task AND to_session = :to AND read_at IS NULL")
+    suspend fun rejectTaskInbox(task: String, to: String, at: Long)
+
+    @Query("UPDATE inbox SET failed_at = NULL, tries = 0 WHERE task_id = :task AND to_session = :to AND read_at IS NULL")
+    suspend fun retryTaskInbox(task: String, to: String)
+
+    @Query("DELETE FROM inbox WHERE to_session = :to")
+    suspend fun clearInbox(to: String)
+
+    @Query("UPDATE inbox SET parts_json = :parts WHERE id = :id")
+    suspend fun inboxParts(id: String, parts: String)
 
     @Query("DELETE FROM inbox WHERE id IN (:ids)")
     suspend fun deleteInbox(ids: List<String>)
@@ -143,12 +183,18 @@ interface TaskDao {
     @Query("SELECT * FROM task WHERE hand = :hand AND state = 'QUEUED' ORDER BY created_at LIMIT 1")
     suspend fun nextFor(hand: String): TaskEntity?
 
+    @Query("SELECT COUNT(*) FROM task WHERE hand = :hand AND state = 'QUEUED'")
+    fun queuedCountFlow(hand: String): Flow<Int>
+
     /** Helpers (hidden child chats) on a task now; they share [Helpers.SLOTS]. */
     @Query("SELECT COUNT(*) FROM task t JOIN sessions s ON s.id = t.hand WHERE s.parent_session_id IS NOT NULL AND t.state IN ('RUNNING', 'WAITING')")
     suspend fun helpersAtWork(): Int
 
     @Query("SELECT t.* FROM task t JOIN sessions s ON s.id = t.hand WHERE s.parent_session_id IS NOT NULL AND t.state = 'QUEUED' ORDER BY t.created_at LIMIT 1")
     suspend fun nextForHelpers(): TaskEntity?
+
+    @Query("SELECT t.* FROM task t JOIN sessions s ON s.id = t.hand WHERE s.parent_session_id IS NOT NULL AND t.state = 'QUEUED' ORDER BY t.created_at")
+    suspend fun queuedHelpers(): List<TaskEntity>
 
     @Insert
     suspend fun insertLog(row: TaskLogEntity)

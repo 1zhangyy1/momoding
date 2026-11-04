@@ -35,4 +35,5 @@
     <string name="mo_task_done">done</string>
     <string name="mo_task_failed">didn\'t work</string>
     <string name="mo_task_stopped">stopped</string>
+    <string name="mo_inbox_failed_retry">Couldn’t process · Try again</string>
 </resources>

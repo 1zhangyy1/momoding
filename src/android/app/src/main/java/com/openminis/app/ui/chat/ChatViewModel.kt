@@ -69,6 +69,7 @@ import com.openminis.app.offload.OffloadPermissionManager
 import com.openminis.app.service.SessionActivityTracker
 import com.openminis.app.service.SessionConcurrencyManager
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.awaitAll
@@ -1285,8 +1286,10 @@ class ChatViewModel(
     internal val fsSessionId: String get() = helperConfig?.parentSessionId ?: activeSessionId
 
     /** Prompts enqueued while the agent loop is running. Drained after the loop finishes. */
-    private val _promptQueue = MutableStateFlow<List<QueuedPrompt>>(emptyList())
-    val promptQueue: StateFlow<List<QueuedPrompt>> = _promptQueue.asStateFlow()
+    private val _unreadInbox = MutableStateFlow<List<QueuedPrompt>>(emptyList())
+    private val incomingMutex = kotlinx.coroutines.sync.Mutex()
+    private var inboxObserver: Job? = null
+    private var observedInbox: String? = null
 
     /**
      * Input-token count reported by the most recent API call, used by
@@ -3419,8 +3422,8 @@ class ChatViewModel(
             // and drains through the normal stream-slot machinery — no new
             // reentrancy path. Runs after `finally` so isCompacting is already
             // false. Mirrors the iOS fix for the same report.
-            if (compactSucceeded && _promptQueue.value.isNotEmpty()) {
-                AppLogger.info(TAG, "[Compact] success with ${_promptQueue.value.size} queued prompt(s) — kicking drain")
+            if (compactSucceeded && _unreadInbox.value.isNotEmpty()) {
+                AppLogger.info(TAG, "[Compact] success with ${_unreadInbox.value.size} queued prompt(s) — kicking drain")
                 drainQueueWhenIdle()
             }
         }
@@ -4888,73 +4891,54 @@ class ChatViewModel(
         ASK_USER,
     }
 
-    /**
-     * Text + attachments held back while the "Context Near Capacity" dialog is
-     * up. Mirrors iOS `pendingSendText` / `pendingSendAttachments`.
-     */
-    private var pendingSendText: String? = null
-
-    /**
-     * [T-scheduled-tool-prefill] Prefilled tool calls travelling with
-     * [pendingSendText] while a pre-send compaction runs, so the prompt that
-     * finally goes out still runs them. Set and cleared together with the text.
-     */
-    private var pendingSendPrefill: List<com.openminis.app.scheduled.PrefilledToolCall> = emptyList()
-
-    /**
-     * [T-android-programmatic-prompt-keeps-draft] Whether [pendingSendText]
-     * came from a headless prompt rather than the composer. It keeps the send
-     * after compaction headless, and stops [cancelCompactBeforeSend] from ever
-     * dropping a background prompt's text into the user's input box.
-     */
+    /** The dialog refers to an already-persisted receive, rather than holding its only copy. */
+    private var pendingSendPrompt: QueuedPrompt? = null
     private var pendingSendHeadless: Boolean = false
-
     private val _showCompactBeforeSendPrompt = MutableStateFlow(false)
     val showCompactBeforeSendPrompt: StateFlow<Boolean> = _showCompactBeforeSendPrompt.asStateFlow()
 
-    /**
-     * Dialog action: compact the history, then send what the user was holding.
-     * [alsoEnableAutoCompact] backs iOS's one-tap opt-in button, which compacts
-     * now AND remembers the choice for every future conversation.
-     */
     fun compactAndSendPending(alsoEnableAutoCompact: Boolean = false) {
         if (alsoEnableAutoCompact) setAutoCompactEnabled(true)
         _showCompactBeforeSendPrompt.value = false
-        val text = pendingSendText ?: return
-        pendingSendText = null
-        val prefill = pendingSendPrefill
-        pendingSendPrefill = emptyList()
+        val prompt = pendingSendPrompt ?: return
         val headless = pendingSendHeadless
-        pendingSendHeadless = false
         viewModelScope.launch {
             val ok = awaitCompaction()
-            if (!ok) {
-                AppLogger.warning(TAG, "[Context] pre-send compaction failed — sending anyway")
-            }
-            sendMessage(text, skipContextCheck = true, headless = headless, prefill = prefill)
+            if (!ok) AppLogger.warning(TAG, "[Context] pre-send compaction failed — sending the stored receive")
+            pendingSendPrompt = null
+            pendingSendHeadless = false
+            sendMessage(prompt.text, skipContextCheck = true, headless = headless, received = prompt)
         }
     }
 
-    /** Dialog action: send without compacting. */
     fun sendPendingWithoutCompacting() {
         _showCompactBeforeSendPrompt.value = false
-        val text = pendingSendText ?: return
-        pendingSendText = null
-        val prefill = pendingSendPrefill
-        pendingSendPrefill = emptyList()
+        val prompt = pendingSendPrompt ?: return
         val headless = pendingSendHeadless
-        pendingSendHeadless = false
-        sendMessage(text, skipContextCheck = true, headless = headless, prefill = prefill)
+        viewModelScope.launch {
+            pendingSendPrompt = null
+            pendingSendHeadless = false
+            sendMessage(prompt.text, skipContextCheck = true, headless = headless, received = prompt)
+        }
     }
 
-    /** Dialog dismissed — restore the text to the composer so it isn't lost. */
     fun cancelCompactBeforeSend() {
         _showCompactBeforeSendPrompt.value = false
-        // Only the user's own text goes back into the composer.
-        if (!pendingSendHeadless) pendingSendText?.let { _inputText.value = it }
-        pendingSendText = null
-        pendingSendPrefill = emptyList()
-        pendingSendHeadless = false
+        val prompt = pendingSendPrompt ?: return
+        val headless = pendingSendHeadless
+        viewModelScope.launch {
+            incomingMutex.withLock {
+                app.momoding.task.Inbox.drop(context, listOf(prompt.id))
+                _messages.value = _messages.value.filterNot { it.id == prompt.id }
+                if (!headless) {
+                    _inputText.value = prompt.text
+                    _attachments.value = prompt.attachments
+                }
+                pendingSendPrompt = null
+                pendingSendHeadless = false
+                refreshInbox()
+            }
+        }
     }
 
     /**
@@ -6581,8 +6565,8 @@ class ChatViewModel(
         // under the NEW model rather than sit as dashed bubbles.
         // drainQueueWhenIdle re-resolves the provider after a 200ms delay,
         // by which time the caller has rebound it.
-        if (_promptQueue.value.isNotEmpty()) {
-            AppLogger.info(TAG_STREAM, "[SwitchModel] ${_promptQueue.value.size} queued prompt(s) remain, restarting drain")
+        if (_unreadInbox.value.isNotEmpty()) {
+            AppLogger.info(TAG_STREAM, "[SwitchModel] ${_unreadInbox.value.size} queued prompt(s) remain, restarting drain")
             drainQueueWhenIdle()
         }
     }
@@ -6624,10 +6608,14 @@ class ChatViewModel(
      * The rest of the prompt is not model-specific on Android.
      */
     private fun systemPromptFor(provider: LLMProvider, prompt: String?): String? {
-        val prefix = com.openminis.app.auth.ClaudeOAuthManager.ANTHROPIC_OAUTH_IDENTIFIER_PROMPT
-        if (prompt == null || prefix.isEmpty()) return prompt
-        val bare = if (prompt.startsWith(prefix)) prompt.removePrefix(prefix).trimStart('\n') else prompt
+        if (prompt == null) return null
         val oauth = (provider as? com.openminis.app.provider.anthropic.AnthropicProvider)?.isOAuth == true
+        // Only Claude Code OAuth requires this build-time customization. Other providers
+        // must work in public builds, where the configured prefix is intentionally empty.
+        val prefix = if (oauth) com.openminis.app.auth.ClaudeOAuthManager.ANTHROPIC_OAUTH_IDENTIFIER_PROMPT
+            else com.openminis.app.BuildConfig.ANTHROPIC_OAUTH_IDENTIFIER_PROMPT
+        if (prefix.isEmpty()) return prompt
+        val bare = if (prompt.startsWith(prefix)) prompt.removePrefix(prefix).trimStart('\n') else prompt
         return if (oauth) "$prefix\n\n$bare" else bare
     }
 
@@ -6654,7 +6642,7 @@ class ChatViewModel(
             isStreaming = _isStreaming.value,
             streamJobActive = streamJob?.isActive == true,
             hasAgentWork = agentWork,
-            hasQueuedPrompts = _promptQueue.value.isNotEmpty(),
+            hasQueuedPrompts = _unreadInbox.value.isNotEmpty(),
         )
     }
 
@@ -7072,7 +7060,7 @@ class ChatViewModel(
         toolLoopDetector.reset()
         _canResume.value = false
         _attachments.value = emptyList()
-        _promptQueue.value = emptyList()
+        _unreadInbox.value = emptyList()
         _hasInjectedShareContent.value = false
         // T261: tool-detail sheet is per-session UI state — clear it so a
         // newly cleared chat doesn't briefly flash a stale tool's sheet
@@ -7094,6 +7082,7 @@ class ChatViewModel(
         // Persist: drop messages + compact markers. Files (workspace,
         // attachments, offloads) intentionally retained.
         viewModelScope.launch {
+            app.momoding.task.TaskEngine.dao(context).clearInbox(sid)
             chatRepository.dao.deleteMessages(sid)
             chatRepository.dao.deleteCompactMarkers(sid)
             // [GH#325] Refresh the row's `updated_at` and drop the now-false
@@ -7458,12 +7447,11 @@ class ChatViewModel(
         // queued visuals and drop its queue entry so the upcoming send
         // doesn't double up against a later auto-drain.
         val retainedHead = messages.subList(0, keepThrough + 1).map { m ->
-            if (m.id == messageId && m.isQueued) {
-                m.queuedPromptId?.let { pid ->
-                    _promptQueue.value = _promptQueue.value.filterNot { it.id == pid }
-                    app.momoding.task.Inbox.drop(context, listOf(pid))
+            if (m.id == messageId && m.unread) {
+                m.inboxId?.let { pid ->
+                    viewModelScope.launch { app.momoding.task.Inbox.drop(context, listOf(pid)) }
                 }
-                m.copy(isQueued = false, queuedPromptId = null)
+                m.copy(unread = false, inboxId = null)
             } else m
         }
         _messages.value = retainedHead
@@ -7569,9 +7557,8 @@ class ChatViewModel(
         // auto-drain can't resurrect them.
         val retainedHead = messages.subList(0, cutFrom)
         for (m in deletedMessages) {
-            m.queuedPromptId?.let { pid ->
-                _promptQueue.value = _promptQueue.value.filterNot { it.id == pid }
-                app.momoding.task.Inbox.drop(context, listOf(pid))
+            m.inboxId?.let { pid ->
+                viewModelScope.launch { app.momoding.task.Inbox.drop(context, listOf(pid)) }
             }
         }
         _messages.value = retainedHead
@@ -7728,7 +7715,7 @@ class ChatViewModel(
         streamJob = viewModelScope.launch(Dispatchers.IO) {
             AppLogger.info(TAG_STREAM, "$label streamJob ENTER sid=$activeSessionId")
             try {
-                SessionConcurrencyManager.acquireSlot(activeSessionId)
+                if (helperConfig == null) SessionConcurrencyManager.acquireSlot(activeSessionId)
                 AppLogger.debug(TAG_STREAM, "$label streamJob slot acquired")
                 SessionActivityTracker.setActive(
                     activeSessionId,
@@ -7774,7 +7761,7 @@ class ChatViewModel(
                     // the stream has already flushed its last delta.
                     publishOverlayReplyExcerpt(activeSessionId)
                     SessionActivityTracker.setInactive(activeSessionId)
-                    SessionConcurrencyManager.releaseSlot(activeSessionId)
+                    if (helperConfig == null) SessionConcurrencyManager.releaseSlot(activeSessionId)
                     AppLogger.info(TAG_STREAM, "$label streamJob FINALLY exit")
                 }
             } catch (e: CancellationException) {
@@ -7990,419 +7977,195 @@ class ChatViewModel(
         )
     }
 
-    /**
-     * Enqueue a prompt to be injected into the currently running agent loop.
-     * The message appears immediately in the chat with isQueued=true; when the
-     * current agent loop finishes, drainQueuedPrompts() consumes the queue.
-     * Mirrors iOS AIChatViewModel.enqueuePrompt().
-     */
-    fun enqueuePrompt(
-        text: String,
-        origin: QueuedPromptOrigin = QueuedPromptOrigin.USER,
-        // [T-scheduled-tool-prefill] Runs as the first turn of whichever loop
-        // eventually carries this prompt (drain or mid-loop injection).
-        prefill: List<com.openminis.app.scheduled.PrefilledToolCall> = emptyList(),
-    ) {
-        val trimmed = text.trim()
-        // [T-p2-gentle-injection] Only a USER prompt owns the composer's staged
-        // attachments. A programmatic prompt arriving while the user has files
-        // staged must not walk off with them (and must not clear them below).
-        val pendingAttachments = if (origin == QueuedPromptOrigin.USER) _attachments.value else emptyList()
-        if ((trimmed.isBlank() && pendingAttachments.isEmpty()) || !_isStreaming.value) return
-        // [T-android-image-input-preflight] Same gate as sendMessage: a queued
-        // prompt drains against the same model, so an image the model cannot
-        // take would fail just as surely a turn later.
-
-        val prompt = QueuedPrompt(
-            id = java.util.UUID.randomUUID().toString(),
-            text = trimmed,
-            attachments = pendingAttachments,
-            origin = origin,
-            prefill = prefill,
-            // [T-scheduled-preemptive-insert] Recognise a scheduled fire by its
-            // envelope, and only when it did not come from the composer.
-            scheduledTaskId = if (origin == QueuedPromptOrigin.PROGRAMMATIC) {
-                com.openminis.app.scheduled.ScheduledTaskMarker.parse(trimmed)?.taskId
-            } else null,
-        )
-        // [T-scheduled-preemptive-insert] A newer undelivered fire of the same
-        // task replaces the older one (queue entry and its dashed bubble).
-        prompt.scheduledTaskId?.let { taskId ->
-            val superseded = QueuedPromptBatching.supersededBy(_promptQueue.value, taskId).toSet()
-            if (superseded.isNotEmpty()) {
-                _promptQueue.value = _promptQueue.value.filterNot { it.id in superseded }
-                _messages.value = _messages.value.filterNot { it.queuedPromptId in superseded }
-                app.momoding.task.Inbox.drop(context, superseded)
-                Log.i(TAG, "Scheduled task $taskId fired again before delivery — replaced ${superseded.size} older queued fire(s)")
-            }
-        }
-        _promptQueue.value = _promptQueue.value + prompt
-        app.momoding.task.Inbox.put(context, activeSessionId, prompt) // momoding: stored before anything can lose it (调研/M39 2.2)
-        _messages.value = _messages.value + prompt.bubble()
-        if (origin == QueuedPromptOrigin.USER) clearAttachments()
-        Log.i(TAG, "Enqueued prompt (${trimmed.length}ch, ${pendingAttachments.size} attachments, origin=$origin), queue=${_promptQueue.value.size}")
+    /** Prepare the durable payload before acknowledging reception, including pasted text. */
+    private fun prepareInboxPrompt(prompt: QueuedPrompt, sid: String): QueuedPrompt {
+        if (prompt.partsJson != null) return prompt
+        val prepared = prepareUserAttachments(prompt.attachments, sid)
+        check(prepared.attachmentNames.size == prompt.attachments.size) { "Some attachments could not be saved; the message was not accepted." }
+        val pasted = buildPastedParts(prompt.text, sid)
+        val ordered = prompt.attachments.filter { it.isImage } + prompt.attachments.filterNot { it.isImage }
+        val uris = prepared.imageUris + prepared.nonImageUris
+        val durable = ordered.mapIndexed { i, a -> a.copy(uri = uris[i]) } +
+            (pasted?.uiUris.orEmpty().mapIndexed { i, uri -> InputAttachment(fileName = pasted!!.uiNames[i], uri = uri, mimeType = "text/plain", kind = InputAttachment.Kind.DOCUMENT) })
+        return prompt.copy(attachments = durable, partsJson = buildUserPartsJson(
+            prompt.text, prepared.mediaRefPartsJson, prepared.attachedFilesXml, bodyPartsJson = pasted?.partsJson,
+        ))
     }
 
-    /** The bubble a queued prompt shows as until it is read. */
-    private fun QueuedPrompt.bubble() = ChatMessage(
-        id = "queued_msg_$id",
-        role = "user",
-        content = text,
-        imageUris = attachments.filter { it.isImage }.map { it.uri },
-        attachmentNames = attachments.map { it.fileName },
-        attachmentUris = attachments.filterNot { it.isImage }.map { it.uri },
-        isQueued = true,
-        queuedPromptId = id,
+    private fun QueuedPrompt.entity(sid: String) = MessageEntity(
+        id = id, sessionId = sid, role = "user", createdAt = arrivedAt, sortOrder = 0,
+        partsJson = partsJson ?: buildUserPartsJson(text, emptyList(), null),
     )
 
-    /** Remove a queued prompt and its chat message by prompt id; it will never be read. */
-    fun removeQueuedPrompt(promptId: String) {
-        _promptQueue.value = _promptQueue.value.filterNot { it.id == promptId }
-        _messages.value = _messages.value.filterNot { it.queuedPromptId == promptId }
-        app.momoding.task.Inbox.drop(context, listOf(promptId))
+    /** A cached view of Room, never a second send queue. */
+    private suspend fun refreshInbox() {
+        val sid = realSessionId.ifEmpty { return }
+        val rows = app.momoding.task.Inbox.rows(context, sid)
+        withContext(Dispatchers.Main) {
+            _unreadInbox.value = rows.filter { it.readAt == null && it.failedAt == null }
+            val byId = rows.associateBy { it.id }
+            _messages.value = _messages.value.map { m ->
+                val row = byId[m.id]
+                if (row != null) m.copy(unread = row.readAt == null, inboxId = row.id, inboxFailed = row.failedAt != null)
+                else if (m.inboxId != null) m.copy(unread = false, inboxId = null, inboxFailed = false) else m
+            }
+            val shown = _messages.value.mapTo(HashSet()) { it.id }
+            val missing = rows.filter { it.id !in shown }.flatMap { row ->
+                listOf(row.entity(sid)).toChatMessages().map { it.copy(
+                    unread = row.readAt == null, inboxId = row.id, inboxFailed = row.failedAt != null,
+                ) }
+            }
+            _messages.value = _messages.value + missing
+        }
     }
 
-    /**
-     * Momoding (调研/M39 2.2): words that reached this chat but were never read — the process died
-     * first — come back as they were, and go out as soon as the chat is free. A loop the phone cut
-     * off mid-way is left to [resume] (WorkResume), whose drain carries them.
-     */
+    private fun observeInbox(sid: String) {
+        if (observedInbox == sid) return
+        observedInbox = sid
+        inboxObserver?.cancel()
+        inboxObserver = viewModelScope.launch {
+            kotlinx.coroutines.flow.combine(
+                app.momoding.task.TaskEngine.dao(context).inboxFlow(sid), _isStreaming, _activeEntryId, _isCompacting,
+                app.momoding.task.TaskEngine.dao(context).queuedCountFlow(sid),
+            ) { _, _, _, _, _ -> Unit }.collect {
+                refreshInbox()
+                if (!incomingMutex.isLocked && !_isStreaming.value) {
+                    app.momoding.task.TaskEngine.handIdle(context, sid)
+                    if (!_canResume.value) drainQueueWhenIdle()
+                }
+            }
+        }
+    }
+
+    /** Used after a transaction posts a task message; no second copy is sent. */
+    internal suspend fun receiveInbox() {
+        sessionLoaded.first { it }
+        val sid = realSessionId.ifEmpty { return }
+        observeInbox(sid)
+        val ready = withTimeoutOrNull(5000) { _activeEntryId.first { it != null } }
+        check(ready != null) { "no provider resolved for the unread message" }
+        refreshInbox()
+        if (!_isStreaming.value) drainQueueWhenIdle()
+    }
+
     private fun restoreInbox() {
         viewModelScope.launch {
             sessionLoaded.first { it }
-            val sid = realSessionId.ifEmpty { return@launch }
-            val known = _promptQueue.value.mapTo(HashSet()) { it.id }
-            val back = app.momoding.task.Inbox.unread(context, sid).filterNot { it.id in known }
-            if (back.isEmpty()) return@launch
-            AppLogger.info(TAG, "restoreInbox: ${back.size} unread prompt(s) back for $sid")
-            _promptQueue.value = _promptQueue.value + back
-            _messages.value = _messages.value + back.map { it.bubble() }
-            if (!_isStreaming.value && !_canResume.value) drainQueueWhenIdle()
+            realSessionId.takeIf { it.isNotEmpty() }?.let { observeInbox(it) }
         }
     }
 
-    /**
-     * [T-android-queued-message-interrupt-on-toolclose] Mid-tool-loop
-     * interrupt: take everything in [_promptQueue] right now, finalize the
-     * just-finished assistant bubble in the UI, persist a fresh user
-     * message carrying the queued text + attachments, append an assistant
-     * "bridge" entry into [agentHistory] (so Anthropic's
-     * mergeConsecutiveSameRole doesn't fold the queued user msg into the
-     * preceding tool_result), and spawn a new assistant placeholder for
-     * the next iteration's response.
-     *
-     * Returns an [InjectedTurn] carrying the new assistantId (which the
-     * caller swaps into its loop-scope `assistantId` before `continue`-ing
-     * the agent loop), or `null` if every queued prompt was empty after
-     * attachment processing (caller falls through to a normal next-turn
-     * dispatch in that case).
-     *
-     * Mirrors iOS `injectQueuedPromptsAsNewTurn`
-     * (AIChatViewModel.swift:2794). Unlike iOS we don't persist the bridge
-     * entry — its sole purpose is to break up the consecutive-user run for
-     * the next API call; chat history reconstruction would just hide it.
-     */
-    /**
-     * [T-scheduled-preemptive-insert] [envelopeText] rewritten as a mid-loop
-     * insertion; unchanged if it is not a scheduled envelope.
-     */
-    private fun insertedScheduledEnvelope(envelopeText: String): String =
-        com.openminis.app.scheduled.ScheduledTaskMarker.parse(envelopeText)
-            ?.copy(insertedMidTask = true)?.xml
-            ?: envelopeText
+    fun retryInboxMessage(id: String) {
+        viewModelScope.launch {
+            val row = app.momoding.task.TaskEngine.dao(context).inbox(id) ?: return@launch
+            if (row.toSession != activeSessionId || row.failedAt == null) return@launch
+            app.momoding.task.Inbox.retry(context, id)
+            refreshInbox()
+            drainQueueWhenIdle()
+        }
+    }
 
-    private data class InjectedTurn(
-        val newAssistantId: String,
-        /** [T-scheduled-tool-prefill] Prefills of the injected prompts; the
-         *  loop runs them as its next turn instead of asking the model. */
-        val prefill: List<com.openminis.app.scheduled.PrefilledToolCall> = emptyList(),
-    )
+    /** One row per received message, the same id in inbox, transcript and bubble. */
+    private suspend fun consumeInbox(batch: List<QueuedPrompt>, inserted: Boolean = false): List<MessageEntity> {
+        val sid = ensureSession()
+        val prepared = withContext(Dispatchers.IO) { batch.map { prepareInboxPrompt(it, sid) } }.map { prompt ->
+            if (!inserted || !prompt.isScheduledFire) prompt else {
+                val xml = insertedScheduledEnvelope(prompt.text)
+                val parts = org.json.JSONArray(prompt.partsJson!!)
+                for (i in 0 until parts.length()) {
+                    val part = parts.getJSONObject(i)
+                    if (part.optString("type") == "text" && part.optString("value") == prompt.text) part.put("value", xml)
+                }
+                prompt.copy(partsJson = parts.toString())
+            }
+        }
+        val rows = app.momoding.task.Inbox.take(context, prepared.map { it.id }) {
+            prepared.map { prompt ->
+                app.momoding.task.TaskEngine.dao(context).inboxParts(prompt.id, prompt.partsJson!!)
+                chatRepository.appendMessage(sid, "user", prompt.partsJson, id = prompt.id).also {
+                    app.momoding.chat.RoutineWakes.claim(sid, it.id)
+                }
+            }
+        }
+        for (row in rows) if (agentHistory.none { it.dbMessageId == row.id }) agentHistory.add(row.toLLMMessage())
+        withContext(Dispatchers.Main) {
+            for (message in rows.toChatMessages()) {
+                val at = _messages.value.indexOfFirst { it.id == message.id }
+                _messages.value = if (at >= 0) _messages.value.toMutableList().also { it[at] = message }
+                    else _messages.value + message
+            }
+        }
+        refreshInbox()
+        return rows
+    }
+
+    private fun insertedScheduledEnvelope(text: String): String =
+        com.openminis.app.scheduled.ScheduledTaskMarker.parse(text)?.copy(insertedMidTask = true)?.xml ?: text
+
+    private data class InjectedTurn(val newAssistantId: String, val prefill: List<com.openminis.app.scheduled.PrefilledToolCall> = emptyList())
 
     private suspend fun injectQueuedPromptsAsNewTurn(
-        finishedAssistantId: String,
-        finishedAccumulatedText: String,
-        finishedAllToolBlocks: List<AssistantBlock>,
-        // [T-scheduled-preemptive-insert] The prompts to inject, chosen by
-        // QueuedPromptBatching.nextInsertBatch: either one scheduled fire, or
-        // the user follow-up(s) merged with the other non-scheduled prompts.
-        // Anything not in the batch stays queued.
+        finishedAssistantId: String, finishedAccumulatedText: String, finishedAllToolBlocks: List<AssistantBlock>,
         batch: List<QueuedPrompt>,
     ): InjectedTurn? {
         if (batch.isEmpty()) return null
-        val queued = batch
-        // A scheduled fire travels alone (see nextInsertBatch), so the batch
-        // is either exactly one of those or has none.
-        val scheduledInsert = queued.size == 1 && queued[0].isScheduledFire
-        // [T-queue-dequeue-after-persist] The prompts stay ON the queue until
-        // their user row is persisted (see the dequeue after appendMessage
-        // below). This used to empty the queue here, ahead of four suspension
-        // points; a Stop inside that window made cancelStream find an empty
-        // queue, so drainQueueWhenIdle never ran and the message was
-        // neither sent nor saved (its dashed bubble vanished on reopen).
-
-        // Momoding: the queued bubbles stay where they are and simply turn into sent ones, linked
-        // to the row the batch is persisted as (as the drain does) — no bubble moves or flashes.
-        val queuedIds = queued.map { it.id }.toSet()
-
-        // Build the combined user message from all queued prompts.
-        val sid = ensureSession()
-        val combinedAttachments = queued.flatMap { it.attachments }
-        val prepared = prepareUserAttachments(combinedAttachments, sid)
-
-        val combinedParts = mutableListOf<AgentContentPart>()
-        val combinedText = StringBuilder()
-        for (prompt in queued) {
-            // [T-scheduled-preemptive-insert] A scheduled fire landing mid-loop
-            // is re-wrapped as an INSERTED envelope, whose reminder tells the
-            // model where this turn came from and to resume its plan after.
-            // Persisted as such, so a reloaded session shows the model the
-            // same thing it saw live.
-            val text = if (scheduledInsert) insertedScheduledEnvelope(prompt.text) else prompt.text
-            if (text.isNotEmpty()) {
-                if (combinedText.isNotEmpty()) combinedText.append("\n\n")
-                combinedText.append(text)
-                combinedParts.add(AgentContentPart.Text(text))
-            }
-        }
-        prepared.imageParts.forEachIndexed { idx, part ->
-            combinedParts.addModelImage(part, prepared.imageUploadPaths.getOrNull(idx), prepared.imageModelNotes.getOrNull(idx))
-        }
-        prepared.attachedFilesXml?.let { combinedParts.add(AgentContentPart.Text(it)) }
-
-        // Guard: every queued prompt produced no content (no text, no
-        // image). An empty user msg is a 400 from every provider. Skip —
-        // the caller falls through to a normal next-turn dispatch so the
-        // loop doesn't spin.
-        if (combinedParts.isEmpty()) {
-            AppLogger.warning(
-                TAG_STREAM,
-                "injectQueuedPromptsAsNewTurn: ${queued.size} queued prompt(s) produced no content, skipping",
-            )
-            _promptQueue.value = _promptQueue.value.filterNot { it.id in queuedIds }
-            app.momoding.task.Inbox.drop(context, queuedIds)
-            return null
-        }
-
-        // Bridge entry into agentHistory ONLY (not persisted). The tail
-        // before this call is user(tool_result); without the bridge the
-        // queued user message becomes two consecutive user roles and the
-        // provider merges them — exactly the regression iOS hit at #579.
-        // Empty/whitespace-only bridge text would itself be merged out by
-        // some sanitizers; keep a small visible string for parity with iOS.
-        // [T-scheduled-preemptive-insert] A scheduled fire is not the user
-        // changing course, so it gets its own bridge: a pause to handle the
-        // task, then back to the plan. A user follow-up keeps the original
-        // wording, which leaves "should the prior task continue?" open.
-        // Both texts live in ChatMessage, whose isInternalBridge keeps them
-        // out of the chat UI.
-        val bridgeText = if (scheduledInsert) ChatMessage.SCHEDULED_INSERT_BRIDGE_TEXT else ChatMessage.INTERNAL_BRIDGE_TEXT
-        agentHistory.add(
-            LLMMessage(
-                role = LLMMessage.Role.ASSISTANT,
-                content = bridgeText,
-                contentParts = listOf(AgentContentPart.Text(bridgeText)),
-            ),
-        )
-
-        // Persist the queued user message as its own DB row + append to
-        // agentHistory so the next API call carries it.
-        val userText = combinedText.toString()
-        // [T-android-paste-mediaref] Queued prompts carry markers too.
-        //
-        // sendMessage hands off to enqueuePrompt whenever a turn is already
-        // streaming, and it no longer expands markers before doing so — so
-        // without this the queued row would persist a literal `[Pasted#3]` and
-        // the model would receive the marker instead of the text.
-        val queuedPaste = buildPastedParts(userText, sid)
-        if (queuedPaste != null) {
-            _pastedTexts.value = _pastedTexts.value.filterNot { it.id in queuedPaste.consumedIds }
-        }
-        val userPartsJson = buildUserPartsJson(
-            userText,
-            prepared.mediaRefPartsJson,
-            prepared.attachedFilesXml,
-            bodyPartsJson = queuedPaste?.partsJson,
-        )
-        val userEntity = app.momoding.task.Inbox.take(context, queuedIds) { chatRepository.appendMessage(sid, "user", userPartsJson) }
-        // [T-queue-dequeue-after-persist] Dequeue only now that the row exists,
-        // with no suspension point in between. Filter by id rather than
-        // emptying: a prompt enqueued during the window above stays queued.
-        _promptQueue.value = _promptQueue.value.filterNot { it.id in queuedIds }
-        agentHistory.add(
-            LLMMessage(
-                role = LLMMessage.Role.USER,
-                // Expanded for the model; the persisted row above stays small.
-                content = queuedPaste?.modelText ?: userText,
-                imageParts = prepared.imageParts,
-                contentParts = queuedPaste?.let { p ->
-                    // Replace the whole LEADING RUN of text parts with the one
-                    // expanded body, then keep everything after it.
-                    //
-                    // Not "index 0": each queued prompt contributes its own text
-                    // part, and combinedText joined them with blank lines —
-                    // p.modelText is the expansion of that join, so it stands
-                    // for all of them. The image and <user-attached-files> parts
-                    // that follow must survive untouched.
-                    val bodyCount = combinedParts.takeWhile { it is AgentContentPart.Text }.size
-                    listOf(AgentContentPart.Text(p.modelText)) + combinedParts.drop(bodyCount)
-                } ?: combinedParts,
-                dbMessageId = userEntity.id,
-            ),
-        )
-
-        // Finalize the just-finished assistant bubble, mark the queued bubbles sent (on the LIVE
-        // list — anything appended during the suspends above stays), and open a new assistant
-        // placeholder for the next iteration's stream.
-        val newAssistantId = "assistant_${System.currentTimeMillis()}"
+        val bridge = if (batch.singleOrNull()?.isScheduledFire == true) ChatMessage.SCHEDULED_INSERT_BRIDGE_TEXT else ChatMessage.INTERNAL_BRIDGE_TEXT
+        agentHistory.add(LLMMessage(LLMMessage.Role.ASSISTANT, bridge, contentParts = listOf(AgentContentPart.Text(bridge))))
+        consumeInbox(batch, inserted = true)
+        val newId = "assistant_${System.currentTimeMillis()}"
         withContext(Dispatchers.Main) {
-            _messages.value = _messages.value.map { m ->
-                if (m.queuedPromptId in queuedIds) m.copy(isQueued = false, queuedPromptId = null, sourceDbIds = listOf(userEntity.id)) else m
-            }
-            updateAssistantMessage(
-                finishedAssistantId,
-                finishedAccumulatedText,
-                false,
-                finishedAllToolBlocks,
-                isAwaitingModelResponse = false,
-            )
-            _messages.value = _messages.value + ChatMessage(
-                id = newAssistantId,
-                role = "assistant",
-                content = "",
-                isStreaming = true,
-                isAwaitingModelResponse = true,
-                thinkingLevel = _thinkingLevel.value,
-            )
+            updateAssistantMessage(finishedAssistantId, finishedAccumulatedText, false, finishedAllToolBlocks, isAwaitingModelResponse = false)
+            _messages.value = _messages.value + ChatMessage(id = newId, role = "assistant", content = "", isStreaming = true,
+                isAwaitingModelResponse = true, thinkingLevel = _thinkingLevel.value)
         }
-
-        AppLogger.info(
-            TAG_STREAM,
-            "injectQueuedPromptsAsNewTurn: injected ${queued.size} queued prompt(s) as new turn, " +
-                "finishedId=$finishedAssistantId newId=$newAssistantId",
-        )
-        return InjectedTurn(newAssistantId, queued.flatMap { it.prefill })
+        return InjectedTurn(newId, batch.flatMap { it.prefill })
     }
 
-    /**
-     * Drain queued prompts after an agent loop finishes. Each queued prompt is
-     * appended to agentHistory, persisted, and re-runs the agent loop.
-     * Mirrors iOS AIChatViewModel.drainQueuedPrompts().
-     */
+    /** Setup failures use the same bounded inbox retry as failures inside the model loop. */
+    private suspend fun inboxSetupFailed(batch: List<QueuedPrompt>, error: Throwable): Boolean =
+        withContext(kotlinx.coroutines.NonCancellable) {
+            val retrying = app.momoding.task.Inbox.failed(context, activeSessionId,
+                terminal = error is CancellationException, ids = batch.map { it.id })
+            refreshInbox()
+            val task = app.momoding.task.TaskEngine.dao(context).heldBy(activeSessionId)
+            app.momoding.task.TaskEngine.turnFinished(context, activeSessionId, task?.id,
+                app.momoding.task.TaskCompletion(false, "The hand could not start: ${error.message}"), hasFollowUp = retrying)
+            retrying
+        }
+
     private suspend fun drainQueuedPrompts(
-        provider: LLMProvider,
-        systemPrompt: String?,
-        fallbackProviders: List<FallbackCandidate>,
+        provider: LLMProvider, fallbackProviders: List<FallbackCandidate>,
         fallbackStrategy: com.openminis.app.data.model.FallbackStrategy,
     ) {
-        while (_promptQueue.value.isNotEmpty()) {
-            // [T-scheduled-preemptive-insert] One scheduled fire per round,
-            // never merged; everything else merges as before.
-            val queued = QueuedPromptBatching.nextDrainBatch(_promptQueue.value)
-            // [T-queue-dequeue-after-persist] Same as injectQueuedPromptsAsNewTurn:
-            // the prompts leave the queue (and their bubbles flip to "sent") only
-            // after appendMessage below, so a Stop during the suspending persist
-            // leaves them queued for cancelStream's drainQueueWhenIdle instead
-            // of losing them.
-            Log.i(TAG, "📨[DRAIN] Draining ${queued.size} queued prompt(s): " +
-                queued.joinToString(", ") { "${it.id}=\"${it.text.take(20)}...\"" })
-            val queuedIds = queued.map { it.id }.toSet()
-
-            // Build a combined user message (text + images from all queued prompts).
-            // Persist as a single row.
-            val sid = ensureSession()
-            val combinedAttachments = queued.flatMap { it.attachments }
-            val prepared = prepareUserAttachments(combinedAttachments, sid)
-
-            // T132: same shape as sendMessage — caption(s) first, then for each
-            // image emit "[attached image: <path>]" + ImageData, finally the
-            // <user-attached-files> XML. Keeps caption adjacent to image and
-            // lets the agent re-read the file via read_image.
-            val combinedParts = mutableListOf<AgentContentPart>()
-            val combinedText = StringBuilder()
-            for (prompt in queued) {
-                if (prompt.text.isNotEmpty()) {
-                    if (combinedText.isNotEmpty()) combinedText.append("\n\n")
-                    combinedText.append(prompt.text)
-                    combinedParts.add(AgentContentPart.Text(prompt.text))
-                }
-            }
-            prepared.imageParts.forEachIndexed { idx, part ->
-                combinedParts.addModelImage(part, prepared.imageUploadPaths.getOrNull(idx), prepared.imageModelNotes.getOrNull(idx))
-            }
-            prepared.attachedFilesXml?.let { combinedParts.add(AgentContentPart.Text(it)) }
-
-            val userText = combinedText.toString()
-            // [T-android-paste-mediaref] Same marker handling as the mid-loop
-            // inject path above — see the note there for why queued prompts
-            // need it at all.
-            val drainPaste = buildPastedParts(userText, sid)
-            if (drainPaste != null) {
-                _pastedTexts.value =
-                    _pastedTexts.value.filterNot { it.id in drainPaste.consumedIds }
-            }
-            val userPartsJson = buildUserPartsJson(
-                userText,
-                prepared.mediaRefPartsJson,
-                prepared.attachedFilesXml,
-                bodyPartsJson = drainPaste?.partsJson,
-            )
-            val drainedRow = app.momoding.task.Inbox.take(context, queuedIds) { chatRepository.appendMessage(sid, "user", userPartsJson) }
-            _promptQueue.value = _promptQueue.value.filterNot { it.id in queuedIds }
-            // Flip isQueued=false on corresponding chat messages so they render as sent.
-            // T189: also clear queuedPromptId so a later retry of this bubble
-            // doesn't try to drop a phantom queue entry (and so the field state
-            // matches what retryFromMessage's truncate path now produces).
-            //
-            // [T-android-bubble-anchor-drain] Link every drained bubble to the
-            // ONE row the batch was persisted as. The bubbles keep their
-            // placeholder ids ("queued_msg_…"), so without the link they were
-            // unlinked and retry / delete / edit fell back to counting — and N
-            // bubbles over one row is exactly the skew counting gets wrong
-            // (editing the second of two merged prompts cut the NEXT turn and
-            // left the merged row, old text included, in the model's context).
-            _messages.value = _messages.value.map { m ->
-                if (m.queuedPromptId != null && queuedIds.contains(m.queuedPromptId)) {
-                    m.copy(isQueued = false, queuedPromptId = null, sourceDbIds = listOf(drainedRow.id))
-                } else m
-            }
-
-            agentHistory.add(LLMMessage(
-                role = LLMMessage.Role.USER,
-                content = drainPaste?.modelText ?: userText,
-                imageParts = prepared.imageParts,
-                contentParts = drainPaste?.let { p ->
-                    val bodyCount = combinedParts.takeWhile { it is AgentContentPart.Text }.size
-                    listOf(AgentContentPart.Text(p.modelText)) + combinedParts.drop(bodyCount)
-                } ?: combinedParts,
-            ))
-
+        while (true) {
+            val batch = QueuedPromptBatching.nextDrainBatch(app.momoding.task.Inbox.unread(context, activeSessionId))
+            if (batch.isEmpty()) return
+            var loopStarted = false
             try {
-                runAgentLoop(
-                    provider = provider,
-                    systemPrompt = systemPrompt,
-                    fallbackProviders = fallbackProviders,
-                    fallbackStrategy = fallbackStrategy,
-                    // [T-scheduled-tool-prefill] A queued scheduled prompt keeps
-                    // its prefilled calls: they run as this loop's first turn.
-                    prefill = queued.flatMap { it.prefill },
-                )
-                momodingAfterTurn() // momoding: queued prompts complete turns too
+                consumeInbox(batch)
+                val prompt = systemPromptFor(provider, buildSystemPrompt())
+                loopStarted = true // runAgentLoop owns retry/closeout from this point.
+                runAgentLoop(provider, prompt, fallbackProviders, fallbackStrategy, prefill = batch.flatMap { it.prefill })
+                momodingAfterTurn()
             } catch (e: CancellationException) {
-                Log.d(TAG, "Agent loop (queued-drain) cancelled")
-                // Cancel mid-drain: cancelStream() will check _promptQueue
-                // and call drainQueueWhenIdle() if anything's still pending,
-                // so just propagate.
+                if (!loopStarted) inboxSetupFailed(batch, e)
                 throw e
             } catch (e: Exception) {
-                Log.e(TAG, "Agent loop (queued-drain) error", e)
-                setInlineError(e.message ?: "Unknown error")
-                break
+                if (!loopStarted) inboxSetupFailed(batch, e)
+                refreshInbox()
+                if (_unreadInbox.value.isEmpty()) {
+                    setInlineError(e.message ?: "Unknown error")
+                    return
+                }
             }
         }
     }
 
     fun sendMessage(text: String) {
-        sendMessage(text, skipContextCheck = false, headless = false)
+        viewModelScope.launch {
+            runCatching { sendMessage(text, skipContextCheck = false, headless = false) }
+                .onFailure { _error.value = it.message; _inputText.value = text }
+        }
     }
 
     /**
@@ -8438,14 +8201,15 @@ class ChatViewModel(
      * is rejected with `context_near_capacity` so the caller can compact and
      * retry, or surface the refusal.
      */
-    internal fun submitPrompt(
+    internal suspend fun submitPrompt(
         text: String,
         // [T-scheduled-tool-prefill] Tool calls executed as the loop's first
         // turn, before any model request (a scheduled task's prefilled call).
         prefill: List<com.openminis.app.scheduled.PrefilledToolCall> = emptyList(),
         origin: QueuedPromptOrigin? = null,
+        attachments: List<InputAttachment> = emptyList(),
     ): SubmitOutcome =
-        sendMessage(text, skipContextCheck = false, headless = true, prefill = prefill, origin = origin)
+        sendMessage(text, skipContextCheck = false, headless = true, prefill = prefill, origin = origin, explicitAttachments = attachments)
 
     /**
      * @param skipContextCheck set by the pre-send context dialog's own actions,
@@ -8454,12 +8218,46 @@ class ChatViewModel(
      *   chunk) token count and pop the dialog again — iOS guards the identical
      *   re-entry with `skipCompactCheck`.
      */
-    private fun sendMessage(
+    private suspend fun sendMessage(
+        text: String, skipContextCheck: Boolean, headless: Boolean = false,
+        prefill: List<com.openminis.app.scheduled.PrefilledToolCall> = emptyList(),
+        origin: QueuedPromptOrigin? = null, explicitAttachments: List<InputAttachment>? = null,
+        received: QueuedPrompt? = null,
+    ): SubmitOutcome = incomingMutex.withLock {
+        if (!sessionLoaded.value && !com.openminis.app.crash.CrashFrequencyDetector.isSafeMode()) sessionLoaded.first { it }
+        val attachments = explicitAttachments ?: if (headless) emptyList() else _attachments.value
+        if (received == null && text.isBlank() && attachments.isEmpty()) return@withLock SubmitOutcome.Rejected("empty_prompt")
+        val sid = ensureSession()
+        val prompt = received ?: run {
+            val raw = QueuedPrompt(java.util.UUID.randomUUID().toString(), text.trim(), attachments,
+                origin = origin ?: if (headless) QueuedPromptOrigin.PROGRAMMATIC else QueuedPromptOrigin.USER,
+                prefill = prefill, scheduledTaskId = if (headless) com.openminis.app.scheduled.ScheduledTaskMarker.parse(text)?.taskId else null)
+            val prepared = withContext(Dispatchers.IO) { prepareInboxPrompt(raw, sid) }
+            app.momoding.task.Inbox.put(context, sid, prepared)
+            if (!headless) {
+                clearAttachments()
+                val consumed = splitPastePlaceholders(text, _pastedTexts.value).second
+                _pastedTexts.value = _pastedTexts.value.filterNot { it.id in consumed }
+            }
+            prepared
+        }
+        observeInbox(sid)
+        refreshInbox()
+        val outcome = sendAcceptedMessage(prompt.text, skipContextCheck, headless, prompt.prefill, prompt.origin, prompt)
+        if (outcome is SubmitOutcome.Rejected && pendingSendPrompt?.id != prompt.id) {
+            app.momoding.task.TaskEngine.dao(context).rejectInbox(prompt.id, System.currentTimeMillis())
+            refreshInbox()
+        }
+        outcome
+    }
+
+    private suspend fun sendAcceptedMessage(
         text: String,
         skipContextCheck: Boolean,
         headless: Boolean = false,
         prefill: List<com.openminis.app.scheduled.PrefilledToolCall> = emptyList(),
         origin: QueuedPromptOrigin? = null,
+        prompt: QueuedPrompt,
     ): SubmitOutcome {
         app.momoding.memory.UserFile.markTurnStart(context, realSessionId.ifEmpty { sessionId }) // momoding: "记住了" lines
         // [T-android-paste-mediaref] `[Pasted#N]` markers are NOT expanded here
@@ -8479,21 +8277,11 @@ class ChatViewModel(
         // here — clearing at this point would strip the content out from under
         // a send that then bails on the context-check paths below.
         val trimmed = text.trim()
-        // While streaming, enqueue instead of silently dropping (iOS: send vs enqueuePrompt).
-        if (_isStreaming.value) {
-            // enqueuePrompt has its own blank/attachment guard and returns Unit;
-            // the queue length is the acceptance signal (iOS does the same).
-            val before = _promptQueue.value.size
-            // [T-p2-gentle-injection] A headless send is PROGRAMMATIC: it waits
-            // for the running loop to finish instead of interrupting it.
-            enqueuePrompt(text, origin ?: if (headless) QueuedPromptOrigin.PROGRAMMATIC else QueuedPromptOrigin.USER, prefill)
-            return if (_promptQueue.value.size == before + 1) SubmitOutcome.Queued
-            else SubmitOutcome.Rejected("enqueue_declined")
-        }
+        if (_isStreaming.value) return SubmitOutcome.Queued
         // T180: allow attachments-only sends (no caption). Mirrors iOS, where
         // an empty text + non-empty attachments still produces a valid user
         // message. Without this an image-only "look at this" send dropped.
-        if (trimmed.isBlank() && _attachments.value.isEmpty()) return SubmitOutcome.Rejected("empty_prompt")
+        if (trimmed.isBlank() && prompt.attachments.isEmpty()) return SubmitOutcome.Rejected("empty_prompt")
         // [T-android-image-input-preflight] Refuse to send images to a model
         // that does not accept them — the request would only come back as an
         // upstream 400 (or have its pixels silently swapped for a placeholder).
@@ -8504,7 +8292,7 @@ class ChatViewModel(
                 text = "Wait for the current compact to finish before sending.",
                 iconKind = "compact",
             )
-            return SubmitOutcome.Rejected("session_compacting")
+            return SubmitOutcome.Queued
         }
         // Context pressure check. Unlike before, needsCompact now HOLDS the
         // send: either compact silently (auto-compact on) or ask first. The
@@ -8514,8 +8302,7 @@ class ChatViewModel(
             when (checkContextBeforeSend()) {
                 PreSendContextAction.PROCEED -> {}
                 PreSendContextAction.COMPACT_THEN_SEND -> {
-                    pendingSendText = text
-                    pendingSendPrefill = prefill
+                    pendingSendPrompt = prompt
                     pendingSendHeadless = headless
                     // [T-android-programmatic-prompt-keeps-draft] Only the
                     // user's own send owns the composer. A headless prompt (a
@@ -8534,7 +8321,7 @@ class ChatViewModel(
                     if (headless) return SubmitOutcome.Rejected("context_near_capacity")
                     // Park the text on the VM (not the composer) so the dialog
                     // owns it; cancelCompactBeforeSend puts it back.
-                    pendingSendText = text
+                    pendingSendPrompt = prompt
                     pendingSendHeadless = false
                     _inputText.value = ""
                     _showCompactBeforeSendPrompt.value = true
@@ -8564,8 +8351,6 @@ class ChatViewModel(
 
         _error.value = null
 
-        val currentAttachments = _attachments.value
-        clearAttachments()
 
         // T145: claim _isStreaming synchronously so a rapid second tap can't
         // slip past the entry guard during DB/OAuth setup. See retryFromMessage.
@@ -8597,6 +8382,7 @@ class ChatViewModel(
 
         viewModelScope.launch {
             var streamLaunched = false
+            var batch = listOf(prompt)
             try {
             // [T-android-send-before-load] Never write this turn into the
             // transcript while loadSession is still reading it. loadSession
@@ -8619,87 +8405,10 @@ class ChatViewModel(
                 truncateBeforeEdit(editingId)
             }
 
-            val prepared = prepareUserAttachments(currentAttachments, activeSessionId)
-
-            // [T-android-paste-mediaref] Fold `[Pasted#N]` markers out to disk
-            // BEFORE persisting, so the stored message carries a mediaRef per
-            // paste instead of one huge text part.
-            val pasted = buildPastedParts(trimmed, activeSessionId)
-            if (pasted != null) {
-                // Safe to clear now: the content is on disk and the parts JSON
-                // below references it, so nothing depends on the buffer any more.
-                _pastedTexts.value = _pastedTexts.value.filterNot { it.id in pasted.consumedIds }
-            }
-
-            // Save user message — text + persisted mediaRef parts so images survive
-            // a session reload (T128). Non-image attachments still only contribute
-            // their name (rendered as a file tile) and are not persisted.
-            val userPartsJson = buildUserPartsJson(
-                trimmed,
-                prepared.mediaRefPartsJson,
-                prepared.attachedFilesXml,
-                bodyPartsJson = pasted?.partsJson,
-            )
-            val persistedUser = chatRepository.appendMessage(activeSessionId, "user", userPartsJson)
-            app.momoding.chat.RoutineWakes.claim(activeSessionId, persistedUser.id) // momoding: a routine's prompt is marked as such on its row
-
-            val userMsg = ChatMessage(
-                id = persistedUser.id,
-                role = "user",
-                // The bubble shows the SHORT body with markers removed; the
-                // pasted blocks appear beside it as file cards (below).
-                // Strip the consumed markers from the visible caption — the
-                // file cards now stand for them. Only ids that actually
-                // resolved are removed, so a literal the user typed for an
-                // unknown id survives as text, matching how it is persisted.
-                content = pasted?.let { p ->
-                    p.consumedIds.fold(trimmed) { acc, id ->
-                        acc.replace(PastedText.placeholderFor(id), "")
-                    }.trim()
-                } ?: trimmed,
-                imageUris = prepared.imageUris,
-                // Pasted blocks render exactly like attached documents: append
-                // them to the non-image suffix, preserving the
-                // images-first/files-after ordering that
-                // ChatMessage.attachmentNames depends on.
-                attachmentNames = prepared.attachmentNames + (pasted?.uiNames ?: emptyList()),
-                attachmentUris = prepared.nonImageUris + (pasted?.uiUris ?: emptyList()),
-            )
-            _messages.value = _messages.value + userMsg
-            val imageParts = prepared.imageParts
-
-            // T132: build the user contentParts in iOS order — caption first
-            // (only if non-empty), then per image emit
-            //   text("[attached image: /var/minis/attachments/uploads/<f>]")
-            //   ImageData(<bytes>, <mime>)
-            // so the caption sits adjacent to the image in the wire payload,
-            // and the agent's read_image tool can resolve the same path back
-            // to bytes. Trailing <user-attached-files> XML block lets the
-            // model see filenames/sizes without needing tool calls.
-            // [T-android-paste-mediaref] The MODEL gets the fully expanded body
-            // even though the bubble and the DB row do not. This is the whole
-            // point of the split: local rendering stays cheap, the prompt is
-            // unchanged from what it used to be.
-            //
-            // On later turns the same expansion is rebuilt from disk by
-            // toLLMMessage's mediaRef branch, so history replay (retry, rerun,
-            // session reload, compaction) sees the identical text.
-            val modelBody = pasted?.modelText ?: trimmed
-
-            val userContentParts = mutableListOf<AgentContentPart>()
-            if (modelBody.isNotEmpty()) userContentParts.add(AgentContentPart.Text(modelBody))
-            imageParts.forEachIndexed { idx, part ->
-                userContentParts.addModelImage(part, prepared.imageUploadPaths.getOrNull(idx), prepared.imageModelNotes.getOrNull(idx))
-            }
-            prepared.attachedFilesXml?.let { userContentParts.add(AgentContentPart.Text(it)) }
-
-            agentHistory.add(LLMMessage(
-                role = LLMMessage.Role.USER,
-                content = modelBody,
-                imageParts = imageParts,
-                contentParts = userContentParts,
-                dbMessageId = persistedUser.id,
-            ))
+            // A new send cannot overtake older receives waiting for this idle chat.
+            batch = QueuedPromptBatching.nextDrainBatch(app.momoding.task.Inbox.unread(context, activeSessionId))
+            if (batch.isEmpty()) return@launch
+            val imageParts = consumeInbox(batch).flatMap { it.toLLMMessage().imageParts }
 
             // Refresh OAuth token if needed before sending (mirrors iOS validAccessToken)
             if ((provider as? com.openminis.app.provider.anthropic.AnthropicProvider)?.isOAuth == true) {
@@ -8789,13 +8498,13 @@ class ChatViewModel(
                             systemPrompt = systemPrompt,
                             fallbackProviders = fallbackProviders,
                             fallbackStrategy = activeFallbackStrategy,
-                            prefill = prefill,
+                            prefill = batch.flatMap { it.prefill },
                         )
                         AppLogger.info(TAG_STREAM, "send runAgentLoop RETURN normal")
                         momodingAfterTurn() // momoding
                         // Drain any prompts the user queued while this loop was running.
                         // Skipped on cancel: cancelled job won't reach here.
-                        drainQueuedPrompts(provider, systemPrompt, fallbackProviders, activeFallbackStrategy)
+                        drainQueuedPrompts(provider, fallbackProviders, activeFallbackStrategy)
                         AppLogger.info(TAG_STREAM, "send drainQueuedPrompts RETURN")
                     } catch (e: CancellationException) {
                         AppLogger.info(TAG_STREAM, "send runAgentLoop CANCELLED")
@@ -8811,9 +8520,11 @@ class ChatViewModel(
                         val imageHint = if (ImageInputPreflight.isLikelyImageRejection(e, imageParts.size)) {
                             "\n" + context.getString(R.string.image_input_rejected_hint, imageParts.size)
                         } else ""
-                        setInlineError((e.message ?: "Unknown error") + imageHint)
-                        // T298: completion notifier should show the ❌ variant.
-                        SessionActivityTracker.markStreamError(activeSessionId)
+                        refreshInbox()
+                        if (_unreadInbox.value.isEmpty()) {
+                            setInlineError((e.message ?: "Unknown error") + imageHint)
+                            SessionActivityTracker.markStreamError(activeSessionId)
+                        }
                     } finally {
                         AppLogger.info(TAG_STREAM, "send streamJob FINALLY enter")
                         // [T-android-overlay-reply-status-34599] Surface
@@ -8842,10 +8553,16 @@ class ChatViewModel(
                 }
                 AppLogger.info(TAG_STREAM, "send streamJob EXIT")
             }
+            } catch (e: CancellationException) {
+                if (!streamLaunched) inboxSetupFailed(batch, e)
+                throw e
+            } catch (e: Exception) {
+                if (!streamLaunched && !inboxSetupFailed(batch, e)) setInlineError(e.message ?: "Unknown error")
             } finally {
                 if (!streamLaunched) {
                     AppLogger.info(TAG_STREAM, "send _isStreaming=false (setup aborted)")
                     _isStreaming.value = false
+                    drainQueueWhenIdle()
                 }
             }
         }
@@ -9125,7 +8842,7 @@ class ChatViewModel(
             streamJob = launch(Dispatchers.IO) {
                 AppLogger.info(TAG_STREAM, "retryLast streamJob ENTER sid=$activeSessionId")
                 try {
-                    SessionConcurrencyManager.acquireSlot(activeSessionId)
+                    if (helperConfig == null) SessionConcurrencyManager.acquireSlot(activeSessionId)
                     AppLogger.debug(TAG_STREAM, "retryLast streamJob slot acquired")
                     SessionActivityTracker.setActive(
                     activeSessionId,
@@ -9150,7 +8867,7 @@ class ChatViewModel(
                         )
                         AppLogger.info(TAG_STREAM, "retryLast runAgentLoop RETURN normal")
                         momodingAfterTurn() // momoding
-                        drainQueuedPrompts(provider, systemPrompt, fallbackProviders, activeFallbackStrategy)
+                        drainQueuedPrompts(provider, fallbackProviders, activeFallbackStrategy)
                         AppLogger.info(TAG_STREAM, "retryLast drainQueuedPrompts RETURN")
                     } catch (e: CancellationException) {
                         AppLogger.info(TAG_STREAM, "retryLast runAgentLoop CANCELLED")
@@ -9172,7 +8889,7 @@ class ChatViewModel(
                         // the stream has already flushed its last delta.
                         publishOverlayReplyExcerpt(activeSessionId)
                         SessionActivityTracker.setInactive(activeSessionId)
-                        SessionConcurrencyManager.releaseSlot(activeSessionId)
+                        if (helperConfig == null) SessionConcurrencyManager.releaseSlot(activeSessionId)
                         AppLogger.info(TAG_STREAM, "retryLast streamJob FINALLY exit")
                     }
                 } catch (e: CancellationException) {
@@ -9843,6 +9560,7 @@ class ChatViewModel(
         val previousTail = agentHistory.lastOrNull()
         var loopReturned = false
         var loopFailure: String? = null
+        var loopCancelled = false
         helperWrapUpRequested = false
         val runningJob = kotlinx.coroutines.currentCoroutineContext()[Job]
         val helperBudget = if (isHelper && taskAtStart != null) app.momoding.task.Helpers.watchBudget(
@@ -11684,7 +11402,7 @@ class ChatViewModel(
                 // the user's own message, which decides instead (iOS clears the
                 // flag when user prompts are injected at turn end).
                 val cleanStop = turnFinishReason == "stop" || turnFinishReason == "end_turn"
-                val userPromptWaiting = _promptQueue.value.any { it.origin == QueuedPromptOrigin.USER }
+                val userPromptWaiting = _unreadInbox.value.any { it.origin == QueuedPromptOrigin.USER }
                 if (scheduledResumeNudgeOwed && !isEmptyTurn && cleanStop && !userPromptWaiting) {
                     scheduledResumeNudgeOwed = false
                     val nudge = ChatMessage.SCHEDULED_RESUME_NUDGE_TEXT
@@ -12161,30 +11879,13 @@ class ChatViewModel(
             //   …assistant(responds-to-queued).
             // The bridge lives in agentHistory only (NOT persisted) —
             // it's purely a wire-format spacer for the API call.
-            // [T-p2-gentle-injection] Only a USER follow-up may cut the plan
-            // short here. PROGRAMMATIC prompts (scheduled jobs, helper results,
-            // RPC/CLI sends) stay queued until the loop converges and are
-            // drained by drainQueuedPrompts() as a fresh turn — the same path a
-            // follow-up typed after the agent went idle takes. Before this
-            // check any queued prompt tripped the interrupt, so a job landing
-            // mid-plan abandoned whatever the agent was in the middle of.
-            //
-            // [T-scheduled-preemptive-insert] ...with one addition: a SCHEDULED
-            // fire may go in here too. It no longer waits for the whole run to
-            // end (and no longer gets merged with whatever else queued up
-            // meanwhile). This boundary is the gap the product asked for:
-            // every tool call of the turn has finished and its result is in
-            // history, and the model has not yet been asked what to do next.
-            // Nothing running is cut short. The fire goes in alone, as an
-            // inserted envelope, and its prefilled command (if any) runs as the
-            // next turn via pendingScriptedTurn — then the model answers it and
-            // resumes. Other programmatic prompts still wait for the drain.
-            // QueuedPromptBatching.nextInsertBatch holds the rules.
-            val insertBatch = QueuedPromptBatching.nextInsertBatch(_promptQueue.value)
-            if (insertBatch.isEmpty() && _promptQueue.value.isNotEmpty()) {
+            // All receives enter in arrival order after the completed tool step.
+            // A routine travels alone so its prefilled command belongs to that fire.
+            val insertBatch = QueuedPromptBatching.nextInsertBatch(app.momoding.task.Inbox.unread(context, activeSessionId))
+            if (insertBatch.isEmpty() && _unreadInbox.value.isNotEmpty()) {
                 AppLogger.info(
                     TAG_STREAM,
-                    "📨[QueueHold] turn=$turn ${_promptQueue.value.size} programmatic prompt(s) queued — holding until the loop converges",
+                    "📨[QueueHold] turn=$turn ${_unreadInbox.value.size} programmatic prompt(s) queued — holding until the loop converges",
                 )
             }
             if (insertBatch.isNotEmpty()) {
@@ -12193,7 +11894,7 @@ class ChatViewModel(
                     TAG_STREAM,
                     if (scheduledFire != null) {
                         "📨[ScheduledInsert] turn=$turn inserting scheduled task ${scheduledFire.scheduledTaskId} " +
-                            "between tool calls (prefill=${scheduledFire.prefill.size}, queue=${_promptQueue.value.size})"
+                            "between tool calls (prefill=${scheduledFire.prefill.size}, queue=${_unreadInbox.value.size})"
                     } else {
                         "📨[QueueInterrupt] turn=$turn ${insertBatch.size} queued prompt(s) (user follow-up) — interrupting after current tool call to start a standalone turn"
                     },
@@ -12257,6 +11958,7 @@ class ChatViewModel(
         loopReturned = true
         } catch (e: Throwable) {
             loopFailure = e.message ?: e.javaClass.simpleName
+            loopCancelled = e is CancellationException
             throw e
         } finally {
             helperBudget?.cancel()
@@ -12264,14 +11966,17 @@ class ChatViewModel(
                 else if (_canResume.value) "The run ended before delivering a final answer."
                 else _messages.value.lastOrNull { it.role == "assistant" }?.error
             withContext(kotlinx.coroutines.NonCancellable) {
+                val retrying = if (error != null) app.momoding.task.Inbox.failed(context, activeSessionId, terminal = loopCancelled)
+                    else { app.momoding.task.Inbox.complete(context, activeSessionId); false }
+                refreshInbox()
                 runCatching {
                     app.momoding.task.TaskEngine.turnFinished(
                         context, activeSessionId, taskAtStart,
                         app.momoding.task.TaskCompletion.fromHistory(isHelper, previousTail, agentHistory.lastOrNull(), error),
-                        hasFollowUp = _promptQueue.value.isNotEmpty() && error == null,
+                        hasFollowUp = retrying || app.momoding.task.Inbox.unread(context, activeSessionId).isNotEmpty(),
                     )
                 }.onFailure { AppLogger.warning(TAG, "task closeout: ${it.message}") }
-                if (!loopReturned && _promptQueue.value.isNotEmpty()) {
+                if ((!loopReturned || retrying) && _unreadInbox.value.isNotEmpty()) {
                     withContext(Dispatchers.Main) { drainQueueWhenIdle() }
                 }
             }
@@ -14819,7 +14524,7 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
         // enqueued prompts during the cancelled stream, auto-resume the drain
         // instead of leaving them stuck as dashed bubbles waiting for a manual
         // long-press retry.
-        val pending = _promptQueue.value
+        val pending = _unreadInbox.value
         if (pending.isNotEmpty()) {
             AppLogger.info(TAG_STREAM, "cancel — ${pending.size} queued prompt(s) remain, restarting drain")
             drainQueueWhenIdle()
@@ -14831,7 +14536,7 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
      * the cancelled stream. 200ms delay matches iOS drainQueueWhenIdle
      * (Task.sleep(200_000_000)) — gives the cancelled streamJob's finally block
      * room to release the concurrency slot + write back state. Race-guards on
-     * entry: empty queue (user withdrew) or already streaming (user manually
+     * entry: no unread receives or already streaming (user manually
      * retried) → noop return.
      *
      * Provider / systemPrompt / fallback resolution mirrors [sendMessage]
@@ -14841,8 +14546,9 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
     private fun drainQueueWhenIdle() {
         viewModelScope.launch {
             kotlinx.coroutines.delay(200)
-            if (_promptQueue.value.isEmpty()) return@launch
-            if (_isStreaming.value) return@launch
+            refreshInbox()
+            if (_unreadInbox.value.isEmpty()) return@launch
+            if (_isStreaming.value || incomingMutex.isLocked || pendingSendPrompt != null) return@launch
             // [T-android-compact-queued-drain] Defer while a compact is in
             // flight — draining would mutate agentHistory mid-marker-write.
             // Safe to just return: every SUCCESSFUL compact re-kicks this
@@ -14855,11 +14561,32 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
 
             val initialProvider = currentProvider
             if (initialProvider == null) {
-                AppLogger.warning(TAG, "drainQueueWhenIdle: no provider, dropping queue")
-                _promptQueue.value = emptyList()
-                _messages.value = _messages.value.filterNot { it.isQueued }
+                AppLogger.warning(TAG, "drainQueueWhenIdle: no provider yet; messages stay in Room")
                 return@launch
             }
+            when (checkContextBeforeSend()) {
+                PreSendContextAction.COMPACT_THEN_SEND -> {
+                    pendingSendPrompt = _unreadInbox.value.first()
+                    pendingSendHeadless = pendingSendPrompt?.origin != QueuedPromptOrigin.USER
+                    compactAndSendPending()
+                    return@launch
+                }
+                PreSendContextAction.ASK_USER -> {
+                    pendingSendPrompt = _unreadInbox.value.first()
+                    pendingSendHeadless = pendingSendPrompt?.origin != QueuedPromptOrigin.USER
+                    _showCompactBeforeSendPrompt.value = true
+                    return@launch
+                }
+                else -> Unit
+            }
+            // T145: claim the streaming flag synchronously before launching
+            // the streamJob so a concurrent send/retry tap is rejected by the
+            // entry guard. Mirrors sendMessage discipline.
+            AppLogger.info(TAG_STREAM, "drainQueueWhenIdle _isStreaming=true (sync, sid=$activeSessionId)")
+            _isStreaming.value = true
+            _canResume.value = false
+            _error.value = null
+
             var provider: LLMProvider = initialProvider
 
             // Refresh OAuth token if needed (mirrors sendMessage L2477-2501).
@@ -14893,25 +14620,10 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
                 }
             }
 
-            val baseSystemPrompt = buildSystemPrompt()
-            val systemPrompt = if ((provider as? com.openminis.app.provider.anthropic.AnthropicProvider)?.isOAuth == true) {
-                val prefix = com.openminis.app.auth.ClaudeOAuthManager.ANTHROPIC_OAUTH_IDENTIFIER_PROMPT
-                if (baseSystemPrompt?.startsWith(prefix) == true) baseSystemPrompt
-                else "$prefix\n\n${baseSystemPrompt ?: ""}"
-            } else baseSystemPrompt
-
-            // T145: claim the streaming flag synchronously before launching
-            // the streamJob so a concurrent send/retry tap is rejected by the
-            // entry guard. Mirrors sendMessage discipline.
-            AppLogger.info(TAG_STREAM, "drainQueueWhenIdle _isStreaming=true (sync, sid=$activeSessionId)")
-            _isStreaming.value = true
-            _canResume.value = false
-            _error.value = null
-
             streamJob = launch(Dispatchers.IO) {
                 AppLogger.info(TAG_STREAM, "drainQueueWhenIdle streamJob ENTER sid=$activeSessionId")
                 try {
-                    SessionConcurrencyManager.acquireSlot(activeSessionId)
+                    if (helperConfig == null) SessionConcurrencyManager.acquireSlot(activeSessionId)
                     AppLogger.debug(TAG_STREAM, "drainQueueWhenIdle streamJob slot acquired")
                     SessionActivityTracker.setActive(
                     activeSessionId,
@@ -14932,7 +14644,6 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
                         AppLogger.info(TAG_STREAM, "drainQueueWhenIdle drainQueuedPrompts CALL")
                         drainQueuedPrompts(
                             provider = provider,
-                            systemPrompt = systemPrompt,
                             fallbackProviders = fallbackProviders,
                             fallbackStrategy = activeFallbackStrategy,
                         )
@@ -14954,7 +14665,7 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
                         // the stream has already flushed its last delta.
                         publishOverlayReplyExcerpt(activeSessionId)
                         SessionActivityTracker.setInactive(activeSessionId)
-                        SessionConcurrencyManager.releaseSlot(activeSessionId)
+                        if (helperConfig == null) SessionConcurrencyManager.releaseSlot(activeSessionId)
                         AppLogger.info(TAG_STREAM, "drainQueueWhenIdle streamJob FINALLY exit")
                     }
                 } catch (e: CancellationException) {
@@ -15198,7 +14909,7 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
             streamJob = launch(Dispatchers.IO) {
                 AppLogger.info(TAG_STREAM, "resume streamJob ENTER sid=$activeSessionId")
                 try {
-                    SessionConcurrencyManager.acquireSlot(activeSessionId)
+                    if (helperConfig == null) SessionConcurrencyManager.acquireSlot(activeSessionId)
                     AppLogger.debug(TAG_STREAM, "resume streamJob slot acquired")
                     SessionActivityTracker.setActive(
                     activeSessionId,
@@ -15224,7 +14935,7 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
                         )
                         AppLogger.info(TAG_STREAM, "resume runAgentLoop RETURN normal")
                         momodingAfterTurn() // momoding
-                        drainQueuedPrompts(provider, systemPrompt, fallbackProviders, activeFallbackStrategy)
+                        drainQueuedPrompts(provider, fallbackProviders, activeFallbackStrategy)
                         AppLogger.info(TAG_STREAM, "resume drainQueuedPrompts RETURN")
                     } catch (e: CancellationException) {
                         AppLogger.info(TAG_STREAM, "resume runAgentLoop CANCELLED")
@@ -15244,7 +14955,7 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
                         // the stream has already flushed its last delta.
                         publishOverlayReplyExcerpt(activeSessionId)
                         SessionActivityTracker.setInactive(activeSessionId)
-                        SessionConcurrencyManager.releaseSlot(activeSessionId)
+                        if (helperConfig == null) SessionConcurrencyManager.releaseSlot(activeSessionId)
                         AppLogger.info(TAG_STREAM, "resume streamJob FINALLY exit")
                     }
                 } catch (e: CancellationException) {

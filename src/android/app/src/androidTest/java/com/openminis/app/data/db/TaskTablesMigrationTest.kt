@@ -61,4 +61,37 @@ class TaskTablesMigrationTest {
             db.query("PRAGMA integrity_check").use { c -> assertTrue(c.moveToFirst()); assertEquals("ok", c.getString(0)) }
         }
     }
+
+    @Test
+    fun upgrade15to16_keepsUnreadWordsAndDoesNotReplayOldReadMessages() {
+        helper.createDatabase(dbName, 15).use { db ->
+            db.execSQL("INSERT INTO sessions (id, model_id, created_at, updated_at, memory_enabled, edit_count) VALUES ('s1', 'm', 1, 1, 1, 0)")
+            db.execSQL("INSERT INTO messages (id, session_id, role, parts_json, created_at, sort_order, stream_interrupt_count) VALUES ('read', 's1', 'user', '[{\"type\":\"text\",\"value\":\"already in history\"}]', 1, 0, 0)")
+            db.execSQL("INSERT INTO inbox (id, to_session, sender, text, arrived_at) VALUES ('unread', 's1', 'USER', 'keep this', 2)")
+            db.execSQL("INSERT INTO inbox (id, to_session, sender, text, arrived_at, read_at) VALUES ('read', 's1', 'USER', 'already in history', 1, 1)")
+        }
+        helper.runMigrationsAndValidate(dbName, 16, true, AppDatabase.MIGRATION_15_16).use { db ->
+            db.query("SELECT id, text, tries, failed_at, parts_json FROM inbox").use { c ->
+                assertTrue(c.moveToFirst()); assertEquals("unread", c.getString(0)); assertEquals("keep this", c.getString(1))
+                assertEquals(0, c.getInt(2)); assertTrue(c.isNull(3)); assertTrue(c.isNull(4)); assertTrue(!c.moveToNext())
+            }
+            db.query("SELECT COUNT(*) FROM messages WHERE id='read'").use { c -> assertTrue(c.moveToFirst()); assertEquals(1, c.getInt(0)) }
+        }
+    }
+
+    @Test
+    fun downgrade16to15_keepsThePendingMessageAndAttachmentReferences() {
+        helper.createDatabase(dbName, 16).use { db ->
+            db.execSQL("INSERT INTO sessions (id, model_id, created_at, updated_at, memory_enabled, edit_count) VALUES ('s1', 'm', 1, 1, 1, 0)")
+            db.execSQL("INSERT INTO inbox (id, to_session, sender, text, attachments, parts_json, arrived_at, tries) VALUES ('pending', 's1', 'USER', 'my words', '[{\"uri\":\"file:///fixture.txt\"}]', '[]', 1, 2)")
+        }
+        helper.runMigrationsAndValidate(dbName, 15, true, AppDatabase.MIGRATION_16_15).use { db ->
+            db.query("SELECT id, text, attachments FROM inbox").use { c ->
+                assertTrue(c.moveToFirst()); assertEquals("pending", c.getString(0)); assertEquals("my words", c.getString(1))
+                assertTrue(c.getString(2).contains("file:///fixture.txt"))
+            }
+            db.query("PRAGMA integrity_check").use { c -> assertTrue(c.moveToFirst()); assertEquals("ok", c.getString(0)) }
+        }
+        helper.runMigrationsAndValidate(dbName, 16, true, AppDatabase.MIGRATION_15_16).close()
+    }
 }

@@ -66,6 +66,9 @@ data class MessageHeadRow(
 
 @Dao
 interface ChatDao {
+    @Query("SELECT * FROM messages WHERE id = :id")
+    suspend fun message(id: String): MessageEntity?
+
     // Sessions
     @Query("SELECT * FROM sessions ORDER BY updated_at DESC")
     fun observeSessions(): Flow<List<ChatSessionEntity>>

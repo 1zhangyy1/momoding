@@ -484,7 +484,7 @@ internal sealed class FlatChatItem {
         override val contentType = "typing"
     }
 
-    data class AssistantError(val messageId: String, val error: String) : FlatChatItem() {
+    data class AssistantError(val messageId: String, val error: String, val retryInboxId: String? = null) : FlatChatItem() {
         override val key = "error:$messageId"
         override val contentType = "error"
     }
@@ -814,7 +814,7 @@ internal fun buildFlatChatItems(
             // momoding: the reaction comes from the turn this message started (Instinct reacts first, ✅ when done)
             val turnEnd = messages.getOrNull(idx + 1)?.takeIf { it.role == "assistant" }?.let { turnLast[idx + 1] } ?: -1
             val reaction = when {
-                turnEnd < 0 || message.isQueued -> null // not read yet: no 👀 (调研/M39 2.2)
+                turnEnd < 0 || message.unread -> null // not read yet: no 👀 (调研/M39 2.2)
                 messages[turnEnd].isStreaming -> "👀"
                 turnHasSteps(turnEnd) -> "✅"
                 else -> null
@@ -1066,9 +1066,14 @@ internal fun buildFlatChatItems(
             )))
         }
 
-        // Inline error banner
-        message.error?.let {
-            out.add(dedupe(FlatChatItem.AssistantError(message.id, it)))
+        // A failed receive owns its retry. A visible user bubble already has the
+        // control; a hidden hand/routine result needs the error row to offer it.
+        message.error?.let { error ->
+            val received = messages.subList(0, idx).lastOrNull { it.role == "user" }
+            val failed = received?.takeIf { it.inboxFailed }
+            if (failed == null || !failed.rendersAsUserBubble()) {
+                out.add(dedupe(FlatChatItem.AssistantError(message.id, error, retryInboxId = failed?.inboxId)))
+            }
         }
 
         // momoding: rule notice, always visible (it explains why nobody was asked)

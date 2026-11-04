@@ -4029,14 +4029,14 @@ fun ChatScreen(
                     // This effect re-pins AFTER flatItems republishes with the
                     // new row measured, which is exactly the missing step: the
                     // earlier pins ran against a flatItems that did not yet
-                    // contain the bubble. Restricting it to isQueued keeps
+                    // contain the bubble. Restricting it to unread keeps
                     // ordinary user sends (already handled by the send path,
                     // and never appended mid-stream) off this path.
-                    val isQueuedBubble =
-                        newest is FlatChatItem.UserBubble && newest.message.isQueued
+                    val unreadBubble =
+                        newest is FlatChatItem.UserBubble && newest.message.unread
                     if (newest !is FlatChatItem.AssistantToolUse &&
                         newest !is FlatChatItem.AssistantTyping &&
-                        !isQueuedBubble
+                        !unreadBubble
                     ) return@LaunchedEffect
                     if (newest.key == lastTrailingPinKey) return@LaunchedEffect
                     if (userScrolledAway) return@LaunchedEffect
@@ -4480,6 +4480,7 @@ fun ChatScreen(
                             is FlatChatItem.UserBubble -> {
                                 // momoding: a row a routine sent is one quiet line, not a bubble in the person's voice
                                 app.momoding.ui.chat.RoutineWakeRow(item.message.id.substringBefore('#'), item.message.content) { app.momoding.ui.chat.PopIn(item.message.id, fromStart = false) {
+                                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
                                 // User bubbles intentionally don't register
                                 // MinisTextKit shards — long-press on a user
                                 // bubble shows its own action menu (Copy /
@@ -4501,12 +4502,9 @@ fun ChatScreen(
                                 // option reappears. Gating execution alone
                                 // wasn't enough — users still saw a tappable
                                 // Retry that silently no-op'd.
-                                onRetry = if (isStreaming) null else ({
-                                    coroutineScope.launch {
-                                        tracedScrollToItem("RETRY-FROM-MSG", 0, 0)
-                                    }
-                                    safeMutate { viewModel.retryFromMessage(item.message.id) }
-                                }),
+                                onRetry = if (item.message.inboxFailed) ({
+                                    item.message.inboxId?.let(viewModel::retryInboxMessage)
+                                }) else null,
                                 // [T-android-delete-from-here] Gated while
                                 // streaming for the same reason as Retry:
                                 // truncating rows under a live agent loop
@@ -4529,7 +4527,7 @@ fun ChatScreen(
                                 // from this turn (inclusive) before persisting
                                 // the edited content. Gated on isStreaming the
                                 // same way Retry is.
-                                onEdit = if (isStreaming || item.message.isQueued) null else ({
+                                onEdit = if (isStreaming || item.message.unread) null else ({
                                     val prefill = viewModel.editMessage(item.message.id)
                                     if (prefill != null) {
                                         viewModel.setInputText(prefill)
@@ -4561,9 +4559,14 @@ fun ChatScreen(
                                 },
                             )
                             // momoding: 👀 the moment its turn starts (the cached list catches up only when the turn ends)
-                            val liveReaction = if (isStreaming && messages.lastOrNull { it.role == "user" && !it.isQueued }?.id == item.message.id.substringBefore('#')) "👀" else item.reaction
+                            if (item.message.inboxFailed) {
+                                androidx.compose.material3.TextButton(onClick = {
+                                    item.message.inboxId?.let(viewModel::retryInboxMessage)
+                                }) { Text(stringResource(R.string.mo_inbox_failed_retry)) }
+                            }
+                            val liveReaction = if (isStreaming && messages.lastOrNull { it.role == "user" && !it.unread }?.id == item.message.id.substringBefore('#')) "👀" else item.reaction
                             liveReaction?.let { app.momoding.ui.chat.MessageReaction(it) }
-                            }} // momoding: close RoutineWakeRow
+                            }}} // momoding: close bubble column, PopIn and RoutineWakeRow
                             } // close UserBubble SideEffect + UserMessageBubble block
                             is FlatChatItem.AssistantHeader -> AssistantHeader()
                             is FlatChatItem.AssistantText -> BoundsTrackedBlock(
@@ -4815,7 +4818,10 @@ fun ChatScreen(
                                 display = if (momodingShowSteps) item.error else app.momoding.chat.ErrorWords.plain(context, item.error), // momoding
                                 onRetry = {
                                     coroutineScope.launch { tracedScrollToItem("INLINE-RETRY-LAST", 0, 0) }
-                                    safeMutate { viewModel.retryLast() }
+                                    safeMutate {
+                                        val received = item.retryInboxId
+                                        if (received != null) viewModel.retryInboxMessage(received) else viewModel.retryLast()
+                                    }
                                 },
                             )
                             is FlatChatItem.AssistantLegacyContent -> BoundsTrackedBlock(

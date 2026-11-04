@@ -35,4 +35,5 @@
     <string name="mo_task_done">做好了</string>
     <string name="mo_task_failed">没成</string>
     <string name="mo_task_stopped">停了</string>
+    <string name="mo_inbox_failed_retry">没处理成 · 再试</string>
 </resources>

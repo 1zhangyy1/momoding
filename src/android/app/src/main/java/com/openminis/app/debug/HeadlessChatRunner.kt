@@ -8,7 +8,6 @@ import com.openminis.app.data.model.ThinkingLevel
 import com.openminis.app.ui.chat.ChatViewModel
 import com.openminis.app.ui.chat.ChatViewModelStore
 import com.openminis.app.ui.chat.InputAttachment
-import com.openminis.app.ui.chat.addAttachment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -138,13 +137,13 @@ internal object HeadlessChatRunner {
      * automation we materialize it eagerly so subsequent reads can resolve
      * the id.
      */
-    suspend fun ensureSession(context: Context, modelId: String? = null): String =
+    suspend fun ensureSession(context: Context, modelId: String? = null, title: String? = null): String =
         withContext(Dispatchers.IO) {
             val app = app(context)
             val resolvedModel = modelId
                 ?: app.providerRepository.allVisibleEntries().firstOrNull()?.baseModel?.id
                 ?: "unknown"
-            val s = app.chatRepository.createSession(modelId = resolvedModel, title = null)
+            val s = app.chatRepository.createSession(modelId = resolvedModel, title = title)
             // Mark source so the UI session list shows it came from RPC.
             app.chatRepository.dao.updateSource(s.id, "debug")
             s.id
@@ -283,7 +282,6 @@ internal object HeadlessChatRunner {
                     timedOut = false,
                 )
             }
-            for (att in attachments) vm.addAttachment(att)
             // [T-android-submit-outcome] Ask the funnel what it did instead of
             // assuming. This used to call sendMessage() (Unit) and report "Running"
             // unconditionally — a queued prompt, a refused prompt, or one parked
@@ -293,7 +291,7 @@ internal object HeadlessChatRunner {
             val rowsBeforeSubmit = if (com.openminis.app.scheduled.ScheduledTaskMarker.isMarkerText(text)) {
                 app(context).chatRepository.dao.loadMessages(sessionId).size
             } else -1
-            val outcome = vm.submitPrompt(text, prefill, origin)
+            val outcome = vm.submitPrompt(text, prefill, origin, attachments)
             if (outcome is ChatViewModel.SubmitOutcome.Rejected) {
                 return@withContext PromptResult(status = "Rejected", responseText = outcome.reason, timedOut = false)
             }

@@ -71,12 +71,14 @@ internal object ChatMutationMethods {
         val app = app(context)
         val existingId = params.optString("sessionId", "").ifEmpty { null }
         val isNew = existingId == null
-        val sessionId = existingId ?: HeadlessChatRunner.ensureSession(context)
+        val sessionId = existingId ?: HeadlessChatRunner.ensureSession(context, title = params.optString("title").takeIf { it.isNotBlank() })
 
         // Resolve model override (mutually exclusive with sessionId binding).
         val modelEntryId = if (params.has("modelEntryId") && !params.isNull("modelEntryId")) params.optString("modelEntryId").ifEmpty { null } else null
         val modelGroupId = if (params.has("modelGroupId") && !params.isNull("modelGroupId")) params.optString("modelGroupId").ifEmpty { null } else null
-        val overrideName = HeadlessChatRunner.applyModelOverride(context, sessionId, modelEntryId, modelGroupId)
+        // A follow-up without a model override keeps the session's existing binding.
+        val overrideName = if (isNew || modelEntryId != null || modelGroupId != null)
+            HeadlessChatRunner.applyModelOverride(context, sessionId, modelEntryId, modelGroupId) else null
 
         // Decode attachments — RPC carries base64; we materialize them as
         // FileProvider-backed Uris so InputAttachment + the existing image
@@ -127,7 +129,8 @@ internal object ChatMutationMethods {
         // automation harnesses.)
         val modelEntryId = if (params.has("modelEntryId") && !params.isNull("modelEntryId")) params.optString("modelEntryId").ifEmpty { null } else null
         val modelGroupId = if (params.has("modelGroupId") && !params.isNull("modelGroupId")) params.optString("modelGroupId").ifEmpty { null } else null
-        val overrideName = HeadlessChatRunner.applyModelOverride(context, sessionId, modelEntryId, modelGroupId)
+        val overrideName = if (modelEntryId != null || modelGroupId != null)
+            HeadlessChatRunner.applyModelOverride(context, sessionId, modelEntryId, modelGroupId) else null
 
         val wait = params.optBoolean("wait", false)
         val timeoutSec = params.optInt("waitTimeout", 600).coerceIn(1, 1800)

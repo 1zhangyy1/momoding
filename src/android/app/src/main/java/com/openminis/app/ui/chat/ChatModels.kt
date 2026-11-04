@@ -166,10 +166,10 @@ data class ChatMessage(
     // to the chat's current thinking level at render time.
     val thinkingLevel: com.openminis.app.data.model.ThinkingLevel? = null,
     val error: String? = null,
-    // Queued user prompt awaiting injection into the running agent loop.
-    // Mirrors iOS ChatMessage.isQueued / queuedPromptId.
-    val isQueued: Boolean = false,
-    val queuedPromptId: String? = null,
+    /** Derived from its persisted inbox row, never from a front-end send queue. */
+    val unread: Boolean = false,
+    val inboxId: String? = null,
+    val inboxFailed: Boolean = false,
     // Set to true when this message belongs to a range that has been folded
     // into a compact summary marker. Mirrors iOS ChatMessage.isCompactedHistory:
     // the message stays in the UI, but renders at reduced opacity so the user
@@ -224,10 +224,8 @@ data class ChatMessage(
          *  ChatViewModel.injectQueuedPromptsAsNewTurn writes this constant, so
          *  the two cannot drift apart. */
         internal const val INTERNAL_BRIDGE_TEXT =
-            "(Interrupted mid-task by a new user message. Decide based on the new " +
-                "message and overall context whether the prior task should continue — do " +
-                "not forget or abandon it unless the user explicitly says to stop, or the " +
-                "new message makes clear it is no longer needed.)"
+            "(New messages arrived between completed tool steps. Read them in arrival order, " +
+                "then continue the work that remains unless the person changed or stopped it.)"
 
         /** [T-scheduled-preemptive-insert] Bridge before a scheduled fire
          *  slipped in between tool calls: a pause, not a change of course. */
@@ -257,6 +255,10 @@ data class ChatMessage(
          */
         private val INTERNAL_BRIDGE_TEXTS = listOf(
             INTERNAL_BRIDGE_TEXT,
+            "(Interrupted mid-task by a new user message. Decide based on the new " +
+                "message and overall context whether the prior task should continue — do " +
+                "not forget or abandon it unless the user explicitly says to stop, or the " +
+                "new message makes clear it is no longer needed.)",
             SCHEDULED_INSERT_BRIDGE_TEXT,
             // Pre-2026-07-23 wording.
             "(Interrupted mid-task to handle your new message. Will return to the prior task after.)",
@@ -272,14 +274,12 @@ data class ChatMessage(
     }
 }
 
-/** A user prompt queued while the agent loop is still running. Mirrors iOS QueuedPrompt. */
+/** A received inbox row, prepared for consumption or rendered while it waits. */
 data class QueuedPrompt(
     val id: String,
     val text: String,
     val attachments: List<InputAttachment> = emptyList(),
-    /** [T-p2-gentle-injection] Who queued it — decides whether it may cut the
-     *  running plan short at the next tool boundary (USER) or must wait for
-     *  the loop to end on its own (PROGRAMMATIC). */
+    /** Sender identity for rendering and routine recognition; arrival order is shared. */
     val origin: QueuedPromptOrigin = QueuedPromptOrigin.USER,
     /** [T-scheduled-tool-prefill] Tool calls run as the first turn of the
      *  loop that carries this prompt, before the model is asked. Only a
@@ -290,24 +290,17 @@ data class QueuedPrompt(
      *  <scheduled_task> envelope, and only for PROGRAMMATIC prompts — a user
      *  typing the tag by hand does not become a scheduled fire. */
     val scheduledTaskId: String? = null,
+    val partsJson: String? = null,
+    val arrivedAt: Long = System.currentTimeMillis(),
+    val readAt: Long? = null,
+    val failedAt: Long? = null,
+    val tries: Int = 0,
+    val taskId: String? = null,
 ) {
     val isScheduledFire: Boolean get() = scheduledTaskId != null
 }
 
-/**
- * [T-p2-gentle-injection] Origin of a queued prompt.
- *
- * A USER follow-up typed while the agent is busy is an interruption by
- * intent ("怎么样了" — stop the plan, answer me), so the agent loop injects
- * it the moment the current tool call closes (T-android-queued-message-
- * interrupt-on-toolclose). A PROGRAMMATIC prompt — a scheduled job firing,
- * a background helper reporting back, an RPC/CLI send — carries no such
- * intent: it is new information for the NEXT turn, and cutting a running
- * shell_execute→read→edit plan short to deliver it is exactly the "helper
- * result interrupted my sleep 90" report. Those wait for the loop to end
- * and are drained as a fresh turn, like a follow-up the user typed after
- * the agent went idle.
- */
+/** A person's words and programmatic messages share the same persisted arrival order. */
 enum class QueuedPromptOrigin { USER, PROGRAMMATIC }
 
 /**

@@ -5,10 +5,8 @@ import androidx.room.withTransaction
 import app.momoding.apps.AppBots
 import app.momoding.apps.MoApps
 import com.openminis.app.MinisApp
-import com.openminis.app.debug.HeadlessChatRunner
 import com.openminis.app.logging.AppLogger
 import com.openminis.app.ui.chat.ChatViewModelStore
-import com.openminis.app.ui.chat.QueuedPromptOrigin
 import com.openminis.app.ui.chat.rendersAsUserBubble
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -50,7 +48,7 @@ object TaskEngine {
     /** The task the person's words started: a new one for [hand], or in line behind the one it is on. */
     suspend fun open(context: Context, conversation: String, title: String, hand: String, brief: String): TaskEntity {
         val source = ChatViewModelStore.existing(conversation)?.messages?.value
-            ?.lastOrNull { it.rendersAsUserBubble() && !it.isQueued }
+            ?.lastOrNull { it.rendersAsUserBubble() && !it.unread }
         val helper = Helpers.isHelper(context, hand)
         return change(context) { dao, after ->
             val busy = !free(dao, hand, helper)
@@ -62,7 +60,10 @@ object TaskEngine {
             dao.insertTask(task)
             source?.content?.let { log(dao, task.id, TaskLogEntity.Kind.AUTHORIZED, it) }
             log(dao, task.id, TaskLogEntity.Kind.PASSED_ON, brief)
-            if (!busy) after += { deliver(context, task, brief) }
+            if (!busy) {
+                postForHand(context, dao, task, brief)
+                after += { deliver(context, task) }
+            }
             task
         }
     }
@@ -87,7 +88,11 @@ object TaskEngine {
         }
         val next = task.copy(state = state.name, ask = null, outcome = null, updatedAt = System.currentTimeMillis())
         dao.updateTask(next)
-        if (state == TaskEntity.State.RUNNING) after += { deliver(context, next, text) }
+        if (state == TaskEntity.State.RUNNING) {
+            if (task.state == TaskEntity.State.ENDED.name) dao.retryTaskInbox(task.id, task.hand)
+            postForHand(context, dao, next, text)
+            after += { deliver(context, next) }
+        }
         return next
     }
 
@@ -99,6 +104,9 @@ object TaskEngine {
 
     private suspend fun reportIn(context: Context, dao: TaskDao, after: MutableList<suspend () -> Unit>, hand: String, kind: Report, text: String, helper: Boolean): TaskEntity {
         val task = dao.heldBy(hand) ?: throw IllegalStateException("you are on no task: just answer in your chat")
+        if (kind == Report.DONE && dao.unread(hand).isNotEmpty()) {
+            throw IllegalStateException("There are unread instructions for this hand. Read them at the next step before reporting done.")
+        }
         val now = System.currentTimeMillis()
         val next = when (kind) {
             Report.PROGRESS -> task.copy(progress = text.lineSequence().first().take(120))
@@ -112,7 +120,8 @@ object TaskEngine {
         if (kind != Report.PROGRESS) {
             log(dao, task.id, if (next.state == TaskEntity.State.ENDED.name) TaskLogEntity.Kind.END else TaskLogEntity.Kind.REPORT, text)
             val words = "$REPORT_CUE${task.id} · ${handName(context, hand)} · ${kind.name.lowercase()}] $text"
-            after += { tellChat(context, task.conversation, words) }
+            Inbox.post(dao, task.conversation, words, task.id)
+            after += { tellChat(context, task.conversation) }
             if (next.state == TaskEntity.State.ENDED.name) {
                 after += {
                     MoApps.ofSession(context, hand)?.let { AppBots.reported(context, it, task.conversation, text) }
@@ -169,12 +178,23 @@ object TaskEngine {
             if (helper && current != null && dao.task(current.id)?.state == TaskEntity.State.ENDED.name) {
                 after += { Helpers.ended(context, hand, current.conversation) }
             }
-            if (dao.heldBy(hand) == null) {
-                val next = if (helper && dao.helpersAtWork() < Helpers.SLOTS) dao.nextForHelpers()
-                    else if (!helper) dao.nextFor(hand) else null
-                next?.let { start(dao, it, after, context) }
-            }
+            advance(context, dao, after, hand, helper, released = true)
         }
+    }
+
+    /** A busy hand may receive queued work just as its loop exits. Only dispatch is inferred
+     * from idleness; outcomes always come from the loop's explicit closeout. */
+    suspend fun handIdle(context: Context, hand: String) {
+        val helper = Helpers.isHelper(context, hand)
+        change(context) { dao, after -> advance(context, dao, after, hand, helper, released = false) }
+    }
+
+    private suspend fun advance(context: Context, dao: TaskDao, after: MutableList<suspend () -> Unit>, hand: String, helper: Boolean, released: Boolean) {
+        if (dao.heldBy(hand) != null || (!released && ChatViewModelStore.existing(hand)?.isStreaming?.value == true)) return
+        val next = if (helper && dao.helpersAtWork() < Helpers.SLOTS) dao.queuedHelpers().firstOrNull {
+            dao.heldBy(it.hand) == null && (it.hand == hand && released || ChatViewModelStore.existing(it.hand)?.isStreaming?.value != true)
+        } else if (!helper) dao.nextFor(hand) else null
+        next?.let { start(dao, it, after, context) }
     }
 
     /** Whether [hand] can start a task now: it holds none, and a helper has a slot. */
@@ -187,32 +207,34 @@ object TaskEngine {
         val next = task.copy(state = TaskEntity.State.RUNNING.name, updatedAt = System.currentTimeMillis())
         dao.updateTask(next)
         val brief = dao.log(task.id).filter { it.kind == TaskLogEntity.Kind.PASSED_ON.name }.joinToString("\n\n") { it.body }
-        after += { deliver(context, next, brief) }
+        dao.retryTaskInbox(task.id, task.hand)
+        postForHand(context, dao, next, brief)
+        after += { deliver(context, next) }
     }
 
     /**
      * Words for a task's hand: into its turn at its next step when it is at work, else a new turn.
      * A Bot reads them as from Momoding ([AppBots.WAKE_CUE]); a helper is set up as one first.
      */
-    private suspend fun deliver(context: Context, task: TaskEntity, text: String) {
+    private suspend fun postForHand(context: Context, dao: TaskDao, task: TaskEntity, text: String) {
         val words = if (MoApps.ofSession(context, task.hand) != null) "${AppBots.WAKE_CUE} $text" else text
+        Inbox.post(dao, task.hand, words, task.id)
+    }
+
+    private suspend fun deliver(context: Context, task: TaskEntity) {
         runCatching {
-            if (Helpers.isHelper(context, task.hand)) Helpers.ready(context, task.hand, task)
-            val result = HeadlessChatRunner.prompt(context.applicationContext, task.hand, words, wait = false, timeoutMs = 0, origin = QueuedPromptOrigin.USER)
-            check(result.status == "Running" || result.status == "Queued") { result.responseText ?: result.status }
+            Inbox.wake(context, task.hand)
         }.onFailure {
             if (it is kotlinx.coroutines.CancellationException) throw it
             AppLogger.warning(TAG, "deliver to ${task.hand.take(8)}: ${it.message}")
+            dao(context).rejectTaskInbox(task.id, task.hand, System.currentTimeMillis())
             turnFinished(context, task.hand, task.id, TaskCompletion(false, "The hand could not start: ${it.message}"), hasFollowUp = false)
         }
     }
 
     /** A hand's report for the chat it works for: read when that chat's turn ends, or a turn of its own. */
-    private suspend fun tellChat(context: Context, chat: String, text: String) {
-        runCatching {
-            val result = HeadlessChatRunner.prompt(context.applicationContext, chat, text, wait = false, timeoutMs = 0)
-            check(result.status == "Running" || result.status == "Queued") { result.responseText ?: result.status }
-        }
+    private suspend fun tellChat(context: Context, chat: String) {
+        runCatching { Inbox.wake(context, chat) }
             .onFailure { AppLogger.warning(TAG, "report to ${chat.take(8)}: ${it.message}") }
     }
 
@@ -248,7 +270,8 @@ object TaskEngine {
         dao.recentInbox(limit).forEach {
             inbox.put(
                 JSONObject().put("id", it.id).put("to", it.toSession).put("task", it.taskId).put("from", it.sender)
-                    .put("text", it.text).put("arrived", it.arrivedAt).put("read", it.readAt),
+                    .put("text", it.text).put("arrived", it.arrivedAt).put("read", it.readAt)
+                    .put("tries", it.tries).put("failed", it.failedAt),
             )
         }
         return JSONObject().put("tasks", tasks).put("inbox", inbox)

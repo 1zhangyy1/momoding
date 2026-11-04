@@ -18,7 +18,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         app.momoding.task.TaskEntity::class,
         app.momoding.task.TaskLogEntity::class,
     ],
-    version = 15,
+    version = 16,
     // [T-android-downgrade-compat] Kept ON so MigrationTestHelper and CI can
     // validate every migration (and its downgrade counterpart) against the
     // committed schema json. Without it the upgrade/downgrade chain has no
@@ -407,6 +407,29 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** Durable reception payloads and bounded retries; rows from the old implementation
+         * already marked read live in messages, and must not be retried as new work. */
+        val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DELETE FROM inbox WHERE read_at IS NOT NULL")
+                db.execSQL("ALTER TABLE inbox ADD COLUMN parts_json TEXT")
+                db.execSQL("ALTER TABLE inbox ADD COLUMN tries INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE inbox ADD COLUMN failed_at INTEGER")
+            }
+        }
+
+        /** Keep every pending message and its durable attachment URIs on rollback. The extra
+         * payload is derived from that content; an older build prepares it again on consumption. */
+        val MIGRATION_16_15 = object : Migration(16, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE inbox_v15 (`id` TEXT NOT NULL, `to_session` TEXT NOT NULL, `task_id` TEXT, `sender` TEXT NOT NULL, `text` TEXT NOT NULL, `attachments` TEXT, `prefill` TEXT, `arrived_at` INTEGER NOT NULL, `read_at` INTEGER, PRIMARY KEY(`id`), FOREIGN KEY(`to_session`) REFERENCES `sessions`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE)")
+                db.execSQL("INSERT INTO inbox_v15 (id, to_session, task_id, sender, text, attachments, prefill, arrived_at, read_at) SELECT id, to_session, task_id, sender, text, attachments, prefill, arrived_at, read_at FROM inbox")
+                db.execSQL("DROP TABLE inbox")
+                db.execSQL("ALTER TABLE inbox_v15 RENAME TO inbox")
+                db.execSQL("CREATE INDEX index_inbox_to_session_read_at ON inbox (to_session, read_at)")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -422,6 +445,7 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
                         MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_12, MIGRATION_12_11,
                         MIGRATION_13_14, MIGRATION_14_13, MIGRATION_14_15, MIGRATION_15_14,
+                        MIGRATION_15_16, MIGRATION_16_15,
                     )
                     .build()
                     .also { INSTANCE = it }

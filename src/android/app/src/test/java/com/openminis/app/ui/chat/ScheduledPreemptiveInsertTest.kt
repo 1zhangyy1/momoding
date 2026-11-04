@@ -1,6 +1,5 @@
 package com.openminis.app.ui.chat
 
-import com.openminis.app.ProductionSources
 import com.openminis.app.debug.HeadlessChatRunner
 import com.openminis.app.scheduled.PrefilledToolCall
 import com.openminis.app.scheduled.ScheduledTaskMarker
@@ -18,7 +17,6 @@ import org.junit.Test
  */
 class ScheduledPreemptiveInsertTest {
 
-    private val vm by lazy { ProductionSources.read("ui/chat/ChatViewModel.kt") }
 
     private fun user(id: String) = QueuedPrompt(id = id, text = "u$id", origin = QueuedPromptOrigin.USER)
     private fun callback(id: String) = QueuedPrompt(id = id, text = "cb$id", origin = QueuedPromptOrigin.PROGRAMMATIC)
@@ -36,27 +34,26 @@ class ScheduledPreemptiveInsertTest {
 
     @Test
     fun `a scheduled fire goes in at the tool boundary, on its own`() {
-        val q = listOf(callback("1"), fire("2"), user("3"), fire("4"))
+        val q = listOf(fire("2"), user("3"), fire("4"))
         assertEquals(listOf("2"), ids(QueuedPromptBatching.nextInsertBatch(q)))
     }
 
     @Test
-    fun `other programmatic prompts are still held until the loop ends`() {
-        assertTrue(QueuedPromptBatching.nextInsertBatch(listOf(callback("1"), callback("2"))).isEmpty())
+    fun `earlier programmatic messages enter at the next completed tool boundary`() {
+        assertEquals(listOf("1", "2"), ids(QueuedPromptBatching.nextInsertBatch(listOf(callback("1"), callback("2")))))
     }
 
     @Test
-    fun `a user follow-up goes in with the other user follow-ups only`() {
-        // Momoding: agent reports never ride along with the person's words
-        // (they wait for the drain); scheduled fires never do either.
+    fun `messages before a routine stay in arrival order and later words cannot overtake it`() {
+        // A contiguous prefix travels together; the scheduled fire is a boundary, not something to skip.
         val q = listOf(callback("1"), user("2"), fire("3"), user("4"))
-        assertEquals(listOf("2", "4"), ids(QueuedPromptBatching.nextInsertBatch(q)))
+        assertEquals(listOf("1", "2"), ids(QueuedPromptBatching.nextInsertBatch(q)))
     }
 
     @Test
-    fun `the drain answers the person first, then the reports together`() {
+    fun `the drain keeps earlier reports before the words that may answer them`() {
         val q = listOf(callback("1"), user("2"), callback("3"))
-        assertEquals(listOf("2"), ids(QueuedPromptBatching.nextDrainBatch(q)))
+        assertEquals(listOf("1", "2", "3"), ids(QueuedPromptBatching.nextDrainBatch(q)))
         assertEquals(listOf("1", "3"), ids(QueuedPromptBatching.nextDrainBatch(listOf(callback("1"), callback("3")))))
     }
 
@@ -81,7 +78,7 @@ class ScheduledPreemptiveInsertTest {
         val q = listOf(fire("1"), user("2"), callback("3"), fire("4"))
         assertEquals(listOf("1"), ids(QueuedPromptBatching.nextDrainBatch(q)))
         val rest = q.drop(1)
-        assertEquals(listOf("2"), ids(QueuedPromptBatching.nextDrainBatch(rest)))
+        assertEquals(listOf("2", "3"), ids(QueuedPromptBatching.nextDrainBatch(rest)))
         assertEquals(listOf("3"), ids(QueuedPromptBatching.nextDrainBatch(listOf(callback("3"), fire("4")))))
         assertEquals(listOf("4"), ids(QueuedPromptBatching.nextDrainBatch(listOf(fire("4")))))
         assertTrue(QueuedPromptBatching.nextDrainBatch(emptyList()).isEmpty())
@@ -99,13 +96,6 @@ class ScheduledPreemptiveInsertTest {
     }
 
     // ── repeated fires ──────────────────────────────────────────────────────
-
-    @Test
-    fun `a newer fire of the same task replaces the undelivered older one`() {
-        val q = listOf(fire("1", task = "A"), fire("2", task = "B"), user("3"))
-        assertEquals(listOf("1"), QueuedPromptBatching.supersededBy(q, "A"))
-        assertTrue(QueuedPromptBatching.supersededBy(q, "C").isEmpty())
-    }
 
     // ── the inserted envelope ───────────────────────────────────────────────
 
@@ -172,8 +162,8 @@ class ScheduledPreemptiveInsertTest {
         val bridge = ChatMessage.SCHEDULED_INSERT_BRIDGE_TEXT
         assertTrue(bridge.contains("pick up the task I was working on"))
         assertTrue(ChatMessage(id = "b", role = "assistant", content = bridge).isInternalBridge)
-        // The user-follow-up bridge is unchanged.
-        assertTrue(ChatMessage.INTERNAL_BRIDGE_TEXT.startsWith("(Interrupted mid-task by a new user message."))
+        // Ordinary inbox mail is neutral about whether the ongoing task should stop.
+        assertTrue(ChatMessage.INTERNAL_BRIDGE_TEXT.contains("arrival order"))
     }
 
     // ── the reply reported for the fire ─────────────────────────────────────
@@ -208,41 +198,4 @@ class ScheduledPreemptiveInsertTest {
         assertEquals("b", HeadlessChatRunner.responseTextFor("hi", rows, fromIndex = -1))
     }
 
-    // ── wiring ──────────────────────────────────────────────────────────────
-
-    @Test
-    fun `the tool boundary and the drain use the batching rules`() {
-        assertTrue(vm.contains("val insertBatch = QueuedPromptBatching.nextInsertBatch(_promptQueue.value)"))
-        assertTrue(vm.contains("batch = insertBatch,"))
-        assertTrue(vm.contains("val queued = QueuedPromptBatching.nextDrainBatch(_promptQueue.value)"))
-        // The injection works on its batch, never on the whole queue.
-        val inject = vm.substringAfter("private suspend fun injectQueuedPromptsAsNewTurn(")
-            .substringBefore("\n    private suspend fun drainQueuedPrompts(")
-        assertTrue(inject.contains("val queued = batch"))
-        assertFalse(inject.contains("val queued = _promptQueue.value"))
-        // A single scheduled fire is re-wrapped and bridged as an insertion.
-        assertTrue(inject.contains("val scheduledInsert = queued.size == 1 && queued[0].isScheduledFire"))
-        assertTrue(inject.contains("if (scheduledInsert) insertedScheduledEnvelope(prompt.text) else prompt.text"))
-        assertTrue(inject.contains("if (scheduledInsert) ChatMessage.SCHEDULED_INSERT_BRIDGE_TEXT else ChatMessage.INTERNAL_BRIDGE_TEXT"))
-        // Its prefill still re-arms the scripted turn after the injection.
-        assertTrue(vm.contains("scriptedTurnFor(handled.prefill)?.let { pendingScriptedTurn = it }"))
-    }
-
-    @Test
-    fun `only a programmatic envelope counts as a scheduled fire, and a repeat replaces the older one`() {
-        assertTrue(
-            vm.contains(
-                "scheduledTaskId = if (origin == QueuedPromptOrigin.PROGRAMMATIC) {\n" +
-                    "                com.openminis.app.scheduled.ScheduledTaskMarker.parse(trimmed)?.taskId",
-            ),
-        )
-        assertTrue(vm.contains("QueuedPromptBatching.supersededBy(_promptQueue.value, taskId)"))
-    }
-
-    @Test
-    fun `the subagent background switch still answers only a user follow-up`() {
-        // A scheduled fire must not turn a synchronous subagent_task into a
-        // background job — that is a reaction to the USER wanting an answer.
-        assertTrue(vm.contains("if (_promptQueue.value.any { it.origin == QueuedPromptOrigin.USER }) {"))
-    }
 }

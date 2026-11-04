@@ -78,7 +78,7 @@ class EvictionGuardTest {
         val probe = vmSrc.substringAfter("fun hasWorkInFlight(): Boolean").substringBefore("fun selectGroup(")
         assertTrue(probe.contains("streamJob?.isActive == true"))
         assertTrue(probe.contains("hasAgentWork("))
-        assertTrue(probe.contains("_promptQueue.value.isNotEmpty()"))
+        assertTrue(probe.contains("_unreadInbox.value.isNotEmpty()"))
     }
 
     @Test
