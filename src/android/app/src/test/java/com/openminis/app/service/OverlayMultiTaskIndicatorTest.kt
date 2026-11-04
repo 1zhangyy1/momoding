@@ -320,7 +320,9 @@ class OverlayMultiTaskIndicatorTest {
         val routed = Regex("sessionTitle = overlaySessionTitle\\(\\)").findAll(vm).count()
         val raw = Regex("sessionTitle = _sessionTitle\\.value").findAll(vm).count()
         assertEquals("no overlay call site may pass the raw title", 0, raw)
-        assertTrue("expected the overlay call sites to route through the helper", routed >= 5)
+        val activeCalls = Regex("SessionActivityTracker\\.setActive\\(").findAll(vm).count()
+        assertTrue("the active-session title path must be exercised", activeCalls > 0)
+        assertEquals("every overlay call site must route through the helper", activeCalls, routed)
         val overlay = ProductionSources.read("service/ToolOverlayController.kt")
         assertTrue(
             "the capsule must not know the sentinel",

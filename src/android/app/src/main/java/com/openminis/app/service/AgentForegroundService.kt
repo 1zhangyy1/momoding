@@ -8,7 +8,6 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
@@ -113,7 +112,6 @@ class AgentForegroundService : Service() {
         // a public SDK constant; this is the extras key the Android 16
         // framework reads ("android.requestPromotedOngoing").
         private const val EXTRA_REQUEST_PROMOTED_ONGOING = "android.requestPromotedOngoing"
-        private const val ACTION_STOP = "com.openminis.app.STOP_AGENT_SERVICE"
 
         /**
          * Starts or updates the foreground service with current status.
@@ -304,7 +302,7 @@ class AgentForegroundService : Service() {
         // pair completes within one main-thread message, well under the frame
         // the shade would need to draw it. This is the pattern Android's own
         // docs prescribe for "started, but no longer needed".
-        if (intent != null && intent.action != ACTION_STOP && !SessionActivityTracker.shouldRunServiceNow()) {
+        if (intent != null && !SessionActivityTracker.shouldRunServiceNow()) {
             Log.d(TAG, "start with nothing to run — satisfying the FG contract, then stopping")
             try {
                 val stub = buildNotification(0, "Idle")
@@ -332,19 +330,6 @@ class AgentForegroundService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        if (intent?.action == ACTION_STOP) {
-            // T50: the notification's Stop action — also cancel every
-            // running agent loop. Without this, stopSelf() alone leaves
-            // streamJobs running until the OS reclaims the process; the
-            // user taps Stop and sees the notification go away but tools
-            // keep firing in the background. SessionActivityTracker holds
-            // the per-session cancel callbacks registered by each VM at
-            // streamJob start.
-            SessionActivityTracker.cancelAllActiveStreams()
-            stopSelf()
-            return START_NOT_STICKY
-        }
-
         val sessionCount = intent?.getIntExtra(EXTRA_SESSION_COUNT, 0) ?: 0
         val toolStatus = intent?.getStringExtra(EXTRA_TOOL_STATUS) ?: "Idle"
 
@@ -1104,16 +1089,6 @@ class AgentForegroundService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val stopIntent = Intent(this, AgentForegroundService::class.java).apply {
-            action = ACTION_STOP
-        }
-        val stopPendingIntent = PendingIntent.getService(
-            this,
-            1,
-            stopIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
         val sessionLabel = resources.getQuantityString(
             R.plurals.bg_service_sessions, sessionCount, sessionCount,
         )
@@ -1215,7 +1190,6 @@ class AgentForegroundService : Service() {
                 runStartWallMs = runStartWallMs,
                 finishedWallMs = finishedWallMs,
                 contentIntent = pendingIntent,
-                stopIntent = stopPendingIntent,
             )
         }
 
@@ -1238,16 +1212,6 @@ class AgentForegroundService : Service() {
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
-
-        // [T-android-live-update-completed] Same rule as the promoted branch:
-        // no Stop once there is nothing left to stop.
-        if (!isCompleted) {
-            builder.addAction(
-                android.R.drawable.ic_menu_close_clear_cancel,
-                getString(R.string.bg_service_stop_action),
-                stopPendingIntent,
-            )
-        }
 
         if (isToolRunning) {
             // Tools rarely report determinate progress (shell/browser/a11y
@@ -1281,7 +1245,6 @@ class AgentForegroundService : Service() {
         runStartWallMs: Long,
         finishedWallMs: Long,
         contentIntent: PendingIntent,
-        stopIntent: PendingIntent,
     ): Notification {
         // [T-android-dynamic-island] A ProgressStyle only counts as a valid
         // *promotable* style when it carries at least one progress segment with
@@ -1332,20 +1295,6 @@ class AgentForegroundService : Service() {
         // running the chronometer owns the clock, and a second stale copy of
         // the same number would contradict it.
         builder.setShortCriticalText(shortCritical)
-
-        // [T-android-live-update-completed] "Stop" is meaningless once the task
-        // has finished — there is nothing left to stop, and offering it invites
-        // a tap that does nothing visible. Reported from a device screenshot
-        // showing "任务已完成 ✓" above a live Stop button.
-        if (!isCompleted) {
-            builder.addAction(
-                Notification.Action.Builder(
-                    Icon.createWithResource(this, android.R.drawable.ic_menu_close_clear_cancel),
-                    getString(R.string.bg_service_stop_action),
-                    stopIntent,
-                ).build(),
-            )
-        }
 
         // [T-android-dynamic-island] Request the always-visible "dynamic island"
         // promotion. The public builder method `setRequestPromotedOngoing(true)`

@@ -103,12 +103,4 @@ class SendReturnModeMenuTest {
         assertTrue(menuSrc.contains("KEY_RETURN_KEY_BEHAVIOR"))
     }
 
-    @Test
-    fun stopButtonHasNoLongPressChooser() {
-        val stopIdx = chatScreen.indexOf("Icons.Default.Stop,")
-        assertTrue(stopIdx > 0)
-        val stopBlock = chatScreen.substring(chatScreen.lastIndexOf("if (showStop)", stopIdx), stopIdx)
-        assertFalse(stopBlock.contains("combinedClickable"))
-        assertFalse(stopBlock.contains("ComposerSendButton"))
-    }
 }

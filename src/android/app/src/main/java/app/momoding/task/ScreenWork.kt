@@ -72,9 +72,7 @@ object ScreenWork {
                         operator = HandsOperator(app)
                         operators[task.id] = operator
                         if (TaskEngine.dao(app).task(task.id)?.state != TaskEntity.State.RUNNING.name) continue
-                        SessionActivityTracker.keepBackgroundWork("screen:${task.id}", task.conversation) {
-                            requestStop(app, task.id, "stopped from the notification")
-                        }
+                        SessionActivityTracker.keepBackgroundWork("screen:${task.id}", task.conversation)
                         budget = watchParentBudget(app, task.id, spec.parent)
                         val history = TaskEngine.dao(app).log(task.id)
                         val log = history.filter { it.kind == TaskLogEntity.Kind.PASSED_ON.name }

@@ -396,13 +396,12 @@ object SessionActivityTracker {
      */
     fun shouldRunServiceNow(): Boolean = shouldRunService()
 
-    private data class BackgroundExecution(val chat: String, val stop: () -> Unit)
-    private val backgroundExecutions = java.util.concurrent.ConcurrentHashMap<String, BackgroundExecution>()
+    private val backgroundExecutions = java.util.concurrent.ConcurrentHashMap<String, String>()
     fun hasBackgroundWork(): Boolean = backgroundExecutions.isNotEmpty()
 
     /** OS lifetime only; business state remains in the task table. */
-    fun keepBackgroundWork(id: String, chat: String, stop: () -> Unit) = synchronized(serviceLock) {
-        backgroundExecutions[id] = BackgroundExecution(chat, stop)
+    fun keepBackgroundWork(id: String, chat: String) = synchronized(serviceLock) {
+        backgroundExecutions[id] = chat
         startServiceIfNeeded()
     }
 
@@ -411,7 +410,7 @@ object SessionActivityTracker {
         if (shouldRunService()) updateService() else stopService()
     }
 
-    private fun workingChats(): Set<String> = _activeSessions.value + backgroundExecutions.values.map { it.chat }
+    private fun workingChats(): Set<String> = _activeSessions.value + backgroundExecutions.values
 
     private fun shouldRunService(): Boolean =
         _activeSessions.value.isNotEmpty() || _presentSessions.value.isNotEmpty() ||
@@ -450,19 +449,6 @@ object SessionActivityTracker {
         // will re-evaluate this for us.
         if (!pending && !shouldRunService()) stopService()
     }
-
-    /**
-     * T50: per-session stream-cancel callbacks. Each ChatViewModel
-     * registers its own [com.openminis.app.ui.chat.ChatViewModel.cancelStream]
-     * here when [setActive] is called and unregisters in [setInactive].
-     * The foreground service's notification "Stop" action calls
-     * [cancelAllActiveStreams] which iterates this map — without it the
-     * notification can only kill itself, leaving streamJobs running until
-     * the OS reclaims the process. Held under the same Map lock as the
-     * activeSessions flow so callers don't observe a transient state where
-     * the session is "active" but has no canceller.
-     */
-    private val streamCancellers = mutableMapOf<String, () -> Unit>()
 
     /**
      * T180-bg-notif: per-session "task is finishing — was it cancelled?"
@@ -548,13 +534,8 @@ object SessionActivityTracker {
         appContext = context.applicationContext
     }
 
-    /**
-     * Marks a session as active. Starts the foreground service if this is
-     * the first active session. [onStop], when supplied, is the agent
-     * loop's cancel callback — captured here so the notification's Stop
-     * action can fan out to every running session.
-     */
-    fun setActive(sessionId: String, onStop: (() -> Unit)? = null, sessionTitle: String? = null) {
+    /** Marks a session as active and keeps its foreground status alive. */
+    fun setActive(sessionId: String, sessionTitle: String? = null) {
         // [T-android-overlay-multitask] Register the capsule slot first so the
         // "① of N" indicator counts this run even if it produces no tool call.
         upsertTask(sessionId, sessionTitle)
@@ -564,9 +545,6 @@ object SessionActivityTracker {
         // session joining an in-flight run must not restart the clock.
         val wasRunIdle = _activeSessions.value.isEmpty()
         _activeSessions.value = _activeSessions.value + sessionId
-        if (onStop != null) {
-            synchronized(streamCancellers) { streamCancellers[sessionId] = onStop }
-        }
         // [T-android-overlay-reply-status-34599] Track which session is
         // driving the overlay so the tap-to-open intent lands in the
         // right chat. Clear the previous reply excerpt so the user
@@ -606,7 +584,6 @@ object SessionActivityTracker {
         // still be showing this task, so the slot stays (and keeps its number)
         // until the linger drops it via removeOverlayTask.
         markTaskFinished(sessionId)
-        synchronized(streamCancellers) { streamCancellers.remove(sessionId) }
         val wasError = synchronized(pendingErrorFlag) { pendingErrorFlag.remove(sessionId) }
         Log.d(TAG, "Session deactivated: $sessionId (total: ${_activeSessions.value.size})")
 
@@ -714,29 +691,6 @@ object SessionActivityTracker {
             stopService()
         } else {
             updateService()
-        }
-    }
-
-    /**
-     * Invoke every registered stream-cancel callback. Called by
-     * [AgentForegroundService] when the user taps the notification's
-     * Stop action. Each VM's cancelStream() is responsible for ending
-     * its streamJob + flipping canResume true (T13) so the user can
-     * tap Resume later.
-     *
-     * Snapshot the map before iterating — the cancellers themselves
-     * call back into [setInactive] which mutates [streamCancellers],
-     * so iterating the live map would ConcurrentModificationException.
-     */
-    fun cancelAllActiveStreams() {
-        val snapshot = synchronized(streamCancellers) { streamCancellers.values.toList() } + backgroundExecutions.values.map { it.stop }
-        Log.d(TAG, "cancelAllActiveStreams: dispatching to ${snapshot.size} session(s)")
-        for (cancel in snapshot) {
-            try {
-                cancel()
-            } catch (e: Exception) {
-                Log.w(TAG, "stream canceller threw: ${e.message}")
-            }
         }
     }
 

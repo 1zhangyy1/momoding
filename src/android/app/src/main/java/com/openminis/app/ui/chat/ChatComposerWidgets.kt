@@ -1017,7 +1017,6 @@ private fun ToolPreviewThumbnail(
 @Composable
 internal fun FloatingToolStatusBar(
     toolBlocks: List<AssistantBlock>,
-    onStop: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     onOpenTerminalWithCommand: (String) -> Unit = {},
     // T261: detail open routes through ChatViewModel state so this bar

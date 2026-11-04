@@ -2,7 +2,7 @@ package com.openminis.app.ui.chat
 
 // [T-android-split-chat] Tail composables extracted verbatim from ChatScreen.kt:
 // BorderedMarkdownTable, FallbackInfoBlock, CompactSummarySheet,
-// parseInlineMarkdown, rememberBrowserLiveSnapshot, ResumeBanner, SwipeToSendHint.
+// parseInlineMarkdown, rememberBrowserLiveSnapshot, SwipeToSendHint.
 // Full import block copied from ChatScreen.kt (unused = warnings). Externally
 // called ones flipped private->internal; cluster-only ones stay private.
 
@@ -80,7 +80,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -121,13 +120,11 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.CloseFullscreen
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
@@ -904,94 +901,6 @@ internal fun rememberBrowserLiveSnapshot(
         }
     }
     return snapshot
-}
-
-/**
- * Resume banner shown at the visual bottom of the message list when an
- * agent loop was interrupted (manual stop / tool cancel / cold-start
- * with persisted-but-incomplete history) and is resumable. Mirrors iOS
- * `resumeBanner` in `CollectionViewMessageListV3.swift:360`:
- *
- *   - orange-tinted rounded rectangle background
- *   - leading "pause" icon + secondary text on the left
- *   - trailing orange-capsule "Resume" button
- *
- * Uses iOS systemOrange (`#FF9F0A` dark / `#FF9500` light flatten to
- * a single mid value, since it sits over a low-alpha tint and reads
- * the same on both themes).
- */
-@Composable
-internal fun ResumeBanner(onResume: () -> Unit) {
-    val orange = Color(0xFFFF9500)
-    // [T-android-c3a-resume-one-tap] Crash-aware resume. When the previous app
-    // cycle ended in crash_or_stall we surface a one-line warning as CONTEXT
-    // (the user is about to re-enter the load that killed the last cycle), but
-    // the warning is informational only — a deliberate tap on the Resume BUTTON
-    // is itself an explicit user action, so it resumes in one tap. (Previously
-    // the first tap only armed the warning and a second tap was required; that
-    // extra confirm was friction on an already-explicit gesture.)
-    val showCrashWarning = com.openminis.app.diagnostics.LaunchCycleBeacon.lastCycleWasCrash
-    // momoding: an interrupted turn reads like the chat's other notes — "停下了，后面的没做 · 接着做"
-    if (!showCrashWarning) {
-        app.momoding.ui.chat.MetaLine(
-            stringResource(R.string.mo_resume_stopped), app.momoding.ui.chat.Mark.UNDONE,
-            action = stringResource(R.string.mo_resume_action), onAction = onResume,
-        )
-        return
-    }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(orange.copy(alpha = 0.08f))
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.weight(1f),
-        ) {
-            Icon(
-                imageVector = Icons.Default.PlayArrow,
-                contentDescription = null,
-                tint = orange,
-                modifier = Modifier.size(12.dp),
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = if (showCrashWarning) {
-                    stringResource(R.string.chat_resume_crash_warning)
-                } else {
-                    stringResource(R.string.resume_banner_title)
-                },
-                fontSize = 11.sp,
-                color = if (showCrashWarning) MaterialTheme.colorScheme.error else ChatColors.secondaryText,
-            )
-        }
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(50))
-                .background(orange)
-                .clickable(onClick = { onResume() })
-                .padding(horizontal = 10.dp, vertical = 3.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = Icons.Default.PlayArrow,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(10.dp),
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            Text(
-                text = stringResource(R.string.resume_action),
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = Color.White,
-            )
-        }
-    }
 }
 
 /// Floating "send arrow + Release to send capsule" hint shown while the

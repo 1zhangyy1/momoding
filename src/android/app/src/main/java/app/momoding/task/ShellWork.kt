@@ -90,9 +90,7 @@ object ShellWork {
             return withContext(NonCancellable) {
                 val task = if (registered == null) TaskEngine.commandStarted(context, chat, taskAtStart, title, command)
                     else requireNotNull(TaskEngine.dao(context).task(registered)).also { check(it.state != TaskEntity.State.ENDED.name) { "The task ended before its command was handed on." } }
-                com.openminis.app.service.SessionActivityTracker.keepBackgroundWork(command.process, chat) {
-                    scope.launch { stop(command.process) }
-                }
+                com.openminis.app.service.SessionActivityTracker.keepBackgroundWork(command.process, chat)
                 scope.launch {
                     val observed = runCatching { execution.await() }
                     val result = observed.getOrElse {

@@ -2,7 +2,7 @@ package com.openminis.app.ui.chat
 
 // [T-android-split-chat] Assistant-message + tool-pill + thinking rendering
 // extracted verbatim from ChatScreen.kt: AssistantHeader, AssistantMessageView,
-// BoundsTrackedBlock, InlineErrorBanner, ToolStopButton,
+// BoundsTrackedBlock, InlineErrorBanner,
 // formatToolDetailsForClipboard, ToolCallPill, ThinkingBlock.
 // Full import block copied (unused=warnings); externally-called ones internal.
 
@@ -76,7 +76,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -119,13 +118,11 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.CloseFullscreen
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
@@ -643,51 +640,6 @@ internal fun InlineErrorBanner(error: String, onRetry: (() -> Unit)? = null, dis
     }
 }
 
-/**
- * T14: per-card stop affordance shown on running/streaming tool blocks.
- * Mirrors iOS `ToolCapsuleView`'s small red square that appears trailing
- * the tool title when `block.toolStatus == .running`. Tapping it routes to
- * the same global `cancelStream()` callback iOS uses for `onStop?()` —
- * iOS also has no per-tool cancellation API; the per-card button is purely
- * an affordance-discoverability win. Resume banner (T13) makes the global
- * cancel UX recoverable.
- *
- * Visual: 14×14 red rounded square (Color 0xFFFF3B30 = iOS systemRed).
- */
-@Composable
-private fun ToolStopButton(
-    onStop: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val label = stringResource(R.string.stop_tool)
-    // Outer Box keeps the *layout* footprint at 18×18 (unchanged capsule width).
-    // The inner clickable Box is 24×24 and overflows the outer bounds equally on
-    // all sides (requiredSize ignores the parent's 18dp constraint), enlarging the
-    // touch target to 24 while the visual 10×10 red square stays identical.
-    Box(
-        modifier = modifier.size(18.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(
-            modifier = Modifier
-                .requiredSize(24.dp)
-                .clip(RoundedCornerShape(6.dp))
-                .clickable(
-                    onClickLabel = label,
-                    onClick = onStop,
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(10.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(Color(0xFFFF3B30)),
-            )
-        }
-    }
-}
-
 // ─── Tool Call Capsule (iOS: Capsule(), inline, tool-colored icon + title + duration) ─
 
 /**
@@ -746,17 +698,11 @@ private const val SHIMMER_PERIOD_MS = 2800
 internal fun ToolCallPill(
     block: AssistantBlock,
     allToolBlocks: List<AssistantBlock> = listOf(block),
-    onRetry: (() -> Unit)? = null,
-    onStop: (() -> Unit)? = null,
     onOpenTerminalWithCommand: (String) -> Unit = {},
     // T261: detail open routes through ChatViewModel so the sheet survives
     // LazyColumn item disposal. Default no-op for the legacy
     // AssistantMessageView call site (currently dead code).
     onOpenDetail: (String) -> Unit = {},
-    // [T-android-tool-bubble-longpress-menu] Long-press actions. Null
-    // disables the corresponding menu item (e.g. re-run is null while
-    // streaming or when there's no preceding user turn to re-run from).
-    onRerunFromHere: (() -> Unit)? = null,
     onCopyDetails: (() -> Unit)? = null,
 ) {
     // T-android-jank-profile: this log was firing on every ToolCallPill
@@ -850,7 +796,7 @@ internal fun ToolCallPill(
                 .clip(CircleShape)
                 .combinedClickable(
                     onClick = { onOpenDetail(block.id) },
-                    onLongClick = if (onRerunFromHere != null || onCopyDetails != null) {
+                    onLongClick = if (onCopyDetails != null) {
                         { showToolMenu = true }
                     } else null,
                 )
@@ -919,14 +865,7 @@ internal fun ToolCallPill(
                     maxLines = 1,
                 )
             }
-            // T168: restore per-tool stop button (reverts T117). Renders only
-            // for running/streaming/pending blocks so completed pills stay
-            // clean. Routes to the same global cancelStream() — there is no
-            // per-tool cancellation API on either platform.
-            if (isRunning && onStop != null) {
-                Spacer(modifier = Modifier.width(8.dp))
-                ToolStopButton(onStop = onStop)
-            }
+
         }
         // [T-android-decorative-anim-perf] Shimmer overlay: its own layer, so
         // the per-tick translation invalidates nothing but this band. The outer
@@ -960,10 +899,7 @@ internal fun ToolCallPill(
             )
         }
         // [T-android-tool-bubble-longpress-menu] Long-press menu anchored to
-        // the pill. Items mirror the user-bubble menu's style (MinisMenu +
-        // DropdownMenuItem + leading icon). Each item no-ops gracefully if
-        // its callback is null (re-run is gated while streaming / when no
-        // preceding user turn exists).
+        // the pill. Copying details keeps the original execution history intact.
         // [T-android-tool-menu-minwidth] Minimum width = min(220dp, screen
         // width) — the menu wants to be 220dp wide, but must never exceed the
         // device width on a narrow screen. screenWidthDp is the usable width in
@@ -977,13 +913,6 @@ internal fun ToolCallPill(
             modifier = Modifier.widthIn(max = toolMenuWidthDp),
             minWidth = toolMenuWidthDp,
         ) {
-            if (onRerunFromHere != null) {
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.tool_longpress_rerun_from_here)) },
-                    onClick = { showToolMenu = false; onRerunFromHere() },
-                    leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                )
-            }
             if (onCopyDetails != null) {
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.tool_longpress_copy_details)) },
@@ -993,13 +922,6 @@ internal fun ToolCallPill(
             }
         }
       }
-        // T251: removed inline Retry affordance next to cancelled/failed pills —
-        // the pill's own status icon (yellow on FAILED, gray on CANCELLED) is
-        // already the unified failure tip. The button was visually noisy and
-        // redundant. ToolCallPill keeps the `onRetry` parameter so upstream
-        // callers don't need to change; the lambda just isn't surfaced inline
-        // any more. retryLast() / retryFromMessage() remain reachable from
-        // other entry points (long-press menu, etc.).
         // iOS: Spacer(minLength: 0) — pill stays content-width, not full-row-width
     }
 }

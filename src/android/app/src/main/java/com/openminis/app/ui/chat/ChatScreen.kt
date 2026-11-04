@@ -81,7 +81,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
@@ -131,8 +130,6 @@ import androidx.compose.material.icons.filled.CloseFullscreen
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Psychology
-import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
@@ -298,7 +295,6 @@ import com.openminis.app.data.model.ProviderConfig
 import com.openminis.app.data.model.ProviderType
 import com.openminis.app.data.model.RoutingStrategy
 import com.openminis.app.data.model.ThinkingLevel
-import app.momoding.task.TaskEngine
 import com.openminis.app.data.repository.ChatRepository
 import com.openminis.app.data.repository.MemoryRepository
 import com.openminis.app.data.repository.ProviderRepository
@@ -638,7 +634,6 @@ fun ChatScreen(
         }.distinctUntilChanged()
     }.collectAsState(initial = false)
     val momodingRequest = remember(messages) { app.momoding.ui.chat.requestBrief(messages.lastOrNull { it.role == "user" }?.content) }
-    val canResume by viewModel.canResume.collectAsState()
     // [T-android-context-usage-hint] Context-window pressure. `contextUsage`
     // is live (drives the glow on every usage chunk); `contextUsageHint` is
     // the discrete, generation-keyed placeholder line.
@@ -1001,7 +996,6 @@ fun ChatScreen(
     // [T-new-chat-menu-entry] Confirmation gate for "New Chat" while the
     // current session is still streaming — stopping the running task needs
     // an explicit confirm; idle sessions skip the dialog entirely.
-    var showNewChatStopDialog by remember { mutableStateOf(false) }
     // [T-android-enhanced-cache] First-enable confirmation dialog visibility.
     var showEnhancedCacheDialog by remember { mutableStateOf(false) }
 
@@ -2018,8 +2012,7 @@ fun ChatScreen(
     LaunchedEffect(imeBottomPx) {
         if (userScrolledAway && isNearBottom.value) userScrolledAway = false
     }
-    // [T-android-tool-autoscroll] Start-of-turn edge from ViewModel: resume() /
-    // retryLast() / retryFromMessage() / rerunFromToolBlock() emit Unit on
+    // Programmatic turn starts emit Unit on
     // forceScrollToBottom because they don't append a new user-message row, so
     // LE(messages.size) below skips them. Without this collector the "Minis is
     // thinking…" placeholder stays parked behind the input bar until the first
@@ -3307,16 +3300,12 @@ fun ChatScreen(
                             // and outlined glyphs of different weights.
                             // [T-new-chat-menu-entry] New Chat — first item
                             // (iOS parity: square.and.pencil at the top of the
-                            // "..." menu). Streaming sessions confirm first.
+                            // "..." menu). Existing work keeps running.
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.chat_menu_new_chat)) },
                                 onClick = {
                                     showChatMenu = false
-                                    if (isStreaming) {
-                                        showNewChatStopDialog = true
-                                    } else {
-                                        onNewChat()
-                                    }
+                                    onNewChat()
                                 },
                                 leadingIcon = {
                                     MenuItemIcon(MinisIcons.SquareAndPencil)
@@ -4319,50 +4308,13 @@ fun ChatScreen(
                     verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.Bottom),
                     overscrollEffect = sharedEffect,
                 ) {
-                    // T13 Resume banner — placed BEFORE items() so reverseLayout
-                    // renders it at the visual bottom of the list (just below
-                    // the last assistant message). Mirrors iOS resumeBanner in
-                    // CollectionViewMessageListV3.swift:360. Hidden while
-                    // streaming or when an error banner is showing.
-                    //
-                    // T114: also hide when the last assistant message carries
-                    // a message-level error — the inline Retry banner already
-                    // covers that turn, and showing both at once is confusing
-                    // (Resume on a turn that hit rate-limit would just retrace
-                    // into the same failure).
-                    val lastAssistantHasError = messages
-                        .lastOrNull { it.role == "assistant" }
-                        ?.error
-                        ?.isNotBlank() == true
-                    // [T-android-compact-progress] Live compaction status, so a
-                    // long-running compact reads as "working" rather than
-                    // "hung". Sits above the resume banner because the two are
-                    // mutually exclusive in practice (compaction blocks sends).
+                    // Compaction remains cancellable without stopping the agent turn.
                     compactProgress?.let { progress ->
                         item(key = "__compact_progress__", contentType = "compact_progress") {
                             CompactProgressIndicator(
                                 progress = progress,
                                 onCancel = { viewModel.cancelCompact() },
                             )
-                        }
-                    }
-                    if (canResume && !isStreaming && error == null && !lastAssistantHasError) {
-                        item(key = "__resume_banner__", contentType = "resume_banner") {
-                            ResumeBanner(onResume = {
-                                viewModel.resume()
-                                // T282: same dual-scroll trick as the regular
-                                // send paths (T281). Resume kicks off a fresh
-                                // stream, so the "Minis is thinking" indicator
-                                // mounts a frame or two later — pin once now,
-                                // then again after 100ms so the indicator
-                                // doesn't land below the fold.
-                                userScrolledAway = false
-                                coroutineScope.launch {
-                                    tracedScrollToItem("RESUME-BANNER/initial", 0, 0)
-                                    kotlinx.coroutines.delay(100)
-                                    tracedScrollToItem("RESUME-BANNER/settle", 0, 0)
-                                }
-                            })
                         }
                     }
                     items(
@@ -4697,13 +4649,6 @@ fun ChatScreen(
                             } else if (!momodingShowSteps) /* momoding: a step in plain words */ app.momoding.ui.chat.StepLine(item.block) else ToolCallPill(
                                 block = item.block,
                                 allToolBlocks = item.allToolBlocks,
-                                onRetry = if (item.isLastCancelled && !isStreaming && !canResume) ({ safeMutate { viewModel.retryLast() } }) else null,
-                                // T14: route per-card stop to the global
-                                // cancelStream(). The button only renders
-                                // when the block is RUNNING/STREAMING — see
-                                // ToolCallPill `isRunning && onStop != null`
-                                // — so passing it unconditionally is safe.
-                                onStop = { viewModel.cancelStream() },
                                 onOpenTerminalWithCommand = onOpenTerminalWithCommand,
                                 // T261: route detail open through ViewModel so
                                 // the sheet is hoisted out of LazyColumn item
@@ -4711,22 +4656,6 @@ fun ChatScreen(
                                 // the pill scrolls off-screen and Compose
                                 // disposes the item).
                                 onOpenDetail = { viewModel.openToolDetail(it) },
-                                // [T-android-rerun-from-tool-block-position]
-                                // Re-run cuts at THIS tool_use block: keep the
-                                // blocks before it in the same turn, drop it +
-                                // everything after, then regenerate. The block
-                                // id (== tool_use id for a tool_use block) is
-                                // the stable anchor. Gated off while streaming
-                                // (mutating an in-flight turn corrupts agent
-                                // state, same rule as Retry on the user bubble).
-                                // safeMutate tears down the selection toolbar
-                                // before the truncation reshuffles the list.
-                                onRerunFromHere = if (!isStreaming) ({
-                                    coroutineScope.launch {
-                                        tracedScrollToItem("RERUN-FROM-TOOL", 0, 0)
-                                    }
-                                    safeMutate { viewModel.rerunFromToolBlock(item.messageId, item.block.id) }
-                                }) else null,
                                 onCopyDetails = {
                                     val text = formatToolDetailsForClipboard(item.block)
                                     val cb = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
@@ -4812,11 +4741,10 @@ fun ChatScreen(
                             is FlatChatItem.AssistantError -> InlineErrorBanner(
                                 error = item.error,
                                 display = if (momodingShowSteps) item.error else app.momoding.chat.ErrorWords.plain(context, item.error), // momoding
-                                onRetry = {
-                                    coroutineScope.launch { tracedScrollToItem("INLINE-RETRY-LAST", 0, 0) }
-                                    safeMutate {
-                                        val received = item.retryInboxId
-                                        if (received != null) viewModel.retryInboxMessage(received) else viewModel.retryLast()
+                                onRetry = item.retryInboxId?.let { received ->
+                                    {
+                                        coroutineScope.launch { tracedScrollToItem("INLINE-RETRY-INBOX", 0, 0) }
+                                        safeMutate { viewModel.retryInboxMessage(received) }
                                     }
                                 },
                             )
@@ -5022,9 +4950,6 @@ fun ChatScreen(
                         Column {
                         FloatingToolStatusBar(
                             toolBlocks = lastToolBlocks,
-                            // T14: per-card stop on the floating bar — same
-                            // global cancel as the message-list pill button.
-                            onStop = { viewModel.cancelStream() },
                             onOpenTerminalWithCommand = onOpenTerminalWithCommand,
                             // T261: route detail open through the same VM
                             // state as in-list pills so both surfaces share
@@ -7329,19 +7254,7 @@ fun ChatScreen(
 
                         Spacer(modifier = Modifier.width(8.dp))
 
-                        // Right: 3-state Send / Enqueue / Stop button (mirrors iOS sendButton).
-                        //   • streaming + hasText  → SEND (routes through viewModel.sendMessage,
-                        //     which dispatches to enqueuePrompt since _isStreaming is true).
-                        //     Visual feedback for the queued prompt comes from the dashed
-                        //     bubble that ChatViewModel.enqueuePrompt appends to the message
-                        //     list — no extra button badge needed (matches iOS).
-                        //   • streaming + !hasText → STOP (cancel current run).
-                        //   • !streaming           → SEND (full color when hasText, dimmed
-                        //     when empty; same as before).
-                        // T180: an attachments-only send (no caption) is a
-                        // valid message — mirrors iOS where !attachments.isEmpty
-                        // satisfies the composer's send guard. Without this an
-                        // image-only "look at this" send is impossible.
+                        // Every message goes through the inbox, including while work is running.
                         val hasText = inputText.isNotBlank()
                         // [T-voice-send-waits-for-asr] Voice mode has captured
                         // speech that is not text yet. Send must be tappable
@@ -7352,66 +7265,10 @@ fun ChatScreen(
                             (sttState != com.openminis.app.speech.RecognitionState.IDLE ||
                                 com.openminis.app.ui.chat.voice.VoiceSendGate.isFinishingForSend)
                         val hasContent = hasText || attachments.isNotEmpty() || voiceOwesText
-                        // [T-android-showstop-subagent] "Is this conversation
-                        // working" is not "is this VM streaming". Once the
-                        // parent delegates, it stops streaming and waits for the
-                        // callback — sub agents are burning tokens, the cards
-                        // are visibly spinning, and the Stop button vanished,
-                        // leaving no way to halt any of it. Same blind spot A6
-                        // fixed in the sidebar (d94cfdf57); this is the composer
-                        // half, reusing the primitive that commit added.
-                        //
-                        // The StateFlow, not hasAgentWork(): a synchronous read
-                        // inside composition would not recompose when the work
-                        // starts or ends, so the button would appear late and
-                        // linger after everything stopped.
-                        val agentWorkParents by TaskEngine.parentsWithWork.collectAsState()
-                        val sessionBusy = isStreaming ||
-                            viewModel.currentSessionId in agentWorkParents
-                        val showStop = sessionBusy && !hasContent
-                        if (showStop) {
-                            Box(
-                                modifier = Modifier
-                                    .size(38.dp)
-                                    .background(Color(0xFFFF3B30), CircleShape)
-                                    .clip(CircleShape)
-                                    .clickable { viewModel.cancelStream() },
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(
-                                    Icons.Default.Stop,
-                                    contentDescription = "Stop",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(20.dp),
-                                )
-                            }
-                        } else {
-                            // Streaming with content → Send-into-queue; Idle with content → Send.
-                            // Idle without text or attachments → disabled.
-                            val canActivate = hasContent
-                            // [T-send-longpress-return-mode] Extracted to
-                            // ComposerSendButton so long-press can open the
-                            // Return-key chooser — including on the grey
-                            // button, which the old clickable(enabled=false)
-                            // made gesture-dead. Tap semantics are unchanged:
-                            // only sends when canActivate.
-                            ComposerSendButton(
-                                canActivate = canActivate,
-                                onSend = {
-                                    // T-drag-send-queue: route through the
-                                    // shared send-or-enqueue handler. Same
-                                    // semantics as before: slash short-
-                                    // circuit, snapshot text, clear input
-                                    // + focus, then sendMessage (which
-                                    // routes to enqueuePrompt when
-                                    // _isStreaming is true), then re-pin
-                                    // the list to index 0 with a 100ms
-                                    // re-pin to catch the late-mounting
-                                    // "thinking" indicator.
-                                    performSendOrEnqueue(inputText)
-                                },
-                            )
-                        }
+                        ComposerSendButton(
+                            canActivate = hasContent,
+                            onSend = { performSendOrEnqueue(inputText) },
+                        )
                     }
                 }
             }
@@ -7536,23 +7393,6 @@ fun ChatScreen(
                     onConfirm = {
                         viewModel.compactBefore(targetId)
                         compactAboveTargetId = null
-                    },
-                )
-            }
-            // [T-new-chat-menu-entry] Streaming guard for the menu's New Chat:
-            // confirm → stop the running task, then navigate to a fresh draft;
-            // dismiss → stay in the current chat.
-            if (showNewChatStopDialog) {
-                MinisAlertDialog(
-                    onDismissRequest = { showNewChatStopDialog = false },
-                    title = stringResource(R.string.chat_menu_new_chat),
-                    text = stringResource(R.string.chat_new_chat_stop_dialog_body),
-                    confirmText = stringResource(R.string.chat_new_chat_stop_dialog_confirm),
-                    isDestructive = true,
-                    onConfirm = {
-                        showNewChatStopDialog = false
-                        viewModel.cancelStream()
-                        onNewChat()
                     },
                 )
             }
@@ -7872,7 +7712,7 @@ fun ChatScreen(
 // moved verbatim to ChatFlatItems.kt (now internal).
 
 // [T-android-split-chat] AssistantHeader / AssistantMessageView /
-// BoundsTrackedBlock / InlineErrorBanner / ToolStopButton /
+// BoundsTrackedBlock / InlineErrorBanner /
 // formatToolDetailsForClipboard / ToolCallPill / ThinkingBlock moved verbatim
 // to ChatAssistantMessageUI.kt.
 
@@ -7894,7 +7734,7 @@ fun ChatScreen(
 
 // [T-android-split-chat] BorderedMarkdownTable / FallbackInfoBlock /
 // CompactSummarySheet / parseInlineMarkdown / rememberBrowserLiveSnapshot /
-// ResumeBanner / SwipeToSendHint moved verbatim to ChatMiscViews.kt.
+// SwipeToSendHint moved verbatim to ChatMiscViews.kt.
 // Sun May 24 11:01:25 CST 2026
 
 /**
