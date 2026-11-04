@@ -27,11 +27,19 @@ Add a home-screen shortcut, use it, and ask its own Bot for changes as you go.</
 
 <p align="center"><sub>Screenshots from an Android emulator with the English interface (DeepSeek V4.1 Flash); the train app and photo album screens are illustrations.</sub></p>
 
-> **Current version: 1.0.8, still moving fast.** You can create small apps in a chat and let several Bots work on them. Most polishing so far happened on an emulator and a few real phones; background reliability on heavily customised Android builds is still being tested. Please [open an issue](https://github.com/1zhangyy1/momoding/issues/new/choose) when something goes wrong.
+> **Current version: 1.0.9, still moving fast.** You can create small apps in a chat and let several Bots work on them. Most polishing so far happened on an emulator and a few real phones; background reliability on heavily customised Android builds is still being tested. Please [open an issue](https://github.com/1zhangyy1/momoding/issues/new/choose) when something goes wrong.
 
 ---
 
-## Recent update 1.0.8
+## Recent update 1.0.9
+
+- Fixed scrolling in app chats and missing handoffs when several Bots receive work in one step.
+- Fixed false “send” approval prompts while editing app code. Actual sends, uploads and deletions still require checks.
+- Added an idle timeout for model streams without useful output and prompt cancellation of blocked network reads.
+
+[Full release notes](docs/releases/1.0.9.md) · [Download 1.0.9](https://github.com/1zhangyy1/momoding/releases/tag/v1.0.9)
+
+### 1.0.8: Small apps and multiple Bots
 
 - **Create a small app in a chat.** Each app has its own Bot, which brings back a card to open it. Ask for changes in the main chat or tap the pencil inside the app.
 - **Hand off several jobs.** Bots work and report back separately. Tap the name at the top to switch between or manage Bots; each Bot can also have its own app.
@@ -131,7 +139,7 @@ Here, improving an app means a Bot changing its own small app. The Momoding host
 3. Type your first request, or tap one of the examples on the empty chat.
 4. To let it operate other apps, go to Settings → Phone permissions → **Hands** and follow the prompts to turn on Accessibility and the overlay permission. Everything else works without it.
 
-> **Updating to 1.0.8:** Official versions 1.0.1–1.0.7 can be updated in place, keeping your data. Version 0.1.0-alpha and early test builds signed with a different key cannot be updated in place; back up the data you need before removing an incompatible build.
+> **Updating to 1.0.9:** Official versions 1.0.1–1.0.8 can be updated in place, keeping your data. Version 0.1.0-alpha and early test builds signed with a different key cannot be updated in place; back up the data you need before removing an incompatible build.
 
 ## Build from source
 
