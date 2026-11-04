@@ -89,8 +89,15 @@ object NativeOffloadServer {
 
     val registeredHandlers: Set<String> get() = handlers.keys.toSet()
 
-    /** momoding: an AI app runs a phone command without a shell (app/momoding/apps/AppBridge.kt). */
-    fun handler(name: String): NativeOffloadHandler? = handlers[name]
+    /** Wired by the app; called for both shell IPC and direct app commands. */
+    @Volatile var taskGuard: ((NativeOffloadRequest) -> String?)? = null
+
+    fun dispatch(request: NativeOffloadRequest): NativeOffloadResult {
+        val name = request.argv.firstOrNull().orEmpty().substringAfterLast('/')
+        taskGuard?.invoke(request)?.let { return NativeOffloadResult(125, "task_guard: $it\n") }
+        val handler = handlers[name] ?: return NativeOffloadResult(127, "native_offload: no handler for '$name'\n")
+        return handler.handle(request)
+    }
 
     fun register(name: String, handler: NativeOffloadHandler) {
         require(name.isNotEmpty())
@@ -276,7 +283,7 @@ object NativeOffloadServer {
             NativeOffloadResult(exitCode = 127, output = "native_offload: no handler for '$name'\n")
         } else {
             try {
-                handler.handle(NativeOffloadRequest(
+                dispatch(NativeOffloadRequest(
                     pid = pid,
                     argv = argv,
                     env = env,

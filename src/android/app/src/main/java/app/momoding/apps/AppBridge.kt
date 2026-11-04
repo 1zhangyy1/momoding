@@ -176,7 +176,7 @@ class AppBridge(private val context: Context, private val webView: WebView, priv
         val argv = words(command)
         val name = argv.firstOrNull() ?: throw IllegalArgumentException("momoding.run needs a command")
         if (!runnable(name)) throw IllegalArgumentException("$name is not a phone command an app can run (android-*, momoding-web, minis-scheduled)")
-        val handler = NativeOffloadServer.handler(name) ?: throw IllegalArgumentException("$name is not available")
+        require(name in NativeOffloadServer.registeredHandlers) { "$name is not available" }
         // what this app may use is the person's choice, asked on its screen (the agent's own checks are its work, not the app's)
         val allowed = when (mode) {
             Mode.SCREEN -> AppPermissions.check(app, name)
@@ -194,7 +194,7 @@ class AppBridge(private val context: Context, private val webView: WebView, priv
             is GateOutcome.Denied -> throw IllegalStateException(gate.message)
             is GateOutcome.Allowed -> Unit
         }
-        val r = handler.handle(NativeOffloadRequest(pid = 0, argv = argv, env = emptyMap(), cwd = "/", sessionId = app.botSession))
+        val r = NativeOffloadServer.dispatch(NativeOffloadRequest(pid = 0, argv = argv, env = emptyMap(), cwd = "/", sessionId = app.botSession))
         val out = JSONObject().put("code", r.exitCode).put("output", r.output)
         runCatching { JSONTokener(r.output.trim()).nextValue() }.getOrNull()?.takeIf { it is JSONObject || it is JSONArray }?.let { out.put("json", it) }
         AppLogger.info(TAG, "${app.name} ran $name -> ${r.exitCode}")

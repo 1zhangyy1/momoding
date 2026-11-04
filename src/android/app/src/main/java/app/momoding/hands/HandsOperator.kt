@@ -127,9 +127,14 @@ class HandsOperator(private val context: Context) {
         if (stop.get()) return false
         val id = durableTaskId ?: return true
         return Hands.enabled(context) && runBlocking {
-            app.momoding.task.TaskEngine.dao(context).task(id)?.state == app.momoding.task.TaskEntity.State.RUNNING.name
+            val denied = app.momoding.task.TaskGuard.check(context,
+                app.momoding.task.TaskGuard.Binding(app.momoding.task.TaskEntity.SCREEN, id))
+            if (denied != null) requestStop(denied)
+            denied == null && app.momoding.task.TaskEngine.dao(context).task(id)?.state == app.momoding.task.TaskEntity.State.RUNNING.name
         }
     }
+
+    private fun act(action: () -> Boolean): Boolean = mayAct() && action()
 
     /** The session this run's approval cards are filed under; see [ownPendingRequest]. */
     @Volatile private var gateSession: String? = null
@@ -348,6 +353,7 @@ class HandsOperator(private val context: Context) {
                 // ── act ── one action, or a batch on this same screen until the screen changes
                 batch@ for ((bi, action) in parsed.actions.withIndex()) {
                 if (checkpoint()) break@batch
+                mayAct()
                 if (stop.get()) return finish(Outcome.Stopped(stopReason.get() ?: "stopped"), steps, runId, lastScreen, traceDir, log, model.label)
                 if (bi > 0) {
                     if (stop.get()) return finish(Outcome.Stopped(stopReason.get() ?: "stopped"), steps, runId, lastScreen, traceDir, log, model.label)
@@ -463,7 +469,7 @@ class HandsOperator(private val context: Context) {
                         val el = tree[action.element]!!
                         val forward = action.direction == "down" || action.direction == "right"
                         capsule.stage.say(fxLabel(action))
-                        val ok = el.node.performAction(if (forward) AccessibilityNodeInfo.ACTION_SCROLL_FORWARD else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)
+                        val ok = act { el.node.performAction(if (forward) AccessibilityNodeInfo.ACTION_SCROLL_FORWARD else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD) }
                         lastResult = if (ok) "scrolled #${action.element} ${action.direction}." else "#${action.element} would not scroll ${action.direction} — maybe the end of the list."
                         pause(SWIPE_SETTLE_MS)
                     } else {
@@ -515,14 +521,14 @@ class HandsOperator(private val context: Context) {
                     }
                     HandsAction.Back -> {
                         capsule.stage.say(fxLabel(action))
-                        bg?.let { HandsDisplay.input(it, "keyevent", "4") } ?: svc.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
-                        lastResult = "pressed Back."
+                        val ok = act { bg?.let { HandsDisplay.input(it, "keyevent", "4") } ?: svc.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK) }
+                        lastResult = if (ok) "pressed Back." else "Back was not performed."
                         pause(TAP_SETTLE_MS)
                     }
                     HandsAction.Home -> {
                         capsule.stage.say(fxLabel(action))
-                        bg?.let { HandsDisplay.input(it, "keyevent", "3") } ?: svc.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME)
-                        lastResult = "went to the home screen."
+                        val ok = act { bg?.let { HandsDisplay.input(it, "keyevent", "3") } ?: svc.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME) }
+                        lastResult = if (ok) "went to the home screen." else "Home was not performed."
                         pause(TAP_SETTLE_MS)
                     }
                     is HandsAction.Wait -> {
@@ -592,12 +598,12 @@ class HandsOperator(private val context: Context) {
         val decidable = cls != RiskClass.MONEY
         capsule.approval(ui.getString(if (decidable) com.openminis.app.R.string.mo_hands_approval_here else com.openminis.app.R.string.mo_hands_approval_detail, short), decidable)
         val outcome = runBlocking {
-            RiskGate.check(sessionId ?: "hands", GuardKind.SCREEN, assessment, preview = "Tap “$short”", pageUrl = appLabel, elementText = short)
+            RiskGate.check(sessionId ?: "hands", GuardKind.SCREEN, assessment, preview = "Tap “$short”", pageUrl = appLabel, elementText = short, taskId = durableTaskId)
         }
         // The user may have opened nanoMuse to answer; put the operated app back in front.
         val (nowPkg, _) = svc.foregroundPackage()
         if (nowPkg == context.packageName && pkg != null && pkg != context.packageName) {
-            if (bg == null) HandsApps.launchable(context).firstOrNull { it.packageName == pkg }?.let { HandsApps.open(context, it) }
+            if (bg == null) HandsApps.launchable(context).firstOrNull { it.packageName == pkg }?.let { openApp(it) }
             Thread.sleep(OPEN_APP_SETTLE_MS)
         }
         capsule.working(0, ui.getString(com.openminis.app.R.string.mo_hands_looking))
@@ -622,11 +628,11 @@ class HandsOperator(private val context: Context) {
         val assessment = RiskAssessment(RiskClass.OUTBOUND, "presses Enter in a message field, which sends it ($where)", appLabel?.let { "app:$it" })
         capsule.approval(ui.getString(com.openminis.app.R.string.mo_hands_approval_here, ui.getString(com.openminis.app.R.string.mo_hands_fx_enter)), decidable = true)
         val outcome = runBlocking {
-            RiskGate.check(sessionId ?: "hands", GuardKind.SCREEN, assessment, preview = "Enter → send", pageUrl = appLabel, elementText = ui.getString(com.openminis.app.R.string.mo_hands_fx_enter))
+            RiskGate.check(sessionId ?: "hands", GuardKind.SCREEN, assessment, preview = "Enter → send", pageUrl = appLabel, elementText = ui.getString(com.openminis.app.R.string.mo_hands_fx_enter), taskId = durableTaskId)
         }
         val (nowPkg, _) = svc.foregroundPackage()
         if (nowPkg == context.packageName && pkg != null && pkg != context.packageName) {
-            if (bg == null) HandsApps.launchable(context).firstOrNull { it.packageName == pkg }?.let { HandsApps.open(context, it) }
+            if (bg == null) HandsApps.launchable(context).firstOrNull { it.packageName == pkg }?.let { openApp(it) }
             Thread.sleep(OPEN_APP_SETTLE_MS)
         }
         capsule.working(0, ui.getString(com.openminis.app.R.string.mo_hands_looking))
@@ -726,18 +732,18 @@ class HandsOperator(private val context: Context) {
         if (TapWords.looksSecret(action.field) || (el != null && TapWords.looksSecret(el.label))) return HANDOFF
         if (action.element != null && el == null) return "there is no element #${action.element} in the list; use a number from the current list."
         if (el != null && !el.editable) return "#${action.element} is not an input; pick the input from the list."
-        val node = el?.node?.also { runCatching { it.performAction(AccessibilityNodeInfo.ACTION_FOCUS) } }
+        val node = el?.node?.also { runCatching { act { it.performAction(AccessibilityNodeInfo.ACTION_FOCUS) } } }
             ?: focusedField(svc) ?: return "no text field has the cursor; tap the field first, then type in the next turn."
         if (node.isPassword) return HANDOFF
         val hint = listOfNotNull(node.hintText?.toString(), node.contentDescription?.toString()).joinToString(" ")
         if (hint.isNotBlank() && TapWords.looksSecret(hint)) return HANDOFF
-        if (svc.setNodeText(node, action.text)) return "typed “${action.text.take(60)}” into the field."
+        if (act { svc.setNodeText(node, action.text) }) return "typed “${action.text.take(60)}” into the field."
         // A search bar that is only a button until tapped (the Phone app's "Search contacts"): tap it,
         // then write into the real field that opens — what a person does, in one step instead of five.
         if (el != null && clickNode(node, long = false)) {
             Thread.sleep(700)
             focusedField(svc)?.takeIf { !it.isPassword }?.let { real ->
-                if (svc.setNodeText(real, action.text) || pasteInto(real, action.text)) return "tapped the field and typed “${action.text.take(60)}” into it."
+                if (act { svc.setNodeText(real, action.text) } || pasteInto(real, action.text)) return "tapped the field and typed “${action.text.take(60)}” into it."
             }
         }
         val ok = pasteInto(node, action.text) // momoding: paste when SET_TEXT is refused
@@ -754,7 +760,7 @@ class HandsOperator(private val context: Context) {
         val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
         cm.setPrimaryClip(android.content.ClipData.newPlainText("momoding", text))
         Thread.sleep(120)
-        if (!node.performAction(AccessibilityNodeInfo.ACTION_PASTE)) return@runCatching false
+        if (!act { node.performAction(AccessibilityNodeInfo.ACTION_PASTE) }) return@runCatching false
         Thread.sleep(250)
         node.refresh()
         node.text?.toString()?.contains(text.take(8)) == true
@@ -764,7 +770,7 @@ class HandsOperator(private val context: Context) {
         if (!mayAct()) return "the screen task ended before Enter"
         val node = focusedField(svc) ?: return "no text field has the cursor, so there is nothing to submit; tap the search or send button instead."
         val ok = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            node.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
+            act { node.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id) }
         } else false
         return if (ok) "pressed Enter." else "Enter is not available for this field; tap the search or send button on the screen instead."
     }

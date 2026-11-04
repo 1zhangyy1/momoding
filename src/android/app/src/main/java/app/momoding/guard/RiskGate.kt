@@ -1,6 +1,8 @@
 // Ported from nanoMuse (GPL-3.0): io/github/nanomuse/guard/RiskGate.kt
 package app.momoding.guard
 
+import android.content.Context
+import app.momoding.task.TaskGuard
 import com.openminis.app.logging.AppLogger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -65,6 +67,9 @@ sealed class GateOutcome {
 object RiskGate {
     private const val TAG = "RiskGate"
     const val TIMEOUT_MS: Long = 180_000
+    @Volatile private var appContext: Context? = null
+
+    fun init(context: Context) { appContext = context.applicationContext }
 
     private val _pending = MutableStateFlow<RiskRequest?>(null)
     val pending: StateFlow<RiskRequest?> = _pending.asStateFlow()
@@ -185,7 +190,11 @@ object RiskGate {
         pageUrl: String? = null,
         elementText: String? = null,
         summary: String? = null,
+        taskId: String? = null,
     ): GateOutcome {
+        val context = appContext
+        val binding = context?.let { TaskGuard.bind(it, if (taskId != null && kind == GuardKind.SCREEN) app.momoding.task.TaskEntity.SCREEN else sessionId, taskId) }
+        if (context != null && binding != null) TaskGuard.check(context, binding, assessment.needsApproval)?.let { return GateOutcome.Denied(it) }
         if (!assessment.needsApproval) {
             return GateOutcome.Allowed(
                 if (assessment.riskClass == RiskClass.INSTALL) INSTALL_NOTICE else null,
@@ -210,6 +219,8 @@ object RiskGate {
             summary = summary,
         )
         val decision = ask(request)
+        // An approval answers this request; it cannot revive work stopped while the card waited.
+        if (context != null && binding != null) TaskGuard.check(context, binding, assessment.needsApproval)?.let { return GateOutcome.Denied(it) }
         // momoding: the chat shows what was decided in one line under the reply
         RuleHits.record(sessionId, RiskText.plainTarget(assessment.target), when (decision) {
             RiskDecision.ALLOW_ONCE -> RuleHits.ONCE

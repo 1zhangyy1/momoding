@@ -329,7 +329,7 @@ object TaskEngine {
     }
 
     suspend fun screenSpec(context: Context, id: String): ScreenWork.Spec =
-        ScreenWork.Spec.parse(dao(context).log(id).first { it.kind == TaskLogEntity.Kind.SCREEN.name }.body)
+        ScreenWork.Spec.parse(requireNotNull(dao(context).screenSpec(id)) { "no screen task $id" })
 
     data class ScreenCheckpoint(val active: Boolean, val instructions: List<TaskLogEntity>)
     suspend fun screenCheckpoint(context: Context, id: String, after: Long): ScreenCheckpoint =

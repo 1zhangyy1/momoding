@@ -12090,6 +12090,8 @@ class ChatViewModel(
         assistantId: String,
         currentText: String,
     ): ToolExecutionResult {
+        val binding = app.momoding.task.TaskGuard.bind(context, activeSessionId, runningTaskId)
+        app.momoding.task.TaskGuard.check(context, binding)?.let { return ToolExecutionResult(it, false) }
         // T330: tri-state permission gating moved into the offload IPC
         // handler (OffloadGate). The CLIs land there whether the LLM
         // emitted a named tool call or a raw shell command, so the gate
@@ -12507,15 +12509,16 @@ class ChatViewModel(
             // §4.2: append the bashism reminder when we fell back to sh and the
             // command failed OR any silent-class rule was hit (S-class exit-0
             // exception, default-on).
+            val withApprovalNotice = approvalNotice?.let { "$redactedOut\n\n$it" } ?: redactedOut
             val withBashReminder = bashReminder?.let { rem ->
-                if (result.exitCode != 0 || bashism.hasSilent) "$redactedOut\n\n$rem" else redactedOut
-            } ?: redactedOut
+                if (result.exitCode != 0 || bashism.hasSilent) "$withApprovalNotice\n\n$rem" else withApprovalNotice
+            } ?: withApprovalNotice
             // [T-android-shell-process-budget] Last, so nothing is appended
             // after the note that the command waited in the process queue.
             val withReminder = result.queueNote?.let { "$withBashReminder\n\n$it" } ?: withBashReminder
 
             ToolExecutionResult(
-                output = approvalNotice?.let { "$withReminder\n\n$it" } ?: withReminder, // momoding: install / remembered-approval notice
+                output = withReminder,
                 success = result.exitCode == 0,
                 toolTitle = toolTitle,
                 timedOut = timedOut,

@@ -721,6 +721,12 @@ class MinisApp : Application(), ImageLoaderFactory {
         // momoding: android-sms — reading the texts the phone received
         NativeOffloadServer.register("android-sms", app.momoding.tools.SmsOffloadHandler(this))
 
+        NativeOffloadServer.taskGuard = { request ->
+            request.sessionId?.let { hand -> kotlinx.coroutines.runBlocking {
+                val binding = app.momoding.task.TaskGuard.bind(this@MinisApp, hand, process = request.env["MINIS_EXECUTION_ID"])
+                app.momoding.task.TaskGuard.check(this@MinisApp, binding)
+            } }
+        }
         NativeOffloadServer.start(RootfsManager.getInstance(this).rootfsDir)
 
         // Initialize session activity tracker for foreground service management
@@ -798,6 +804,7 @@ class MinisApp : Application(), ImageLoaderFactory {
         }
         // momoding: remembered approvals + the approval gate's background notification
         app.momoding.guard.Grants.init(this)
+        app.momoding.guard.RiskGate.init(this)
         app.momoding.guard.RuleHits.init(this) // momoding: "approved by your rule" rows
         app.momoding.chat.RoutineWakes.init(this) // momoding: which chat rows a routine sent
         val riskNotifier = app.momoding.guard.RiskApprovalNotifier(this, ::isAppForeground)

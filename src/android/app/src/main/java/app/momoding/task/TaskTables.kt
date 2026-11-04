@@ -213,6 +213,9 @@ interface TaskDao {
     @Query("SELECT * FROM task WHERE id IN (SELECT body FROM task_log WHERE task_id = :parent AND kind = 'CHILD') ORDER BY created_at, rowid")
     suspend fun children(parent: String): List<TaskEntity>
 
+    @Query("SELECT body FROM task_log WHERE task_id = :id AND kind = 'SCREEN' ORDER BY id LIMIT 1")
+    suspend fun screenSpec(id: String): String?
+
     @Query("SELECT * FROM task WHERE hand = 'screen' AND state = 'RUNNING'")
     suspend fun interruptedScreens(): List<TaskEntity>
 
