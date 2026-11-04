@@ -4522,12 +4522,8 @@ fun ChatScreen(
                                 onCompactAbove = if (isStreaming) null else ({
                                     compactAboveTargetId = item.message.id
                                 }),
-                                // T187: long-press → Edit pulls the user message
-                                // text into the composer; the next send truncates
-                                // from this turn (inclusive) before persisting
-                                // the edited content. Gated on isStreaming the
-                                // same way Retry is.
-                                onEdit = if (isStreaming || item.message.unread) null else ({
+                                // A correction is a new received message, safe even while another turn runs.
+                                onEdit = ({
                                     val prefill = viewModel.editMessage(item.message.id)
                                     if (prefill != null) {
                                         viewModel.setInputText(prefill)
@@ -7508,7 +7504,7 @@ fun ChatScreen(
             deleteFromHereTargetId?.let { targetId ->
                 val affected = remember(targetId, messages) {
                     val idx = messages.indexOfFirst { it.id == targetId }
-                    if (idx < 0) 0 else messages.size - idx
+                    if (idx < 0) 0 else messages.size - BubbleRowLocator.groupSpan(messages, idx).first
                 }
                 MinisAlertDialog(
                     onDismissRequest = { deleteFromHereTargetId = null },
@@ -7517,7 +7513,7 @@ fun ChatScreen(
                         R.plurals.chat_delete_from_here_dialog_body,
                         affected,
                         affected,
-                    ),
+                    ) + "\n\n" + stringResource(R.string.chat_delete_from_here_stops_work),
                     confirmText = stringResource(R.string.chat_delete_from_here_confirm),
                     isDestructive = true,
                     onConfirm = {

@@ -758,7 +758,7 @@ class ChatViewModel(
             // java.util.ArrayList; comparing a stale window after such a write
             // returned OK, not CME).
             //
-            // Also verified end-to-end on device (Pixel 4a, build with this
+            // Historical check, before editing became append-only (Pixel 4a, build with this
             // `.toList()` deliberately REVERTED): create a multi-turn session,
             // long-press a middle user message → Edit → send. `truncateBeforeEdit`
             // provably ran (8 messages → 4), storing a live SubList as
@@ -1045,10 +1045,9 @@ class ChatViewModel(
     /**
      * T187: id of a user message currently being re-edited via the
      * long-press → Edit context menu. While non-null, the composer
-     * shows an "Exit Edit Mode" pill, and the next sendMessage()
-     * call truncates the conversation from this message (inclusive)
-     * before persisting the new content as a fresh user turn.
-     * Mirrors iOS AIChatViewModel.editingMessageIndex.
+     * shows an "Exit Edit Mode" pill. The next user send captures this
+     * source and appends a quoted correction; automatic receives do not
+     * consume the draft or change the earlier conversation.
      */
     private val _editingMessageId = MutableStateFlow<String?>(null)
     val editingMessageId: StateFlow<String?> = _editingMessageId.asStateFlow()
@@ -7515,95 +7514,43 @@ class ChatViewModel(
         }
     }
 
-    /**
-     * [T-android-delete-from-here] Delete [messageId] and every message after
-     * it, leaving the conversation as it stood immediately before that turn.
-     * Mirrors iOS `6717c0ab0`.
-     *
-     * Deliberately close to — but not the same as — [retryFromMessage]. Both
-     * rewind the conversation to a point and share its anchoring: the
-     * target's persisted row is found by id through [BubbleRowLocator]
-     * ([T-android-bubble-anchor]), so synthetic rows with no bubble and
-     * bubbles with no text part cannot shift the cut.
-     *
-     * The one deliberate difference is the cut point: retry keeps the target
-     * user message and re-sends it, so it cuts at `sortOrder + 1`. Delete From
-     * Here removes the target too, so it cuts at `sortOrder`. Off-by-one in
-     * either direction is silent and destructive — one strands the message the
-     * user asked to delete, the other eats the preceding turn.
-     *
-     * No stream is started and `_isStreaming` is never claimed: this is a pure
-     * truncation. It is still refused while a turn is in flight, because
-     * deleting rows out from under a live agent loop would leave
-     * [agentHistory] describing messages that no longer exist.
-     */
+    /** Remove the selected source and later history only after their work is stopped. */
     fun deleteFromMessage(messageId: String) {
         if (_isStreaming.value) return
-        _canResume.value = false
         val messages = _messages.value
         val index = messages.indexOfFirst { it.id == messageId }
         if (index < 0) return
-
-        // [T-android-bubble-anchor-drain] A user bubble from a merged queue
-        // batch takes its siblings with it: they share the row being deleted.
-        // An assistant target keeps the user row, so it cuts at itself.
         val cutFrom = BubbleRowLocator.groupSpan(messages, index).first
-
-        // Snapshot what's about to go so any memory_write tool blocks inside
-        // can be revoked — otherwise the on-disk daily log keeps entries from
-        // messages the user just deleted.
-        val deletedMessages = messages.subList(cutFrom, messages.size).toList()
-
-        // Truncate the UI to everything BEFORE the target message, and drop
-        // any queued prompts that belonged to the deleted range so a later
-        // auto-drain can't resurrect them.
-        val retainedHead = messages.subList(0, cutFrom)
-        for (m in deletedMessages) {
-            m.inboxId?.let { pid ->
-                viewModelScope.launch { app.momoding.task.Inbox.drop(context, listOf(pid)) }
-            }
-        }
-        _messages.value = retainedHead
-
-        // Scrub stream deltas pointing at truncated messages so they can't
-        // resurface into a row that no longer exists.
-        val keptIds = retainedHead.mapTo(mutableSetOf()) { it.id }
-        retainStreamFlushStates(keptIds)
-        if (_streamingById.value.isNotEmpty()) {
-            _streamingById.value = _streamingById.value.filterKeys { it in keptIds }
-        }
-
-        revokeMemoryWritesInDeletedMessages(deletedMessages)
-
+        val source = messages[cutFrom].sourceDbIds.firstOrNull() ?: messages[cutFrom].id.substringBefore('#')
         val sid = activeSessionId ?: return
+        val selected = messages.drop(cutFrom).flatMap { it.sourceDbIds + it.id.substringBefore('#') }.toSet()
         viewModelScope.launch {
-            val target = messages[index]
-            val cutoffSortOrder = resolveDeleteCutoffSortOrder(sid, messages, index, target)
-            if (cutoffSortOrder >= 0) {
-                chatRepository.deleteMessagesAfter(sid, cutoffSortOrder)
+            incomingMutex.withLock {
+                if (_isStreaming.value) return@withLock
+                runCatching {
+                    val deleted = app.momoding.task.TaskEngine.deleteMessagesFrom(context, sid, source, selected)
+                    if (deleted.ids.isEmpty()) return@runCatching
+                    _canResume.value = false
+                    val removed = messages.filter { it.id.substringBefore('#') in deleted.ids || it.sourceDbIds.any(deleted.ids::contains) }
+                    revokeMemoryWritesInDeletedMessages(removed)
+                    if (_editingMessageId.value?.substringBefore('#') in deleted.ids) {
+                        cancelEdit()
+                        _inputText.value = ""
+                    }
+                    val remaining = chatRepository.loadMessages(sid)
+                    agentHistory.clear()
+                    toolLoopDetector.reset()
+                    for (entity in remaining) {
+                        if (!ChatRepository.isEmptyAssistantCarrier(entity.role, entity.partsJson)) agentHistory.add(entity.toLLMMessage())
+                    }
+                    _messages.value = _messages.value.filterNot { it.id.substringBefore('#') in deleted.ids || it.sourceDbIds.any(deleted.ids::contains) }
+                    val kept = _messages.value.mapTo(mutableSetOf()) { it.id }
+                    retainStreamFlushStates(kept)
+                    _streamingById.value = _streamingById.value.filterKeys { it in kept }
+                    refreshInbox()
+                }.onFailure { _error.value = it.message }
             }
-
-            // Rebuild agentHistory from what survived, so the next turn is
-            // built on the truncated conversation rather than a stale list.
-            agentHistory.clear()
-            toolLoopDetector.reset()
-            val remaining = chatRepository.loadMessages(sid)
-            for (entity in remaining) {
-                // [T-android-error-persist-current-turn] Carriers never reach the model.
-                if (ChatRepository.isEmptyAssistantCarrier(entity.role, entity.partsJson)) continue
-                agentHistory.add(entity.toLLMMessage())
-            }
-            // Refresh the session's last-message preview; otherwise the
-            // session list keeps quoting a message that no longer exists.
-            // An empty remainder clears it rather than leaving the stale text.
-            runCatching {
-                chatRepository.updateSessionPreview(sid, remaining.lastOrNull()?.partsJson ?: "[]")
-            }
-            AppLogger.info(
-                TAG,
-                "deleteFromMessage: cut at sortOrder=$cutoffSortOrder, " +
-                    "${deletedMessages.size} message(s) removed, ${remaining.size} remain",
-            )
+            drainQueueWhenIdle()
         }
     }
 
@@ -7617,43 +7564,6 @@ class ChatViewModel(
         val line = "[BubbleAnchor] op=$op bubble=${bubbleId.take(8)} via=${located.via} " +
             "row=${located.row?.id?.take(8) ?: "-"} sortOrder=${located.row?.sortOrder ?: -1}"
         if (located.via == BubbleRowLocator.Via.LINKED) AppLogger.info(TAG, line) else AppLogger.warning(TAG, line)
-    }
-
-    /**
-     * [T-android-delete-from-here] Resolve the DB `sort_order` to cut at so
-     * that [index] and everything after it is removed.
-     *
-     * [T-android-bubble-anchor] The row is found by the bubble's id
-     * ([BubbleRowLocator]), not by counting visible user rows: the chat and
-     * the persisted rows are not 1:1 (synthetic `<system-reminder>` rows have
-     * no bubble; an image-only turn has a bubble but no text part), and the
-     * count went wrong wherever they differed.
-     *
-     * When the target is an ASSISTANT message the cut is anchored to the user
-     * turn it belongs to: we find the last user bubble at or before [index],
-     * cut just after its row, and thereby drop the assistant reply and
-     * everything following. Returns -1 when no anchor can be resolved, which
-     * the caller treats as "leave the DB alone".
-     */
-    private suspend fun resolveDeleteCutoffSortOrder(
-        sid: String,
-        messages: List<ChatMessage>,
-        index: Int,
-        target: ChatMessage,
-    ): Int {
-        // [T-android-bubble-anchor] A user target is cut AT its own row. An
-        // assistant target anchors to the user turn it answers - the last
-        // user bubble at or before it - and is cut just AFTER that row,
-        // keeping the question and removing the reply onward. Rows are found
-        // by id; see BubbleRowLocator.
-        val anchorIdx = if (target.role == "user") index
-        else messages.subList(0, index + 1).indexOfLast { it.role == "user" }
-        // No user turn at or before the target (e.g. deleting from a leading
-        // assistant/system row): everything goes.
-        if (anchorIdx < 0) return 0
-        val located = BubbleRowLocator.locateUserRow(messages, anchorIdx, chatRepository.loadMessages(sid))
-        logBubbleAnchor("delete", messages[anchorIdx].id, located)
-        return BubbleRowLocator.cutoffFor(located, keepBubble = target.role != "user")
     }
 
     /**
@@ -7792,17 +7702,13 @@ class ChatViewModel(
      * T187: enter edit mode for [messageId]. Returns the cleaned text the
      * caller should drop into the composer (with any
      * `<user-attached-files>` XML stripped), or null when the message
-     * cannot be edited (streaming in progress, message missing, or not
-     * a user turn). Setting `_editingMessageId` is what flips the
-     * composer into edit-mode UI; the next sendMessage call sees the
-     * non-null id and truncates the conversation from that point.
-     * Mirrors iOS AIChatViewModel.editMessage(_:) (L2468).
+     * cannot be edited. Sending appends a new message quoting this one;
+     * it never rewinds the original authorization or its later history.
      */
     fun editMessage(messageId: String): String? {
-        if (_isStreaming.value) return null
         val msg = _messages.value.firstOrNull { it.id == messageId } ?: return null
         if (msg.role != "user") return null
-        var text = msg.content
+        var text = msg.correction?.replacement ?: msg.content
         val startIdx = text.indexOf("<user-attached-files>")
         if (startIdx >= 0) {
             val endTag = "</user-attached-files>"
@@ -7914,69 +7820,6 @@ class ChatViewModel(
             _attachments.value = emptyList()
         }
         _editingMessageId.value = null
-    }
-
-    /**
-     * T187: drop the message at [messageId] *and* every later message
-     * (in UI, in agentHistory, and on disk) so the new sendMessage()
-     * call below this can persist the edited text as a fresh user
-     * turn at the same position. Reuses the cutoff-search machinery
-     * from retryFromMessage but offsets by `entity.sortOrder` (not
-     * +1) — retry preserves the original turn, edit replaces it.
-     */
-    private suspend fun truncateBeforeEdit(messageId: String) {
-        val messages = _messages.value
-        val index = messages.indexOfFirst { it.id == messageId }
-        if (index < 0) return
-
-        // [T-android-bubble-anchor-drain] Remove from the FIRST bubble of a
-        // merged queue batch: the edit removes the batch's shared row, so its
-        // sibling bubbles must go with it.
-        val cutFrom = BubbleRowLocator.groupSpan(messages, index).first
-        val deletedMessages = messages.subList(cutFrom, messages.size).toList()
-        // [T-android-uimessages-sublist-cme] Defensive: without `.toList()` this
-        // stores a live subList VIEW as `_messages.value`.
-        //
-        // Reproduced on device with this `.toList()` reverted (Pixel 4a): the
-        // truncation ran (8 messages → 4) and a further message was sent, and it
-        // did NOT crash — the next `+` copies the view into a plain ArrayList
-        // before anything can invalidate it. So this line is hardening, not the
-        // proven cause of the reported CME. See the long note on `uiMessages`.
-        // (`deletedMessages` above already copies; this line did not.)
-        val kept = messages.subList(0, cutFrom).toList()
-        _messages.value = kept
-        if (_streamingById.value.isNotEmpty()) {
-            val keptIds = kept.mapTo(mutableSetOf()) { it.id }
-            retainStreamFlushStates(keptIds)
-            _streamingById.value = _streamingById.value.filterKeys { it in keptIds }
-        }
-        revokeMemoryWritesInDeletedMessages(deletedMessages)
-
-        val sid = realSessionId.takeIf { it.isNotEmpty() } ?: sessionId
-        // [T-android-bubble-anchor] Edit = delete from here + an ordinary
-        // send, so the edited row itself goes: cut AT it. Found by id, not by
-        // counting visible user rows. Counting could run off the end (an
-        // image-only turn earlier in the chat is a bubble with no text part),
-        // leave the pre-edit row in place, and send the edited text after it,
-        // so the model still read the old message. See BubbleRowLocator.
-        val located = BubbleRowLocator.locateUserRow(messages, index, chatRepository.loadMessages(sid))
-        logBubbleAnchor("edit", messageId, located)
-        val cutoffSortOrder = BubbleRowLocator.cutoffFor(located, keepBubble = false)
-        if (cutoffSortOrder >= 0) {
-            chatRepository.deleteMessagesAfter(sid, cutoffSortOrder)
-        }
-        agentHistory.clear()
-        toolLoopDetector.reset()
-        val remaining = chatRepository.loadMessages(sid)
-        for (entity in remaining) {
-            // [T-android-error-persist-current-turn] Carriers never reach the model.
-            if (ChatRepository.isEmptyAssistantCarrier(entity.role, entity.partsJson)) continue
-            agentHistory.add(entity.toLLMMessage())
-        }
-        AppLogger.info(
-            TAG_STREAM,
-            "✏️ truncateBeforeEdit cutoffSortOrder=$cutoffSortOrder remaining=${remaining.size}"
-        )
     }
 
     /** Prepare the durable payload before acknowledging reception, including pasted text. */
@@ -8196,9 +8039,22 @@ class ChatViewModel(
     }
 
     fun sendMessage(text: String) {
+        // Capture the actual click, before another receive can hold the inbox mutex.
+        val editingId = _editingMessageId.value
+        val source = editingId?.let { id -> _messages.value.firstOrNull { it.id == id } }
+        if (editingId != null && source == null) {
+            cancelEdit()
+            _inputText.value = text
+            return
+        }
+        val correction = source?.let { app.momoding.chat.MessageCorrection(it.id, it.content.ifBlank { it.attachmentNames.joinToString(", ") }, text.trim()) }
+        val attachments = _attachments.value.toList()
         viewModelScope.launch {
-            runCatching { sendMessage(text, skipContextCheck = false, headless = false) }
-                .onFailure { _error.value = it.message; _inputText.value = text }
+            runCatching { sendMessage(text, skipContextCheck = false, headless = false, explicitAttachments = attachments, correction = correction) }
+                .onFailure {
+                    _error.value = it.message
+                    if (_editingMessageId.value == editingId && _inputText.value.isEmpty()) _inputText.value = text
+                }
         }
     }
 
@@ -8257,19 +8113,27 @@ class ChatViewModel(
         prefill: List<com.openminis.app.scheduled.PrefilledToolCall> = emptyList(),
         origin: QueuedPromptOrigin? = null, explicitAttachments: List<InputAttachment>? = null,
         received: QueuedPrompt? = null,
+        correction: app.momoding.chat.MessageCorrection? = null,
     ): SubmitOutcome = incomingMutex.withLock {
         if (!sessionLoaded.value && !com.openminis.app.crash.CrashFrequencyDetector.isSafeMode()) sessionLoaded.first { it }
         val attachments = explicitAttachments ?: if (headless) emptyList() else _attachments.value
         if (received == null && text.isBlank() && attachments.isEmpty()) return@withLock SubmitOutcome.Rejected("empty_prompt")
         val sid = ensureSession()
         val prompt = received ?: run {
-            val raw = QueuedPrompt(java.util.UUID.randomUUID().toString(), text.trim(), attachments,
+            val words = if (correction == null) text.trim() else com.openminis.app.i18n.LocaleWrap.uiContext(context).getString(R.string.chat_edit_correction, text.trim())
+            val raw = QueuedPrompt(java.util.UUID.randomUUID().toString(), words, attachments,
                 origin = origin ?: if (headless) QueuedPromptOrigin.PROGRAMMATIC else QueuedPromptOrigin.USER,
                 prefill = prefill, scheduledTaskId = if (headless) com.openminis.app.scheduled.ScheduledTaskMarker.parse(text)?.taskId else null)
-            val prepared = withContext(Dispatchers.IO) { prepareInboxPrompt(raw, sid) }
+            val prepared = withContext(Dispatchers.IO) {
+                val payload = prepareInboxPrompt(raw, sid)
+                if (correction == null) payload else payload.copy(partsJson = correction.prepend(requireNotNull(payload.partsJson)))
+            }
             app.momoding.task.Inbox.put(context, sid, prepared)
             if (!headless) {
-                clearAttachments()
+                if (_editingMessageId.value == correction?.source) {
+                    _editingMessageId.value = null
+                    if (_attachments.value == attachments) clearAttachments()
+                }
                 val consumed = splitPastePlaceholders(text, _pastedTexts.value).second
                 _pastedTexts.value = _pastedTexts.value.filterNot { it.id in consumed }
             }
@@ -8406,14 +8270,6 @@ class ChatViewModel(
             flushAllStreamingDeltas()
         }
 
-        // T187: when the user is editing a previous message, truncate the
-        // conversation from that message (inclusive) before persisting the
-        // edited text as a fresh user turn. Snapshot + clear the id here so
-        // any error in the truncate path doesn't leave the composer stuck
-        // in edit mode.
-        val editingId = _editingMessageId.value
-        if (editingId != null) _editingMessageId.value = null
-
         viewModelScope.launch {
             var streamLaunched = false
             var batch = listOf(prompt)
@@ -8434,10 +8290,6 @@ class ChatViewModel(
             }
             // Ensure session exists in DB (creates on first message for draft sessions)
             val activeSessionId = ensureSession()
-
-            if (editingId != null) {
-                truncateBeforeEdit(editingId)
-            }
 
             // A new send cannot overtake older receives waiting for this idle chat.
             batch = QueuedPromptBatching.nextDrainBatch(app.momoding.task.Inbox.unread(context, activeSessionId))
@@ -15165,6 +15017,7 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
         // Filter out user messages that only contain toolResult parts (no visible text)
         return mapNotNull { entity ->
             var text = ""
+            var correction: app.momoding.chat.MessageCorrection? = null
             val blocks = mutableListOf<AssistantBlock>()
             // T128: media attachments persisted under user messages as `mediaRef`
             // parts. Restored to file:// URIs (stable across app restarts) and
@@ -15207,6 +15060,8 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
                     val obj = array.getJSONObject(i)
                     when (obj.optString("type")) {
                         "text" -> {
+                            if (entity.role == "user") app.momoding.chat.MessageCorrection.fromPart(obj)?.let { correction = it }
+                            if (correction != null && obj.has("correction")) continue
                             val raw = obj.optString("value", "")
                             // Strip <system-reminder>...</system-reminder> blocks
                             // here only — agentHistory in memory and the DB row
@@ -15343,6 +15198,7 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
                 id = entity.id,
                 role = entity.role,
                 content = text,
+                correction = correction,
                 imageUris = restoredImageUris,
                 // Image names first, then file names — the invariant
                 // UserAttachmentList's `drop(imageUris.size)` relies on.

@@ -216,13 +216,10 @@ class StreamWatchdogAndCancelTest {
 
     private val vmSrc by lazy { File("src/main/java/com/openminis/app/ui/chat/ChatViewModel.kt").readText() }
 
-    /** Drift guard: the window is a snapshot, and the truncation copies too. */
+    /** Drift guard: the UI window is a snapshot. Editing no longer truncates history. */
     @Test
-    fun `production ui window and truncation still copy instead of sharing a live view`() {
+    fun `production ui window still copies instead of sharing a live view`() {
         assertTrue(vmSrc.contains("else full.subList(full.size - cap, full.size).toList()"))
-        // [T-android-bubble-anchor-drain] The edit cut now starts at the merged
-        // batch's first bubble (cutFrom); still a copy, not a live view.
-        assertTrue(vmSrc.contains("val kept = messages.subList(0, cutFrom).toList()"))
     }
 
     // Registry stop-order assertions were removed with that implementation. Persistent

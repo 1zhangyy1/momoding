@@ -2304,4 +2304,6 @@
     <string name="rootfs_dns_saved">Saved and applied</string>
     <string name="rootfs_dns_effective_system">In effect: system DNS</string>
     <string name="rootfs_dns_effective_custom">In effect: %1$s</string>
+    <string name="chat_edit_correction">Change to: %1$s</string>
+    <string name="chat_delete_from_here_stops_work">Unfinished work started by these messages will be stopped.</string>
 </resources>

@@ -62,7 +62,7 @@ object TaskTranscript {
             val receipts = JSONArray()
             for ((call, effects) in actions.groupBy { ToolCall.parse(JSONObject(it.body).getJSONObject("tool")) }) {
                 require(effects.all { JSONObject(it.body).getString("session") == source.sessionId }) { "The call belongs to another conversation." }
-                val saved = effects.filter { it.kind == TaskLogEntity.Kind.HANDOFF.name }.mapNotNull { tasks.task(it.taskId) }
+                val saved = effects.filter { it.kind == TaskLogEntity.Kind.HANDOFF.name }.mapNotNull { tasks.task(it.taskId) }.distinctBy { it.id }
                 val values = effects.filter { it.kind == TaskLogEntity.Kind.ABOUT_TO.name }.map { action ->
                     val about = JSONObject(action.body)
                     require(source.sessionId == about.getString("session")) { "The action belongs to another conversation." }

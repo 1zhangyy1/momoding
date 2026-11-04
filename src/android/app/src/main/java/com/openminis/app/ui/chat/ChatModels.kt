@@ -203,6 +203,7 @@ data class ChatMessage(
     val completedAt: Long? = null,
     // momoding: when a user message was sent (its row's created_at), for the chat's time dividers
     val sentAt: Long? = null,
+    val correction: app.momoding.chat.MessageCorrection? = null,
 ) {
     /**
      * [T-bridge-message-ui-leak-android] True when this UI message is the

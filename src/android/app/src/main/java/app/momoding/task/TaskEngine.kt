@@ -142,7 +142,7 @@ object TaskEngine {
             val owner = requireNotNull(dao.task(id)) { "no task $id" }.conversation
             call?.requireStoredIn(dao, owner)
             TaskGuard.checkIn(dao, TaskGuard.Binding(owner, null, call?.message), outward = true, targetTaskId = id)?.let { throw TaskAction.NotStarted(it) }
-            tellIn(context, dao, after, id, text, helper)
+            tellIn(context, dao, after, id, text, helper).also { handoffIn(dao, it, call) }
         }
     }
 
@@ -257,6 +257,46 @@ object TaskEngine {
                 append("\n")
             }
         }.trimEnd()
+    }
+
+    data class DeletedMessages(val ids: Set<String>, val stopped: Int)
+
+    /** The state, stop receipts and removal commit together; cancellation follows that commit. */
+    suspend fun deleteMessagesFrom(context: Context, session: String, source: String, visibleIds: Set<String>): DeletedMessages = change(context) { dao, after ->
+        deleteMessagesFromIn(context, (context.applicationContext as MinisApp).database.chatDao(), dao, after, session, source, visibleIds)
+    }
+
+    internal suspend fun deleteMessagesFromIn(context: Context, chat: com.openminis.app.data.db.ChatDao, dao: TaskDao,
+        after: MutableList<suspend () -> Unit>, session: String, source: String, visibleIds: Set<String>,
+    ): DeletedMessages {
+        val rows = chat.loadMessages(session)
+        val inbox = dao.inboxFor(session)
+        val selected = visibleIds + source
+        val original = rows.firstOrNull { it.id == source }
+        if (original == null && inbox.none { it.id == source }) return DeletedMessages(emptySet(), 0)
+        // An inbox-only failure may precede later persisted rows. Its displayed tail
+        // supplies those identities; absence from transcript is never an ordering rule.
+        val anchor = original ?: rows.firstOrNull { it.id in selected }
+        val removedRows = if (anchor == null) emptyList() else rows.filter { it.sortOrder >= anchor.sortOrder }
+        val rowIds = rows.map { it.id }.toSet()
+        val ids = removedRows.map { it.id }.toMutableSet()
+        val removedInbox = inbox.filter { it.id in ids || (it.id !in rowIds && it.id in selected) }
+        ids += removedInbox.map { it.id }
+        val handed = removedInbox.mapNotNull { it.taskId }.toSet()
+        val candidates = dao.relatedTo(listOf(session)).filter { it.state != TaskEntity.State.ENDED.name }
+        val roots = candidates.filter { task ->
+            task.sourceMessageId?.substringBefore('#') in ids || task.id in handed || dao.log(task.id).any { row ->
+                row.kind in listOf(TaskLogEntity.Kind.HANDOFF.name, TaskLogEntity.Kind.ABOUT_TO.name) &&
+                    runCatching { JSONObject(row.body).optJSONObject("tool")?.optString("message") in ids }.getOrDefault(false)
+            }
+        }
+        val stopped = descendants(dao, roots).count { it.state != TaskEntity.State.ENDED.name }
+        for (task in roots) stopIn(context, dao, after, task.id, "Stopped because its source messages were deleted.")
+        dao.deleteInbox(ids.toList())
+        if (anchor != null) chat.deleteMessagesAfter(session, anchor.sortOrder)
+        val last = (if (anchor == null) rows else rows.filter { it.sortOrder < anchor.sortOrder }).lastOrNull()
+        chat.updateLastMessage(session, last?.let { com.openminis.app.data.repository.ChatRepository.extractTextPreview(it.partsJson) }, System.currentTimeMillis())
+        return DeletedMessages(ids, stopped)
     }
 
     data class DeletedSessions(val ids: List<String>, val tasks: List<TaskEntity>, val stopped: Int)

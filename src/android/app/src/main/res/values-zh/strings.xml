@@ -2110,4 +2110,6 @@
     <string name="rootfs_dns_saved">已保存并生效</string>
     <string name="rootfs_dns_effective_system">当前生效：系统 DNS</string>
     <string name="rootfs_dns_effective_custom">当前生效：%1$s</string>
+    <string name="chat_edit_correction">改成：%1$s</string>
+    <string name="chat_delete_from_here_stops_work">这些消息引出的未完成任务也会停止。</string>
 </resources>

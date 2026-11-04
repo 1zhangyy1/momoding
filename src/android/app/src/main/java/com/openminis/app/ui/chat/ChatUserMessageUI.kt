@@ -394,15 +394,17 @@ internal fun UserMessageBubble(
                             isStreaming = false,
                             stableKey = "user:${message.id}",
                         ) {
-                            Text(
-                                text = message.content,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 16.sp, lineHeight = 22.sp), // momoding
-                                modifier = Modifier
-                                    .background(userBubbleColor, shape)
-                                    .clip(shape)
-                                    .padding(horizontal = 14.dp, vertical = 9.dp),
-                            )
+                            Column(Modifier.background(userBubbleColor, shape).clip(shape).padding(horizontal = 14.dp, vertical = 9.dp)) {
+                                message.correction?.let { correction ->
+                                    Row(Modifier.padding(bottom = 6.dp).height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Box(Modifier.width(2.dp).fillMaxHeight().background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)))
+                                        Text(correction.quote.take(600), maxLines = 3, overflow = TextOverflow.Ellipsis,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
+                                Text(text = message.content, color = MaterialTheme.colorScheme.onSurface,
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 16.sp, lineHeight = 22.sp))
+                            }
                         }
                     }
                 }

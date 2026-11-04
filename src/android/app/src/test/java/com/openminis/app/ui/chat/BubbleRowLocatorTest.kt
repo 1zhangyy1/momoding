@@ -109,20 +109,6 @@ class BubbleRowLocatorTest {
         assertEquals(4..4, BubbleRowLocator.groupSpan(messages, 4))
     }
 
-    @Test
-    fun `a drain links its bubbles, and retry, delete and edit cut the chat by group`() {
-        val vm = ProductionSources.read("ui/chat/ChatViewModel.kt")
-        val drain = vm.substring(vm.indexOf("private suspend fun drainQueuedPrompts"))
-        assertTrue(
-            "drainQueuedPrompts must link every drained bubble to the persisted row",
-            drain.substring(0, 6000).contains("sourceDbIds = listOf(drainedRow.id)"),
-        )
-        for (fn in listOf("fun retryFromMessage", "fun deleteFromMessage", "private suspend fun truncateBeforeEdit")) {
-            val body = vm.substring(vm.indexOf(fn)).take(4000)
-            assertTrue("$fn must cut the chat by group", body.contains("BubbleRowLocator.groupSpan(messages, index)"))
-        }
-    }
-
     // ── the reported shape ────────────────────────────────────────────────
 
     @Test
@@ -220,17 +206,10 @@ class BubbleRowLocatorTest {
     // ── wiring ────────────────────────────────────────────────────────────
 
     @Test
-    fun `retry, delete and edit all anchor through the locator, with no counting loop left`() {
+    fun `legacy retry anchors through the locator without a counting loop`() {
         val vm = ProductionSources.read("ui/chat/ChatViewModel.kt")
         assertTrue(vm.contains("logBubbleAnchor(\"retry\", messageId, located)"))
-        assertTrue(vm.contains("logBubbleAnchor(\"edit\", messageId, located)"))
-        assertTrue(vm.contains("logBubbleAnchor(\"delete\", messages[anchorIdx].id, located)"))
         assertFalse("the per-operation ordinal loops are gone", vm.contains("visibleUserCount"))
     }
 
-    @Test
-    fun `a steer bubble takes its persisted row's id`() {
-        val vm = ProductionSources.read("ui/chat/ChatViewModel.kt")
-        assertTrue(vm.contains("id = steerRow?.id ?: \"steer_\${System.currentTimeMillis()}\""))
-    }
 }
