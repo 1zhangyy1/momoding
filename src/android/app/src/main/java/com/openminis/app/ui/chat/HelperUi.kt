@@ -84,8 +84,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.openminis.app.data.model.ThinkingLevel
 import com.openminis.app.R
-import com.openminis.app.agent.jobs.AgentCallback
-import com.openminis.app.agent.jobs.AgentJobRegistry
+import com.openminis.app.agent.jobs.LegacyAgentCallback
 import com.openminis.app.agent.jobs.HelperRunner
 import com.openminis.app.debug.HeadlessChatRunner
 import com.openminis.app.ui.theme.ChatColors
@@ -97,8 +96,6 @@ import com.openminis.app.ui.components.DecorativeSpinner
 // [T-p2-agent-series] Dedicated rendering for a `delegate_task` (agent)
 // block — the Android port of iOS HelperBlockView.swift / HelperSheet.swift
 // at their FINAL state. Surfaces:
-//   • HelperToolBlock       — the inline block in the parent transcript
-//                              (two fixed rows: no height change across states)
 //   • HelperThumbContent    — the floating tool bar's 100×65 preview
 //   • HelperDetailContent   — the tool detail sheet's body, stacked cards in
 //                              the file/browser tool language
@@ -269,33 +266,12 @@ internal fun parseHelperBlock(block: AssistantBlock): HelperBlockInfo {
     // pause that will never lift — which also lets the parent model read it as
     // work that did not happen and delegate it again.
     if (status == "queued") {
-        // [T-android-subagent-control-not-lost] `queued` means two unrelated
-        // things on two unrelated queues, and the liveness check below only
-        // answers for one of them.
-        //
-        //   delegate — waiting for a CONCURRENCY SLOT in AgentJobRegistry's
-        //     in-memory queue. That queue dies with the process and holds the
-        //     only copy of the arguments, so after a restart the delegation
-        //     genuinely can never start. "Never started" is the right label.
-        //
-        //   steer    — waiting for the CHILD to read it on its next turn,
-        //     parked in the child vm's pendingSteerMessages. Nothing ever puts
-        //     it in queuedDelegations, so isQueuedLive is false from the very
-        //     first read — not after a restart, immediately.
-        //
-        // Without this guard every steer was badged yellow "Never started"
-        // while its own result text said "Queued. The sub agent reads it at its
-        // next turn" — the badge and the body asserting opposite things about
-        // the same call. A control call has no delegation queue to be lost
-        // from, so the question simply does not apply to it.
+        // Historic steering acknowledgements describe pending instructions.
+        // Historic delegations cannot be started by the removed memory queue.
         if (HelperRunner.isControlOnly(block.toolArgs.ifEmpty { null }, block.content.ifEmpty { null })) {
             return HelperBlockInfo(title, HelperPhase.Queued(o.optInt("queued_behind", 0)), childId, null, summaryLine)
         }
-        return if (HelperRunner.isQueuedLive(block.id)) {
-            HelperBlockInfo(title, HelperPhase.Queued(o.optInt("queued_behind", 0)), childId, null, summaryLine)
-        } else {
-            HelperBlockInfo(title, HelperPhase.NeverStarted, childId, null, summaryLine)
-        }
+        return HelperBlockInfo(title, HelperPhase.NeverStarted, childId, null, summaryLine)
     }
     if (status == "running") {
         if (liveRunning) {
@@ -496,152 +472,6 @@ internal fun helperToolIcon(name: String?): ImageVector = when (name) {
 private fun HelperSpinner(size: Int, stroke: Float = 2f) {
     // [T-android-decorative-anim-perf] See DecorativeAnimation.kt.
     DecorativeSpinner(color = helperAccent(), modifier = Modifier.size(size.dp), strokeWidth = stroke.dp)
-}
-
-// ─── Inline block ────────────────────────────────────────────────────────
-
-/**
- * The block in the parent transcript. Two rows at a FIXED height whatever
- * the phase: title row (Agent chip + task title) and one status row —
- * starting / tool·activity·clock / status·tier·elapsed. The finished state
- * deliberately shows no result summary; the deliverable lives in the detail
- * sheet, so the block never grows and jolts the list when a run ends.
- */
-@Composable
-internal fun HelperToolBlock(
-    block: AssistantBlock,
-    onOpenDetail: (String) -> Unit,
-    onStop: (() -> Unit)? = null,
-    /**
-     * [T-android-neverstarted-not-running] Run a delegation that never got off
-     * the queue. Only offered for [HelperPhase.NeverStarted], which is the one
-     * state where the work is fully described (the task text is in the block's
-     * own arguments) but definitively did not happen.
-     */
-    onStart: (() -> Unit)? = null,
-    /**
-     * [T-android-subagent-card-resume] Restart an INTERRUPTED run (the app
-     * stopped while it was working). Returns whether it was accepted, started
-     * or queued: the button stays dimmed and disabled after an accepted tap,
-     * and comes back after a refusal so the user can try again. Port of iOS
-     * HelperBlockView's resume button.
-     */
-    onResume: (() -> Boolean)? = null,
-    modifier: Modifier = Modifier,
-) {
-    val info = remember(block.content, block.toolStatus, block.toolTitle) { parseHelperBlock(block) }
-    // [T-android-subagent-card-resume] iOS `resuming`. Once a resume starts, the
-    // block flips to Running and the button leaves on its own; a queued one
-    // stays interrupted until a slot frees, so the tap must not be repeatable.
-    var resuming by remember(block.id) { mutableStateOf(false) }
-    val accent = helperAccent()
-    val shape = RoundedCornerShape(12.dp)
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .clip(shape)
-            .background(accent.copy(alpha = 0.07f))
-            .border(0.8.dp, accent.copy(alpha = 0.35f), shape)
-            .clickable(onClickLabel = stringResource(R.string.agent_open_detail)) { onOpenDetail(block.id) }
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(modifier = Modifier.size(34.dp).clip(CircleShape).background(accent.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-            val f = info.finished
-            when {
-                // [T-android-subagent-card-metrics] 13, not 15. iOS draws these
-                // at 13pt, and an SF Symbol at 13 carries less visual weight
-                // than a Material icon at 15 — the two differences compounded,
-                // so the 34dp disc read as packed next to iOS's. The disc
-                // itself stays 34; only the glyph inside it changes.
-                info.isRunning && info.phase is HelperPhase.Running -> HelperSpinner(13)
-                f != null -> Icon(
-                    helperStatusGlyph(f.status),
-                    contentDescription = null, tint = helperStatusColor(f.status), modifier = Modifier.size(13.dp),
-                )
-                // [T-android-queued-visual] A QUEUED agent is paused, and must
-                // not wear the same generic Groups glyph as one that is
-                // starting. With a fan-out of five, the two that were waiting
-                // for a slot looked identical to the three that were about to
-                // run — the only difference was the word in the second line.
-                // iOS draws `pause.fill` here (HelperBlockView.swift:589).
-                info.phase is HelperPhase.Queued -> Icon(
-                    Icons.Default.Pause, contentDescription = null,
-                    tint = accent, modifier = Modifier.size(13.dp),
-                )
-                else -> Icon(Icons.Default.Groups, contentDescription = null, tint = accent, modifier = Modifier.size(13.dp))
-            }
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                // [T-android-subagent-badge] Name the sub agent once the payload
-                // carries one; the generic label until then. Several agents in
-                // one fan-out all reading "Agent" left the user unable to tell
-                // which card was which.
-                AgentChip(info.agent ?: stringResource(R.string.helper_label))
-                Text(
-                    info.title, fontSize = 13.sp, lineHeight = 14.sp,
-                    fontWeight = FontWeight.Medium, color = ChatColors.primaryText,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
-                )
-            }
-            HelperSecondLine(info)
-        }
-        Spacer(Modifier.width(4.dp))
-        if (info.phase is HelperPhase.NeverStarted && onStart != null) {
-            // A play triangle, not a stop square: this card's work never ran,
-            // and the only useful action is to run it.
-            val startLabel = stringResource(R.string.helper_start)
-            Box(
-                modifier = Modifier.size(24.dp).clip(CircleShape).background(helperAccent())
-                    .clickable(onClickLabel = startLabel) { onStart() }
-                    .semantics { contentDescription = startLabel },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    Icons.Default.PlayArrow,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(14.dp),
-                )
-            }
-            Spacer(Modifier.width(8.dp))
-        } else if (info.finished?.status == "interrupted" && onResume != null) {
-            // [T-android-subagent-card-resume] Same slot as Stop, and its
-            // counterpart: an accent disc with a restart arrow (iOS
-            // arrow.clockwise). Once the run is going again the card turns
-            // Running and Stop takes this slot back by itself.
-            val resumeLabel = stringResource(R.string.helper_resume)
-            Box(
-                modifier = Modifier.size(24.dp).clip(CircleShape)
-                    .background(helperAccent().copy(alpha = if (resuming) 0.25f else 1f))
-                    .clickable(enabled = !resuming, onClickLabel = resumeLabel) { resuming = onResume() }
-                    .semantics { contentDescription = resumeLabel },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    Icons.Default.Refresh,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(14.dp),
-                )
-            }
-            Spacer(Modifier.width(8.dp))
-        } else if (info.isRunning && onStop != null) {
-            // Classic stop-recording look: red disc, white rounded square.
-            val stopLabel = stringResource(R.string.helper_stop)
-            Box(
-                modifier = Modifier.size(24.dp).clip(CircleShape).background(HelperStatusRed)
-                    .clickable(onClickLabel = stopLabel) { onStop() }
-                    .semantics { contentDescription = stopLabel },
-                contentAlignment = Alignment.Center,
-            ) { Box(Modifier.size(9.dp).clip(RoundedCornerShape(2.dp)).background(Color.White)) }
-            Spacer(Modifier.width(8.dp))
-        }
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = ChatColors.tertiaryText, modifier = Modifier.size(16.dp))
-    }
 }
 
 @Composable
@@ -1144,8 +974,8 @@ internal fun HelperDetailContent(block: AssistantBlock) {
 /** A delegate_task-shaped tool block carrying this callback's payload, in
  *  the JSON dialect [parseHelperBlock] already reads — so tapping a callback
  *  card opens the very same detail as the agent block. */
-internal fun AgentCallback.syntheticBlock(): AssistantBlock {
-    val finished = kind == AgentCallback.Kind.FINISHED
+internal fun LegacyAgentCallback.syntheticBlock(): AssistantBlock {
+    val finished = kind == LegacyAgentCallback.Kind.FINISHED
     // [T-android-no-deliverable] The callback envelope carries the run's own
     // body; an empty one means the agent handed nothing over.
     val status = if (!finished) "running"
@@ -1178,7 +1008,7 @@ internal fun AgentCallback.syntheticBlock(): AssistantBlock {
             OrphanedRunningToolGate.resolve(
                 ToolBlockStatus.RUNNING,
                 isLiveRun = false,
-                jobIsAlive = com.openminis.app.agent.jobs.AgentJobRegistry.job(jobId)?.isActive == true,
+                jobIsAlive = false, // a historical progress report is not live work
             )
         } else when (this.status) {
             "done" -> ToolBlockStatus.SUCCESS
@@ -1192,7 +1022,7 @@ internal fun AgentCallback.syntheticBlock(): AssistantBlock {
 /** Compact, left-aligned card for an <agent_callback> message that has no
  *  delegate block in the transcript (a scheduled child-of-current run). */
 @Composable
-internal fun AgentCallbackCard(callback: AgentCallback, onTap: () -> Unit, modifier: Modifier = Modifier) {
+internal fun AgentCallbackCard(callback: LegacyAgentCallback, onTap: () -> Unit, modifier: Modifier = Modifier) {
     // [T-android-subagent-callback-card-metrics] Sized and composed like iOS
     // AgentCallbackCellView (cardHeight 56, rowHeight 64): a 30pt status
     // circle, ONE headline line "<kind> · <title>" at 14 semibold, ONE subline
@@ -1202,7 +1032,7 @@ internal fun AgentCallbackCard(callback: AgentCallback, onTap: () -> Unit, modif
     // read as a taller component with loose line spacing next to the pill
     // above it.
     val helperAccent = helperAccent()
-    val finished = callback.kind == AgentCallback.Kind.FINISHED
+    val finished = callback.kind == LegacyAgentCallback.Kind.FINISHED
     val accent = when (callback.status) {
         "running" -> helperAccent
         "done" -> HelperStatusGreen
@@ -1220,7 +1050,7 @@ internal fun AgentCallbackCard(callback: AgentCallback, onTap: () -> Unit, modif
     val headline = if (callback.title.isEmpty()) kindLabel else "$kindLabel · ${callback.title}"
     val turnLabel = callback.turn?.takeIf { it > 0 }?.let { stringResource(R.string.agent_callback_turn, it) }
     val subline = buildList {
-        add(com.openminis.app.agent.jobs.AgentCallbackLabels.localizedStatus(callback.status))
+        add(com.openminis.app.agent.jobs.LegacyAgentCallbackLabels.localizedStatus(callback.status))
         callback.elapsed?.takeIf { it.isNotEmpty() }?.let { add(it) }
         if (!finished) {
             callback.tool?.takeIf { it.isNotEmpty() }?.let { add(it) }
@@ -1274,14 +1104,13 @@ fun AgentTranscriptScreen(sessionId: String, onBack: () -> Unit) {
         HeadlessChatRunner.viewModelFor(context, sessionId, ChatViewModelStore.PoolKind.CHILD)
     }
     val isStreaming by vm.isStreaming.collectAsState()
-    val jobs by AgentJobRegistry.jobs.collectAsState()
-    val job = jobs.values.firstOrNull { it.runSessionId == sessionId }
     val sessionTitle by vm.sessionTitle.collectAsState()
     val title = remember(sessionTitle) { HelperRunner.stripChildSessionTitlePrefix(context, sessionTitle) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(isStreaming) { while (isStreaming) { delay(1000); now = System.currentTimeMillis() } }
     val accent = helperAccent()
-    val startedAt = job?.startedAtMs
+    val tasks by app.momoding.task.TaskEngine.active.collectAsState()
+    val startedAt = tasks.firstOrNull { it.hand == sessionId }?.createdAt
     // [T-android-transcript-tool-sheet] Synthetic block behind a tapped
     // callback card, mirroring ChatScreen. Held at screen scope so the sheet
     // survives the list disposing the card.
@@ -1316,22 +1145,7 @@ fun AgentTranscriptScreen(sessionId: String, onBack: () -> Unit) {
                             )
                         }
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            job?.tierUsed?.let { TierChip(it) }
                             if (isStreaming && startedAt != null) Text(HelperRunner.formatClock(now - startedAt), fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = ChatColors.secondaryText)
-                        }
-                    }
-                },
-                actions = {
-                    if (isStreaming) {
-                        IconButton(onClick = {
-                            // [T-android-stop-sibling-subagent] Stop the whole
-                            // fan-out this run belongs to, matching the card's
-                            // Stop; a run with no delegating parent still stops
-                            // just itself.
-                            job?.let { AgentJobRegistry.cancelSiblings(sessionId, "user-stop-transcript") }
-                                ?: vm.cancelStream()
-                        }) {
-                            Icon(Icons.Outlined.StopCircle, contentDescription = stringResource(R.string.helper_stop), tint = HelperStatusRed)
                         }
                     }
                 },
@@ -1414,7 +1228,7 @@ internal fun HelperTranscript(
      * callback card, which is also `clickable` with an "open detail" label and
      * draws a chevron, yet did nothing here.
      */
-    onOpenCallback: (AgentCallback) -> Unit = {},
+    onOpenCallback: (LegacyAgentCallback) -> Unit = {},
 ) {
     val messages by vm.messages.collectAsState()
     val streaming by vm.streamingById.collectAsState()
@@ -1454,9 +1268,7 @@ internal fun HelperTranscript(
                     isStreaming = item.isLastBlockOverall && item.messageIsStreaming,
                     isLast = item.isLast,
                 )
-                is FlatChatItem.AssistantToolUse ->
-                    if (HelperRunner.isSubAgentToolName(item.block.toolName)) HelperToolBlock(item.block, onOpenDetail = { onOpenDetail(item.block.id) })
-                    else ToolCallPill(item.block, allToolBlocks = item.allToolBlocks, onOpenDetail = onOpenDetail)
+                is FlatChatItem.AssistantToolUse -> ToolCallPill(item.block, allToolBlocks = item.allToolBlocks, onOpenDetail = onOpenDetail)
                 is FlatChatItem.AssistantInfo -> FallbackInfoBlock(item.block)
                 is FlatChatItem.AssistantTyping -> TypingIndicator()
                 is FlatChatItem.AssistantError -> InlineErrorBanner(item.error)

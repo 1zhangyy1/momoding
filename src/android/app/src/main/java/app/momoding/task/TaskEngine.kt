@@ -159,7 +159,7 @@ object TaskEngine {
         val (open, ended) = db.withTransaction { dao(context).openIn(conversation) to dao(context).endedIn(conversation) }
         if (open.isEmpty() && ended.isEmpty()) return null
         return buildString {
-            append("## Tasks\nWork handed on from this chat. A message starting $REPORT_CUE<id> · <hand> · done|ask|failed] is that task's report, not the person: ")
+            append("## Tasks\nWork handed on from this chat. A message starting $REPORT_CUE<id> · <hand> · done|ask|failed|stopped] is that task's report, not the person: ")
             append("tell the person what came of it in your own words, in a line or two (with a link to open a Momoding's app when there is something to see); for an ask, ask the person. ")
             append("Their answer, or anything more they want of a task, goes to its hand with `momoding-task tell <id> \"<their words>\"`.\n")
             (open + ended).forEach { t ->
@@ -170,6 +170,31 @@ object TaskEngine {
                 append("\n")
             }
         }.trimEnd()
+    }
+
+    data class DeletedSessions(val ids: List<String>, val tasks: List<TaskEntity>, val stopped: Int)
+
+    /** Rows disappear in the same commit as their tasks stop. A late receive/report cannot
+     * recreate a deleted conversation: inbox, task and message writes all require that row. */
+    suspend fun deleteSessionTree(context: Context, root: String): DeletedSessions = change(context) { dao, after ->
+        val app = context.applicationContext as MinisApp
+        val ids = app.chatRepository.sessionSubtreeIds(root)
+        val tasks = dao.relatedTo(ids)
+        val unfinished = tasks.filter { it.state != TaskEntity.State.ENDED.name }
+        for (task in unfinished) {
+            val words = "Stopped because the conversation or its hand was deleted."
+            dao.updateTask(task.copy(state = TaskEntity.State.ENDED.name, outcome = TaskEntity.Outcome.STOPPED.name,
+                ask = null, updatedAt = System.currentTimeMillis()))
+            log(dao, task.id, TaskLogEntity.Kind.END, words)
+            dao.deleteTaskInbox(task.id)
+            if (task.conversation !in ids) {
+                Inbox.post(dao, task.conversation, "$REPORT_CUE${task.id} · ${handName(context, task.hand)} · stopped] $words", task.id)
+                after += { tellChat(context, task.conversation) }
+            }
+        }
+        // The FK cascades remove messages, inbox and tasks owned by these sessions.
+        for (id in ids) app.database.chatDao().deleteSession(id)
+        DeletedSessions(ids, tasks, unfinished.size)
     }
 
     /** A routine's history/notification consumer acknowledged this persisted completion. */
@@ -197,7 +222,12 @@ object TaskEngine {
             if (helper && current != null && dao.task(current.id)?.state == TaskEntity.State.ENDED.name) {
                 after += { Helpers.ended(context, hand, current.conversation) }
             }
-            advance(context, dao, after, hand, helper, released = true)
+            after += {
+                val deferred = kotlinx.coroutines.withContext(Dispatchers.Main) {
+                    ChatViewModelStore.existing(hand)?.afterTurn { scope.launch { handIdle(context, hand) } } == true
+                }
+                if (!deferred) handIdle(context, hand)
+            }
         }
     }
 
@@ -205,20 +235,20 @@ object TaskEngine {
      * from idleness; outcomes always come from the loop's explicit closeout. */
     suspend fun handIdle(context: Context, hand: String) {
         val helper = Helpers.isHelper(context, hand)
-        change(context) { dao, after -> advance(context, dao, after, hand, helper, released = false) }
+        change(context) { dao, after -> advance(context, dao, after, hand, helper) }
     }
 
-    private suspend fun advance(context: Context, dao: TaskDao, after: MutableList<suspend () -> Unit>, hand: String, helper: Boolean, released: Boolean) {
-        if (dao.heldBy(hand) != null || (!released && ChatViewModelStore.existing(hand)?.isStreaming?.value == true)) return
+    private suspend fun advance(context: Context, dao: TaskDao, after: MutableList<suspend () -> Unit>, hand: String, helper: Boolean) {
+        if (dao.heldBy(hand) != null || ChatViewModelStore.existing(hand)?.turnIsRunning == true) return
         val next = if (helper && dao.helpersAtWork() < Helpers.SLOTS) dao.queuedHelpers().firstOrNull {
-            dao.heldBy(it.hand) == null && (it.hand == hand && released || ChatViewModelStore.existing(it.hand)?.isStreaming?.value != true)
+            dao.heldBy(it.hand) == null && ChatViewModelStore.existing(it.hand)?.turnIsRunning != true
         } else if (!helper) dao.nextFor(hand) else null
         next?.let { start(dao, it, after, context) }
     }
 
     /** Whether [hand] can start a task now: it holds none, and a helper has a slot. */
     private suspend fun free(dao: TaskDao, hand: String, helper: Boolean) =
-        dao.heldBy(hand) == null && ChatViewModelStore.existing(hand)?.isStreaming?.value != true &&
+        dao.heldBy(hand) == null && ChatViewModelStore.existing(hand)?.turnIsRunning != true &&
             (!helper || dao.helpersAtWork() < Helpers.SLOTS)
 
     /** A task that waited its turn starts once this change commits, with everything passed on for it. */

@@ -44,11 +44,10 @@ internal object OrphanedRunningToolGate {
      * risk rewriting a correct SUCCESS into something else.
      *
      * @param isLiveRun true when this view model is actively streaming this
-     *   very turn. During a live turn the registry may not have registered the
-     *   job yet (the block is created before the child starts), so the
-     *   in-flight case is trusted and never downgraded.
+     *   very turn. A tool block can precede its backing run, so the in-flight
+     *   case is trusted and never downgraded.
      * @param jobIsAlive whether a job backing this block is present and active
-     *   in `AgentJobRegistry`.
+     *   in the current process. Saved reports always pass false.
      */
     fun resolve(
         status: ToolBlockStatus?,

@@ -45,6 +45,18 @@ object DebugMethodRegistry {
 
     private val DEBUG_ONLY_METHODS: List<MethodSpec> = listOf(
         MethodSpec(
+            name = "debug.tasks.open",
+            description = "DEV-only: hand a task between existing debug fixture chats. Uses TaskEngine; preserves configured defaults.",
+            params = listOf(
+                ParamSpec("conversation", "string", required = true, description = "Owner fixture chat id."),
+                ParamSpec("hand", "string", required = true, description = "Hand fixture chat id."),
+                ParamSpec("text", "string", required = true, description = "Instructions."),
+                ParamSpec("title", "string", required = false, description = "Task title."),
+            ),
+            returns = "{id,state}",
+            example = ex("conversation" to "fixture-owner", "hand" to "fixture-hand", "text" to "fixture"),
+        ),
+        MethodSpec(
             name = "debug.shizuku.exec",
             description = "DEBUG-only: invoke ShizukuOffloadHandler directly with the given argv (T344). Bypasses the agent loop for e2e harness verification of android-shizuku-cli.",
             params = listOf(

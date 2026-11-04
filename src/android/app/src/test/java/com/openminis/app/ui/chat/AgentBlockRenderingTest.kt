@@ -1,6 +1,8 @@
 package com.openminis.app.ui.chat
 
-import com.openminis.app.agent.jobs.AgentCallback
+import com.openminis.app.agent.jobs.xml
+
+import com.openminis.app.agent.jobs.LegacyAgentCallback
 import com.openminis.app.agent.jobs.HelperModelTier
 import com.openminis.app.agent.jobs.HelperRunner
 import org.junit.Assert.assertEquals
@@ -58,7 +60,7 @@ class AgentBlockRenderingTest {
 
     @Test
     fun `callback synthetic block opens the same detail as an agent block`() {
-        val cb = AgentCallback(AgentCallback.Kind.FINISHED, "J", "C", "Deep research", "timeout", "primary", "2m05s", summary = "tools x×1 · turns 2 · tokens in 1 / out 1", body = "partial")
+        val cb = LegacyAgentCallback(LegacyAgentCallback.Kind.FINISHED, "J", "C", "Deep research", "timeout", "primary", "2m05s", summary = "tools x×1 · turns 2 · tokens in 1 / out 1", body = "partial")
         val b = cb.syntheticBlock()
         assertEquals(ToolBlockStatus.TIMEOUT, b.toolStatus)
         val f = parseHelperBlock(b).phase as HelperPhase.Finished
@@ -74,7 +76,7 @@ class AgentBlockRenderingTest {
         // final report is NOT deduped against the delegate block any more —
         // the block changing state is not a record of the hand-off.
         val finalJson = HelperRunner.resultJson("completed", "r", "m", HelperModelTier.PRIMARY, "primary", 1, 1000, "C", "J")
-        val cbText = AgentCallback(AgentCallback.Kind.FINISHED, "J", "C", "t", "done", body = "r").xml
+        val cbText = LegacyAgentCallback(LegacyAgentCallback.Kind.FINISHED, "J", "C", "t", "done", body = "r").xml
         // With the block: callback card KEPT (this was the reported gap); it is
         // still not a user bubble, and the reply after it has NO header.
         val withBlock = buildFlatChatItems(listOf(
@@ -89,7 +91,7 @@ class AgentBlockRenderingTest {
         assertEquals(listOf("a1"), withBlock.filterIsInstance<FlatChatItem.AssistantHeader>().map { it.messageId })
         // A progress report with the block present renders too — it never was
         // duplicated by the block, which only ever shows the final state.
-        val progressText = AgentCallback(AgentCallback.Kind.PROGRESS, "J", "C", "t", "running", body = "working").xml
+        val progressText = LegacyAgentCallback(LegacyAgentCallback.Kind.PROGRESS, "J", "C", "t", "running", body = "working").xml
         val withProgress = buildFlatChatItems(listOf(
             user("u1", "do it"),
             assistant("a1", block(finalJson, ToolBlockStatus.SUCCESS)),
@@ -97,7 +99,7 @@ class AgentBlockRenderingTest {
             user("u3", cbText),
         ))
         assertEquals(
-            listOf(AgentCallback.Kind.PROGRESS, AgentCallback.Kind.FINISHED),
+            listOf(LegacyAgentCallback.Kind.PROGRESS, LegacyAgentCallback.Kind.FINISHED),
             withProgress.filterIsInstance<FlatChatItem.AgentCallbackCard>().map { it.callback.kind },
         )
         // Without a block (scheduled child-of-current): callback card kept, still no second header.

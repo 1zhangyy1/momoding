@@ -164,6 +164,11 @@ class DebugRPCHandler(private val context: Context) {
             "chat.messages.list" -> ChatDebugMethods.messagesList(context, params)
             "chat.models.list" -> ChatDebugMethods.modelsList(context, params)
 
+            "debug.tasks.open" -> {
+                if (!BuildConfig.DEV_TOOLS) throw RPCException(-32601, "debug.tasks.open is dev-only")
+                ChatMutationMethods.openFixtureTask(context, params)
+            }
+
             // Chat (mutate)
             "chat.prompt" -> ChatMutationMethods.prompt(context, params)
             "chat.uiPrompt" -> ChatMutationMethods.uiPrompt(context, params)

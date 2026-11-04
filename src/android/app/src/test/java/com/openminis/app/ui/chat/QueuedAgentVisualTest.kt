@@ -1,6 +1,5 @@
 package com.openminis.app.ui.chat
 
-import com.openminis.app.agent.jobs.AgentJobRegistry
 import com.openminis.app.agent.jobs.HelperRunner
 import org.junit.After
 import org.junit.Before
@@ -27,29 +26,6 @@ import org.junit.Test
  */
 class QueuedAgentVisualTest {
 
-    /**
-     * A `status: queued` payload only reads as Queued while the delegation is
-     * ACTUALLY still in the registry's queue — otherwise it is a task the
-     * process lost and parses as NeverStarted
-     * ([T-android-subagent-control-not-lost] documents why those two must stay
-     * apart). The first run of this test asserted the wrong thing and caught
-     * that: enqueue the block so the phase under test is reachable at all.
-     */
-    @Before
-    fun enqueue() {
-        AgentJobRegistry.dropQueuedDelegations("parent", "test-setup")
-        AgentJobRegistry.enqueueDelegation(
-            AgentJobRegistry.QueuedDelegation(
-                parentSessionId = "parent", argsJson = "{}", toolUseId = "b1",
-            ),
-        )
-    }
-
-    @After
-    fun cleanup() {
-        AgentJobRegistry.dropQueuedDelegations("parent", "test-teardown")
-    }
-
     private fun block(json: String) = AssistantBlock(
         id = "b1", kind = "tool_use", content = json,
         toolName = HelperRunner.TOOL_NAME, toolTitle = "调研 2025 苹果发布与销售",
@@ -60,13 +36,9 @@ class QueuedAgentVisualTest {
      * `queued_behind` is what the card can use to say how many are ahead.
      */
     @Test
-    fun `a queued delegation parses as the Queued phase`() {
-        val info = parseHelperBlock(
-            block("""{"ok":true,"status":"queued","queued_behind":2,"detail":"All 3 slots are busy."}"""),
-        )
-        val phase = info.phase
-        assertTrue("expected Queued, got $phase", phase is HelperPhase.Queued)
-        assertEquals(2, (phase as HelperPhase.Queued).behind)
+    fun `an archived queued delegation does not claim a live slot`() {
+        val info = parseHelperBlock(block("""{"ok":true,"status":"queued","queued_behind":2}"""))
+        assertTrue(info.phase is HelperPhase.NeverStarted)
     }
 
     /**
@@ -108,9 +80,8 @@ class QueuedAgentVisualTest {
      * still render as queued rather than falling through to a generic phase.
      */
     @Test
-    fun `a queued payload without a position still parses as queued`() {
+    fun `an archived queued payload without a position has no live slot`() {
         val info = parseHelperBlock(block("""{"ok":true,"status":"queued"}"""))
-        assertTrue(info.phase is HelperPhase.Queued)
-        assertEquals(0, (info.phase as HelperPhase.Queued).behind)
+        assertTrue(info.phase is HelperPhase.NeverStarted)
     }
 }

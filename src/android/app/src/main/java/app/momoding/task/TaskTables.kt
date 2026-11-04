@@ -188,10 +188,15 @@ interface TaskDao {
     @Update
     suspend fun updateTask(row: TaskEntity)
 
+    @Query("SELECT * FROM task WHERE conversation IN (:sessions) OR hand IN (:sessions)")
+    suspend fun relatedTo(sessions: List<String>): List<TaskEntity>
+
+    @Query("DELETE FROM inbox WHERE task_id = :task")
+    suspend fun deleteTaskInbox(task: String)
+
     @Query("SELECT * FROM task ORDER BY created_at DESC LIMIT :limit")
     suspend fun recentTasks(limit: Int): List<TaskEntity>
 
-    /** The newest tasks, kept current: what the rows and the main chat's table show. */
     /** The task [hand] is on: one at a time, so its session is enough to find it. */
     @Query("SELECT * FROM task WHERE hand = :hand AND state IN ('RUNNING', 'WAITING') LIMIT 1")
     suspend fun heldBy(hand: String): TaskEntity?

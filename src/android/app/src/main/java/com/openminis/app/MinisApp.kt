@@ -493,7 +493,7 @@ class MinisApp : Application(), ImageLoaderFactory {
         }
         database = AppDatabase.getInstance(this)
         chatRepository = ChatRepository(database.chatDao())
-        com.openminis.app.agent.jobs.AgentCallbackLabels.install(this)
+        com.openminis.app.agent.jobs.LegacyAgentCallbackLabels.install(this)
         providerRepository = ProviderRepository(this)
         envVarRepository = EnvVarRepository(this)
         // [T-android-safemode-lateinit-crash-147] SkillRepository parses

@@ -1,6 +1,8 @@
 package com.openminis.app.data
 
-import com.openminis.app.agent.jobs.AgentCallback
+import com.openminis.app.agent.jobs.xml
+
+import com.openminis.app.agent.jobs.LegacyAgentCallback
 import com.openminis.app.agent.jobs.HelperRunner
 import com.openminis.app.data.model.SubAgentDefinition
 import com.openminis.app.data.model.SubAgentRoster
@@ -24,8 +26,8 @@ class SubAgentParityTest {
     fun `the callback model attribute carries the origin, not the legacy tier`() {
         // iOS puts HelperModelOrigin here. Emitting "primary"/"sub" instead
         // made the same attribute answer a different question per platform.
-        val xml = AgentCallback(
-            kind = AgentCallback.Kind.FINISHED,
+        val xml = LegacyAgentCallback(
+            kind = LegacyAgentCallback.Kind.FINISHED,
             jobId = "j", childSessionId = "c", title = "t", status = "done",
             tier = "pinned", agentName = "Researcher", body = "x",
         ).xml
@@ -34,8 +36,8 @@ class SubAgentParityTest {
 
     @Test
     fun `agent is emitted between model and elapsed, as on iOS`() {
-        val xml = AgentCallback(
-            kind = AgentCallback.Kind.FINISHED,
+        val xml = LegacyAgentCallback(
+            kind = LegacyAgentCallback.Kind.FINISHED,
             jobId = "j", childSessionId = "c", title = "t", status = "done",
             tier = "inherited", elapsed = "5s", agentName = "Researcher", body = "x",
         ).xml

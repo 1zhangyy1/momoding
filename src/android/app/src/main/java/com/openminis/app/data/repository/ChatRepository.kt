@@ -121,7 +121,7 @@ class ChatRepository(internal val dao: ChatDao) {
 
     /**
      * DB-level delete of the whole tree: rows and messages for [id] and every
-     * descendant, children first, with any running helper job cancelled.
+     * descendant, children first. Live cancellation belongs to SessionDeleter.
      *
      * This is the DB half only. App code must delete a session through
      * [com.openminis.app.data.session.SessionDeleter], which also removes the
@@ -131,8 +131,6 @@ class ChatRepository(internal val dao: ChatDao) {
      */
     suspend fun deleteSession(id: String) {
         for (sid in sessionSubtreeIds(id)) {
-            com.openminis.app.agent.jobs.AgentJobRegistry.jobForSession(sid)
-                ?.let { com.openminis.app.agent.jobs.AgentJobRegistry.cancel(it.id, "parent-deleted") }
             deleteSessionOnly(sid)
         }
     }
@@ -1089,8 +1087,8 @@ class ChatRepository(internal val dao: ChatDao) {
                         if (text.isNotBlank()) {
                             // [T-p2-agent-callback] An agent's report reads as
                             // "Agent result · title · status", never as raw XML.
-                            com.openminis.app.agent.jobs.AgentCallback.parse(text)?.let { cb ->
-                                return com.openminis.app.agent.jobs.AgentCallbackLabels.previewLine(cb)
+                            com.openminis.app.agent.jobs.LegacyAgentCallback.parse(text)?.let { cb ->
+                                return com.openminis.app.agent.jobs.LegacyAgentCallbackLabels.previewLine(cb)
                             }
                             return cleanPreview(text)
                         }

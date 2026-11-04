@@ -14,20 +14,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.momoding.ui.Design
 import com.openminis.app.R
-import com.openminis.app.agent.jobs.AgentCallback
+import com.openminis.app.agent.jobs.LegacyAgentCallback
 
-/**
- * A background job's report, as the person sees it: one quiet line, "后台办完 · 查京沪高铁 · 17 分钟 ›",
- * the way a routine's turn is one line (调研/M19). The Bot's own reply right after says what it
- * means; tapping the line opens the job's raw result. The upstream card's tool counts, turns and
- * tokens are for the developer, not the person.
- */
+/** Saved reports remain readable; current work uses task rows and task reports. */
 @Composable
-fun BackgroundResultLine(callback: AgentCallback, onTap: () -> Unit) {
+fun LegacyAgentResultLine(callback: LegacyAgentCallback, onTap: () -> Unit) {
     val context = LocalContext.current
     val title = callback.title.ifBlank { context.getString(R.string.mo_bg_untitled) }
     val text = when {
-        callback.kind == AgentCallback.Kind.PROGRESS -> context.getString(R.string.mo_bg_progress, title)
+        callback.kind == LegacyAgentCallback.Kind.PROGRESS -> context.getString(R.string.mo_bg_progress, title)
         callback.status == "done" -> listOfNotNull(context.getString(R.string.mo_bg_done, title), duration(context, callback.elapsed)).joinToString(" · ")
         callback.status == "cancelled" -> context.getString(R.string.mo_bg_stopped, title)
         else -> context.getString(R.string.mo_bg_failed, title)

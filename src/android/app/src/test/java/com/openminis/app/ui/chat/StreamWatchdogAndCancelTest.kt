@@ -1,18 +1,10 @@
 package com.openminis.app.ui.chat
 
-import com.openminis.app.agent.jobs.AgentJobOrigin
-import com.openminis.app.agent.jobs.AgentJobRegistry
-import com.openminis.app.agent.jobs.AgentJobState
-import com.openminis.app.agent.jobs.AgentJobTarget
-import com.openminis.app.agent.jobs.AgentJobThen
-import com.openminis.app.agent.jobs.AgentJobTrigger
 import com.openminis.app.data.model.LLMError
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Before
 import org.junit.Test
 import java.io.File
 import java.util.concurrent.atomic.AtomicReference
@@ -31,14 +23,11 @@ import java.util.concurrent.atomic.AtomicReference
  * GH#239: Stop while the stream thread was diffing the same ArrayList threw
  * ConcurrentModificationException (16/16 repro). The UI window is now a
  * snapshot (`.toList()`) and every publish allocates a fresh list, so a
- * concurrent equals-diff never observes an in-place mutation; and
- * `cancelStream` mutes the parent, drops the queue, then cancels the fan-out —
- * in that order — before flipping the streaming flag.
+ * concurrent equals-diff never observes an in-place mutation.
  *
  * The decision logic is entangled in OpenAIProvider.streamMessage and
  * ChatViewModel, so it is ported VERBATIM here (source cited above each port)
- * with grep drift guards on the production files. The registry half runs
- * against the real AgentJobRegistry.
+ * with drift guards on the production files.
  */
 class StreamWatchdogAndCancelTest {
 
@@ -236,80 +225,6 @@ class StreamWatchdogAndCancelTest {
         assertTrue(vmSrc.contains("val kept = messages.subList(0, cutFrom).toList()"))
     }
 
-    // ── cancelStream ordering, against the real registry ──────────────
-    //
-    //   AgentJobRegistry.muteDelegationResults(activeSessionId)
-    //   AgentJobRegistry.dropQueuedDelegations(activeSessionId, "user-stopped")
-    //   AgentJobRegistry.cancelAll(activeSessionId, "user-stopped")
-    //   streamJob?.cancel()
-    //   _isStreaming.value = false
-    private val parent = "P-cancel"
-
-    private fun cancelStreamPort(isStreaming: AtomicReference<Boolean>) {
-        AgentJobRegistry.muteDelegationResults(parent)
-        AgentJobRegistry.dropQueuedDelegations(parent, "user-stopped")
-        AgentJobRegistry.cancelAll(parent, "user-stopped")
-        isStreaming.set(false)
-    }
-
-    @Before
-    fun resetRegistry() {
-        AgentJobRegistry.resetForTest()
-        AgentJobRegistry.dropQueuedDelegations(parent, "reset")
-    }
-
-    @After
-    fun clearRegistry() {
-        AgentJobRegistry.followUpDispatcher = null
-        AgentJobRegistry.unregisterQueuedStarter(parent)
-        AgentJobRegistry.dropQueuedDelegations(parent, "teardown")
-        AgentJobRegistry.resetForTest()
-    }
-
-    private fun child(t: String) = AgentJobRegistry.register(
-        title = t, origin = AgentJobOrigin.TOOL, trigger = AgentJobTrigger.Immediate,
-        target = AgentJobTarget.ChildOfCurrent(parent, "tu-$t"), prompt = "x",
-        then = AgentJobThen.FollowUpParent(null),
-    )
-
-    @Test
-    fun `stop mutes the parent, drops the queue and cancels the fan-out before the flag flips`() {
-        val dispatched = mutableListOf<String>()
-        AgentJobRegistry.followUpDispatcher = { _, _, id -> dispatched += id }
-        var started = 0
-        AgentJobRegistry.registerQueuedStarter(parent) { started++; true }
-        val a = child("a"); val b = child("b")
-        AgentJobRegistry.markRunning(a.id, "S-a") {}
-        AgentJobRegistry.markRunning(b.id, "S-b") {}
-        assertTrue(AgentJobRegistry.enqueueDelegation(AgentJobRegistry.QueuedDelegation(parent, "{}", "tu-q")))
-        val streaming = AtomicReference(true)
-
-        cancelStreamPort(streaming)
-
-        assertFalse(streaming.get())
-        assertEquals(AgentJobState.CANCELLED, AgentJobRegistry.job(a.id)?.state)
-        assertEquals(AgentJobState.CANCELLED, AgentJobRegistry.job(b.id)?.state)
-        assertEquals("the queue was emptied before any slot was freed", 0, AgentJobRegistry.queuedCount(parent))
-        assertEquals(0, started)
-        assertEquals("cancelled children do not wake the stopped parent", emptyList<String>(), dispatched)
-        // A sibling that finishes AFTER the stop stays quiet too.
-        val late = child("late")
-        AgentJobRegistry.markRunning(late.id, "S-late") {}
-        AgentJobRegistry.finish(late.id, AgentJobState.DONE, "r")
-        assertEquals(emptyList<String>(), dispatched)
-    }
-
-    @Test
-    fun `production cancelStream keeps the mute → drop → cancel order`() {
-        val body = vmSrc.substringAfter("fun cancelStream() {").substringBefore("streamJob?.cancel()")
-        val mute = body.indexOf("AgentJobRegistry.muteDelegationResults(activeSessionId)")
-        val drop = body.indexOf("AgentJobRegistry.dropQueuedDelegations(activeSessionId, \"user-stopped\")")
-        val cancel = body.indexOf("AgentJobRegistry.cancelAll(activeSessionId, \"user-stopped\")")
-        assertTrue("mute must come first", mute in 0 until drop)
-        assertTrue("drop must come before cancel", drop in 0 until cancel)
-        assertTrue(
-            "the streaming flag flips only after the fan-out is stopped",
-            vmSrc.substringAfter("fun cancelStream() {").indexOf("_isStreaming.value = false") > cancel,
-        )
-    }
+    // Registry stop-order assertions were removed with that implementation. Persistent
+    // deletion/cancellation is exercised with Room and the Android runtime probe.
 }

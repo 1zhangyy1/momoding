@@ -1,96 +1,11 @@
 package com.openminis.app.data
 
-import com.openminis.app.agent.jobs.AgentJobOrigin
-import com.openminis.app.agent.jobs.AgentJobRegistry
-import com.openminis.app.agent.jobs.AgentJobState
-import com.openminis.app.agent.jobs.AgentJobTarget
-import com.openminis.app.agent.jobs.AgentJobTrigger
 import com.openminis.app.agent.jobs.HelperRunner
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
+import org.junit.Assert.*
 import org.junit.Test
 
-/**
- * [T-sub-agents-steer] / [T-sub-agents-resume] Course-correcting a running sub
- * agent, and restarting one the app lost.
- */
+/** Pure history/steer policies retained after the persistent task migration. */
 class SubAgentSteerResumeTest {
-
-    private fun newJob(parent: String = "p1") = AgentJobRegistry.register(
-        title = "t",
-        origin = AgentJobOrigin.TOOL,
-        trigger = AgentJobTrigger.Immediate,
-        target = AgentJobTarget.ChildOfCurrent(parent, "tool-1"),
-        prompt = "work",
-        agentName = "Researcher",
-    )
-
-    // ── Steer ───────────────────────────────────────────────────────────────
-
-    @Test
-    fun `a steer reaches the child through its hook`() {
-        val job = newJob()
-        val delivered = mutableListOf<String>()
-        AgentJobRegistry.registerSteerHook(job.id) { delivered.add(it); true }
-
-        assertTrue(AgentJobRegistry.steer(job.id, "focus on pricing"))
-        assertEquals(listOf("focus on pricing"), delivered)
-        AgentJobRegistry.finish(job.id, AgentJobState.DONE, "done")
-    }
-
-    @Test
-    fun `steering a job with no hook fails rather than pretending`() {
-        // The parent must learn its correction did not land; silently
-        // succeeding would let it assume the sub agent changed course.
-        val job = newJob()
-        assertFalse(AgentJobRegistry.steer(job.id, "too late"))
-        AgentJobRegistry.finish(job.id, AgentJobState.DONE, null)
-    }
-
-    @Test
-    fun `steering an unknown job fails`() {
-        assertFalse(AgentJobRegistry.steer("no-such-job", "hello"))
-    }
-
-    @Test
-    fun `a child that refuses the steer reports failure`() {
-        val job = newJob()
-        AgentJobRegistry.registerSteerHook(job.id) { false }
-        assertFalse(AgentJobRegistry.steer(job.id, "nope"))
-        AgentJobRegistry.finish(job.id, AgentJobState.DONE, null)
-    }
-
-    @Test
-    fun `steers the child never read are recorded when the job closes`() {
-        // The parent believes the correction landed, so a steer that arrived
-        // after the last turn has to be reported rather than dropped.
-        val job = newJob()
-        AgentJobRegistry.registerSteerHook(job.id) { true }
-        AgentJobRegistry.registerMissedSteerDrain(job.id) { listOf("unread one", "unread two") }
-
-        AgentJobRegistry.finish(job.id, AgentJobState.DONE, "result")
-
-        assertEquals(listOf("unread one", "unread two"), AgentJobRegistry.missedSteersFor(job.id))
-    }
-
-    @Test
-    fun `a job that read everything reports no missed steers`() {
-        val job = newJob()
-        AgentJobRegistry.registerMissedSteerDrain(job.id) { emptyList() }
-        AgentJobRegistry.finish(job.id, AgentJobState.DONE, "result")
-        assertTrue(AgentJobRegistry.missedSteersFor(job.id).isEmpty())
-    }
-
-    @Test
-    fun `the steer hook is dropped once the job closes`() {
-        val job = newJob()
-        AgentJobRegistry.registerSteerHook(job.id) { true }
-        AgentJobRegistry.finish(job.id, AgentJobState.DONE, "r")
-        // A finished job cannot be steered — the hook is gone with it.
-        assertFalse(AgentJobRegistry.steer(job.id, "after the fact"))
-    }
-
     // ── Steer at loop end [T-subagent-steer-continues-loop] ────────────────
 
     @Test
@@ -140,10 +55,4 @@ class SubAgentSteerResumeTest {
         assertTrue("tool results remain usable", n.contains("tool results above are still valid"))
     }
 
-    @Test
-    fun `a resumed job carries its agent name for the callback`() {
-        val job = newJob()
-        assertEquals("Researcher", job.agentName)
-        AgentJobRegistry.finish(job.id, AgentJobState.DONE, null)
-    }
 }

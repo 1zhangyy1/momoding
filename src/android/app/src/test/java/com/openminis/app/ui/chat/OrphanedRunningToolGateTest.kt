@@ -1,6 +1,5 @@
 package com.openminis.app.ui.chat
 
-import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -121,55 +120,9 @@ class OrphanedRunningToolGateTest {
         assertTrue(OrphanedRunningToolGate.overrideMayApply(null, isLiveRun = false, jobIsAlive = false))
     }
 
-    // ── the wiring ─────────────────────────────────────────────────────────
-
-    private val vmSrc by lazy {
-        val f = File("src/main/java/com/openminis/app/ui/chat/ChatViewModel.kt")
-        assertTrue("missing ${f.absolutePath}", f.exists())
-        f.readText()
-    }
-
-    @Test
-    fun `mergeDelegateOverrides consults the gate`() {
-        val body = vmSrc.substringAfter("private fun mergeDelegateOverrides(")
-            .substringBefore("private fun delegateJobIsAlive(")
-        assertTrue(
-            "the override merge must gate spinner statuses, or a dead delegate " +
-                "re-stamps RUNNING on every reload",
-            body.contains("OrphanedRunningToolGate.overrideMayApply("),
-        )
-        assertTrue("liveness must come from the registry", body.contains("delegateJobIsAlive("))
-    }
-
-    @Test
-    fun `a historical progress callback does not spin forever`() {
-        // HelperUi.syntheticBlock derived RUNNING from `kind != FINISHED`.
-        // `kind` is a historical fact — a PROGRESS callback stays PROGRESS
-        // once persisted — so every past progress report opened a detail
-        // sheet that animated for the rest of the session.
-        val src = File("src/main/java/com/openminis/app/ui/chat/HelperUi.kt")
-        assertTrue("missing ${src.absolutePath}", src.exists())
-        val body = src.readText().substringAfter("internal fun AgentCallback.syntheticBlock(")
-            .substringBefore("\n}")
-        assertTrue(
-            "the unfinished branch must go through the gate",
-            body.contains("OrphanedRunningToolGate.resolve("),
-        )
-        assertTrue(
-            "liveness must come from the registry, keyed by this callback's job",
-            body.contains("AgentJobRegistry.job(jobId)?.isActive"),
-        )
-    }
-
-    @Test
-    fun `liveness is read from the job registry by job_id`() {
-        val body = vmSrc.substringAfter("private fun delegateJobIsAlive(").substringBefore("\n    }")
-        assertTrue("must read job_id from the block payload", body.contains("""optString("job_id", "")"""))
-        assertTrue("must ask the registry", body.contains("AgentJobRegistry.job(jobId)?.isActive"))
-        assertTrue(
-            "an unparseable payload must NOT be treated as alive — a spinner " +
-                "that never stops is the worse failure",
-            body.contains("return false"),
-        )
+    @Test fun `saved progress cannot pretend there is a live job`() {
+        val report = com.openminis.app.agent.jobs.LegacyAgentCallback(
+            com.openminis.app.agent.jobs.LegacyAgentCallback.Kind.PROGRESS, "old", "child", "archive", "running", body = "progress")
+        assertEquals(ToolBlockStatus.TIMEOUT, report.syntheticBlock().toolStatus)
     }
 }

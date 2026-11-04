@@ -8037,6 +8037,32 @@ class ChatViewModel(
         }
     }
 
+    @Volatile private var runningTaskId: String? = null
+
+    internal val turnIsRunning: Boolean get() = _isStreaming.value || streamJob?.isCompleted == false
+
+    /** Dispatch may wait for this real coroutine to return; completion never implies success. */
+    internal fun afterTurn(action: () -> Unit): Boolean {
+        val job = streamJob?.takeUnless { it.isCompleted } ?: return false
+        job.invokeOnCompletion { action() }
+        return true
+    }
+
+    /** Stop precisely the deleted task, keeping a later task on the same Bot intact. */
+    internal suspend fun cancelTaskForDeletion(taskId: String) {
+        val job = withContext(Dispatchers.Main) {
+            if (runningTaskId != taskId) null else streamJob.also { cancelStream() }
+        }
+        job?.join()
+    }
+
+    /** Deleting a session closes all of its writes before its files are removed. */
+    internal suspend fun closeForDeletion() {
+        val job = viewModelScope.coroutineContext[Job]
+        withContext(Dispatchers.Main) { job?.cancel() }
+        job?.join()
+    }
+
     /** Used after a transaction posts a task message; no second copy is sent. */
     internal suspend fun receiveInbox() {
         sessionLoaded.first { it }
@@ -8044,6 +8070,7 @@ class ChatViewModel(
         observeInbox(sid)
         val ready = withTimeoutOrNull(5000) { _activeEntryId.first { it != null } }
         check(ready != null) { "no provider resolved for the unread message" }
+        if (!_isStreaming.value) app.momoding.task.TaskEngine.dao(context).heldBy(sid)?.let { runningTaskId = it.id }
         refreshInbox()
         if (!_isStreaming.value) drainQueueWhenIdle()
     }
@@ -9557,6 +9584,8 @@ class ChatViewModel(
         prefill: List<com.openminis.app.scheduled.PrefilledToolCall> = emptyList(),
     ) {
         val taskAtStart = app.momoding.task.TaskEngine.dao(context).heldBy(activeSessionId)?.id
+        if (runningTaskId != null && runningTaskId != taskAtStart) throw CancellationException("The task ended before its run started.")
+        runningTaskId = taskAtStart
         val previousTail = agentHistory.lastOrNull()
         var loopReturned = false
         var loopFailure: String? = null
@@ -11978,6 +12007,7 @@ class ChatViewModel(
                         hasFollowUp = retrying || app.momoding.task.Inbox.unread(context, activeSessionId).isNotEmpty(),
                     )
                 }.onFailure { AppLogger.warning(TAG, "task closeout: ${it.message}") }
+                if (runningTaskId == taskAtStart) runningTaskId = null
                 if ((!loopReturned || retrying) && _unreadInbox.value.isNotEmpty()) {
                     withContext(Dispatchers.Main) { drainQueueWhenIdle() }
                 }

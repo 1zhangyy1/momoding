@@ -107,7 +107,7 @@ object ChatViewModelStore {
      * Cap for the child pool.
      *
      * Sized from Android's own numbers rather than copied from iOS (which uses
-     * 10): AgentJobRegistry.MAX_CONCURRENT_CHILD_JOBS is 3, so 3 children can
+     * 10): Helpers.SLOTS is 3, so 3 children can
      * be live at once, and a finished child lingers while the user reads its
      * transcript. 6 holds two full generations of concurrent jobs plus their
      * read-back, which is the realistic worst case, and at the ~1MB per child

@@ -413,6 +413,19 @@ internal object ChatMutationMethods {
         }
     }
 
+    /** Exercise the real serial-hand path using isolated debug chats, without changing defaults. */
+    suspend fun openFixtureTask(context: Context, params: JSONObject): JSONObject {
+        val conversation = params.optString("conversation")
+        val hand = params.optString("hand")
+        val repo = app(context).chatRepository
+        for (id in listOf(conversation, hand)) {
+            if (repo.getSession(id)?.source != "debug") throw RPCException(-32602, "Only debug fixture chats are accepted")
+        }
+        val work = app.momoding.task.TaskEngine.open(context, conversation, params.optString("title", "fixture"), hand,
+            params.getString("text"))
+        return JSONObject().put("id", work.id).put("state", work.state)
+    }
+
     /** [T-agent-port-round3] Debug/e2e: run a scheduled agent-child task now. */
     suspend fun runScheduledAgentChild(context: Context, params: JSONObject): JSONObject {
         val sessionId = params.optString("sessionId", "").ifEmpty { throw RPCException(-32602, "Missing 'sessionId' param") }

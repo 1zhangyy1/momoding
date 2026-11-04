@@ -338,7 +338,7 @@ internal sealed class FlatChatItem {
 
     class AgentCallbackCard(
         val message: ChatMessage,
-        val callback: com.openminis.app.agent.jobs.AgentCallback,
+        val callback: com.openminis.app.agent.jobs.LegacyAgentCallback,
     ) : FlatChatItem() {
         override val key = "callback:${message.id}"
         override val contentType = "callback"
@@ -646,7 +646,7 @@ internal fun streamingOverlaySubset(
 internal fun ChatMessage.rendersAsUserBubble(): Boolean {
     if (role != "user") return false
     if (com.openminis.app.scheduled.ScheduledTaskMarker.parse(content) != null) return false
-    if (com.openminis.app.agent.jobs.AgentCallback.isCallbackText(content)) return false
+    if (com.openminis.app.agent.jobs.LegacyAgentCallback.isCallbackText(content)) return false
     if (content.startsWith(app.momoding.task.TaskEngine.REPORT_CUE)) return false // momoding: a hand's report
     return true
 }
@@ -793,8 +793,8 @@ internal fun buildFlatChatItems(
             // 8417eb68f (progress) and 7985d161e (final); this is the port.
             // The child-id scan that fed the dedup walked every message and
             // block on each flatten and nothing reads it now, so it goes too.
-            val callback = if (com.openminis.app.agent.jobs.AgentCallback.isCallbackText(message.content))
-                com.openminis.app.agent.jobs.AgentCallback.parse(message.content) else null
+            val callback = if (com.openminis.app.agent.jobs.LegacyAgentCallback.isCallbackText(message.content))
+                com.openminis.app.agent.jobs.LegacyAgentCallback.parse(message.content) else null
             if (callback != null) {
                 out.add(dedupe(FlatChatItem.AgentCallbackCard(message, callback)))
                 continue
@@ -862,7 +862,7 @@ internal fun buildFlatChatItems(
         // or the callback card without a second avatar header.
         val prevNonSystem = (idx - 1 downTo 0).asSequence()
             .map { messages[it] }
-            .firstOrNull { it.role != "system" && !com.openminis.app.agent.jobs.AgentCallback.isCallbackText(it.content) && (showSteps || !stepsOnlyTurn(it)) } // momoding: hidden turns do not count
+            .firstOrNull { it.role != "system" && !com.openminis.app.agent.jobs.LegacyAgentCallback.isCallbackText(it.content) && (showSteps || !stepsOnlyTurn(it)) } // momoding: hidden turns do not count
         val isResumeContinuation = prevNonSystem?.role == "assistant"
         // momoding: one Bot, one voice — no "✨ Momoding" over each reply unless steps are shown
         if (!isSystem && !isResumeContinuation && showStepsAll) {

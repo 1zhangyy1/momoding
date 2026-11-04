@@ -1,6 +1,7 @@
 package app.momoding.task
 
 import android.content.Context
+import androidx.room.withTransaction
 import app.momoding.prompt.MomodingHelper
 import com.openminis.app.MinisApp
 import com.openminis.app.agent.jobs.HelperConfig
@@ -35,21 +36,21 @@ object Helpers {
     private fun app(context: Context) = context.applicationContext as MinisApp
 
     /** A new helper's chat under [parent]; its id is the hand of the task. */
-    suspend fun create(context: Context, parent: String, title: String): String {
+    suspend fun create(context: Context, parent: String, title: String): String = app(context).database.withTransaction {
         val repo = app(context).chatRepository
-        val parentRow = repo.getSession(parent)
+        val parentRow = repo.getSession(parent) ?: error("the parent conversation was deleted")
         val resolution = ModelTierResolver.resolveForSubAgent(
             pinnedGroupId = null, choice = SubAgentModelChoice.SAME_AS_PARENT, repo = app(context).providerRepository,
-            parentBindingJson = parentRow?.modelBinding, parentModelId = parentRow?.modelId,
+            parentBindingJson = parentRow.modelBinding, parentModelId = parentRow.modelId,
             parentActiveEntryId = ChatViewModelStore.existing(parent)?.activeEntryId?.value,
         ) ?: throw IllegalStateException("no model is set up for a helper to run on")
         val child = repo.createSession(
             modelId = resolution.seedModelId, title = HelperRunner.childSessionTitle(context, title),
             memoryEnabled = false, parentSessionId = parent,
         )
-        parentRow?.source?.let { repo.dao.updateSource(child.id, it) }
+        parentRow.source?.let { repo.dao.updateSource(child.id, it) }
         resolution.bindingJson?.let { repo.updateSessionBinding(child.id, it, resolution.seedModelId) }
-        return child.id
+        child.id
     }
 
     /** Whether [session] is a helper's chat. */

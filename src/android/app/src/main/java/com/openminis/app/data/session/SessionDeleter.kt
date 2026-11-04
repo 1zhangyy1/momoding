@@ -1,7 +1,7 @@
 package com.openminis.app.data.session
 
 import android.content.Context
-import com.openminis.app.agent.jobs.AgentJobRegistry
+import app.momoding.task.TaskEngine
 import com.openminis.app.data.repository.ChatRepository
 import com.openminis.app.debug.HeadlessChatRunner
 import com.openminis.app.logging.AppLogger
@@ -22,15 +22,14 @@ import kotlinx.coroutines.withContext
  * dropped the children's DB rows but left their directories, their cached
  * ViewModels and their badges behind.
  *
- * One call now does the whole tree, in the only safe order:
- *   1. resolve self + every descendant (deepest first);
- *   2. per session, deepest first: cancel its running helper job, stop any
- *      live stream and drop its ViewModel, delete messages + row, delete its
- *      files, drop its badge entries;
- *   3. the root last.
+ * One call deletes the whole tree:
+ *   1. stop related tasks and delete session rows in one transaction, so late
+ *      receives cannot recreate a deleted chat;
+ *   2. cancel precisely those runs and wait for their coroutines to finish;
+ *   3. release ViewModels, files and badges, children before the root.
  *
- * Lives in `data/session` and takes a Context only for `filesDir` — the
- * repository stays Context-free, and the UI/service singletons it touches
+ * Lives in `data/session`; the repository stays Context-free, and the
+ * UI/service singletons it touches
  * (ViewModel store, badge store, headless runner) are process-wide objects,
  * not screen state. Every delete entry point MUST route through here.
  */
@@ -46,38 +45,22 @@ object SessionDeleter {
         reason: String,
     ): Report = withContext(Dispatchers.IO) {
         val storage = SessionStorage(context.applicationContext.filesDir)
-        val ids = SessionTree.subtreeDeepestFirst(rootId) { repo.dao.childSessionIds(it) }
+        val deleted = TaskEngine.deleteSessionTree(context, rootId)
+        val ids = deleted.ids
         var freed = 0L
-        var jobs = 0
+        val jobs = deleted.stopped
+        // A Bot may live outside the deleted tree. Cancel only the run for this task.
+        for (task in deleted.tasks.filter { it.hand !in ids }) {
+            val vm = withContext(Dispatchers.Main) { ChatViewModelStore.existing(task.hand) }
+            vm?.cancelTaskForDeletion(task.id)
+        }
         for (id in ids) {
-            // 1. Stop work first. A helper still running in a child would keep
-            //    writing rows/files into what we are about to delete.
-            //    [T-agent-port-round2] Drop `then` first: a cancelled child's
-            //    completion must not post an <agent_callback> into a session
-            //    that is being deleted — the headless submit would re-create
-            //    rows for it (a resurrected parent).
-            AgentJobRegistry.jobForSession(id)?.let {
-                if (it.isActive) {
-                    AgentJobRegistry.setThen(it.id, com.openminis.app.agent.jobs.AgentJobThen.None)
-                    AgentJobRegistry.cancel(it.id, "session-deleted:$reason"); jobs++
-                }
-            }
-            for (child in AgentJobRegistry.activeChildren(id)) {
-                AgentJobRegistry.setThen(child.id, com.openminis.app.agent.jobs.AgentJobThen.None)
-            }
-            // [T-sub-agents-queue] Drop the backlog too — a queued task
-            // would otherwise start into a session that no longer exists.
-            AgentJobRegistry.dropQueuedDelegations(id, "parent-deleted:$reason")
-            AgentJobRegistry.cancelAll(id, "parent-deleted:$reason")
-            runCatching { HeadlessChatRunner.cancel(context, id) }
-            // 2. Drop the live ViewModel (cancels its scope) — on Main, it owns
-            //    a ViewModelStore.
+            val vm = withContext(Dispatchers.Main) { ChatViewModelStore.existing(id) }
+            vm?.closeForDeletion()
             withContext(Dispatchers.Main) { ChatViewModelStore.release(id) }
             HeadlessChatRunner.forget(id)
-            // 3. DB rows. deleteSessionOnly is the non-cascading primitive; the
-            //    cascade is this loop, which already walked the subtree.
-            repo.deleteSessionOnly(id)
-            // 4. Files, then badges.
+            app.momoding.guard.Grants.clearSession(id)
+            // No live writer remains when files are removed.
             freed += storage.deleteFiles(id)
             SessionBadgeStore.clear(id)
             // [T-android-browser-cli-own-pool] A pool minis-browser-use made

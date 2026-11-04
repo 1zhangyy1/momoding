@@ -377,13 +377,6 @@ object HelperRunner {
     // ── Payloads (block content + tool_result JSON) ─────────────────────
 
     /**
-     * [T-sub-agents-queue] Whether this block's delegation is still waiting in
-     * the live queue, as opposed to having been queued in a previous run of the
-     * app. Drives "Queued" vs "Never started".
-     */
-    fun isQueuedLive(toolUseId: String): Boolean = AgentJobRegistry.isQueued(toolUseId)
-
-    /**
      * [T-sub-agents-resume] What a resumed child is told on its first turn.
      *
      * States plainly what did and did not survive the restart, because the
@@ -778,12 +771,6 @@ object HelperRunner {
     /** `child_session_id` from a progress or result block, or null. */
     fun childSessionIdFrom(blockContent: String): String? =
         runCatching { JSONObject(blockContent).optString("child_session_id", "").ifEmpty { null } }.getOrNull()
-
-    /** Map a terminal job state to the payload / callback status word. */
-    fun statusWord(state: AgentJobState): String = when (state) {
-        AgentJobState.DONE -> "completed"
-        else -> state.wire
-    }
 
     // ── Run summary (tools · turns · tokens) ─────────────────────────────
 

@@ -9,7 +9,7 @@ package com.openminis.app.scheduled
  * user sees text they never wrote and has no way to learn which task produced
  * it, or that a task produced it at all.
  *
- * Modelled on `AgentCallback`: a leading tag the flattener recognises, parses,
+ * Modelled on `LegacyAgentCallback`: a leading tag the flattener recognises, parses,
  * and lifts into a card instead of a bubble. Kept deliberately small — it
  * carries only what the card must show and what the cancel action needs, and
  * the prompt itself follows verbatim so a build that does not know the tag

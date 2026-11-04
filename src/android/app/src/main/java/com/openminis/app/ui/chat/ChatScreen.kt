@@ -4675,7 +4675,7 @@ fun ChatScreen(
                             // [T-p2-delegate-render] A helper block gets its
                             // own card; everything else keeps the pill.
                             // momoding: one quiet line, not the developer's card (调研/M19)
-                            is FlatChatItem.AgentCallbackCard -> app.momoding.ui.chat.BackgroundResultLine(
+                            is FlatChatItem.AgentCallbackCard -> app.momoding.ui.chat.LegacyAgentResultLine(
                                 callback = item.callback,
                                 onTap = { callbackDetailBlock = item.callback.syntheticBlock() },
                             )

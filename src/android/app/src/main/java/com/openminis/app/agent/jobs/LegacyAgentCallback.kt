@@ -1,24 +1,7 @@
 package com.openminis.app.agent.jobs
 
-// [T-p2-agent-callback] Wire format for the messages an agent injects into
-// its parent conversation: the completion report and mid-run progress
-// reports. Byte-compatible with iOS AgentCallback.swift — both clients feed
-// the same models, so the envelope must read identically. They travel as
-// USER messages (every provider accepts those) wrapped in one fixed XML
-// element so that the model can tell a system-injected callback from a
-// human message, and the UI can render it as a callback card.
-//
-//   <agent_callback kind="finished" job="…" session="…" title="…"
-//                   status="done" model="primary" elapsed="1m02s">
-//   <summary>tools browser_use×2 · turns 4 · tokens in 12k / out 2k</summary>
-//   <result>
-//   …the agent's final answer…
-//   </result>
-//   </agent_callback>
-//
-// Progress reports use kind="progress", carry tool/activity/turn attributes
-// and a <last_message> element instead of <result>.
-data class AgentCallback(
+/** Read-only decoder for reports written by older builds. New work reports through TaskEngine. */
+data class LegacyAgentCallback(
     val kind: Kind,
     val jobId: String,
     val childSessionId: String?,
@@ -50,31 +33,6 @@ data class AgentCallback(
 ) {
     enum class Kind(val wire: String) { PROGRESS("progress"), FINISHED("finished") }
 
-    val xml: String
-        get() {
-            val attrs = mutableListOf("kind" to kind.wire, "job" to jobId)
-            if (!childSessionId.isNullOrEmpty()) attrs += "session" to childSessionId
-            attrs += "title" to title
-            attrs += "status" to status
-            if (!tier.isNullOrEmpty()) attrs += "model" to tier
-            // [T-sub-agents-v1] Position matches iOS: model, agent, elapsed…
-            if (!agentName.isNullOrEmpty()) attrs += "agent" to agentName
-            if (!elapsed.isNullOrEmpty()) attrs += "elapsed" to elapsed
-            if (!tool.isNullOrEmpty()) attrs += "tool" to tool
-            if (!activity.isNullOrEmpty()) attrs += "activity" to activity
-            if (turn != null && turn > 0) attrs += "turn" to turn.toString()
-            val open = "<$TAG " + attrs.joinToString(" ") { "${it.first}=\"${escapeAttr(it.second)}\"" } + ">"
-            val lines = mutableListOf(open)
-            if (!summary.isNullOrEmpty()) lines += "<summary>${escapeText(summary)}</summary>"
-            if (!siblings.isNullOrEmpty()) lines += "<other_sub_agents>${escapeText(siblings)}</other_sub_agents>"
-            val bodyTag = if (kind == Kind.FINISHED) "result" else "last_message"
-            lines += "<$bodyTag>"
-            lines += body
-            lines += "</$bodyTag>"
-            lines += "</$TAG>"
-            return lines.joinToString("\n")
-        }
-
     /** Elapsed "1m02s" / "45s" → seconds. */
     val elapsedSeconds: Int?
         get() {
@@ -94,7 +52,7 @@ data class AgentCallback(
         fun isCallbackText(text: String): Boolean =
             text.startsWith("<$TAG ") || text.startsWith("<$TAG>")
 
-        fun parse(text: String): AgentCallback? {
+        fun parse(text: String): LegacyAgentCallback? {
             if (!isCallbackText(text)) return null
             val openEnd = text.indexOf('>').takeIf { it >= 0 } ?: return null
             // `<agent_callback>` with no attributes is accepted by
@@ -114,7 +72,7 @@ data class AgentCallback(
             val close = after.lastIndexOf("</$TAG>")
             val inner = if (close >= 0) after.substring(0, close) else after
             val bodyTag = if (kind == Kind.FINISHED) "result" else "last_message"
-            return AgentCallback(
+            return LegacyAgentCallback(
                 kind = kind,
                 jobId = jobId,
                 childSessionId = attrs["session"],
@@ -155,23 +113,17 @@ data class AgentCallback(
             return s.substring(start, close).trim()
         }
 
-        private fun escapeAttr(s: String): String =
-            escapeText(s).replace("\"", "&quot;").replace("\n", " ")
-
-        private fun escapeText(s: String): String =
-            s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
         private fun unescapeText(s: String): String =
             s.replace("&quot;", "\"").replace("&gt;", ">").replace("&lt;", "<").replace("&amp;", "&")
     }
 }
 
 /**
- * Localized nouns for [AgentCallback] previews (session list, notifications).
+ * Localized nouns for [LegacyAgentCallback] previews (session list, notifications).
  * Installed once by MinisApp from resources so the data layer never touches a
  * Context. Defaults are the English words.
  */
-object AgentCallbackLabels {
+object LegacyAgentCallbackLabels {
     @Volatile var result: String = "Agent result"
     @Volatile var progress: String = "Agent progress"
     @Volatile var status: Map<String, String> = emptyMap()
@@ -193,6 +145,6 @@ object AgentCallbackLabels {
     fun localizedStatus(s: String): String = status[s] ?: s
 
     /** One-line stand-in for session previews, where the raw XML would be noise. */
-    fun previewLine(cb: AgentCallback): String =
-        "${if (cb.kind == AgentCallback.Kind.FINISHED) result else progress} · ${cb.title} · ${localizedStatus(cb.status)}"
+    fun previewLine(cb: LegacyAgentCallback): String =
+        "${if (cb.kind == LegacyAgentCallback.Kind.FINISHED) result else progress} · ${cb.title} · ${localizedStatus(cb.status)}"
 }

@@ -47,9 +47,6 @@ class HelperRunnerArgsTest {
         assertTrue(done.getString("result").startsWith("(the agent ended with status completed"))
         assertEquals("new turn in this conversation", done.getString("delivered_as"))
         assertTrue(done.getString("summary").startsWith("Summary:"))
-        assertEquals("timeout", HelperRunner.statusWord(AgentJobState.TIMEOUT))
-        assertEquals("completed", HelperRunner.statusWord(AgentJobState.DONE))
-        assertEquals("cancelled", HelperRunner.statusWord(AgentJobState.CANCELLED))
     }
 
     @Test
