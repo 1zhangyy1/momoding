@@ -63,7 +63,12 @@ object ScreenWork {
                     finished[task.id] = done
                     try {
                         val spec = TaskEngine.screenSpec(app, task.id)
-                        check(Hands.usable(app)) { "Operating the screen is no longer enabled or ready; check Settings → Hands." }
+                        if (!Hands.usable(app)) {
+                            TaskEngine.screenFinished(app, task.id, HandsOperator.Result(
+                                HandsOperator.Outcome.NeedsUser("Operating the screen is not ready. Check Settings → Hands, then continue this task."),
+                                0, task.id, null, null, emptyList(), null))
+                            continue
+                        }
                         operator = HandsOperator(app)
                         operators[task.id] = operator
                         if (TaskEngine.dao(app).task(task.id)?.state != TaskEntity.State.RUNNING.name) continue

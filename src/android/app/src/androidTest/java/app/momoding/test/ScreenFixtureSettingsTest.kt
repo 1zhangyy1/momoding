@@ -4,6 +4,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.openminis.app.MinisApp
 import com.openminis.app.data.model.hasImageInput
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
@@ -21,10 +23,12 @@ class ScreenFixtureSettingsTest {
         assumeTrue(mode in listOf("configure", "restore"))
         val context = instrumentation.targetContext
         val prefs = context.getSharedPreferences("momoding", 0)
-        val snapshot = File(instrumentation.context.filesDir, "m41-screen-settings.json")
+        val snapshot = File(context.filesDir, "m41-screen-settings.json")
         if (mode == "configure") {
             val id = requireNotNull(args.getString("m41_screen_model"))
-            val config = (context.applicationContext as MinisApp).providerRepository.config.value
+            val repository = (context.applicationContext as MinisApp).providerRepository
+            runBlocking { withTimeout(15_000) { repository.awaitConfigLoaded() } }
+            val config = repository.config.value
             val entry = config.modelEntries.single { it.id == id }
             val provider = config.instances.single { it.id == entry.providerInstanceId }
             require(provider.customBaseURL?.startsWith("http://127.0.0.1:") == true) { "only a local fixture model is accepted" }
