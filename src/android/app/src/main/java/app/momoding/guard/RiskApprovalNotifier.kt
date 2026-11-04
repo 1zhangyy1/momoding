@@ -70,6 +70,8 @@ class RiskApprovalNotifier(
             .addAction(0, ui.getString(R.string.mo_risk_deny), action(RiskDecision.DENY, 2))
             .setAutoCancel(true)
             .setOnlyAlertOnce(true)
+            // The visible screen capsule already offers this same decision.
+            .setSilent(request.kind == GuardKind.SCREEN && RiskGate.isWaiting(request.id))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_RECOMMENDATION)
             // Its own group, so Android never folds it into an auto-grouped "Momoding (n)" bundle
