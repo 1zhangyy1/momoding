@@ -4618,7 +4618,7 @@ fun ChatScreen(
                                     Column {
                                     momodingFrom?.let { app.momoding.ui.chat.FromBotHeader(it.first, onOpen = urlClickHandler) }
                                     app.momoding.ui.chat.AgentBubble(momodingSplit?.first ?: momodingText, last = item.isLastBlockOfMessage, id = "${item.messageId}:${item.parentBlockId}:${item.blockIndex}", delayMs = if (item.isStreaming) 0 else item.blockIndex * 140) {
-                                    androidx.compose.runtime.CompositionLocalProvider(app.momoding.ui.chat.LocalMomodingMessage provides item.messageId, app.momoding.ui.chat.LocalMomodingLive provides (item.messageId in momodingLiveTurn)) {
+                                    androidx.compose.runtime.CompositionLocalProvider(app.momoding.ui.chat.LocalMomodingMessage provides item.messageId, app.momoding.ui.chat.LocalMomodingSource provides item.sourceMessageId, app.momoding.ui.chat.LocalMomodingLive provides (item.messageId in momodingLiveTurn)) {
                                     MarkdownBlock(
                                         rawText = momodingSplit?.first ?: momodingText,
                                         isStreaming = item.isStreaming,

@@ -185,6 +185,8 @@ data class ChatMessage(
     // ChatMessage.sourceSortOrder, which serves the same UI↔raw mapping
     // role (AIChatViewModel.swift:3411, 3421).
     val sourceDbIds: List<String> = emptyList(),
+    /** Persisted row for each rendered block, including merged assistant turns. */
+    val blockSourceIds: Map<String, String> = emptyMap(),
     // [T-android-usage-capsule-time] Token usage for this assistant turn and
     // the instant it finished, for the capsule under the bubble.
     //

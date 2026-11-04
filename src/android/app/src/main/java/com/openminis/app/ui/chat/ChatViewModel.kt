@@ -11335,7 +11335,8 @@ class ChatViewModel(
                 }
                 val turnParts = buildTurnParts(allToolBlocks, turnStartBlockIndex, toolInputMap)
                 val blockMeta = allToolBlocks.filter { it.kind == "tool_use" }.associateBy { it.id }
-                persistAssistantTurn(turnParts, lastUsage, turnReasoningContent, blockMeta, uiAssistantId = assistantId, streamMs = turnStreamMs)
+                persistAssistantTurn(turnParts, lastUsage, turnReasoningContent, blockMeta, uiAssistantId = assistantId, streamMs = turnStreamMs,
+                    sourceBlockIds = allToolBlocks.drop(turnStartBlockIndex).map { it.id }.toSet())
                 // [T-error-persist-android] Empty-response hint: the model ended a
                 // turn (finish=stop/end_turn) with no visible text anywhere in the
                 // reply and no tool blocks — the user just sees a blank bubble.
@@ -11908,7 +11909,8 @@ class ChatViewModel(
             // assistant entry — compact-marker boundary resolution depends on it.
             val turnParts = buildTurnParts(allToolBlocks, turnStartBlockIndex, toolInputMap)
             val blockMeta = allToolBlocks.filter { it.kind == "tool_use" }.associateBy { it.id }
-            val assistantDbId = persistAssistantTurn(turnParts, lastUsage, turnReasoningContent, blockMeta, uiAssistantId = assistantId, streamMs = turnStreamMs)
+            val assistantDbId = persistAssistantTurn(turnParts, lastUsage, turnReasoningContent, blockMeta, uiAssistantId = assistantId, streamMs = turnStreamMs,
+                sourceBlockIds = allToolBlocks.drop(turnStartBlockIndex).map { it.id }.toSet())
             if (assistantDbId != null) {
                 val lastIdx = agentHistory.indexOfLast { it.role == LLMMessage.Role.ASSISTANT && it.dbMessageId == null }
                 if (lastIdx >= 0) {
@@ -12333,8 +12335,9 @@ class ChatViewModel(
                     "Do not retry, wait or poll; you can answer other messages meanwhile.", true, toolTitle = title)
             is app.momoding.guard.GateOutcome.Allowed -> Unit
         }
-        val task = gate.permit?.spec?.request?.taskId ?: runningTaskId
-        return app.momoding.task.ShellWork.run(context, activeSessionId, task, title, command, permit = gate.permit) { process, foreground ->
+        val action = app.momoding.guard.RiskGate.started(gate)
+        val task = action?.taskId ?: gate.permit?.spec?.request?.taskId ?: runningTaskId
+        return app.momoding.task.ShellWork.run(context, activeSessionId, task, title, command, permit = gate.permit, action = action) { process, foreground ->
             executeShellCommandForeground(argsJson, toolId, toolBlocks, assistantId, currentText, process, foreground, gate.notice)
         }
     }
@@ -13043,6 +13046,7 @@ class ChatViewModel(
         // "not measured", which is also what every row written before this
         // change reads as — hence a NEW key rather than a changed one.
         streamMs: Long = 0L,
+        sourceBlockIds: Set<String> = emptySet(),
     ): String? {
         if (parts.isEmpty()) return null
         val partsJson = buildAssistantPartsJson(parts, toolBlockMeta)
@@ -13091,7 +13095,9 @@ class ChatViewModel(
                 // used to assign a possibly-null value, so the capsule vanished
                 // live and came back after a reload. Same rule on both paths now.
                 _messages.value = _messages.value.map { m ->
-                    if (m.id == uiAssistantId) { hit = true; m.copy(tokenUsage = stampedUsage ?: m.tokenUsage, completedAt = entity.createdAt) } else m
+                    if (m.id == uiAssistantId) { hit = true; m.copy(tokenUsage = stampedUsage ?: m.tokenUsage, completedAt = entity.createdAt,
+                        sourceDbIds = (m.sourceDbIds + entity.id).distinct(),
+                        blockSourceIds = m.blockSourceIds + sourceBlockIds.associateWith { entity.id }) } else m
                 }
                 // One line per turn. `hit=false` means the bubble id was not in
                 // the list — the exact silent failure this fix exists to end.
@@ -15376,6 +15382,7 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
                 attachmentUris = restoredAttachmentUris,
                 toolBlocks = blocks,
                 sourceDbIds = listOf(entity.id),
+                blockSourceIds = blocks.associate { it.id to entity.id },
                 // [T-android-usage-capsule-time] Only assistant rows carry
                 // usage. created_at is the completion instant on this path —
                 // the row is written after the turn produced its usage.
@@ -15426,6 +15433,7 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
                         // an assistant row that gets folded into a later
                         // assistant turn).
                         sourceDbIds = prev.sourceDbIds + msg.sourceDbIds,
+                        blockSourceIds = prev.blockSourceIds + msg.blockSourceIds,
                         // [T-error-persist-android] The error sticker is written
                         // to the LAST assistant row of the turn, so the later row
                         // (`msg`) wins; fall back to `prev` if only it carried one.

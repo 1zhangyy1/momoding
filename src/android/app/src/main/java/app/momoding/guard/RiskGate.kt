@@ -6,6 +6,7 @@ import app.momoding.task.Approval
 import app.momoding.task.TaskEngine
 import app.momoding.task.TaskEntity
 import app.momoding.task.TaskGuard
+import app.momoding.task.TaskAction
 import com.openminis.app.logging.AppLogger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -60,7 +61,9 @@ enum class RiskDecision { ALLOW_ONCE, ALLOW_SESSION, ALLOW_ALWAYS, DENY, TIMEOUT
 
 sealed class GateOutcome {
     /** Go ahead. [notice] is a line for the model when something ran without asking (installs). */
-    data class Allowed(val notice: String? = null, val permit: Approval.Permit? = null) : GateOutcome()
+    data class Allowed(val notice: String? = null, val permit: Approval.Permit? = null,
+        val effect: Approval.Spec? = permit?.spec,
+    ) : GateOutcome()
     /** Do not run it; [message] is what the model is told. */
     data class Denied(val message: String) : GateOutcome()
     data class Waiting(val taskId: String) : GateOutcome()
@@ -143,17 +146,23 @@ object RiskGate {
         val context = requireNotNull(appContext) { "The approval gate is not ready." }
         val hand = if (kind == GuardKind.SCREEN && taskId != null) TaskEntity.SCREEN else sessionId
         val binding = TaskGuard.bind(context, hand, taskId)
-        TaskGuard.check(context, binding, assessment.needsApproval, allowWaiting = true)?.let { return GateOutcome.Denied(it) }
-        if (!assessment.needsApproval) return GateOutcome.Allowed(if (assessment.riskClass == RiskClass.INSTALL) INSTALL_NOTICE else null)
+        val outward = assessment.riskClass != RiskClass.SAFE || assessment.needsApproval
+        TaskGuard.check(context, binding, outward, allowWaiting = true)?.let { return GateOutcome.Denied(it) }
+        if (!outward) return GateOutcome.Allowed()
         val request = RiskRequest(sessionId = sessionId, kind = kind, assessment = assessment, preview = preview,
             pageUrl = pageUrl, elementText = elementText, summary = summary, taskId = binding.taskId)
+        val spec = Approval.Spec(request, mode, shellArgs)
+        if (!assessment.needsApproval) {
+            TaskGuard.check(context, binding, outward = true)?.let { return GateOutcome.Denied(it) }
+            return GateOutcome.Allowed(INSTALL_NOTICE, effect = spec)
+        }
         if (kind == GuardKind.SCREEN) TaskEngine.screenApproval(context, request)?.let { return outcome(it) }
         if (assessment.warnings.isEmpty() && Grants.allows(assessment.riskClass, assessment.target, sessionId)) {
             TaskGuard.check(context, binding, outward = true)?.let { return GateOutcome.Denied(it) }
             RuleHits.record(sessionId, RiskText.plainTarget(assessment.target))
-            return GateOutcome.Allowed(if (assessment.riskClass == RiskClass.MONEY) autoPaidNotice(RiskText.plainTarget(assessment.target)) else null)
+            return GateOutcome.Allowed(if (assessment.riskClass == RiskClass.MONEY) autoPaidNotice(RiskText.plainTarget(assessment.target)) else null,
+                effect = spec)
         }
-        val spec = Approval.Spec(request, mode, shellArgs)
         return try {
             if (defer) {
                 val saved = TaskEngine.waitForApproval(context, spec)
@@ -165,6 +174,16 @@ object RiskGate {
         } catch (e: IllegalArgumentException) {
             GateOutcome.Denied(e.message ?: "The command cannot be saved for approval.")
         }
+    }
+
+    /** Commit the planned outward action immediately before its executor is allowed to run. */
+    suspend fun started(allowed: GateOutcome.Allowed, sourceId: String? = null, authorization: String? = null, draft: String? = null): TaskAction? = allowed.effect?.let {
+        TaskEngine.actionStarted(requireNotNull(appContext), it, allowed.permit?.command, sourceId, authorization, draft)
+    }
+
+    /** The executor supplies an observed result; an interruption explicitly stays uncertain. */
+    suspend fun finished(action: TaskAction?, output: String, success: Boolean, unknown: Boolean = false) {
+        if (action != null) TaskEngine.actionFinished(requireNotNull(appContext), action, output, success, unknown)
     }
 
     private suspend fun await(spec: Approval.Spec): Approval.Claim {

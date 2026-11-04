@@ -23,6 +23,7 @@ import app.momoding.guard.RiskAssessment
 import app.momoding.guard.RiskClass
 import app.momoding.guard.RiskDecision
 import app.momoding.guard.RiskGate
+import com.openminis.app.tools.ToolExecutionResult
 import app.momoding.guard.RiskRequest
 import app.momoding.guard.TapWords
 import app.momoding.status.KeepAwake
@@ -407,13 +408,16 @@ class HandsOperator(private val context: Context) {
                         capsule.dodge(px, py)
                         capsule.stage.aim(px, py, fxLabel(action))
                         Thread.sleep(AIM_MS)
-                        val ok = capsule.passThrough {
-                            when (action) {
-                                is HandsAction.LongPress -> { capsule.stage.hold(LONG_PRESS_MS); tap(svc, px, py, LONG_PRESS_MS) }
-                                is HandsAction.DoubleTap -> tap(svc, px, py, 50).also { capsule.stage.ripple(px, py); Thread.sleep(90) } && tap(svc, px, py, 50)
-                                else -> tap(svc, px, py, 60)
+                        val ok = outward(gate) {
+                            val accepted = capsule.passThrough {
+                                when (action) {
+                                    is HandsAction.LongPress -> { capsule.stage.hold(LONG_PRESS_MS); tap(svc, px, py, LONG_PRESS_MS) }
+                                    is HandsAction.DoubleTap -> tap(svc, px, py, 50).also { capsule.stage.ripple(px, py); Thread.sleep(90) } && tap(svc, px, py, 50)
+                                    else -> tap(svc, px, py, 60)
+                                }
                             }
-                        }
+                            ToolExecutionResult("Android ${if (accepted) "accepted" else "rejected"} the gesture at ($px, $py); inspect the screen for the external result.", accepted)
+                        }.success
                         capsule.stage.ripple(px, py)
                         lastResult = if (ok) "${action.describe()} at ($px, $py) was performed." else "the gesture at ($px, $py) was rejected by the system; try again or another way."
                         if (ok && gate.gated) {
@@ -440,10 +444,13 @@ class HandsOperator(private val context: Context) {
                             capsule.stage.aim(px, py, fxLabel(action))
                             Thread.sleep(AIM_MS / 2)
                             // the element itself first (exact, needs no finger); a real tap on its centre when it will not take a click
-                            val ok = clickNode(el.node, action.long) || run {
-                                capsule.dodge(px, py)
-                                capsule.passThrough { tap(svc, px, py, if (action.long) LONG_PRESS_MS else 60) }
-                            }
+                            val ok = outward(gate) {
+                                val accepted = clickNode(el.node, action.long) || run {
+                                    capsule.dodge(px, py)
+                                    capsule.passThrough { tap(svc, px, py, if (action.long) LONG_PRESS_MS else 60) }
+                                }
+                                ToolExecutionResult("Android ${if (accepted) "accepted" else "rejected"} the tap on #${action.index}; inspect the screen for the external result.", accepted)
+                            }.success
                             capsule.stage.ripple(px, py)
                             lastResult = if (ok) "${action.describe()} was performed." else "the tap on #${action.index} was rejected by the system; try again or another way."
                             if (ok && gate.gated) {
@@ -507,7 +514,7 @@ class HandsOperator(private val context: Context) {
                         gate.notice?.let { log += it }
                         if (stop.get()) return finish(Outcome.Stopped(stopReason.get() ?: "stopped"), steps, runId, lastScreen, traceDir, log, model.label)
                         capsule.stage.say(fxLabel(action))
-                        lastResult = pressEnter(svc)
+                        lastResult = outward(gate) { pressEnter(svc) }.output
                         pause(TAP_SETTLE_MS)
                     }
                     is HandsAction.OpenApp -> {
@@ -580,7 +587,21 @@ class HandsOperator(private val context: Context) {
     }
 
     /** Null [denied] when the tap may go ahead; [notice] is what the chat model should pass on. */
-    private data class TapGate(val denied: String? = null, val notice: String? = null, val shown: String = "", val gated: Boolean = false, val app: String? = null)
+    private data class TapGate(val denied: String? = null, val notice: String? = null, val shown: String = "", val gated: Boolean = false,
+        val app: String? = null, val allowed: GateOutcome.Allowed? = null)
+
+    private fun outward(gate: TapGate, execute: () -> ToolExecutionResult): ToolExecutionResult {
+        val action = gate.allowed?.let { runBlocking { RiskGate.started(it) } }
+        try {
+            val result = execute()
+            runBlocking { RiskGate.finished(action, result.output, result.success) }
+            return result
+        } catch (error: Throwable) {
+            runBlocking { RiskGate.finished(action, "The screen action was interrupted; its external outcome is unknown. Verify before repeating.\n" + error.message,
+                false, unknown = true) }
+            throw error
+        }
+    }
 
     /**
      * The approval for a tap whose label says pay, send, post or delete. The person is in the
@@ -610,7 +631,7 @@ class HandsOperator(private val context: Context) {
         }
         capsule.working(0, ui.getString(com.openminis.app.R.string.mo_hands_looking))
         return when (outcome) {
-            is GateOutcome.Allowed -> TapGate(notice = outcome.notice, shown = shown, gated = true, app = appLabel)
+            is GateOutcome.Allowed -> TapGate(notice = outcome.notice, shown = shown, gated = true, app = appLabel, allowed = outcome)
             is GateOutcome.Denied -> TapGate(denied = outcome.message, shown = shown, gated = true, app = appLabel)
             is GateOutcome.Waiting -> error("A screen approval waits on its saved task.")
         }
@@ -642,7 +663,7 @@ class HandsOperator(private val context: Context) {
         }
         capsule.working(0, ui.getString(com.openminis.app.R.string.mo_hands_looking))
         return when (outcome) {
-            is GateOutcome.Allowed -> TapGate(notice = outcome.notice, shown = "Enter")
+            is GateOutcome.Allowed -> TapGate(notice = outcome.notice, shown = "Enter", allowed = outcome)
             is GateOutcome.Denied -> TapGate(denied = outcome.message, shown = "Enter")
             is GateOutcome.Waiting -> error("A screen approval waits on its saved task.")
         }
@@ -772,13 +793,13 @@ class HandsOperator(private val context: Context) {
         node.text?.toString()?.contains(text.take(8)) == true
     }.getOrDefault(false)
 
-    private fun pressEnter(svc: MinisAccessibilityService): String {
-        if (!mayAct()) return "the screen task ended before Enter"
-        val node = focusedField(svc) ?: return "no text field has the cursor, so there is nothing to submit; tap the search or send button instead."
+    private fun pressEnter(svc: MinisAccessibilityService): ToolExecutionResult {
+        if (!mayAct()) return ToolExecutionResult("the screen task ended before Enter", false)
+        val node = focusedField(svc) ?: return ToolExecutionResult("no text field has the cursor, so there is nothing to submit; tap the search or send button instead.", false)
         val ok = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             act { node.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id) }
         } else false
-        return if (ok) "pressed Enter." else "Enter is not available for this field; tap the search or send button on the screen instead."
+        return ToolExecutionResult(if (ok) "pressed Enter." else "Enter is not available for this field; tap the search or send button on the screen instead.", ok)
     }
 
     // ── the eyes ───────────────────────────────────────────────────────────

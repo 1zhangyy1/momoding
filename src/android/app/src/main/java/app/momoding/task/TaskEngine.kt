@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.withTransaction
 import app.momoding.apps.AppBots
 import app.momoding.apps.MoApps
+import app.momoding.chat.WorkResume
 import com.openminis.app.MinisApp
 import com.openminis.app.logging.AppLogger
 import com.openminis.app.ui.chat.ChatViewModelStore
@@ -49,10 +50,13 @@ object TaskEngine {
             _parentsWithWork.value = it.map { task -> task.conversation }.toSet()
         } }
         scope.launch {
-            recoverApprovals(app)
             recoverCommands(app)
+            recoverActions(app)
             recoverScreens(app)
+            recoverApprovals(app)
             ScreenWork.start(app)
+            WorkResume.start(app)
+            Inbox.wakeAll(app)
             kotlinx.coroutines.delay(3000)
             dao(app).queuedHands().forEach { hand -> handIdle(app, hand) }
         }
@@ -240,7 +244,127 @@ object TaskEngine {
     suspend fun pendingWork(dao: TaskDao, id: String): Boolean {
         val history = dao.log(id)
         return ShellWork.pending(history).isNotEmpty() || Approval.unclaimed(history).isNotEmpty() ||
-            dao.task(id)?.ask != null || dao.children(id).any { it.state != TaskEntity.State.ENDED.name }
+            TaskAction.pending(history).isNotEmpty() || dao.task(id)?.ask != null ||
+            dao.children(id).any { it.state != TaskEntity.State.ENDED.name }
+    }
+
+    suspend fun actionStarted(context: Context, spec: Approval.Spec, command: ShellWork.Command? = null,
+        sourceId: String? = null, authorization: String? = null, draft: String? = null,
+    ): TaskAction = try {
+        change(context) { dao, _ ->
+            val source = if (spec.mode == Approval.Mode.SHELL) ChatViewModelStore.existing(spec.request.sessionId)?.messages?.value
+                ?.lastOrNull { it.rendersAsUserBubble() && !it.unread } else null
+            actionStartedIn(dao, spec, command, sourceId ?: source?.id, authorization ?: source?.content ?: spec.request.summary ?: spec.request.preview, draft)
+        }
+    } catch (e: TaskAction.NotStarted) {
+        // Claiming approval may already have registered COMMAND. A later hold or
+        // question can still prevent execution, so settle that known non-action.
+        val id = spec.request.taskId
+        if (command != null && id != null) kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+            commandFinished(context, id, command,
+                com.openminis.app.tools.ToolExecutionResult("The action did not start: ${e.message}", false),
+                announce = false, onlyIfNotStarted = true)
+        }
+        throw e
+    }
+
+    internal suspend fun actionStartedIn(dao: TaskDao, spec: Approval.Spec, approved: ShellWork.Command? = null,
+        sourceId: String? = null, authorized: String = spec.request.preview, draft: String? = null,
+    ): TaskAction {
+        val request = spec.request
+        if (draft != null) {
+            require(!sourceId.isNullOrBlank()) { "A draft send needs its source card." }
+            check(dao.draftTask(request.sessionId, sourceId, draftNeedle(draft)) == null) { "This draft already has a task. Inspect its result before sending again." }
+        }
+        require(spec.mode != Approval.Mode.SCREEN || request.taskId != null) { "An outward screen action needs its persisted screen task." }
+        val id = request.taskId ?: request.id
+        val task = dao.task(id) ?: run {
+            check(request.taskId == null) { "The action's task was deleted." }
+            val now = System.currentTimeMillis()
+            TaskEntity(id, request.sessionId, sourceId, (request.summary ?: request.preview).lineSequence().first().take(60),
+                request.sessionId, TaskEntity.State.RUNNING.name, createdAt = now, updatedAt = now).also {
+                dao.insertTask(it)
+                log(dao, id, TaskLogEntity.Kind.AUTHORIZED, authorized)
+                log(dao, id, TaskLogEntity.Kind.PASSED_ON, request.preview)
+            }
+        }
+        val hand = if (spec.mode == Approval.Mode.SCREEN) TaskEntity.SCREEN else request.sessionId
+        TaskGuard.checkIn(dao, TaskGuard.Binding(hand, id), outward = true,
+            allowWaiting = Approval.pending(task.ask).isNotEmpty())?.let { throw TaskAction.NotStarted(it) }
+        val history = dao.log(id)
+        check(history.none { it.kind == TaskLogEntity.Kind.ABOUT_TO.name && JSONObject(it.body).getString("id") == request.id }) {
+            "This action already started. Inspect its recorded result; do not execute it again."
+        }
+        if (approved != null) check(ShellWork.pending(history).any { it.id == approved.id }) {
+            "This approved command has already settled. Request approval again before acting."
+        }
+        val command = if (spec.mode == Approval.Mode.SCREEN) null else approved ?: ShellWork.Command(request.id,
+            request.sessionId + "~command~" + request.id, JSONObject(requireNotNull(spec.shellArgs)).getString("command"))
+        if (command != null && history.none { it.kind == TaskLogEntity.Kind.COMMAND.name && ShellWork.Command.parse(it.body)?.id == command.id }) {
+            log(dao, id, TaskLogEntity.Kind.COMMAND, command.json())
+        }
+        val owner = request.conversation ?: if (spec.mode == Approval.Mode.SCREEN) {
+            dao.screenSpec(id)?.let { ScreenWork.Spec.parse(it).parent }?.let { dao.task(it)?.conversation }
+        } else null
+        log(dao, id, TaskLogEntity.Kind.ABOUT_TO, spec.copy(request = request.copy(taskId = id,
+            conversation = owner ?: task.conversation)).json().toString())
+        if (draft != null) log(dao, id, TaskLogEntity.Kind.DRAFT, draft)
+        refreshBudget(dao, id)
+        return TaskAction(id, request.id, command)
+    }
+
+    suspend fun actionFinished(context: Context, action: TaskAction, output: String, success: Boolean, unknown: Boolean = false) {
+        if (action.command != null) {
+            commandFinished(context, action.taskId, action.command, com.openminis.app.tools.ToolExecutionResult(output, success),
+                announce = false, unknown = unknown)
+        } else change(context) { dao, _ ->
+            if (actionResultIn(dao, action.taskId, action.id, output, success, unknown) && unknown) {
+                dao.task(action.taskId)?.takeIf { it.state != TaskEntity.State.ENDED.name }?.let { actionUnknownIn(dao, it, output) }
+            }
+        }
+    }
+
+    internal suspend fun actionResultIn(dao: TaskDao, task: String, id: String, output: String, success: Boolean, unknown: Boolean = false): Boolean {
+        if (TaskAction.pending(dao.log(task)).none { it.request.id == id }) return false
+        val result = JSONObject().put("id", id).put("output", output)
+        if (unknown) result.put("unknown", true) else result.put("success", success)
+        log(dao, task, TaskLogEntity.Kind.RESULT, result.toString())
+        return true
+    }
+
+    private suspend fun actionUnknownIn(dao: TaskDao, task: TaskEntity, words: String) {
+        invalidateApprovals(dao, task.id)
+        val ask = JSONObject().put("kind", "action_outcome_unknown").put("question", words)
+            .put("screen", task.id.takeIf { task.hand == TaskEntity.SCREEN }).toString()
+        setAskIn(dao, task, ask)
+        if (task.hand == TaskEntity.SCREEN) dao.screenSpec(task.id)?.let { ScreenWork.Spec.parse(it).parent }
+            ?.let { dao.task(it) }?.takeIf { it.state != TaskEntity.State.ENDED.name }?.let {
+                invalidateApprovals(dao, it.id)
+                setAskIn(dao, it, ask)
+            }
+    }
+
+    internal suspend fun recoverActionsIn(dao: TaskDao, task: TaskEntity): String? {
+        val pending = TaskAction.pending(dao.log(task.id))
+        if (pending.isEmpty()) return null
+        val words = "An outward action has no recorded result; its outcome is unknown. Verify the current external state before continuing; do not repeat it.\n" +
+            pending.joinToString("\n") { it.request.preview }
+        val commands = ShellWork.pending(dao.log(task.id)).map { it.id }.toSet()
+        for (action in pending) {
+            if (action.request.id in commands) log(dao, task.id, TaskLogEntity.Kind.COMMAND_RESULT,
+                JSONObject().put("id", action.request.id).put("unknown", true).toString())
+            actionResultIn(dao, task.id, action.request.id, words, false, unknown = true)
+        }
+        if (task.state != TaskEntity.State.ENDED.name) actionUnknownIn(dao, task, words)
+        return words
+    }
+
+    private suspend fun recoverActions(context: Context) = change(context) { dao, _ ->
+        for (task in dao.unfinishedTasks()) {
+            val words = recoverActionsIn(dao, task) ?: continue
+            val owner = dao.screenSpec(task.id)?.let { ScreenWork.Spec.parse(it).parent }?.let { dao.task(it)?.conversation } ?: task.conversation
+            Inbox.post(dao, owner, "$REPORT_CUE${task.id} · action · ask] $words", task.id)
+        }
     }
 
     /** Native commands retain the task of the process that launched them, even after its model turn. */
@@ -292,18 +416,25 @@ object TaskEngine {
         }
     }
 
-    suspend fun openScreen(context: Context, options: app.momoding.hands.HandsOperator.Options, parentId: String? = null): TaskEntity = change(context) { dao, after ->
+    suspend fun openScreen(context: Context, options: app.momoding.hands.HandsOperator.Options, parentId: String? = null,
+        sourceId: String? = null, authorization: String? = null, draft: String? = null,
+    ): TaskEntity = change(context) { dao, after ->
         val chat = requireNotNull(options.sessionId) { "a screen task needs its conversation" }
+        if (draft != null) {
+            require(!sourceId.isNullOrBlank()) { "A draft send needs its source card." }
+            dao.draftTask(chat, sourceId, draftNeedle(draft))?.let { return@change it }
+        }
         val parent = parentId?.let { dao.task(it) ?: error("the parent task was deleted") }
         require(parent == null || parent.hand == chat) { "the parent task belongs to another hand" }
         check(parent == null || parent.state != TaskEntity.State.ENDED.name) { "the parent task ended" }
         val source = ChatViewModelStore.existing(chat)?.messages?.value?.lastOrNull { it.rendersAsUserBubble() && !it.unread }
-        val sourceId = if (parent?.conversation == chat) parent.sourceMessageId else source?.id
+        val origin = sourceId ?: if (parent?.conversation == chat) parent.sourceMessageId else source?.id
         val now = System.currentTimeMillis()
-        val task = TaskEntity(newId(), chat, sourceId, options.task.lineSequence().first().take(60), TaskEntity.SCREEN,
+        val task = TaskEntity(newId(), chat, origin, options.task.lineSequence().first().take(60), TaskEntity.SCREEN,
             TaskEntity.State.QUEUED.name, createdAt = now, updatedAt = now)
         dao.insertTask(task)
-        source?.content?.let { log(dao, task.id, TaskLogEntity.Kind.AUTHORIZED, it) }
+        (authorization ?: source?.content)?.let { log(dao, task.id, TaskLogEntity.Kind.AUTHORIZED, it) }
+        if (draft != null) log(dao, task.id, TaskLogEntity.Kind.DRAFT, draft)
         log(dao, task.id, TaskLogEntity.Kind.SCREEN, ScreenWork.Spec(options, parent?.id).json())
         log(dao, task.id, TaskLogEntity.Kind.PASSED_ON, options.task)
         parent?.let { log(dao, it.id, TaskLogEntity.Kind.CHILD, task.id) }
@@ -393,8 +524,16 @@ object TaskEngine {
     }
 
     suspend fun screenFinished(context: Context, id: String, result: app.momoding.hands.HandsOperator.Result) = change(context) { dao, after ->
-        val task = dao.task(id) ?: return@change
-        val body = ScreenWork.resultJson(result).toString()
+        var task = dao.task(id) ?: return@change
+        if (task.state != TaskEntity.State.ENDED.name && TaskAction.pending(dao.log(id)).isNotEmpty() &&
+            result.outcome !is app.momoding.hands.HandsOperator.Outcome.Stopped) {
+            recoverActionsIn(dao, task)
+            task = dao.task(id) ?: return@change
+        }
+        val uncertain = task.ask?.let { JSONObject(it).takeIf { a -> a.optString("kind") == "action_outcome_unknown" }?.optString("question") }
+        val observed = if (uncertain != null && result.outcome !is app.momoding.hands.HandsOperator.Outcome.Stopped)
+            result.copy(outcome = app.momoding.hands.HandsOperator.Outcome.NeedsUser(uncertain)) else result
+        val body = ScreenWork.resultJson(observed).toString()
         if (dao.log(id).none { it.kind == TaskLogEntity.Kind.SCREEN_RESULT.name && runCatching { JSONObject(it.body).optString("run_id") == result.runId }.getOrDefault(false) }) {
             log(dao, id, TaskLogEntity.Kind.SCREEN_RESULT, body)
         }
@@ -403,8 +542,8 @@ object TaskEngine {
             after += { ScreenWork.wake() }
             return@change
         }
-        val question = (result.outcome as? app.momoding.hands.HandsOperator.Outcome.NeedsUser)?.question
-        val outcome = when (result.outcome) {
+        val question = (observed.outcome as? app.momoding.hands.HandsOperator.Outcome.NeedsUser)?.question
+        val outcome = when (observed.outcome) {
             is app.momoding.hands.HandsOperator.Outcome.Done -> TaskEntity.Outcome.DONE
             is app.momoding.hands.HandsOperator.Outcome.Stopped -> TaskEntity.Outcome.STOPPED
             else -> TaskEntity.Outcome.FAILED
@@ -465,7 +604,7 @@ object TaskEngine {
         return closed
     }
 
-    private suspend fun recoverScreens(context: Context) = change(context) { dao, after ->
+    private suspend fun recoverScreens(context: Context) = change(context) { dao, _ ->
         for (task in dao.interruptedScreens()) {
             val words = "The app restarted while the screen was working. Check the current screen and any outward effect before continuing; do not repeat an action whose outcome is unknown."
             val ask = JSONObject().put("kind", "screen_outcome_unknown").put("screen", task.id).put("question", words).toString()
@@ -475,7 +614,6 @@ object TaskEngine {
             val owner = parent?.conversation ?: task.conversation
             if (parent != null && parent.state != TaskEntity.State.ENDED.name) setAskIn(dao, parent, ask)
             Inbox.post(dao, owner, "$REPORT_CUE${parent?.id ?: task.id} · screen · ask] $words", parent?.id ?: task.id)
-            after += { tellChat(context, owner) }
         }
     }
 
@@ -734,10 +872,24 @@ object TaskEngine {
 
     internal suspend fun commandFinished(context: Context, id: String, command: ShellWork.Command,
         result: com.openminis.app.tools.ToolExecutionResult, budgetExpired: Boolean = false, announce: Boolean = true,
+        unknown: Boolean = false, onlyIfNotStarted: Boolean = false,
     ) = change(context) { dao, after ->
         val task = dao.task(id) ?: return@change
-        if (task.state == TaskEntity.State.ENDED.name || ShellWork.pending(dao.log(id)).none { it.id == command.id }) return@change
-        log(dao, id, TaskLogEntity.Kind.COMMAND_RESULT, JSONObject().put("id", command.id).put("success", result.success).put("output", result.output).toString())
+        val history = dao.log(id)
+        if (onlyIfNotStarted && history.any { it.kind == TaskLogEntity.Kind.ABOUT_TO.name && JSONObject(it.body).getString("id") == command.id }) return@change
+        if (ShellWork.pending(history).none { it.id == command.id }) return@change
+        val row = JSONObject().put("id", command.id).put("output", result.output)
+        if (unknown) row.put("unknown", true) else row.put("success", result.success)
+        log(dao, id, TaskLogEntity.Kind.COMMAND_RESULT, row.toString())
+        actionResultIn(dao, id, command.id, result.output, result.success, unknown)
+        if (task.state == TaskEntity.State.ENDED.name) return@change
+        if (unknown) {
+            val words = "The command was interrupted; its outward effect is unknown. Verify what happened before repeating it.\n" + result.output
+            actionUnknownIn(dao, task, words)
+            Inbox.post(dao, task.conversation, "$REPORT_CUE$id · command · ask] $words", id)
+            after += { tellChat(context, task.conversation) }
+            return@change
+        }
         if (budgetExpired) {
             reportIn(context, dao, after, task.hand, Report.FAILED, result.output, helper = true)
             after += { Helpers.ended(context, task.hand, task.conversation) }
@@ -754,16 +906,17 @@ object TaskEngine {
     }
 
     /** A killed process cannot prove a command's effect. Keep it waiting for verification. */
-    private suspend fun recoverCommands(context: Context) = change(context) { dao, after ->
+    private suspend fun recoverCommands(context: Context) = change(context) { dao, _ ->
         for (task in dao.commandTasks()) {
             val commands = ShellWork.pending(dao.log(task.id))
             if (commands.isEmpty()) continue
-            val words = "The app restarted while a command was running; its outcome is unknown. Verify what happened before running it again."
+            val fallback = "The app restarted while a command was running; its outcome is unknown. Verify what happened before running it again."
             commands.forEach { log(dao, task.id, TaskLogEntity.Kind.COMMAND_RESULT, JSONObject().put("id", it.id).put("unknown", true).toString()) }
-            setAskIn(dao, task, JSONObject().put("question", words).put("kind", "command_outcome_unknown").toString())
+            val words = recoverActionsIn(dao, task) ?: fallback.also {
+                setAskIn(dao, task, JSONObject().put("question", it).put("kind", "command_outcome_unknown").toString())
+            }
             log(dao, task.id, TaskLogEntity.Kind.REPORT, words)
             Inbox.post(dao, task.conversation, "$REPORT_CUE${task.id} · command · ask] $words", task.id)
-            after += { tellChat(context, task.conversation) }
         }
     }
 
@@ -873,6 +1026,8 @@ object TaskEngine {
 
     private suspend fun log(dao: TaskDao, task: String, kind: TaskLogEntity.Kind, body: String) =
         dao.insertLog(TaskLogEntity(taskId = task, at = System.currentTimeMillis(), kind = kind.name, body = body))
+
+    private fun draftNeedle(draft: String): String = "\"id\":" + JSONObject.quote(JSONObject(draft).getString("id"))
 
     /** Short enough for a model to repeat back. */
     private fun newId(): String = java.util.UUID.randomUUID().toString().replace("-", "").take(6)

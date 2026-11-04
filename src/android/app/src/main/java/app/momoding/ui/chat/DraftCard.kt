@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,14 +32,29 @@ import app.momoding.ui.Design
 fun DraftCard(code: String) {
     val draft = remember(code) { Drafts.parse(code) } ?: return // still streaming, or not a draft
     val context = LocalContext.current
+    val conversation = com.openminis.app.ui.chat.LocalMarkdownSessionId.current
+    val source = LocalMomodingSource.current.orEmpty()
+    val key = Drafts.key(conversation.orEmpty(), source, draft.id)
     val states by Drafts.all.collectAsState()
-    val state = states[draft.id] ?: remember(draft.id) { Drafts.state(context, draft.id) }
-    var text by remember(draft.id) { mutableStateOf(state.text ?: draft.text) }
+    val cached = states[key] ?: remember(key) { Drafts.state(context, key, draft.id) }
+    var managed by remember(key) { mutableStateOf<Drafts.State?>(null) }
+    var loaded by remember(key) { mutableStateOf(false) }
+    LaunchedEffect(key) {
+        if (conversation != null && source.isNotBlank()) {
+            app.momoding.task.TaskEngine.dao(context).draftFlow(conversation, source, Drafts.needle(draft.id)).collect { task ->
+                managed = task?.let { Drafts.project(context, it) }
+                loaded = true
+            }
+        }
+    }
+    val state = managed ?: cached
+    var text by remember(key) { mutableStateOf(state.text ?: draft.text) }
+    LaunchedEffect(managed?.text) { managed?.text?.let { text = it } }
     // an SMS goes out through the phone's SMS service: ask for it once, right as Send is tapped;
     // refused, the card still works — the Messages app opens with the text filled in
     val smsAsk = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
-    ) { Drafts.start(context, draft, text.trim()) }
+    ) { if (conversation != null && source.isNotBlank()) Drafts.start(context, draft, text.trim(), conversation, source) }
     val firstLine = text.trim().lineSequence().firstOrNull().orEmpty().let { if (it.length > 40) it.take(40) + "…" else it }
 
     when (state.status) {
@@ -48,6 +64,7 @@ fun DraftCard(code: String) {
         )
         Drafts.Status.DISCARDED -> SettledLine(stringResource(R.string.mo_draft_settled_discarded, firstLine), done = false)
         Drafts.Status.OPENED -> SettledLine(stringResource(R.string.mo_draft_settled_opened, firstLine), done = false)
+        Drafts.Status.WAITING -> SettledLine(stringResource(R.string.mo_draft_attention), done = false)
         else -> DecisionCard {
             val who = when {
                 draft.to.isNotBlank() && draft.app.isNotBlank() -> stringResource(R.string.mo_draft_to_in, draft.to, draft.app)
@@ -57,7 +74,7 @@ fun DraftCard(code: String) {
             CardTitlebar(stringResource(R.string.mo_draft_label), who)
             val sending = state.status == Drafts.Status.SENDING
             BasicTextField(
-                value = text, onValueChange = { text = it }, enabled = !sending,
+                value = text, onValueChange = { text = it; Drafts.set(context, key, Drafts.State(Drafts.Status.PENDING, it)) }, enabled = loaded && !sending,
                 textStyle = TextStyle(fontSize = Design.Size.Body, lineHeight = Design.Line.Body, color = MaterialTheme.colorScheme.onSurface),
                 cursorBrush = SolidColor(Tones.action),
                 modifier = Modifier.fillMaxWidth(),
@@ -65,7 +82,7 @@ fun DraftCard(code: String) {
             if (state.status == Drafts.Status.FAILED) Status(failedLine(state.note), MaterialTheme.colorScheme.error)
             CardActions {
                 if (!sending) PillButton(stringResource(R.string.mo_draft_discard), primary = false) {
-                    Drafts.set(context, draft.id, Drafts.State(Drafts.Status.DISCARDED, text))
+                    Drafts.set(context, key, Drafts.State(Drafts.Status.DISCARDED, text))
                 }
                 PillButton(
                     stringResource(
@@ -75,10 +92,10 @@ fun DraftCard(code: String) {
                             else -> R.string.mo_draft_send
                         },
                     ),
-                    primary = true, enabled = !sending && text.isNotBlank(),
+                    primary = true, enabled = loaded && !sending && text.isNotBlank(),
                 ) {
                     if (Drafts.isSms(draft) && !app.momoding.chat.SmsSend.canSend(context)) smsAsk.launch(android.Manifest.permission.SEND_SMS)
-                    else Drafts.start(context, draft, text.trim())
+                    else if (conversation != null && source.isNotBlank()) Drafts.start(context, draft, text.trim(), conversation, source)
                 }
             }
         }

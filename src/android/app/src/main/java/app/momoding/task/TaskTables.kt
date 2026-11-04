@@ -99,7 +99,7 @@ data class TaskLogEntity(
     val kind: String,
     val body: String,
 ) {
-    enum class Kind { AUTHORIZED, PASSED_ON, STARTED, PAUSED, ROUTINE, ROUTINE_RECORDED, COMMAND, COMMAND_RESULT, CHILD, SCREEN, SCREEN_RESULT, APPROVAL, APPROVAL_DECISION, APPROVAL_USED, APPROVAL_CLOSED, ABOUT_TO, RESULT, REPORT, END }
+    enum class Kind { AUTHORIZED, PASSED_ON, STARTED, PAUSED, ROUTINE, ROUTINE_RECORDED, COMMAND, COMMAND_RESULT, CHILD, SCREEN, SCREEN_RESULT, APPROVAL, APPROVAL_DECISION, APPROVAL_USED, APPROVAL_CLOSED, ABOUT_TO, RESULT, DRAFT, REPORT, END }
 }
 
 @Dao
@@ -178,6 +178,9 @@ interface TaskDao {
     @Query("SELECT * FROM task WHERE state != 'ENDED' ORDER BY created_at")
     fun activeFlow(): Flow<List<TaskEntity>>
 
+    @Query("SELECT * FROM task WHERE state != 'ENDED' ORDER BY created_at")
+    suspend fun unfinishedTasks(): List<TaskEntity>
+
     @Query("SELECT * FROM task WHERE conversation = :conversation AND state != 'ENDED' ORDER BY created_at")
     suspend fun openIn(conversation: String): List<TaskEntity>
 
@@ -190,6 +193,12 @@ interface TaskDao {
 
     @Query("SELECT * FROM task WHERE conversation IN (:sessions) OR hand IN (:sessions)")
     suspend fun relatedTo(sessions: List<String>): List<TaskEntity>
+
+    @Query("SELECT t.* FROM task t JOIN task_log l ON l.task_id = t.id WHERE t.conversation = :conversation AND t.source_message_id = :source AND l.kind = 'DRAFT' AND instr(l.body, :draft) > 0 ORDER BY l.id DESC LIMIT 1")
+    suspend fun draftTask(conversation: String, source: String, draft: String): TaskEntity?
+
+    @Query("SELECT t.* FROM task t JOIN task_log l ON l.task_id = t.id WHERE t.conversation = :conversation AND t.source_message_id = :source AND l.kind = 'DRAFT' AND instr(l.body, :draft) > 0 ORDER BY l.id DESC LIMIT 1")
+    fun draftFlow(conversation: String, source: String, draft: String): Flow<TaskEntity?>
 
     @Query("DELETE FROM inbox WHERE task_id = :task")
     suspend fun deleteTaskInbox(task: String)

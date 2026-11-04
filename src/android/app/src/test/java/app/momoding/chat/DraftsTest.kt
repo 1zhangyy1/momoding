@@ -5,6 +5,8 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import app.momoding.task.TaskEntity
+import app.momoding.task.TaskLogEntity
 
 /** momoding: the draft fence parses, ids are stable per content, and the hands get the exact words. */
 class DraftsTest {
@@ -30,11 +32,33 @@ class DraftsTest {
         assertTrue(t.contains("in 微信")); assertTrue(t.contains("to 张阿姨")); assertTrue(t.contains("instead of guessing")); assertTrue(t.contains("start a new message"))
     }
 
-    @Test fun `an sms to a number goes the prefilled way`() {
-        assertTrue(Drafts.isSmsToNumber(Drafts.Draft("+15551234567", "短信", "hi")))
-        assertTrue(!Drafts.isSmsToNumber(Drafts.Draft("张阿姨", "短信", "hi")))
-        assertTrue(!Drafts.isSmsToNumber(Drafts.Draft("+15551234567", "微信", "hi")))
-        assertTrue(Drafts.prefilledSmsTask(Drafts.Draft("+15551234567", "短信", "x"), "new words").contains("new words"))
+    @Test fun `identical draft cards in different messages or chats do not share send state`() {
+        val id = Drafts.Draft("Mom", "SMS", "hi").id
+        assertNotEquals(Drafts.key("chat", "one", id), Drafts.key("chat", "two", id))
+        assertNotEquals(Drafts.key("chat", "one", id), Drafts.key("other chat", "one", id))
+    }
+
+    private fun task(state: String, outcome: String? = null) =
+        TaskEntity("draft", "chat", title = "send", hand = "chat", state = state, outcome = outcome, createdAt = 1, updatedAt = 1)
+    private fun entry(kind: String, body: String) = TaskLogEntity(taskId = "draft", at = 1, kind = kind, body = body)
+
+    @Test fun `an unconfirmed or stopped send never offers automatic retry`() {
+        assertEquals(Drafts.Status.WAITING, Drafts.project(task("WAITING"), emptyList()).status)
+        assertEquals(Drafts.Status.WAITING, Drafts.project(task("ENDED", "STOPPED"), emptyList()).status)
+        assertEquals(Drafts.Status.WAITING, Drafts.project(task("ENDED", "FAILED"), emptyList()).status)
+    }
+
+    @Test fun `a carrier receipt arriving after stop still shows what was actually sent`() {
+        val history = listOf(entry("DRAFT", """{"sms":true,"text":"exact edited text"}"""),
+            entry("RESULT", """{"id":"send","success":true,"output":"all parts sent"}"""))
+        val projected = Drafts.project(task("ENDED", "STOPPED"), history)
+        assertEquals(Drafts.Status.SENT, projected.status)
+        assertEquals("exact edited text", projected.text)
+    }
+
+    @Test fun `running and queued sends still owe their result`() {
+        assertEquals(Drafts.Status.SENDING, Drafts.project(task("RUNNING"), emptyList()).status)
+        assertEquals(Drafts.Status.SENDING, Drafts.project(task("QUEUED"), emptyList()).status)
     }
 
     @Test fun `an sms goes straight through the phone, any other app through the screen`() {

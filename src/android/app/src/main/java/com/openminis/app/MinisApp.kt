@@ -744,11 +744,9 @@ class MinisApp : Application(), ImageLoaderFactory {
         // runs it, so the badge would be missing after restart. The persisted
         // message tail is the durable source of truth — scan it off-main and
         // reconcile. Runs after init() so it merges with the restored queues.
-        // momoding: work the phone cut off picks up by itself (app/momoding/chat/WorkResume.kt)
-        app.momoding.chat.WorkResume.start(this)
+        // Reconcile interrupted effects before waking saved messages or model loops.
         app.momoding.task.TaskEngine.start(this)
         com.openminis.app.scheduled.ScheduledCompletionTriggers.ensureListening(this)
-        app.momoding.task.Inbox.wakeAll(this) // momoding: words a chat never read go out now (调研/M39 2.2)
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
             val interrupted = runCatching { chatRepository.interruptedSessionIds() }.getOrElse { emptySet() }
             // Exclude any session that is already actively streaming (defensive;

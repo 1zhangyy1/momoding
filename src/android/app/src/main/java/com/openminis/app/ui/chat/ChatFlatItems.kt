@@ -408,6 +408,7 @@ internal sealed class FlatChatItem {
         val messageIsStreaming: Boolean,
         /** Joined raw markdown of the parent message, used by Copy Markdown. */
         val messageMarkdown: String,
+        val sourceMessageId: String? = null,
     ) : FlatChatItem() {
         override val key = "mdblock:$messageId:$parentBlockId:$blockIndex"
         override val contentType = "mdblock"
@@ -417,6 +418,7 @@ internal sealed class FlatChatItem {
             if (this === other) return true
             if (other !is AssistantMarkdownBlock) return false
             return messageId == other.messageId &&
+                sourceMessageId == other.sourceMessageId &&
                 parentBlockId == other.parentBlockId &&
                 blockIndex == other.blockIndex &&
                 isLastBlockOfMessage == other.isLastBlockOfMessage &&
@@ -426,6 +428,7 @@ internal sealed class FlatChatItem {
         }
         override fun hashCode(): Int {
             var h = messageId.hashCode()
+            h = h * 31 + (sourceMessageId?.hashCode() ?: 0)
             h = h * 31 + parentBlockId.hashCode()
             h = h * 31 + blockIndex
             h = h * 31 + isLastBlockOfMessage.hashCode()
@@ -729,6 +732,7 @@ internal fun buildFlatChatItems(
                 isLastBlockOfMessage = item.isLastBlockOfMessage,
                 messageIsStreaming = item.messageIsStreaming,
                 messageMarkdown = item.messageMarkdown,
+                sourceMessageId = item.sourceMessageId,
             )
             is FlatChatItem.AssistantThinking -> item.copy(messageId = "${item.messageId}#$n")
             is FlatChatItem.AssistantToolUse -> item.copy(messageId = "${item.messageId}#$n")
@@ -942,6 +946,7 @@ internal fun buildFlatChatItems(
                                 isLastBlockOfMessage = isLastText,
                                 messageIsStreaming = false,
                                 messageMarkdown = joinedMarkdown,
+                                sourceMessageId = message.blockSourceIds[block.id] ?: message.sourceDbIds.singleOrNull(),
                             )))
                             return@forEachIndexed
                         }
@@ -983,6 +988,7 @@ internal fun buildFlatChatItems(
                                 isLastBlockOfMessage = isLastText && message.isStreaming,
                                 messageIsStreaming = message.isStreaming && isLastText,
                                 messageMarkdown = joinedMarkdown,
+                                sourceMessageId = message.blockSourceIds[block.id] ?: message.sourceDbIds.singleOrNull(),
                             )))
                         } else {
                             fragments.forEachIndexed { fragIdx, raw ->
@@ -995,6 +1001,7 @@ internal fun buildFlatChatItems(
                                     isLastBlockOfMessage = isLastText && isLastFragOfText,
                                     messageIsStreaming = message.isStreaming && isLastText,
                                     messageMarkdown = joinedMarkdown,
+                                    sourceMessageId = message.blockSourceIds[block.id] ?: message.sourceDbIds.singleOrNull(),
                                 )))
                             }
                         }

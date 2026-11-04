@@ -2,9 +2,16 @@ package app.momoding.chat
 
 import android.content.Context
 import app.momoding.Identity
-import app.momoding.guard.Grants
+import app.momoding.guard.GateOutcome
+import app.momoding.guard.GuardKind
+import app.momoding.guard.RiskAssessment
+import app.momoding.guard.RiskGate
+import app.momoding.guard.RiskRequest
+import app.momoding.task.Approval
+import app.momoding.task.TaskEngine
+import app.momoding.task.TaskEntity
+import app.momoding.task.TaskLogEntity
 import app.momoding.guard.RiskClass
-import app.momoding.hands.Hands
 import app.momoding.hands.HandsOperator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -13,6 +20,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.NonCancellable
 import org.json.JSONObject
 import java.util.Locale
 
@@ -26,9 +34,8 @@ import java.util.Locale
  * {"to": "张阿姨", "app": "微信", "text": "张阿姨好，房租下周一转给您～"}
  * ```
  *
- * and the chat draws it as a card. Send runs the hands with the (possibly edited) text and a
- * grant for outbound taps scoped to that one run, so the person, who just read the exact words
- * and tapped Send, is not asked a second time; the grant is dropped when the run ends.
+ * and the chat draws it as a card. Send binds the exact card, recipient and edited text to a
+ * persisted task. Screen sends use the shared queue; native SMS writes its intent before sending.
  */
 object Drafts {
     const val BLOCK = "momoding-draft"
@@ -40,7 +47,7 @@ object Drafts {
     }
 
     /** OPENED: the SMS app is open with the message filled in, for the person to tap Send there. */
-    enum class Status { PENDING, SENDING, SENT, FAILED, DISCARDED, OPENED }
+    enum class Status { PENDING, SENDING, SENT, FAILED, DISCARDED, OPENED, WAITING }
 
     data class State(val status: Status, val text: String? = null, val note: String? = null)
 
@@ -55,13 +62,14 @@ object Drafts {
     private val states = MutableStateFlow<Map<String, State>>(emptyMap())
     val all: StateFlow<Map<String, State>> = states
 
-    fun state(context: Context, id: String): State = states.value[id] ?: run {
-        val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY + id, null)
+    fun state(context: Context, id: String, legacyId: String? = null): State = states.value[id] ?: run {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val raw = prefs.getString(KEY + id, null) ?: legacyId?.let { prefs.getString(KEY + it, null) }
         val s = raw?.let { runCatching { JSONObject(it) }.getOrNull() }?.let {
             State(Status.valueOf(it.optString("status", "PENDING")), it.optString("text").ifEmpty { null }, it.optString("note").ifEmpty { null })
         } ?: State(Status.PENDING)
-        // A send cut off by the process dying did not finish; show it as not sent.
-        (if (s.status == Status.SENDING) s.copy(status = Status.FAILED, note = null) else s).also { set(context, id, it, persist = false) }
+        // A process exit cannot prove whether a send happened. The task projection supplies its receipt.
+        (if (s.status == Status.SENDING) s.copy(status = Status.WAITING, note = null) else s).also { set(context, id, it, persist = false) }
     }
 
     /** Debug reset: forget every card's state (the prefs are cleared by the caller). */
@@ -89,81 +97,96 @@ object Drafts {
     /** Outlives the card: the hands are in another app while this runs, and the chat may be rebuilt. */
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
-    /** The person tapped Send on [d] with [text] (possibly edited). */
-    fun start(context: Context, d: Draft, text: String) {
+    fun key(conversation: String, source: String, draft: String): String = "$conversation:$source:$draft"
+    fun needle(id: String): String = "\"id\":" + JSONObject.quote(id)
+
+    /** The person tapped Send on this exact card. Task creation rejects a duplicate atomically. */
+    fun start(context: Context, d: Draft, text: String, conversation: String, source: String) {
+        require(conversation.isNotBlank() && source.isNotBlank())
         val app = context.applicationContext
-        set(app, d.id, State(Status.SENDING, text))
-        scope.launch { set(app, d.id, send(app, d, text)) }
+        val key = key(conversation, source, d.id)
+        set(app, key, State(Status.SENDING, text))
+        scope.launch {
+            val state = try { send(app, d, text, conversation, source) } catch (error: Exception) {
+                TaskEngine.dao(app).draftTask(conversation, source, needle(d.id))?.let { project(app, it) }
+                    ?: State(Status.FAILED, text, error.message)
+            }
+            set(app, key, state)
+        }
     }
 
     private val SMS_APPS = setOf("短信", "简讯", "簡訊", "信息", "sms", "messages", "message", "text")
     private val NUMBER = Regex("""^\+?[0-9][0-9 \-]{4,}$""")
-    internal fun isSmsToNumber(d: Draft): Boolean =
-        d.app.trim().lowercase() in SMS_APPS && NUMBER.matches(d.to.trim())
-
     /** An SMS goes out through the phone's own SMS service, never through the screen. */
     fun isSms(d: Draft): Boolean = d.app.trim().lowercase() in SMS_APPS ||
         (d.app.isBlank() && (NUMBER.matches(d.number) || NUMBER.matches(d.to.trim())))
 
-    private fun openSmsPrefilled(context: Context, number: String, text: String): Boolean = runCatching {
-        val i = android.content.Intent(android.content.Intent.ACTION_SENDTO, android.net.Uri.parse("smsto:" + number.replace(" ", "")))
-            .putExtra("sms_body", text).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(i); Thread.sleep(1500); true
-    }.getOrDefault(false)
+    private fun metadata(d: Draft, text: String, sms: Boolean): String = JSONObject()
+        .put("id", d.id).put("to", d.to).put("app", d.app).put("number", d.number).put("text", text).put("sms", sms).toString()
 
-    internal fun prefilledSmsTask(d: Draft, text: String): String =
-        "The Messages app is open on a new message to ${d.to} with this text already typed: \"$text\". " +
-            "Check the recipient is ${d.to} and the text is exactly that, then tap Send once. " +
-            "If either is wrong or missing, stop and say so. After sending, check the message shows in the chat."
-
-    /** Runs the send. Returns the state to show; never throws. */
-    private suspend fun send(context: Context, d: Draft, text: String): State = withContext(Dispatchers.IO) {
-        if (isSms(d)) return@withContext sendSms(context, d, text)
-        if (!Hands.enabled(context) || !Hands.readiness(context).ready) {
-            return@withContext State(Status.FAILED, text, "hands_off")
-        }
-        if (!Hands.claim()) return@withContext State(Status.FAILED, text, "busy")
-        val runSession = "draft-${d.id}"
-        Grants.grantSession(RiskClass.OUTBOUND, runSession, label = d.to.ifBlank { d.app })
-        // An SMS to a number opens prefilled through smsto: — the hands only check it and tap Send.
-        val prefilled = isSmsToNumber(d) && openSmsPrefilled(context, d.to, text)
-        try {
-            val r = HandsOperator(context).run(
-                HandsOperator.Options(
-                    task = if (prefilled) prefilledSmsTask(d, text) else task(d, text),
-                    appHint = d.app.ifBlank { null },
-                    sessionId = runSession,
-                    agentName = Identity.name(context),
-                    language = context.resources.configuration.locales[0].getDisplayLanguage(Locale.ENGLISH).ifBlank { "the user's language" }, // momoding: the app's language, not the system's
-                )
-            )
-            when (val o = r.outcome) {
-                is HandsOperator.Outcome.Done -> State(Status.SENT, text)
-                is HandsOperator.Outcome.Stopped -> State(Status.FAILED, text, "stopped")
-                is HandsOperator.Outcome.NeedsUser -> State(Status.FAILED, text, o.question)
-                is HandsOperator.Outcome.Infeasible -> State(Status.FAILED, text, o.message)
-                is HandsOperator.Outcome.Failed -> State(Status.FAILED, text, o.message)
-            }
-        } catch (t: Throwable) {
-            State(Status.FAILED, text, t.message)
-        } finally {
-            Grants.clearSession(runSession)
-            Hands.setActive(false)
-        }
+    private suspend fun send(context: Context, d: Draft, text: String, conversation: String, source: String): State = withContext(Dispatchers.IO) {
+        TaskEngine.dao(context).draftTask(conversation, source, needle(d.id))?.let { return@withContext project(context, it) }
+        if (isSms(d)) return@withContext sendSms(context, d, text, conversation, source)
+        val authorization = "The person tapped Send on this card with exactly these parameters:\n" + metadata(d, text, false)
+        val screen = TaskEngine.openScreen(context, HandsOperator.Options(task = task(d, text), appHint = d.app.ifBlank { null },
+            sessionId = conversation, agentName = Identity.name(context),
+            language = context.resources.configuration.locales[0].getDisplayLanguage(Locale.ENGLISH)),
+            sourceId = source, authorization = authorization, draft = metadata(d, text, false))
+        project(context, screen)
     }
 
-    // ── SMS: straight through the phone's SMS service; the person's Send on the card is the approval ──
+    /** A projection of task/log state. A lost process never turns an uncertain send into Retry. */
+    suspend fun project(context: Context, task: TaskEntity): State = project(task, TaskEngine.dao(context).log(task.id))
 
-    private fun sendSms(context: Context, d: Draft, text: String): State {
+    internal fun project(task: TaskEntity, history: List<TaskLogEntity>): State {
+        val draft = history.lastOrNull { it.kind == TaskLogEntity.Kind.DRAFT.name }?.body?.let(::JSONObject)
+        val sent = draft?.optBoolean("sms") == true && history.any { it.kind == TaskLogEntity.Kind.RESULT.name &&
+            runCatching { JSONObject(it.body).optBoolean("success") }.getOrDefault(false) }
+        val status = when {
+            sent -> Status.SENT
+            task.state in listOf(TaskEntity.State.QUEUED.name, TaskEntity.State.RUNNING.name) -> Status.SENDING
+            task.state == TaskEntity.State.ENDED.name && task.outcome == TaskEntity.Outcome.DONE.name -> Status.SENT
+            else -> Status.WAITING
+        }
+        return State(status, draft?.optString("text"))
+    }
+
+    private suspend fun sendSms(context: Context, d: Draft, text: String, conversation: String, source: String): State {
         val number = when (val r = SmsSend.resolve(context, d)) {
             is SmsSend.Resolved.One -> r.number
             is SmsSend.Resolved.Several -> return State(Status.FAILED, text, "ambiguous:" + r.count)
             SmsSend.Resolved.None -> null
         }
         if (number != null && SmsSend.canSend(context)) {
-            return if (SmsSend.send(context, number, text)) State(Status.SENT, text) else State(Status.FAILED, text, "sms_failed")
+            return sendApprovedSms(context, d, number, text, conversation, source) { recipient, body -> SmsSend.send(context, recipient, body) }
         }
-        // no permission, or nobody by that name: the SMS app opens with it filled in, the person sends it there
         return if (SmsSend.openPrefilled(context, number, text)) State(Status.OPENED, text) else State(Status.FAILED, text, "sms_failed")
+    }
+
+    /** The card is the approval; the delegate only runs after the exact send is on disk. */
+    internal suspend fun sendApprovedSms(context: Context, d: Draft, number: String, text: String, conversation: String, source: String,
+        perform: (String, String) -> Boolean,
+    ): State {
+        val parameters = metadata(d.copy(number = number), text, true)
+        val request = RiskRequest(sessionId = conversation, kind = GuardKind.SHELL,
+            assessment = RiskAssessment(RiskClass.OUTBOUND, "Sends the exact SMS approved on its card", "sms:$number"),
+            preview = "Send SMS to $number:\n$text", summary = "Send SMS to $number")
+        val recipe = JSONObject().put("command", request.preview).toString()
+        val action = requireNotNull(RiskGate.started(GateOutcome.Allowed(effect = Approval.Spec(request, Approval.Mode.NATIVE, recipe)),
+            sourceId = source, authorization = "The person tapped Send with exactly these parameters:\n$parameters", draft = parameters))
+        var recorded = false
+        try {
+            val accepted = perform(number, text)
+            withContext(NonCancellable) {
+                RiskGate.finished(action, if (accepted) "The SMS service reported every part sent." else "The SMS service did not confirm every part; verify before repeating.",
+                    accepted, unknown = !accepted)
+            }
+            recorded = true
+            return TaskEngine.dao(context).task(action.taskId)?.let { project(context, it) } ?: State(Status.WAITING, text)
+        } finally {
+            if (!recorded) withContext(NonCancellable) {
+                RiskGate.finished(action, "The SMS caller stopped without a confirmed result. Verify whether it was sent before repeating.", false, unknown = true)
+            }
+        }
     }
 }

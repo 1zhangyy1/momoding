@@ -1,7 +1,6 @@
 package app.momoding.apps
 
 import app.momoding.home.MainChat
-import app.momoding.task.TaskEngine
 import com.openminis.app.MinisApp
 
 import android.content.Context
@@ -203,19 +202,16 @@ class AppBridge(private val context: Context, private val webView: WebView, priv
             is GateOutcome.Waiting -> return JSONObject().put("code", 202).put("task", gate.taskId).put("output", "Waiting for approval.")
             is GateOutcome.Allowed -> Unit
         }
-        val permit = gate.permit
+        val action = RiskGate.started(gate)
         var executed: com.openminis.app.sandbox.NativeOffloadResult? = null
         val r = try {
             NativeOffloadServer.dispatch(NativeOffloadRequest(pid = 0, argv = argv,
-                env = permit?.command?.let { mapOf("MINIS_EXECUTION_ID" to it.process) }.orEmpty(),
+                env = action?.command?.let { mapOf("MINIS_EXECUTION_ID" to it.process) }.orEmpty(),
                 cwd = "/", sessionId = gateSession)).also { executed = it }
         } finally {
-            permit?.command?.let { saved ->
-                kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
-                    TaskEngine.commandFinished(context, requireNotNull(permit.spec.request.taskId), saved,
-                        com.openminis.app.tools.ToolExecutionResult(executed?.output ?: "The native command was interrupted; verify its outcome before repeating.",
-                            executed?.exitCode == 0), announce = false)
-                }
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                RiskGate.finished(action, executed?.output ?: "The native command was interrupted; verify its outcome before repeating.",
+                    executed?.exitCode == 0, unknown = executed == null)
             }
         }
         val out = JSONObject().put("code", r.exitCode).put("output", r.output)

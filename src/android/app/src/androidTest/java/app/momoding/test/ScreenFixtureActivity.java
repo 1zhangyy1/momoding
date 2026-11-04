@@ -35,6 +35,10 @@ public class ScreenFixtureActivity extends Activity {
         mark.setText("M41 MARK");
         mark.setOnClickListener(v -> setCount(prefs.getInt("count", 0) + 1));
         layout.addView(mark);
+        Button send = new Button(this);
+        send.setText("M41 SEND FIXTURE");
+        send.setOnClickListener(v -> setCount(prefs.getInt("count", 0) + 1));
+        layout.addView(send);
         Button reset = new Button(this);
         reset.setText("M41 RESET");
         reset.setOnClickListener(v -> reset());

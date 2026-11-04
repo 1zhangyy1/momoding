@@ -67,6 +67,9 @@ fun MomodingBlock(language: String, code: String) {
  */
 val LocalMomodingMessage = androidx.compose.runtime.staticCompositionLocalOf { "" }
 
+/** Stable persisted source for actions; the live bubble id may still be temporary. */
+val LocalMomodingSource = androidx.compose.runtime.staticCompositionLocalOf<String?> { null }
+
 /** False for a card in an earlier turn: if it was never answered, it has expired (Grok's "This ask expired"). */
 val LocalMomodingLive = androidx.compose.runtime.compositionLocalOf { true }
 

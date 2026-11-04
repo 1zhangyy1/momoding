@@ -43,11 +43,13 @@ object ShellWork {
 
     suspend fun run(context: Context, chat: String, taskAtStart: String?, title: String, text: String,
         permit: Approval.Permit? = null,
+        action: TaskAction? = null,
         execute: suspend (process: String, foreground: () -> Boolean) -> ToolExecutionResult,
     ): ToolExecutionResult {
         val id = java.util.UUID.randomUUID().toString()
-        val command = permit?.command ?: Command(id, "$chat~command~$id", text)
-        val registered = permit?.spec?.request?.taskId
+        val command = action?.command ?: permit?.command ?: Command(id, "$chat~command~$id", text)
+        val registered = action?.taskId ?: permit?.spec?.request?.taskId
+        val outward = action != null || permit != null
         val foreground = AtomicBoolean(true)
         val budgetExpired = AtomicBoolean(false)
         val remaining = if (taskAtStart != null && Helpers.isHelper(context, chat)) {
@@ -71,9 +73,13 @@ object ShellWork {
         execution.invokeOnCompletion { runs.remove(command.process, execution) }
         execution.start()
         var handedOn = false
+        var settled = false
         try {
             withTimeoutOrNull(FOREGROUND_MS) { execution.await() }?.let {
-                if (registered != null) withContext(NonCancellable) { TaskEngine.commandFinished(context, registered, command, it, announce = false) }
+                if (registered != null) withContext(NonCancellable) {
+                    TaskEngine.commandFinished(context, registered, command, it, announce = false, unknown = outward && it.timedOut)
+                }
+                settled = true
                 return it
             }
             foreground.set(false)
@@ -84,11 +90,13 @@ object ShellWork {
                     scope.launch { stop(command.process) }
                 }
                 scope.launch {
-                    val result = runCatching { execution.await() }.getOrElse {
+                    val observed = runCatching { execution.await() }
+                    val result = observed.getOrElse {
                         ToolExecutionResult("The command was interrupted: ${it.message}", false)
                     }
                     try {
-                        runCatching { TaskEngine.commandFinished(context, task.id, command, result, budgetExpired.get()) }
+                        runCatching { TaskEngine.commandFinished(context, task.id, command, result, budgetExpired.get(),
+                            unknown = outward && (observed.isFailure || result.timedOut)) }
                             .onFailure { AppLogger.warning("ShellWork", "completion ${task.id}: ${it.message}") }
                     } finally {
                         com.openminis.app.service.SessionActivityTracker.finishBackgroundWork(command.process)
@@ -105,6 +113,10 @@ object ShellWork {
         } finally {
             foreground.set(false)
             if (!handedOn && !execution.isCompleted) withContext(NonCancellable) { stop(command.process) }
+            if (!handedOn && !settled && registered != null) withContext(NonCancellable) {
+                TaskEngine.commandFinished(context, registered, command,
+                    ToolExecutionResult("No command result was observed before its caller stopped.", false), announce = false, unknown = outward)
+            }
             if (!handedOn) ExecutionCoordinator.sessionDidTerminate(command.process)
         }
     }
