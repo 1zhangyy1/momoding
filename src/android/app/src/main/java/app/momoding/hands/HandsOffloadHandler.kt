@@ -7,6 +7,10 @@ import com.openminis.app.sandbox.NativeOffloadHandler
 import com.openminis.app.sandbox.NativeOffloadRequest
 import com.openminis.app.sandbox.NativeOffloadResult
 import app.momoding.Identity
+import app.momoding.task.TaskEngine
+import app.momoding.task.ScreenWork
+import app.momoding.task.TaskEntity
+import kotlinx.coroutines.runBlocking
 import com.openminis.app.sandbox.offload.OffloadArgs
 import org.json.JSONArray
 import org.json.JSONObject
@@ -19,7 +23,7 @@ import java.util.Locale
  *     momoding-hands apps
  *     momoding-hands run --task "<one clear task>" [--app "<app name>"] [--max-steps N]
  *
- * `run` blocks for the whole task (minutes) and answers with one JSON object. Off by default;
+ * `run` persists a task and returns its id immediately; the result comes through its inbox. Off by default;
  * with the switch off or a prerequisite missing it exits 3 with the reason and the settings
  * link, so the agent tells the user instead of guessing. Registered in `MinisApp` next to
  * `nanomuse-media`.
@@ -32,8 +36,17 @@ class HandsOffloadHandler(private val context: Context) : NativeOffloadHandler {
             null, "help", "--help", "-h" -> NativeOffloadResult(0, HELP)
             "status" -> ok(status())
             "apps" -> ok(apps())
-            "run" -> run(args, request.sessionId)
-            "stop" -> { Hands.stopCurrent("stopped from the shell"); ok(JSONObject().put("ok", true)) }
+            "run" -> runCatching { run(args, request.sessionId, process = request.env["MINIS_EXECUTION_ID"]) }
+                .getOrElse { NativeOffloadResult(2, "momoding-hands: ${it.message}\n") }
+            "stop" -> runCatching {
+                val sid = requireNotNull(request.sessionId) { "a screen task needs its conversation" }
+                val task = runBlocking { args.positional.getOrNull(1)?.let { TaskEngine.dao(context).task(it) }
+                    ?: TaskEngine.dao(context).heldBy(TaskEntity.SCREEN) } ?: error("there is no active screen task")
+                require(task.hand == TaskEntity.SCREEN && task.conversation == sid) { "that screen task belongs to another conversation" }
+                val parent = runBlocking { TaskEngine.screenSpec(context, task.id).parent }
+                runBlocking { TaskEngine.stop(context, parent ?: task.id) }
+                ok(JSONObject().put("task", task.id).put("state", "stopped"))
+            }.getOrElse { NativeOffloadResult(2, "momoding-hands: ${it.message}\n") }
             else -> NativeOffloadResult(2, "momoding-hands: unknown subcommand '${args.positional.first()}'\n$HELP")
         }
     }
@@ -63,10 +76,8 @@ class HandsOffloadHandler(private val context: Context) : NativeOffloadHandler {
      * optional screen model for this run only, and return the result plus the wall time.
      */
     fun runForDebug(task: String, app: String?, maxSteps: Int?, modelEntryId: String?, mode: String? = null, textSteps: Boolean = false, background: Boolean = true): JSONObject {
-        val previous = Hands.modelEntryId(context)
-        if (modelEntryId != null) Hands.setModelEntryId(context, modelEntryId)
         val started = System.currentTimeMillis()
-        try {
+        run {
             val argv = buildList {
                 add("momoding-hands"); add("run"); add("--task"); add(task)
                 app?.let { add("--app"); add(it) }
@@ -75,19 +86,17 @@ class HandsOffloadHandler(private val context: Context) : NativeOffloadHandler {
                 if (textSteps) { add("--text-steps"); add("true") }
                 if (!background) { add("--background"); add("false") }
             }
-            val r = run(OffloadArgs(argv.drop(1)), sessionId = "debug-hands")
+            val r = run(OffloadArgs(argv.drop(1)), sessionId = "debug-hands", persistent = false, modelEntry = modelEntryId)
             val body = runCatching { JSONObject(r.output) }.getOrElse { JSONObject().put("raw", r.output) }
             return body.put("exit", r.exitCode).put("elapsed_ms", System.currentTimeMillis() - started)
-        } finally {
-            if (modelEntryId != null) Hands.setModelEntryId(context, previous)
         }
     }
 
-    private fun run(args: OffloadArgs, sessionId: String?): NativeOffloadResult {
+    private fun run(args: OffloadArgs, sessionId: String?, persistent: Boolean = true, process: String? = null, modelEntry: String? = null): NativeOffloadResult {
         val task = args.get("task")?.trim().orEmpty()
         if (task.isEmpty()) return NativeOffloadResult(2, "momoding-hands run: --task is required\n")
         if (!Hands.enabled(context)) return refused("off", "Operating the screen is switched off in Settings → Hands.")
-        val r = Hands.readiness(context)
+        val r = Hands.readiness(context).copy(model = Hands.screenModel(context, entryOverride = modelEntry))
         if (!r.ready) {
             val missing = buildList {
                 if (!r.androidOk) add("Android 11 or newer is needed for screenshots")
@@ -110,9 +119,17 @@ class HandsOffloadHandler(private val context: Context) : NativeOffloadHandler {
             mode = args.get("mode")?.let { m -> HandsPrompt.Mode.entries.firstOrNull { it.name.equals(m, ignoreCase = true) } } ?: HandsPrompt.Mode.TREE,
             textSteps = args.get("text-steps") == "true",
             background = args.get("background") != "false",
+            modelEntryId = modelEntry,
         )
+        if (persistent) {
+            val sid = requireNotNull(sessionId) { "a screen task needs its conversation" }
+            val parent = runBlocking { TaskEngine.executionTask(context, sid, process) }
+            val work = runBlocking { TaskEngine.openScreen(context, opts, parent?.id) }
+            return ok(JSONObject().put("task", work.id).put("state", work.state.lowercase())
+                .put("note", "The screen task is saved and will run when the screen is free. Its result arrives here automatically. Do not repeat it or poll."))
+        }
         // Taken atomically, so two runs arriving together cannot both start; given back when the run ends.
-        if (!Hands.claim()) return refused("busy", "The hands are already working on something; wait for it to finish or stop it.")
+        if (!runBlocking { TaskEngine.claimDiagnosticScreen(context) }) return refused("busy", "A screen task is running, queued or waiting; the diagnostic cannot borrow its screen.")
         AppLogger.info(TAG, "run: ${task.take(80)} app=${opts.appHint} maxSteps=$maxSteps")
         val result = try { HandsOperator(context).run(opts) } finally { Hands.setActive(false) }
         val body = JSONObject()
@@ -165,7 +182,8 @@ Usage:
 
 The screen model sees screenshots only. It never types passwords or codes (the user takes over), and taps that
 pay, send, post or delete wait for the same approval card as the shell and the browser. Off by default:
-Settings → Hands. Exit codes: 0 done · 1 failed · 2 usage · 3 off or not ready · 4 stopped, infeasible or needs the user.
+Settings → Hands. run returns a saved task id immediately, queues when the screen is busy and reports back here.
+Exit codes: 0 accepted · 2 usage · 3 off or not ready. Use momoding-task tell <id> to update it or stop <id> to stop it.
 """
     }
 }

@@ -28,6 +28,7 @@ class TaskOffloadHandler(private val context: Context) : NativeOffloadHandler {
                 null, "help", "--help", "-h" -> NativeOffloadResult(0, HELP)
                 "new" -> new(args, sid)
                 "tell" -> tell(args, sid)
+                "stop" -> stop(args, sid)
                 "report" -> report(args, sid)
                 else -> NativeOffloadResult(2, "momoding-task: unknown verb '$verb'\n$HELP")
             }
@@ -76,6 +77,14 @@ class TaskOffloadHandler(private val context: Context) : NativeOffloadHandler {
         return ok(JSONObject().put("task", task.id).put("state", task.state.lowercase()))
     }
 
+    private fun stop(args: OffloadArgs, sid: String): NativeOffloadResult {
+        val id = args.positional.getOrNull(1) ?: throw IllegalArgumentException("momoding-task stop <id>")
+        val task = runBlocking { TaskEngine.dao(context).task(id) } ?: throw IllegalArgumentException("no task $id")
+        require(task.conversation == sid) { "task $id belongs to another chat" }
+        val stopped = runBlocking { TaskEngine.stop(context, id) } ?: error("the task was deleted")
+        return ok(JSONObject().put("task", id).put("state", stopped.state.lowercase()).put("outcome", stopped.outcome?.lowercase()))
+    }
+
     private fun ok(o: JSONObject) = NativeOffloadResult(0, o.toString(2) + "\n")
 
     companion object {
@@ -84,6 +93,7 @@ class TaskOffloadHandler(private val context: Context) : NativeOffloadHandler {
             that handed it on, and its hand works on one task at a time (the next waits its turn).
 
             From a chat:
+              stop <id>          stop this task and its work; a stopped task does not resume
               new --to helper --title "<a few words>" "<a complete brief>"
                                    a helper: its own chat, no memory, nothing of this one; it works
                                    on its own and its final answer comes back here. At most 3 at

@@ -8038,6 +8038,11 @@ class ChatViewModel(
     }
 
     @Volatile private var runningTaskId: String? = null
+    internal val activeTaskId: String? get() = runningTaskId
+
+    internal fun cancelTaskIfRunning(taskId: String) {
+        if (runningTaskId == taskId) cancelStream()
+    }
 
     internal val turnIsRunning: Boolean get() = _isStreaming.value || streamJob?.isCompleted == false
 

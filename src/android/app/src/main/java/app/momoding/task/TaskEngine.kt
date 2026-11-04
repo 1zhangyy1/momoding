@@ -50,6 +50,8 @@ object TaskEngine {
         } }
         scope.launch {
             recoverCommands(app)
+            recoverScreens(app)
+            ScreenWork.start(app)
             kotlinx.coroutines.delay(3000)
             dao(app).queuedHands().forEach { hand -> handIdle(app, hand) }
         }
@@ -96,6 +98,20 @@ object TaskEngine {
         val task = dao.task(id) ?: throw IllegalArgumentException("no task $id (the table of tasks lists them)")
         if (task.outcome == TaskEntity.Outcome.STOPPED.name) throw IllegalStateException("task $id was stopped: open a new one")
         log(dao, id, TaskLogEntity.Kind.PASSED_ON, text)
+        val waitingScreen = task.ask?.let { runCatching { JSONObject(it).optString("screen") }.getOrNull() }?.takeIf { it.isNotBlank() }
+        if (waitingScreen != null && dao.children(id).any { it.id == waitingScreen && it.state == TaskEntity.State.WAITING.name }) {
+            tellIn(context, dao, after, waitingScreen, text, helper = false)
+            return dao.task(id) ?: task
+        }
+        if (task.hand == TaskEntity.SCREEN) {
+            val live = ScreenWork.isRunning(id)
+            val next = task.copy(state = (if (live) TaskEntity.State.RUNNING else TaskEntity.State.QUEUED).name,
+                ask = null, outcome = null, updatedAt = System.currentTimeMillis())
+            dao.updateTask(next)
+            screenParentReady(dao, id)
+            after += { if (!ScreenWork.continueIfRunning(id)) ScreenWork.wake() }
+            return next
+        }
         val state = when (TaskEntity.State.valueOf(task.state)) {
             TaskEntity.State.QUEUED -> TaskEntity.State.QUEUED // read when it starts, with the brief
             TaskEntity.State.ENDED -> if (free(dao, task.hand, helper)) TaskEntity.State.RUNNING else TaskEntity.State.QUEUED
@@ -120,8 +136,8 @@ object TaskEngine {
 
     private suspend fun reportIn(context: Context, dao: TaskDao, after: MutableList<suspend () -> Unit>, hand: String, kind: Report, text: String, helper: Boolean): TaskEntity {
         val task = dao.heldBy(hand) ?: throw IllegalStateException("you are on no task: just answer in your chat")
-        if (kind == Report.DONE && ShellWork.pending(dao.log(task.id)).isNotEmpty()) {
-            throw IllegalStateException("A command for this task is still running. Its result will arrive automatically; do not report done yet.")
+        if (kind == Report.DONE && pendingWork(dao, task.id)) {
+            throw IllegalStateException("Work for this task is still running or waiting. Its result will arrive automatically; do not report done yet.")
         }
         if (kind == Report.DONE && dao.unread(hand).isNotEmpty()) {
             throw IllegalStateException("There are unread instructions for this hand. Read them at the next step before reporting done.")
@@ -129,13 +145,18 @@ object TaskEngine {
         val now = System.currentTimeMillis()
         val next = when (kind) {
             Report.PROGRESS -> task.copy(progress = text.lineSequence().first().take(120))
-            Report.ASK -> task.copy(state = TaskEntity.State.WAITING.name, ask = JSONObject().put("question", text).toString())
+            Report.ASK -> task.copy(state = TaskEntity.State.WAITING.name, ask = JSONObject().put("question", text)
+                .put("screen", task.ask?.let { runCatching { JSONObject(it).optString("screen") }.getOrNull() }?.takeIf { it.isNotBlank() }).toString())
             Report.DONE, Report.FAILED -> task.copy(
                 state = TaskEntity.State.ENDED.name, ask = null,
                 outcome = (if (kind == Report.DONE) TaskEntity.Outcome.DONE else TaskEntity.Outcome.FAILED).name,
             )
         }.copy(updatedAt = now)
         dao.updateTask(next)
+        if (kind == Report.FAILED) {
+            for (child in dao.children(task.id)) stopTree(context, dao, after, child.id, "The task it belonged to ended.")
+            ShellWork.pending(dao.log(task.id)).forEach { command -> after += { ShellWork.stop(command.process) } }
+        }
         if (kind != Report.PROGRESS) {
             log(dao, task.id, if (next.state == TaskEntity.State.ENDED.name) TaskLogEntity.Kind.END else TaskLogEntity.Kind.REPORT, text)
             val words = "$REPORT_CUE${task.id} · ${handName(context, hand)} · ${kind.name.lowercase()}] $text"
@@ -186,23 +207,230 @@ object TaskEngine {
     suspend fun deleteSessionTree(context: Context, root: String): DeletedSessions = change(context) { dao, after ->
         val app = context.applicationContext as MinisApp
         val ids = app.chatRepository.sessionSubtreeIds(root)
-        val tasks = dao.relatedTo(ids)
+        val tasks = descendants(dao, dao.relatedTo(ids))
         val unfinished = tasks.filter { it.state != TaskEntity.State.ENDED.name }
+        val stoppingIds = unfinished.map { it.id }.toSet()
         for (task in unfinished) {
             ShellWork.pending(dao.log(task.id)).forEach { command -> after += { ShellWork.stop(command.process) } }
+            if (task.hand == TaskEntity.SCREEN) after += { ScreenWork.stopAndJoin(task.id, "the conversation was deleted") }
             val words = "Stopped because the conversation or its hand was deleted."
             dao.updateTask(task.copy(state = TaskEntity.State.ENDED.name, outcome = TaskEntity.Outcome.STOPPED.name,
                 ask = null, updatedAt = System.currentTimeMillis()))
             log(dao, task.id, TaskLogEntity.Kind.END, words)
             dao.deleteTaskInbox(task.id)
-            if (task.conversation !in ids) {
+            val coveredByParent = task.hand == TaskEntity.SCREEN && screenSpec(context, task.id).parent in stoppingIds
+            if (task.conversation !in ids && !coveredByParent) {
                 Inbox.post(dao, task.conversation, "$REPORT_CUE${task.id} · ${handName(context, task.hand)} · stopped] $words", task.id)
                 after += { tellChat(context, task.conversation) }
             }
         }
+        unfinished.map { it.hand }.distinct().filter { it !in ids }.forEach { hand -> after += { handIdle(context, hand) } }
         // The FK cascades remove messages, inbox and tasks owned by these sessions.
         for (id in ids) app.database.chatDao().deleteSession(id)
         DeletedSessions(ids, tasks, unfinished.size)
+    }
+
+    suspend fun pendingWork(dao: TaskDao, id: String): Boolean =
+        ShellWork.pending(dao.log(id)).isNotEmpty() || dao.children(id).any { it.state != TaskEntity.State.ENDED.name }
+
+    /** Native commands retain the task of the process that launched them, even after its model turn. */
+    suspend fun executionTask(context: Context, chat: String, process: String?): TaskEntity? =
+        (context.applicationContext as MinisApp).database.withTransaction {
+            val dao = dao(context)
+            val command = process?.let { dao.byExecution(chat, "\"process\":" + JSONObject.quote(it)) }
+            val model = if (process != null) ChatViewModelStore.existing(chat)?.activeTaskId?.let { dao.task(it) } else null
+            (command ?: model)?.also { check(it.state != TaskEntity.State.ENDED.name) { "the task ended; this process may not start new work" } }
+        }
+
+    private suspend fun descendants(dao: TaskDao, roots: List<TaskEntity>): List<TaskEntity> {
+        val found = linkedMapOf<String, TaskEntity>()
+        suspend fun add(task: TaskEntity) {
+            if (found.putIfAbsent(task.id, task) != null) return
+            for (child in dao.children(task.id)) add(child)
+        }
+        roots.forEach { add(it) }
+        return found.values.toList()
+    }
+
+    /** State commits first; cancellation reaches only these runs, never the next task on a Bot. */
+    suspend fun stop(context: Context, id: String, reason: String = "Stopped by the person.", outcome: TaskEntity.Outcome = TaskEntity.Outcome.STOPPED): TaskEntity? = change(context) { dao, after ->
+        val root = dao.task(id) ?: return@change null
+        val unread = dao.unread(root.hand).filter { it.taskId == id }.map { it.text }
+        stopTree(context, dao, after, id, reason)
+        if (root.state != TaskEntity.State.ENDED.name) {
+            if (outcome != TaskEntity.Outcome.STOPPED) dao.task(id)?.let { dao.updateTask(it.copy(outcome = outcome.name)) }
+            val words = reason + if (unread.isEmpty()) "" else "\nInstructions the hand had not read:\n" + unread.joinToString("\n\n")
+            Inbox.post(dao, root.conversation, "$REPORT_CUE$id · ${handName(context, root.hand)} · ${outcome.name.lowercase()}] $words", id)
+            after += { tellChat(context, root.conversation) }
+        }
+        dao.task(id)
+    }
+
+    private suspend fun stopTree(context: Context, dao: TaskDao, after: MutableList<suspend () -> Unit>, id: String, reason: String) {
+        val root = dao.task(id) ?: return
+        for (task in descendants(dao, listOf(root))) {
+            if (task.state == TaskEntity.State.ENDED.name) continue
+            val commands = ShellWork.pending(dao.log(task.id))
+            dao.updateTask(task.copy(state = TaskEntity.State.ENDED.name, outcome = TaskEntity.Outcome.STOPPED.name,
+                ask = null, updatedAt = System.currentTimeMillis()))
+            log(dao, task.id, TaskLogEntity.Kind.END, reason)
+            dao.deleteTaskInbox(task.id)
+            commands.forEach { command -> after += { ShellWork.stop(command.process) } }
+            if (task.hand == TaskEntity.SCREEN) after += { ScreenWork.stop(task.id, reason) }
+            else after += { kotlinx.coroutines.withContext(Dispatchers.Main) { ChatViewModelStore.existing(task.hand)?.cancelTaskIfRunning(task.id) } }
+            after += { handIdle(context, task.hand) }
+        }
+    }
+
+    suspend fun openScreen(context: Context, options: app.momoding.hands.HandsOperator.Options, parentId: String? = null): TaskEntity = change(context) { dao, after ->
+        val chat = requireNotNull(options.sessionId) { "a screen task needs its conversation" }
+        val parent = parentId?.let { dao.task(it) ?: error("the parent task was deleted") }
+        require(parent == null || parent.hand == chat) { "the parent task belongs to another hand" }
+        check(parent == null || parent.state != TaskEntity.State.ENDED.name) { "the parent task ended" }
+        val source = ChatViewModelStore.existing(chat)?.messages?.value?.lastOrNull { it.rendersAsUserBubble() && !it.unread }
+        val sourceId = if (parent?.conversation == chat) parent.sourceMessageId else source?.id
+        val now = System.currentTimeMillis()
+        val task = TaskEntity(newId(), chat, sourceId, options.task.lineSequence().first().take(60), TaskEntity.SCREEN,
+            TaskEntity.State.QUEUED.name, createdAt = now, updatedAt = now)
+        dao.insertTask(task)
+        source?.content?.let { log(dao, task.id, TaskLogEntity.Kind.AUTHORIZED, it) }
+        log(dao, task.id, TaskLogEntity.Kind.SCREEN, ScreenWork.Spec(options, parent?.id).json())
+        log(dao, task.id, TaskLogEntity.Kind.PASSED_ON, options.task)
+        parent?.let { log(dao, it.id, TaskLogEntity.Kind.CHILD, task.id) }
+        after += { ScreenWork.wake() }
+        task
+    }
+
+    internal suspend fun acquireScreen(dao: TaskDao, claim: () -> Boolean): TaskEntity? {
+        if (dao.heldBy(TaskEntity.SCREEN) != null) return null
+        val task = dao.nextFor(TaskEntity.SCREEN) ?: return null
+        if (!claim()) return null
+        val next = task.copy(state = TaskEntity.State.RUNNING.name, updatedAt = System.currentTimeMillis())
+        dao.updateTask(next)
+        log(dao, task.id, TaskLogEntity.Kind.STARTED, "screen lease acquired")
+        return next
+    }
+
+    internal suspend fun acquireDiagnosticScreen(dao: TaskDao, claim: () -> Boolean): Boolean =
+        dao.heldBy(TaskEntity.SCREEN) == null && dao.nextFor(TaskEntity.SCREEN) == null && claim()
+
+    suspend fun claimDiagnosticScreen(context: Context): Boolean = change(context) { dao, _ ->
+        acquireDiagnosticScreen(dao) { app.momoding.hands.Hands.claim() }
+    }
+
+    internal suspend fun takeScreen(context: Context): TaskEntity? {
+        var claimed = false
+        try {
+            return change(context) { dao, _ -> acquireScreen(dao) { app.momoding.hands.Hands.claim().also { claimed = it } } }
+        } catch (e: Throwable) {
+            if (claimed) app.momoding.hands.Hands.setActive(false)
+            throw e
+        }
+    }
+
+    suspend fun screenSpec(context: Context, id: String): ScreenWork.Spec =
+        ScreenWork.Spec.parse(dao(context).log(id).first { it.kind == TaskLogEntity.Kind.SCREEN.name }.body)
+
+    data class ScreenCheckpoint(val active: Boolean, val instructions: List<TaskLogEntity>)
+    suspend fun screenCheckpoint(context: Context, id: String, after: Long): ScreenCheckpoint =
+        (context.applicationContext as MinisApp).database.withTransaction {
+            val dao = dao(context)
+            ScreenCheckpoint(dao.task(id)?.state in listOf(TaskEntity.State.RUNNING.name, TaskEntity.State.WAITING.name),
+                dao.log(id).filter { it.id > after && it.kind == TaskLogEntity.Kind.PASSED_ON.name })
+        }
+
+    suspend fun screenProgress(context: Context, id: String, progress: String) = change(context) { dao, _ ->
+        dao.task(id)?.takeIf { it.state == TaskEntity.State.RUNNING.name }?.let { dao.updateTask(it.copy(progress = progress, updatedAt = System.currentTimeMillis())) }
+    }
+
+    suspend fun screenWaiting(context: Context, id: String, question: String) = change(context) { dao, _ ->
+        val task = dao.task(id)?.takeIf { it.state != TaskEntity.State.ENDED.name } ?: return@change
+        val ask = JSONObject().put("kind", "screen_takeover").put("screen", id).put("question", question).toString()
+        dao.updateTask(task.copy(state = TaskEntity.State.WAITING.name, ask = ask, updatedAt = System.currentTimeMillis()))
+        log(dao, id, TaskLogEntity.Kind.REPORT, question)
+        screenSpec(context, id).parent?.let { parent -> dao.task(parent)?.takeIf { it.state != TaskEntity.State.ENDED.name }?.let {
+            dao.updateTask(it.copy(state = TaskEntity.State.WAITING.name, ask = ask, updatedAt = System.currentTimeMillis()))
+        } }
+    }
+
+    private suspend fun screenParentReady(dao: TaskDao, id: String) {
+        val spec = dao.log(id).firstOrNull { it.kind == TaskLogEntity.Kind.SCREEN.name }?.body?.let { ScreenWork.Spec.parse(it) } ?: return
+        spec.parent?.let { parent -> dao.task(parent)?.takeIf {
+            it.state == TaskEntity.State.WAITING.name && it.ask?.let { ask -> JSONObject(ask).optString("screen") } == id
+        }?.let {
+            dao.updateTask(it.copy(state = TaskEntity.State.RUNNING.name, ask = null, updatedAt = System.currentTimeMillis()))
+            log(dao, it.id, TaskLogEntity.Kind.STARTED, "screen continued")
+        } }
+    }
+
+    /** An old run's result cannot settle words that arrived after its last checkpoint. */
+    internal suspend fun requeueScreenFollowUp(dao: TaskDao, id: String, through: Long?): Boolean {
+        val task = dao.task(id) ?: return false
+        if (through == null || task.state == TaskEntity.State.ENDED.name ||
+            dao.log(id).none { it.kind == TaskLogEntity.Kind.PASSED_ON.name && it.id > through }) return false
+        dao.updateTask(task.copy(state = TaskEntity.State.QUEUED.name, ask = null, outcome = null,
+            progress = null, updatedAt = System.currentTimeMillis()))
+        screenParentReady(dao, id)
+        return true
+    }
+
+    suspend fun screenFinished(context: Context, id: String, result: app.momoding.hands.HandsOperator.Result) = change(context) { dao, after ->
+        val task = dao.task(id) ?: return@change
+        val body = ScreenWork.resultJson(result).toString()
+        if (dao.log(id).none { it.kind == TaskLogEntity.Kind.SCREEN_RESULT.name && runCatching { JSONObject(it.body).optString("run_id") == result.runId }.getOrDefault(false) }) {
+            log(dao, id, TaskLogEntity.Kind.SCREEN_RESULT, body)
+        }
+        if (task.state == TaskEntity.State.ENDED.name) return@change
+        if (requeueScreenFollowUp(dao, id, result.instructionsThrough)) {
+            after += { ScreenWork.wake() }
+            return@change
+        }
+        val question = (result.outcome as? app.momoding.hands.HandsOperator.Outcome.NeedsUser)?.question
+        val outcome = when (result.outcome) {
+            is app.momoding.hands.HandsOperator.Outcome.Done -> TaskEntity.Outcome.DONE
+            is app.momoding.hands.HandsOperator.Outcome.Stopped -> TaskEntity.Outcome.STOPPED
+            else -> TaskEntity.Outcome.FAILED
+        }
+        dao.updateTask(task.copy(state = (if (question != null) TaskEntity.State.WAITING else TaskEntity.State.ENDED).name,
+            ask = question?.let { JSONObject().put("kind", "screen_question").put("screen", id).put("question", it).toString() },
+            outcome = if (question == null) outcome.name else null, progress = null, updatedAt = System.currentTimeMillis()))
+        log(dao, id, if (question == null) TaskLogEntity.Kind.END else TaskLogEntity.Kind.REPORT, body)
+        val parent = screenSpec(context, id).parent
+        if (parent != null && dao.task(parent)?.state !in listOf(TaskEntity.State.RUNNING.name, TaskEntity.State.WAITING.name)) return@change
+        if (question != null && parent != null) dao.task(parent)?.let {
+            dao.updateTask(it.copy(state = TaskEntity.State.WAITING.name,
+                ask = JSONObject().put("kind", "screen_question").put("screen", id).put("question", question).toString(), updatedAt = System.currentTimeMillis()))
+        }
+        if (question == null) screenParentReady(dao, id)
+        val ownParent = parent?.let { dao.task(it) }?.takeIf { it.conversation == it.hand }
+        var reportedOutcome = outcome
+        if (question == null && ownParent != null && !pendingWork(dao, ownParent.id)) {
+            val history = dao.log(ownParent.id)
+            val since = history.lastOrNull { it.kind == TaskLogEntity.Kind.STARTED.name }?.id ?: 0
+            val commandFailed = history.any { it.id > since && it.kind == TaskLogEntity.Kind.COMMAND_RESULT.name &&
+                runCatching { !JSONObject(it.body).optBoolean("success", true) }.getOrDefault(false) }
+            reportedOutcome = if (commandFailed) TaskEntity.Outcome.FAILED else outcome
+            dao.updateTask(ownParent.copy(state = TaskEntity.State.ENDED.name, ask = null, progress = null,
+                outcome = reportedOutcome.name, updatedAt = System.currentTimeMillis()))
+            log(dao, ownParent.id, TaskLogEntity.Kind.END, body)
+        }
+        val receipt = ownParent?.id ?: id
+        Inbox.post(dao, task.conversation, "$REPORT_CUE$receipt · screen · ${if (question != null) "ask" else reportedOutcome.name.lowercase()}] $body", receipt)
+        after += { tellChat(context, task.conversation) }
+    }
+
+    private suspend fun recoverScreens(context: Context) = change(context) { dao, after ->
+        for (task in dao.interruptedScreens()) {
+            val words = "The app restarted while the screen was working. Check the current screen and any outward effect before continuing; do not repeat an action whose outcome is unknown."
+            val ask = JSONObject().put("kind", "screen_outcome_unknown").put("screen", task.id).put("question", words).toString()
+            dao.updateTask(task.copy(state = TaskEntity.State.WAITING.name, ask = ask, updatedAt = System.currentTimeMillis()))
+            log(dao, task.id, TaskLogEntity.Kind.REPORT, words)
+            val parent = screenSpec(context, task.id).parent?.let { dao.task(it) }
+            val owner = parent?.conversation ?: task.conversation
+            if (parent != null && parent.state != TaskEntity.State.ENDED.name) dao.updateTask(parent.copy(state = TaskEntity.State.WAITING.name, ask = ask, updatedAt = System.currentTimeMillis()))
+            Inbox.post(dao, owner, "$REPORT_CUE${parent?.id ?: task.id} · screen · ask] $words", parent?.id ?: task.id)
+            after += { tellChat(context, owner) }
+        }
     }
 
     /** A local command does not turn an unrelated new message into that command's model turn. */
@@ -210,7 +438,7 @@ object TaskEngine {
         (context.applicationContext as MinisApp).database.withTransaction {
             val dao = dao(context)
             dao.onHand(hand).firstOrNull { task ->
-                task.conversation != hand || (task.ask == null && ShellWork.pending(dao.log(task.id)).isEmpty())
+                task.conversation != hand || (task.ask == null && !pendingWork(dao, task.id))
             }
         }
 
@@ -252,14 +480,15 @@ object TaskEngine {
             return@change
         }
         val ownCommand = task.conversation == task.hand
+        val completeOwn = ownCommand && !pendingWork(dao, id)
         val kind = if (result.success) "done" else "failed"
-        if (ownCommand && ShellWork.pending(dao.log(id)).isEmpty()) {
+        if (completeOwn) {
             dao.updateTask(task.copy(state = TaskEntity.State.ENDED.name,
                 outcome = (if (result.success) TaskEntity.Outcome.DONE else TaskEntity.Outcome.FAILED).name,
                 updatedAt = System.currentTimeMillis()))
             log(dao, id, TaskLogEntity.Kind.END, result.output)
         }
-        val words = "$REPORT_CUE$id · command · ${if (ownCommand) kind else "command_result"}] ${result.output}"
+        val words = "$REPORT_CUE$id · command · ${if (completeOwn) kind else "command_result"}] ${result.output}"
         Inbox.post(dao, task.hand, words, id, sender = InboxEntity.Sender.COMMAND)
         after += { tellChat(context, task.hand) }
     }
@@ -288,7 +517,7 @@ object TaskEngine {
     }
 
     /** The name a hand goes by: its Momoding's, else it is a helper. */
-    fun handName(context: Context, hand: String): String = MoApps.ofSession(context, hand)?.title ?: "helper"
+    fun handName(context: Context, hand: String): String = if (hand == TaskEntity.SCREEN) "screen" else MoApps.ofSession(context, hand)?.title ?: "helper"
 
     /**
      * The loop that actually ran hands back its result, tied to the task it started on. An
@@ -299,7 +528,7 @@ object TaskEngine {
         val helper = Helpers.isHelper(context, hand)
         change(context) { dao, after ->
             val current = taskId?.let { dao.task(it) }
-            if (current?.hand == hand && current.state == TaskEntity.State.RUNNING.name && !hasFollowUp && ShellWork.pending(dao.log(current.id)).isEmpty()) {
+            if (current?.hand == hand && current.state == TaskEntity.State.RUNNING.name && !hasFollowUp && !pendingWork(dao, current.id)) {
                 reportIn(context, dao, after, hand, if (completion.done) Report.DONE else Report.FAILED, completion.words, helper)
             }
             if (helper && current != null && dao.task(current.id)?.state == TaskEntity.State.ENDED.name) {
@@ -317,6 +546,7 @@ object TaskEngine {
     /** A busy hand may receive queued work just as its loop exits. Only dispatch is inferred
      * from idleness; outcomes always come from the loop's explicit closeout. */
     suspend fun handIdle(context: Context, hand: String) {
+        if (hand == TaskEntity.SCREEN) { ScreenWork.wake(); return }
         val helper = Helpers.isHelper(context, hand)
         change(context) { dao, after -> advance(context, dao, after, hand, helper) }
     }

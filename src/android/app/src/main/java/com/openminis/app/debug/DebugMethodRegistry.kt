@@ -45,6 +45,19 @@ object DebugMethodRegistry {
 
     private val DEBUG_ONLY_METHODS: List<MethodSpec> = listOf(
         MethodSpec(
+            name = "momoding.hands.run",
+            description = "DEV-only synchronous screen diagnostic. Cannot bypass running, queued or waiting screen tasks. Uses a per-run model override.",
+            params = listOf(
+                ParamSpec("task", "string", required = true, description = "What the hands should do."),
+                ParamSpec("app", "string", required = false, description = "App to open first."),
+                ParamSpec("maxSteps", "int", required = false, description = "Step cap."),
+                ParamSpec("modelEntryId", "string", required = false, description = "Screen model for this run only."),
+                ParamSpec("mode", "string", required = false, description = "How the hands see: vision (screenshot only), tree (element list), hybrid (default)."),
+            ),
+            returns = "{ok, outcome, steps, answer|message, run_id, trace, log, elapsed_ms}",
+            example = ex("task" to "Open Settings and read the Android version", "app" to "Settings"),
+        ),
+        MethodSpec(
             name = "debug.tasks.open",
             description = "DEV-only: hand a task between existing debug fixture chats. Uses TaskEngine; preserves configured defaults.",
             params = listOf(
@@ -972,19 +985,6 @@ object DebugMethodRegistry {
             example = ex("sessionId" to "6D0F…", "confirm" to true),
         ),
         // momoding
-        MethodSpec(
-            name = "momoding.hands.run",
-            description = "Run the hands (screen operator) on a task directly, bypassing the chat model. Blocks until done.",
-            params = listOf(
-                ParamSpec("task", "string", required = true, description = "What the hands should do."),
-                ParamSpec("app", "string", required = false, description = "App to open first."),
-                ParamSpec("maxSteps", "int", required = false, description = "Step cap."),
-                ParamSpec("modelEntryId", "string", required = false, description = "Screen model for this run only."),
-                ParamSpec("mode", "string", required = false, description = "How the hands see: vision (screenshot only), tree (element list), hybrid (default)."),
-            ),
-            returns = "{ok, outcome, steps, answer|message, run_id, trace, log, elapsed_ms}",
-            example = ex("task" to "Open Settings and read the Android version", "app" to "Settings"),
-        ),
         MethodSpec(
             name = "task.dump",
             description = "The main chat's stored inbox rows and tasks (with each task's log), newest first.",

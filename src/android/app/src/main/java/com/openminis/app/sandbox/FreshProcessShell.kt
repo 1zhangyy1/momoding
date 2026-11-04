@@ -299,6 +299,7 @@ internal class FreshProcessShell(
         env["TZ"] = PRootKernel.posixTz()
         if (debugOffload) env["MINIS_NOFF_DEBUG"] = "1"
         env["MINIS_CHAT_SESSION_ID"] = chatSessionId
+        env["MINIS_EXECUTION_ID"] = sessionId
         for ((k, v) in PRootKernel.customEnvironment) env[k] = v
         // User-configured variables go in as real environment entries rather
         // than `export` lines written to a shared stdin — one more thing the

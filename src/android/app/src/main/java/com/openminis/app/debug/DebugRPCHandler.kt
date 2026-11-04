@@ -234,6 +234,7 @@ class DebugRPCHandler(private val context: Context) {
 
             // momoding: fresh-install state for walkthroughs (keeps the provider, key and system grants)
             "momoding.hands.run" -> {
+                if (!BuildConfig.DEV_TOOLS) throw RPCException(-32601, "momoding.hands.run is a development diagnostic; use the screen task command")
                 val task = params.optString("task").ifBlank { throw RPCException(-32602, "task is required") }
                 app.momoding.hands.HandsOffloadHandler(context).runForDebug(
                     task = task,

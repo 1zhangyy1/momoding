@@ -48,8 +48,8 @@ import java.util.concurrent.atomic.AtomicReference
  * takes the screenshot; the only node it ever touches is the field that has the cursor, to
  * type into it — and to refuse when that field is a password field.
  *
- * Runs on the sandbox worker thread that carries the `momoding-hands` call, so everything here
- * blocks; the capsule's buttons arrive from the main thread through flags and latches.
+ * Runs on the screen task's IO worker (or the synchronous diagnostic worker). The caller
+ * owns the physical lease; capsule buttons arrive from Main through flags and latches.
  */
 class HandsOperator(private val context: Context) {
     /** Strings in the app's own language: this runs in a service, outside any Activity. */
@@ -76,6 +76,9 @@ class HandsOperator(private val context: Context) {
          * model reading the same list, and sometimes answered nothing.
          */
         val textSteps: Boolean = false,
+        val taskId: String? = null,
+        val instructionCursor: Long = 0,
+        val modelEntryId: String? = null,
     )
 
     sealed class Outcome(val code: String) {
@@ -98,6 +101,8 @@ class HandsOperator(private val context: Context) {
         val model: String?,
         /** The taps that pay, send or delete which went through in this run, whatever the outcome. */
         val done: List<String> = emptyList(),
+        /** Last persisted instruction read by this run; newer words still need a run. */
+        val instructionsThrough: Long? = null,
     )
 
     private class Turn(val userText: String, val image: ByteArray?, var assistant: String)
@@ -108,6 +113,23 @@ class HandsOperator(private val context: Context) {
     private val stopReason = AtomicReference<String?>(null)
     private val userSignal = AtomicReference<CountDownLatch?>(null)
     private val capsule = HandsCapsule(context)
+    @Volatile private var durableTaskId: String? = null
+    private var instructionCursor: Long = 0
+    private val pausedMs = java.util.concurrent.atomic.AtomicLong(0)
+
+    fun stopTask(reason: String) {
+        durableTaskId?.let { app.momoding.task.ScreenWork.requestStop(context, it, reason) } ?: requestStop(reason)
+    }
+
+    fun continueAfterUser() { userSignal.get()?.countDown() }
+
+    private fun mayAct(): Boolean {
+        if (stop.get()) return false
+        val id = durableTaskId ?: return true
+        return Hands.enabled(context) && runBlocking {
+            app.momoding.task.TaskEngine.dao(context).task(id)?.state == app.momoding.task.TaskEntity.State.RUNNING.name
+        }
+    }
 
     /** The session this run's approval cards are filed under; see [ownPendingRequest]. */
     @Volatile private var gateSession: String? = null
@@ -131,19 +153,23 @@ class HandsOperator(private val context: Context) {
     }
 
     fun run(opts: Options): Result {
-        val runId = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
+        val runId = SimpleDateFormat("yyyyMMdd-HHmmss-SSS", Locale.US).format(Date())
+        durableTaskId = opts.taskId
+        instructionCursor = opts.instructionCursor
+        pausedMs.set(0)
         val log = mutableListOf<String>()
         done.clear()
         val traceDir = traceDir(opts.sessionId, runId)
         var lastScreen: String? = null
         var steps = 0
-        val model = Hands.screenModel(context)
-        Hands.setActive(true)
+        val model = Hands.screenModel(context, entryOverride = opts.modelEntryId)
         Hands.current = this
         gateSession = opts.sessionId ?: "hands"
         SessionActivityTracker.setCameraSuppressActive(true) // one capsule at a time: ours, not OpenMinis'
-        capsule.onStop = { requestStop() }
-        capsule.onContinue = { userSignal.get()?.countDown() }
+        capsule.onStop = { stopTask("the user tapped Stop") }
+        capsule.onContinue = {
+            if (userSignal.get() != null) durableTaskId?.let { app.momoding.task.ScreenWork.answer(context, it) } ?: continueAfterUser()
+        }
         capsule.onOpenApp = { capsule.bringAppToFront(opts.sessionId) }
         // the approval answered where the person is: the same request the chat card shows,
         // and only ours (a shell or browser card of another conversation is not the capsule's to answer)
@@ -181,6 +207,18 @@ class HandsOperator(private val context: Context) {
             // the same action on an unchanged screen: a note at the third, a stop at the sixth
             val watch = HandsLoopWatch()
             var loopNote: String? = null
+            fun checkpoint(): Boolean {
+                val id = durableTaskId ?: return false
+                val update = runBlocking { app.momoding.task.TaskEngine.screenCheckpoint(context, id, instructionCursor) }
+                if (!update.active || !Hands.enabled(context)) requestStop("the screen task ended or was switched off")
+                if (update.instructions.isEmpty()) return false
+                instructionCursor = update.instructions.last().id
+                lastResult = "Updated instructions; replan before acting: " + update.instructions.joinToString("\n") { it.body }
+                return true
+            }
+
+            checkpoint()
+            if (stop.get()) return finish(Outcome.Stopped(stopReason.get() ?: "stopped"), steps, runId, lastScreen, traceDir, log, model.label)
 
             // The app the caller named comes first, before the model looks.
             opts.appHint?.takeIf { it.isNotBlank() }?.let { hint ->
@@ -191,9 +229,10 @@ class HandsOperator(private val context: Context) {
                 log += "open $hint → $lastResult"
             }
 
-            while (opts.maxSteps <= 0 || steps < opts.maxSteps) {
+            loop@ while (opts.maxSteps <= 0 || steps < opts.maxSteps) {
+                checkpoint()
                 if (stop.get()) return finish(Outcome.Stopped(stopReason.get() ?: "stopped"), steps, runId, lastScreen, traceDir, log, model.label)
-                if (System.currentTimeMillis() - started > MAX_RUN_MS) {
+                if (System.currentTimeMillis() - started - pausedMs.get() > MAX_RUN_MS) {
                     return finish(Outcome.Stopped("the run hit its time limit"), steps, runId, lastScreen, traceDir, log, model.label)
                 }
                 steps++
@@ -203,6 +242,8 @@ class HandsOperator(private val context: Context) {
                 // the app being worked: on the hidden display it is the one the last look found there
                 val frontApp = if (bg != null) lastApp else svc.foregroundPackage().first?.takeIf { it != context.packageName }?.let { HandsApps.labelOf(context, it) }
                 Hands.reportStep(frontApp ?: opts.appHint, steps, background = bg != null)
+                durableTaskId?.let { id -> runBlocking { app.momoding.task.TaskEngine.screenProgress(context, id,
+                    listOfNotNull(frontApp ?: opts.appHint, ui.getString(R.string.mo_hands_step, steps)).joinToString(" · ")) } }
 
                 // ── look ── the element list from the tree; the screenshot when there is no tree to read,
                 // too little in it, the last action went wrong, or the model asked to look
@@ -270,6 +311,7 @@ class HandsOperator(private val context: Context) {
                     continue
                 }
                 if (stop.get()) return finish(Outcome.Stopped(stopReason.get() ?: "stopped"), steps, runId, lastScreen, traceDir, log, model.label)
+                if (checkpoint()) continue@loop
                 // history keeps the short turn text; only the current turn carries the element list
                 val turn = Turn(HandsPrompt.turnText(steps, lastResult), jpeg?.bytes, reply)
                 turns += turn
@@ -280,7 +322,7 @@ class HandsOperator(private val context: Context) {
                     if (formatErrors >= 3) return finish(Outcome.Failed("the screen model did not answer in the action format (${e.message})"), steps, runId, lastScreen, traceDir, log, model.label)
                     lastResult = "your reply could not be read (${e.message}); answer with `Thought:` and one JSON `Action:` only."
                     log += "step $steps: unreadable reply"
-                    trace(traceDir, steps, "", reply, lastResult, lastScreen)
+                    trace(traceDir, steps, "", reply, lastResult.orEmpty(), lastScreen)
                     continue
                 }
                 formatErrors = 0
@@ -305,6 +347,8 @@ class HandsOperator(private val context: Context) {
 
                 // ── act ── one action, or a batch on this same screen until the screen changes
                 batch@ for ((bi, action) in parsed.actions.withIndex()) {
+                if (checkpoint()) break@batch
+                if (stop.get()) return finish(Outcome.Stopped(stopReason.get() ?: "stopped"), steps, runId, lastScreen, traceDir, log, model.label)
                 if (bi > 0) {
                     if (stop.get()) return finish(Outcome.Stopped(stopReason.get() ?: "stopped"), steps, runId, lastScreen, traceDir, log, model.label)
                     val now = ScreenTree.read(svc, context.packageName, screenRect, bg)
@@ -498,14 +542,15 @@ class HandsOperator(private val context: Context) {
         } finally {
             capsule.hide()
             Hands.current = null
-            Hands.setActive(false)
             SessionActivityTracker.setCameraSuppressActive(false)
-            capsule.bringAppToFront(opts.sessionId)
+            if (durableTaskId == null || runBlocking { app.momoding.task.TaskEngine.dao(context).task(durableTaskId!!)?.state }
+                in listOf(app.momoding.task.TaskEntity.State.RUNNING.name, app.momoding.task.TaskEntity.State.WAITING.name)) capsule.bringAppToFront(opts.sessionId)
         }
     }
 
     private fun finish(outcome: Outcome, steps: Int, runId: String, lastScreen: String?, traceDir: File?, log: List<String>, model: String?): Result =
-        Result(outcome, steps, runId, lastScreen, traceDir?.let { "/var/minis/attachments/hands/$runId/trace.jsonl" }, log, model, done.toList())
+        Result(outcome, steps, runId, lastScreen, traceDir?.let { "/var/minis/attachments/hands/$runId/trace.jsonl" }, log, model, done.toList(),
+            instructionsThrough = instructionCursor.takeIf { durableTaskId != null })
 
     // ── the user's turn ────────────────────────────────────────────────────
 
@@ -513,9 +558,12 @@ class HandsOperator(private val context: Context) {
     private fun waitForUser(reason: String): Boolean {
         val latch = CountDownLatch(1)
         userSignal.set(latch)
+        durableTaskId?.let { id -> runBlocking { app.momoding.task.TaskEngine.screenWaiting(context, id, reason) } }
         capsule.takeOver(reason)
         Hands.reportWaiting(reason) // the chat says what is asked, not only the step
-        val came = latch.await(TAKE_OVER_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        val pausedAt = System.currentTimeMillis()
+        val came = if (durableTaskId != null) { latch.await(); true } else latch.await(TAKE_OVER_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        pausedMs.addAndGet(System.currentTimeMillis() - pausedAt)
         userSignal.set(null)
         Hands.reportWaiting(null)
         if (!came) requestStop("nobody continued within ${TAKE_OVER_TIMEOUT_MS / 60_000} minutes")
@@ -595,7 +643,7 @@ class HandsOperator(private val context: Context) {
         val action = if (long) AccessibilityNodeInfo.ACTION_LONG_CLICK else AccessibilityNodeInfo.ACTION_CLICK
         var n: AccessibilityNodeInfo? = node
         var depth = 0
-        while (n != null && depth < 4) {
+        while (n != null && depth < 4 && mayAct()) {
             if ((if (long) n.isLongClickable else n.isClickable) && runCatching { n.performAction(action) }.getOrDefault(false)) return true
             n = runCatching { n.parent }.getOrNull(); depth++
         }
@@ -618,15 +666,17 @@ class HandsOperator(private val context: Context) {
     /** The display this run works on: the hands' hidden one, or null for the person's screen. */
     @Volatile private var bg: Int? = null
 
-    private fun openApp(app: HandsApps.App): Boolean = bg?.let { HandsDisplay.launch(context, it, app.packageName) } ?: HandsApps.open(context, app)
+    private fun openApp(app: HandsApps.App): Boolean = mayAct() && (bg?.let { HandsDisplay.launch(context, it, app.packageName) } ?: HandsApps.open(context, app))
 
     private fun tap(svc: MinisAccessibilityService, x: Int, y: Int, durationMs: Long): Boolean {
+        if (!mayAct()) return false
         bg?.let { d -> return if (durationMs >= 500) HandsDisplay.input(d, "swipe", "$x", "$y", "$x", "$y", "$durationMs") else HandsDisplay.input(d, "tap", "$x", "$y") }
         val path = Path().apply { moveTo(x.toFloat(), y.toFloat()); lineTo(x + 0.5f, y + 0.5f) }
         return svc.dispatchSimpleGesture(path, 0L, durationMs)
     }
 
     private fun swipe(svc: MinisAccessibilityService, x1: Int, y1: Int, x2: Int, y2: Int, durationMs: Long): Boolean {
+        if (!mayAct()) return false
         bg?.let { d -> return HandsDisplay.input(d, "swipe", "$x1", "$y1", "$x2", "$y2", "$durationMs") }
         val path = Path().apply { moveTo(x1.toFloat(), y1.toFloat()); lineTo(x2.toFloat(), y2.toFloat()) }
         return svc.dispatchSimpleGesture(path, 0L, durationMs)
@@ -672,6 +722,7 @@ class HandsOperator(private val context: Context) {
 
     /** Types into the field with the cursor; [HANDOFF] when that field is a secret. */
     private fun typeText(svc: MinisAccessibilityService, action: HandsAction.InputText, el: ScreenTree.Element? = null): String {
+        if (!mayAct()) return "the screen task ended before typing"
         if (TapWords.looksSecret(action.field) || (el != null && TapWords.looksSecret(el.label))) return HANDOFF
         if (action.element != null && el == null) return "there is no element #${action.element} in the list; use a number from the current list."
         if (el != null && !el.editable) return "#${action.element} is not an input; pick the input from the list."
@@ -699,6 +750,7 @@ class HandsOperator(private val context: Context) {
      * checks it landed. The clipboard keeps [text] afterwards.
      */
     private fun pasteInto(node: AccessibilityNodeInfo, text: String): Boolean = runCatching {
+        if (!mayAct()) return@runCatching false
         val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
         cm.setPrimaryClip(android.content.ClipData.newPlainText("momoding", text))
         Thread.sleep(120)
@@ -709,6 +761,7 @@ class HandsOperator(private val context: Context) {
     }.getOrDefault(false)
 
     private fun pressEnter(svc: MinisAccessibilityService): String {
+        if (!mayAct()) return "the screen task ended before Enter"
         val node = focusedField(svc) ?: return "no text field has the cursor, so there is nothing to submit; tap the search or send button instead."
         val ok = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             node.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
@@ -804,7 +857,10 @@ class HandsOperator(private val context: Context) {
     // ── the trace ──────────────────────────────────────────────────────────
 
     private fun traceDir(sessionId: String?, runId: String): File? {
-        val base = if (sessionId != null) File(context.filesDir, "minis-sessions/$sessionId/attachments")
+        val filesSession = sessionId?.let { actor -> runBlocking {
+            (context.applicationContext as? com.openminis.app.MinisApp)?.chatRepository?.getSession(actor)?.parentSessionId
+        } ?: actor }
+        val base = if (filesSession != null) File(context.filesDir, "minis-sessions/$filesSession/attachments")
         else PRootKernel.resolveHostPath("/var/minis/attachments")
         val hands = base?.let { File(it, "hands") } ?: return null
         // the person's screen is not kept without bound: older runs keep their trace and last screen

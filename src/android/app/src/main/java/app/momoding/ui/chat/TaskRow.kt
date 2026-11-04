@@ -45,7 +45,8 @@ fun TaskRow(taskId: String, onOpen: (String) -> Unit) {
             else -> R.string.mo_task_done
         })
     }
-    val head = if (task.hand == task.conversation) "" else stringResource(R.string.mo_task_handed, app?.title ?: stringResource(R.string.mo_task_helper))
+    val hand = if (task.hand == TaskEntity.SCREEN) stringResource(R.string.mo_hands_title) else app?.title ?: stringResource(R.string.mo_task_helper)
+    val head = if (task.hand == task.conversation) "" else stringResource(R.string.mo_task_handed, hand)
     Row(
         Modifier.clip(RoundedCornerShape(Design.Radius.Row))
             .clickable(enabled = app != null) { app?.let { onOpen(botHome(it)) } }

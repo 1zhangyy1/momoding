@@ -494,8 +494,9 @@ class HandsCapsule(private val context: Context) {
     /** Brings nanoMuse's chat back to the front. */
     fun bringAppToFront(sessionId: String?) {
         try {
+            val destination = sessionId?.let { app.momoding.task.TaskEngine.conversationOf(it) ?: it }
             val intent = Intent(context, Class.forName("com.openminis.app.MainActivity")).apply {
-                if (!sessionId.isNullOrBlank()) data = android.net.Uri.parse("minis://session/$sessionId")
+                if (!destination.isNullOrBlank()) data = android.net.Uri.parse("minis://session/$destination")
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
             context.startActivity(intent)

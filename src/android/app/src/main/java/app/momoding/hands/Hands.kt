@@ -141,7 +141,7 @@ object Hands {
      * momoding: nanoMuse's order without its Cloud relay, its model slots and its vendor
      * catalogue; whether a model sees is what the model entry declares.
      */
-    fun screenModel(context: Context, automatic: Boolean = false): ScreenModel? {
+    fun screenModel(context: Context, automatic: Boolean = false, entryOverride: String? = null): ScreenModel? {
         val repo = repo(context) ?: return null
         val cfg = repo.config.value
         fun usable(inst: ProviderInstance?, entry: ModelEntry?, why: Why): ScreenModel? {
@@ -151,6 +151,7 @@ object Hands {
         }
         fun byEntry(entry: ModelEntry?, why: Why): ScreenModel? =
             entry?.let { e -> usable(cfg.instances.firstOrNull { it.id == e.providerInstanceId }, e, why) }
+        if (entryOverride != null) return byEntry(cfg.modelEntries.firstOrNull { it.id == entryOverride }, Why.CHOSEN)
         if (!automatic) modelEntryId(context)?.let { id -> byEntry(cfg.modelEntries.firstOrNull { it.id == id }, Why.CHOSEN) }?.let { return it }
         DEFAULT_MODEL_IDS.firstNotNullOfOrNull { wanted ->
             cfg.modelEntries.filter { !it.isHidden && it.model.id.equals(wanted, ignoreCase = true) }
@@ -198,7 +199,7 @@ object Hands {
     /**
      * Takes the hands for a run: true when they were free, false when another run holds them.
      * One atomic step, so two `momoding-hands run` arriving together cannot both start; the
-     * run that gets them hands them back in [HandsOperator.run]'s finish.
+     * caller that gets them releases them after [HandsOperator.run] returns.
      */
     internal fun claim(): Boolean = _active.compareAndSet(expect = false, update = true)
 
@@ -206,7 +207,7 @@ object Hands {
     @Volatile internal var current: HandsOperator? = null
 
     /** Ends the run in progress after the action in flight; a no-op when none. */
-    fun stopCurrent(reason: String = "stopped from the app") { current?.requestStop(reason) }
+    fun stopCurrent(reason: String = "stopped from the app") { current?.stopTask(reason) }
 
     // ── what the agent is told ─────────────────────────────────────────────
 
@@ -229,8 +230,8 @@ object Hands {
                 append("The screen is available: `momoding-hands run --task \"<one clear task, with every detail the hands need>\" [--app \"<app name>\"]` ")
                 append("(screen model: ${r.model?.label}). It reads the screen's elements (a screenshot when they are not enough) and taps, types and swipes; a capsule with Stop shows the user what it does. ")
                 append("It never types passwords, codes or card numbers: for a login or a code it hands the phone to the user and waits. Taps that pay, send, post or delete go through the same approval card as the shell and the browser. ")
-                append("It returns JSON: `outcome` is done (with `answer`), stopped (the user tapped Stop — do not restart it), needs_user (`question` — relay it and wait), infeasible or failed (with `message`); `last_screen` is a picture you can show with `![screen](<last_screen>)`; `done` lists the taps that paid, sent or deleted and went through — report those as done whatever the outcome. ")
-                append("Tell the user in one line that you are about to use the screen and which app, then run it; give one task per run, and never a payment as the task. `momoding-hands apps` lists the installed apps; `momoding-hands status` says what is set up.")
+                append("It returns a saved task id immediately; a busy screen queues it. Its result arrives here automatically: `outcome` is done (with `answer`), stopped (the user tapped Stop — do not restart it), needs_user (`question` — relay it and wait), infeasible or failed (with `message`); `last_screen` is a picture you can show with `![screen](<last_screen>)`; `done` lists the taps that paid, sent or deleted and went through — report those as done whatever the outcome. ")
+                append("Do not repeat it, wait or poll. Update it with `momoding-task tell <id>` and stop it with `momoding-task stop <id>`. Tell the user in one line that you are about to use the screen and which app, then run it; give one task per run, and never a payment as the task. `momoding-hands apps` lists the installed apps; `momoding-hands status` says what is set up.")
             } else if (on) {
                 val missing = buildList {
                     if (!r.androidOk) add("Android 11 or newer")
