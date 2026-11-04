@@ -11,6 +11,7 @@ object TaskGuard {
     data class Binding(val hand: String, val taskId: String?)
 
     suspend fun bind(context: Context, hand: String, taskId: String? = null, process: String? = null): Binding {
+        TaskEngine.awaitRecovery()
         val db = (context.applicationContext as MinisApp).database
         val model = ChatViewModelStore.existing(hand)?.activeTaskId
         return db.withTransaction { bindIn(db.taskDao(), hand, taskId, process, model) }
@@ -27,6 +28,7 @@ object TaskGuard {
 
     /** Null means allowed. A removed task never becomes an unbound, newly authorized call. */
     suspend fun check(context: Context, binding: Binding, outward: Boolean = false, allowWaiting: Boolean = false): String? {
+        TaskEngine.awaitRecovery()
         val db = (context.applicationContext as MinisApp).database
         return db.withTransaction { checkIn(db.taskDao(), binding, outward, allowWaiting) }
     }

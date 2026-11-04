@@ -5614,6 +5614,7 @@ class ChatViewModel(
             println("[T-HANG-DIAG] loadSession ENTER session=$sessionId isDraft=$isDraft")
             com.openminis.app.diagnostics.PerfLongCtx.step(sessionId, "loadSession.enter", "isDraft=$isDraft")
             try {
+            app.momoding.task.TaskEngine.awaitRecovery()
             val config = providerRepository.config.value
             _availableGroups.value = config.modelGroups
 
@@ -11515,26 +11516,18 @@ class ChatViewModel(
             }
             AppLogger.info(TAG_STREAM, "runAgentLoop turn=$turn dispatching ${toolCalls.size} tool call(s), continuing")
 
-            // [T-android-session-last-message-live-tool-call] Push a live
-            // preview to the session list NOW, before the (possibly long-
-            // running) tools execute. The authoritative assistant row isn't
-            // written until turn end (persistAssistantTurn below), so without
-            // this the home list shows a stale preview — or "No messages yet"
-            // for a turn that opened with a tool call and no prior text —
-            // for the entire tool duration. extractTextPreview prefers the
-            // assistant's partial text and falls back to the tool summary, so
-            // the list reflects exactly what the model just emitted. Mirrors
-            // iOS overlaying the live VM's last message over the DB value.
-            run {
-                val livePreviewParts = buildTurnParts(allToolBlocks, turnStartBlockIndex, toolInputMap)
-                val liveMeta = allToolBlocks.filter { it.kind == "tool_use" }.associateBy { it.id }
-                if (livePreviewParts.isNotEmpty()) {
-                    chatRepository.updateSessionPreview(
-                        realSessionId.ifEmpty { sessionId },
-                        buildAssistantPartsJson(livePreviewParts, liveMeta),
-                    )
-                }
+            // Commit the invocation before any executor can affect the outside world.
+            // The same row is updated with final tool metadata after execution.
+            val plannedParts = buildTurnParts(allToolBlocks, turnStartBlockIndex, toolInputMap)
+            val plannedMeta = allToolBlocks.filter { it.kind == "tool_use" }.associateBy { it.id }
+            require(buildAssistantPartsJson(plannedParts, plannedMeta).length <= com.openminis.app.data.repository.ChatRepository.MAX_MESSAGE_PARTS_JSON_LENGTH) {
+                "The tool request is too large to save safely. No tools were executed."
             }
+            val assistantDbId = requireNotNull(persistAssistantTurn(plannedParts, lastUsage, turnReasoningContent, plannedMeta,
+                uiAssistantId = assistantId, streamMs = turnStreamMs,
+                sourceBlockIds = allToolBlocks.drop(turnStartBlockIndex).map { it.id }.toSet()))
+            val historyIndex = agentHistory.indexOfLast { it.role == LLMMessage.Role.ASSISTANT && it.dbMessageId == null }
+            if (historyIndex >= 0) agentHistory[historyIndex] = agentHistory[historyIndex].copy(dbMessageId = assistantDbId)
 
             // Execute all tool calls
             val resultParts = mutableListOf<AgentContentPart>()
@@ -11775,7 +11768,9 @@ class ChatViewModel(
                         }
 
                         android.util.Log.d("ToolChain[VM]", "[turn=$turn] executeTool START name=$name args=${argsStr.take(200)}")
-                        val result = executeTool(name, argsStr, id, allToolBlocks, assistantId, accumulatedText)
+                        val result = withContext(app.momoding.task.ToolCall(assistantDbId, id, name)) {
+                            executeTool(name, argsStr, id, allToolBlocks, assistantId, accumulatedText)
+                        }
                         android.util.Log.d("ToolChain[VM]", "[turn=$turn] executeTool END name=$name success=${result.success} title=${result.toolTitle} outputLen=${result.output.length} output=${result.output.take(200)}")
 
                         // Record post-execution. WARNING text is appended to the tool
@@ -11904,22 +11899,10 @@ class ChatViewModel(
                 )
             }
 
-            // Persist the assistant+tools turn (with full input JSON and thinking).
-            // Capture the persisted DB id so we can back-fill agentHistory's last
-            // assistant entry — compact-marker boundary resolution depends on it.
             val turnParts = buildTurnParts(allToolBlocks, turnStartBlockIndex, toolInputMap)
             val blockMeta = allToolBlocks.filter { it.kind == "tool_use" }.associateBy { it.id }
-            val assistantDbId = persistAssistantTurn(turnParts, lastUsage, turnReasoningContent, blockMeta, uiAssistantId = assistantId, streamMs = turnStreamMs,
-                sourceBlockIds = allToolBlocks.drop(turnStartBlockIndex).map { it.id }.toSet())
-            if (assistantDbId != null) {
-                val lastIdx = agentHistory.indexOfLast { it.role == LLMMessage.Role.ASSISTANT && it.dbMessageId == null }
-                if (lastIdx >= 0) {
-                    agentHistory[lastIdx] = agentHistory[lastIdx].copy(dbMessageId = assistantDbId)
-                }
-            }
-
-            // Persist tool results as user-role message (mirrors iOS)
-            val toolResultDbId = persistToolResultMessage(resultParts)
+            chatRepository.updateMessageParts(assistantDbId, buildAssistantPartsJson(turnParts, blockMeta))
+            val toolResultDbId = persistToolResultMessage(resultParts, assistantDbId)
 
             // Add tool results to history
             agentHistory.add(LLMMessage(
@@ -13157,7 +13140,7 @@ class ChatViewModel(
     }
 
     /** Persist tool results as a user-role message (mirrors iOS behavior). */
-    private suspend fun persistToolResultMessage(parts: List<AgentContentPart>): String? {
+    private suspend fun persistToolResultMessage(parts: List<AgentContentPart>, assistantMessageId: String? = null): String? {
         val results = parts.filterIsInstance<AgentContentPart.ToolResult>()
         if (results.isEmpty()) return null
         val partsJson = buildString {
@@ -13169,6 +13152,7 @@ class ChatViewModel(
             }
             append("]")
         }
+        if (assistantMessageId != null) return app.momoding.task.TaskTranscript.results(context, assistantMessageId, partsJson)
         val entity = chatRepository.appendMessage(realSessionId.ifEmpty { sessionId }, "user", partsJson)
         return entity.id
     }
@@ -15285,7 +15269,7 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
                                 toolArgs = toolInput,
                                 content = result?.output?.lines()?.takeLast(80)?.joinToString("\n") ?: "",
                                 toolStatus = when {
-                                    result == null -> ToolBlockStatus.SUCCESS
+                                    result == null -> ToolBlockStatus.PENDING
                                     !result.success && (
                                         result.output.startsWith(CANCELLED_MARKER) ||
                                             result.output.startsWith(LEGACY_CANCELLED_MARKER)

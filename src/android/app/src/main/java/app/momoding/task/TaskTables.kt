@@ -99,11 +99,15 @@ data class TaskLogEntity(
     val kind: String,
     val body: String,
 ) {
-    enum class Kind { AUTHORIZED, PASSED_ON, STARTED, PAUSED, ROUTINE, ROUTINE_RECORDED, COMMAND, COMMAND_RESULT, CHILD, SCREEN, SCREEN_RESULT, APPROVAL, APPROVAL_DECISION, APPROVAL_USED, APPROVAL_CLOSED, ABOUT_TO, RESULT, DRAFT, REPORT, END }
+    enum class Kind { AUTHORIZED, PASSED_ON, STARTED, PAUSED, ROUTINE, ROUTINE_RECORDED, COMMAND, COMMAND_RESULT, CHILD, SCREEN, SCREEN_RESULT, APPROVAL, APPROVAL_DECISION, APPROVAL_USED, APPROVAL_CLOSED, ABOUT_TO, RESULT, DRAFT, TRANSCRIBED, REPORT, END }
 }
 
 @Dao
 interface TaskDao {
+    /** A receipt still owed to the transcript, identified by its immutable ABOUT_TO row. */
+    @Query("SELECT a.* FROM task_log a WHERE a.kind = 'ABOUT_TO' AND instr(a.body, '\"tool\":') > 0 AND instr(a.body, :messageNeedle) > 0 AND NOT EXISTS (SELECT 1 FROM task_log done WHERE done.task_id = a.task_id AND done.kind = 'TRANSCRIBED' AND done.body = CAST(a.id AS TEXT)) ORDER BY a.id")
+    suspend fun untranscribedActions(messageNeedle: String = ""): List<TaskLogEntity>
+
     // ── inbox ──
     @Insert
     suspend fun insertInbox(row: InboxEntity)

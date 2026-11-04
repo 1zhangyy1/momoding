@@ -36,6 +36,10 @@ object TaskEngine {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _active = MutableStateFlow<List<TaskEntity>>(emptyList())
     val active: StateFlow<List<TaskEntity>> = _active.asStateFlow()
+    private val recovered = kotlinx.coroutines.CompletableDeferred<Unit>()
+
+    /** Reconcile old effects before a new executor or a restored chat can use the database. */
+    suspend fun awaitRecovery() = recovered.await()
 
     fun dao(context: Context): TaskDao = (context.applicationContext as MinisApp).database.taskDao()
 
@@ -50,13 +54,24 @@ object TaskEngine {
             _parentsWithWork.value = it.map { task -> task.conversation }.toSet()
         } }
         scope.launch {
-            recoverCommands(app)
-            recoverActions(app)
-            recoverScreens(app)
-            recoverApprovals(app)
+            val approvalHands: Set<String>
+            try {
+                recoverCommands(app)
+                recoverActions(app)
+                recoverScreens(app)
+                approvalHands = recoverApprovals(app)
+                val db = (app as MinisApp).database
+                db.withTransaction { TaskTranscript.recoverIn(db.chatDao(), db.taskDao()) }
+                recovered.complete(Unit)
+            } catch (error: Throwable) {
+                recovered.completeExceptionally(error)
+                AppLogger.error(TAG, "startup recovery: ${error.message}")
+                return@launch
+            }
             ScreenWork.start(app)
             WorkResume.start(app)
             Inbox.wakeAll(app)
+            approvalHands.forEach { tellChat(app, it) }
             kotlinx.coroutines.delay(3000)
             dao(app).queuedHands().forEach { hand -> handIdle(app, hand) }
         }
@@ -250,26 +265,30 @@ object TaskEngine {
 
     suspend fun actionStarted(context: Context, spec: Approval.Spec, command: ShellWork.Command? = null,
         sourceId: String? = null, authorization: String? = null, draft: String? = null,
-    ): TaskAction = try {
-        change(context) { dao, _ ->
-            val source = if (spec.mode == Approval.Mode.SHELL) ChatViewModelStore.existing(spec.request.sessionId)?.messages?.value
-                ?.lastOrNull { it.rendersAsUserBubble() && !it.unread } else null
-            actionStartedIn(dao, spec, command, sourceId ?: source?.id, authorization ?: source?.content ?: spec.request.summary ?: spec.request.preview, draft)
+    ): TaskAction {
+        awaitRecovery()
+        val call = kotlinx.coroutines.currentCoroutineContext()[ToolCall]
+        return try {
+            change(context) { dao, _ ->
+                val source = if (spec.mode == Approval.Mode.SHELL) ChatViewModelStore.existing(spec.request.sessionId)?.messages?.value
+                    ?.lastOrNull { it.rendersAsUserBubble() && !it.unread } else null
+                actionStartedIn(dao, spec, command, sourceId ?: source?.id, authorization ?: source?.content ?: spec.request.summary ?: spec.request.preview, draft, call)
+            }
+        } catch (e: TaskAction.NotStarted) {
+            // Claiming approval may already have registered COMMAND. A later hold or
+            // question can still prevent execution, so settle that known non-action.
+            val id = spec.request.taskId
+            if (command != null && id != null) kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                commandFinished(context, id, command,
+                    com.openminis.app.tools.ToolExecutionResult("The action did not start: ${e.message}", false),
+                    announce = false, onlyIfNotStarted = true)
+            }
+            throw e
         }
-    } catch (e: TaskAction.NotStarted) {
-        // Claiming approval may already have registered COMMAND. A later hold or
-        // question can still prevent execution, so settle that known non-action.
-        val id = spec.request.taskId
-        if (command != null && id != null) kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
-            commandFinished(context, id, command,
-                com.openminis.app.tools.ToolExecutionResult("The action did not start: ${e.message}", false),
-                announce = false, onlyIfNotStarted = true)
-        }
-        throw e
     }
 
     internal suspend fun actionStartedIn(dao: TaskDao, spec: Approval.Spec, approved: ShellWork.Command? = null,
-        sourceId: String? = null, authorized: String = spec.request.preview, draft: String? = null,
+        sourceId: String? = null, authorized: String = spec.request.preview, draft: String? = null, call: ToolCall? = null,
     ): TaskAction {
         val request = spec.request
         if (draft != null) {
@@ -307,7 +326,7 @@ object TaskEngine {
             dao.screenSpec(id)?.let { ScreenWork.Spec.parse(it).parent }?.let { dao.task(it)?.conversation }
         } else null
         log(dao, id, TaskLogEntity.Kind.ABOUT_TO, spec.copy(request = request.copy(taskId = id,
-            conversation = owner ?: task.conversation)).json().toString())
+            conversation = owner ?: task.conversation)).json().apply { call?.let { put("tool", it.json()) } }.toString())
         if (draft != null) log(dao, id, TaskLogEntity.Kind.DRAFT, draft)
         refreshBudget(dao, id)
         return TaskAction(id, request.id, command)
@@ -359,7 +378,7 @@ object TaskEngine {
         return words
     }
 
-    private suspend fun recoverActions(context: Context) = change(context) { dao, _ ->
+    private suspend fun recoverActions(context: Context) = change(context, recovering = true) { dao, _ ->
         for (task in dao.unfinishedTasks()) {
             val words = recoverActionsIn(dao, task) ?: continue
             val owner = dao.screenSpec(task.id)?.let { ScreenWork.Spec.parse(it).parent }?.let { dao.task(it)?.conversation } ?: task.conversation
@@ -604,7 +623,7 @@ object TaskEngine {
         return closed
     }
 
-    private suspend fun recoverScreens(context: Context) = change(context) { dao, _ ->
+    private suspend fun recoverScreens(context: Context) = change(context, recovering = true) { dao, _ ->
         for (task in dao.interruptedScreens()) {
             val words = "The app restarted while the screen was working. Check the current screen and any outward effect before continuing; do not repeat an action whose outcome is unknown."
             val ask = JSONObject().put("kind", "screen_outcome_unknown").put("screen", task.id).put("question", words).toString()
@@ -618,13 +637,15 @@ object TaskEngine {
     }
 
     /** A local command does not turn an unrelated new message into that command's model turn. */
-    suspend fun modelTask(context: Context, hand: String): TaskEntity? =
-        (context.applicationContext as MinisApp).database.withTransaction {
+    suspend fun modelTask(context: Context, hand: String): TaskEntity? {
+        awaitRecovery()
+        return (context.applicationContext as MinisApp).database.withTransaction {
             val dao = dao(context)
             dao.onHand(hand).firstOrNull { task ->
                 task.conversation != hand || (task.ask == null && !pendingWork(dao, task.id))
             }
         }
+    }
 
     internal suspend fun elapsed(context: Context, id: String): Long {
         return elapsedIn(dao(context), id)
@@ -834,8 +855,8 @@ object TaskEngine {
         }
     }
 
-    private suspend fun recoverApprovals(context: Context) = change(context) { dao, after ->
-        recoverApprovalsIn(dao).forEach { hand -> after += { tellChat(context, hand) } }
+    private suspend fun recoverApprovals(context: Context): Set<String> = change(context, recovering = true) { dao, _ ->
+        recoverApprovalsIn(dao)
     }
 
     internal suspend fun recoverApprovalsIn(dao: TaskDao): Set<String> {
@@ -906,7 +927,7 @@ object TaskEngine {
     }
 
     /** A killed process cannot prove a command's effect. Keep it waiting for verification. */
-    private suspend fun recoverCommands(context: Context) = change(context) { dao, _ ->
+    private suspend fun recoverCommands(context: Context) = change(context, recovering = true) { dao, _ ->
         for (task in dao.commandTasks()) {
             val commands = ShellWork.pending(dao.log(task.id))
             if (commands.isEmpty()) continue
@@ -1016,7 +1037,8 @@ object TaskEngine {
     }
 
     /** One change: [block] in a transaction, then what it set off. */
-    private suspend fun <T> change(context: Context, block: suspend (TaskDao, MutableList<suspend () -> Unit>) -> T): T {
+    private suspend fun <T> change(context: Context, recovering: Boolean = false, block: suspend (TaskDao, MutableList<suspend () -> Unit>) -> T): T {
+        if (!recovering) awaitRecovery()
         val db = (context.applicationContext as MinisApp).database
         val after = mutableListOf<suspend () -> Unit>()
         val result = db.withTransaction { block(db.taskDao(), after) }

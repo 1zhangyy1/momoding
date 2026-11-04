@@ -69,6 +69,15 @@ interface ChatDao {
     @Query("SELECT * FROM messages WHERE id = :id")
     suspend fun message(id: String): MessageEntity?
 
+    @Query("SELECT * FROM messages WHERE session_id = :sessionId AND sort_order > :after ORDER BY sort_order LIMIT 1")
+    suspend fun nextMessage(sessionId: String, after: Int): MessageEntity?
+
+    @Query("UPDATE messages SET sort_order = sort_order + 1 WHERE session_id = :sessionId AND sort_order > :after")
+    suspend fun shiftMessagesAfter(sessionId: String, after: Int)
+
+    @Query("SELECT m.* FROM messages m WHERE m.role = 'assistant' AND m.session_id IN (SELECT to_session FROM inbox WHERE read_at IS NOT NULL AND failed_at IS NULL) AND m.sort_order >= (SELECT MIN(received.sort_order) FROM messages received JOIN inbox i ON i.id = received.id WHERE i.to_session = m.session_id AND received.session_id = m.session_id AND i.read_at IS NOT NULL AND i.failed_at IS NULL) AND instr(m.parts_json, '\"type\":\"toolUse\"') > 0 ORDER BY m.session_id, m.sort_order")
+    suspend fun interruptedToolTurns(): List<MessageEntity>
+
     // Sessions
     @Query("SELECT * FROM sessions ORDER BY updated_at DESC")
     fun observeSessions(): Flow<List<ChatSessionEntity>>
