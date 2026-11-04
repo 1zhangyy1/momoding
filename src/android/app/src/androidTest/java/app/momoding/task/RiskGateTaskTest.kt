@@ -10,6 +10,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -116,6 +117,24 @@ class RiskGateTaskTest {
         RiskGate.finished(first, "The first fake executor returned; no system command was executed.", true)
         assertTrue(ShellWork.pending(dao.log(task.id)).isEmpty())
         assertEquals(1, dao.log(task.id).count { it.kind == "RESULT" })
+    }
+
+    @Test fun aDeletedInvocationAfterClaimSettlesAsNotStarted(): Unit = runBlocking {
+        val source = app.chatRepository.appendMessage(chat, "assistant",
+            """[{"type":"toolUse","value":{"toolUseId":"deleted-call","name":"shell_execute","input":"{}"}}]""")
+        val answer = async(Dispatchers.Default) { request() }
+        val pending = withTimeout(5_000) { RiskGate.open.first { all -> all.any { it.sessionId == chat } }.single { it.sessionId == chat } }
+        RiskGate.decide(pending.id, RiskDecision.ALLOW_ONCE)
+        val allowed = withTimeout(5_000) { answer.await() } as GateOutcome.Allowed
+        app.database.chatDao().deleteMessagesAfter(chat, source.sortOrder)
+        val failed = runCatching { withContext(ToolCall(source.id, "deleted-call", "shell_execute")) { RiskGate.started(allowed) } }
+        assertTrue(failed.exceptionOrNull()?.message.orEmpty().contains("deleted"))
+        val history = app.database.taskDao().log(task.id)
+        assertTrue(ShellWork.pending(history).isEmpty())
+        assertFalse(history.any { it.kind == "ABOUT_TO" || it.kind == "RESULT" })
+        val result = org.json.JSONObject(history.single { it.kind == "COMMAND_RESULT" }.body)
+        assertFalse(result.getBoolean("success"))
+        assertFalse(result.has("unknown"))
     }
 
     @Test fun aHoldAddedWhileTheCardWaitsStillBlocksTheApprovedAction() = runBlocking {

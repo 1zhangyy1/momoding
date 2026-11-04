@@ -42,7 +42,7 @@ object TaskTranscript {
         }
         val keys = added.map { key(it.getJSONObject("value")) }.toSet()
         chat.touchSession(source.sessionId, System.currentTimeMillis())
-        for (action in tasks.untranscribedActions(needle(message))) {
+        for (action in tasks.untranscribedCalls(needle(message))) {
             val call = ToolCall.parse(JSONObject(action.body).getJSONObject("tool"))
             if (call.message == message && ToolPairing.key(call.id) in keys) transcribed(tasks, action)
         }
@@ -52,7 +52,7 @@ object TaskTranscript {
     /** Must run in the startup transaction, before a chat can load or resume its history. */
     internal suspend fun recoverIn(chat: ChatDao, tasks: TaskDao): Int {
         var restored = 0
-        for ((message, actions) in tasks.untranscribedActions().groupBy { ToolCall.parse(JSONObject(it.body).getJSONObject("tool")).message }) {
+        for ((message, actions) in tasks.untranscribedCalls().groupBy { ToolCall.parse(JSONObject(it.body).getJSONObject("tool")).message }) {
             val source = chat.message(message)
             if (source == null) {
                 // Deleting a message is not permission to recreate it on the next launch.
@@ -61,19 +61,26 @@ object TaskTranscript {
             }
             val receipts = JSONArray()
             for ((call, effects) in actions.groupBy { ToolCall.parse(JSONObject(it.body).getJSONObject("tool")) }) {
-                val values = effects.map { action ->
+                require(effects.all { JSONObject(it.body).getString("session") == source.sessionId }) { "The call belongs to another conversation." }
+                val saved = effects.filter { it.kind == TaskLogEntity.Kind.HANDOFF.name }.mapNotNull { tasks.task(it.taskId) }
+                val values = effects.filter { it.kind == TaskLogEntity.Kind.ABOUT_TO.name }.map { action ->
                     val about = JSONObject(action.body)
                     require(source.sessionId == about.getString("session")) { "The action belongs to another conversation." }
                     tasks.log(action.taskId).lastOrNull { it.kind == TaskLogEntity.Kind.RESULT.name &&
                         JSONObject(it.body).getString("id") == about.getString("id") }?.body?.let(::JSONObject)
                 }
-                if (values.any { it == null }) continue
+                if (saved.isEmpty() && (values.isEmpty() || values.any { it == null })) continue
                 val results = values.filterNotNull()
                 val unknown = results.any { it.optBoolean("unknown") }
-                val output = results.joinToString("\n") { it.optString("output") } +
+                val handoff = if (saved.isEmpty()) "" else JSONObject()
+                    .put("interrupted", values.isEmpty() || values.any { it == null })
+                    .put("tasks", JSONArray(saved.map { task -> JSONObject().put("task", task.id).put("title", task.title)
+                        .put("hand", task.hand).put("state", task.state.lowercase()).put("outcome", task.outcome?.lowercase()) }))
+                    .put("note", "These tasks were already saved before the tool returned. Do not create duplicates; inspect their state and continue any remaining work.").toString()
+                val output = listOf(results.joinToString("\n") { it.optString("output") }, handoff).filter { it.isNotBlank() }.joinToString("\n") +
                     if (unknown) "\nThe external outcome is unknown. Verify what happened; do not repeat this action." else ""
                 val value = JSONObject().put("toolUseId", call.id).put("name", call.name).put("output", output)
-                    .put("success", !unknown && results.all { it.optBoolean("success") })
+                    .put("success", values.isNotEmpty() && values.none { it == null } && !unknown && results.all { it.optBoolean("success") })
                     .put("snapshot", JSONObject().put("type", "text").put("text", output.lines().takeLast(30).joinToString("\n")))
                 receipts.put(JSONObject().put("type", "toolResult").put("value", value))
             }

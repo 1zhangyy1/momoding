@@ -36,7 +36,8 @@ class HandsOffloadHandler(private val context: Context) : NativeOffloadHandler {
             null, "help", "--help", "-h" -> NativeOffloadResult(0, HELP)
             "status" -> ok(status())
             "apps" -> ok(apps())
-            "run" -> runCatching { run(args, request.sessionId, process = request.env["MINIS_EXECUTION_ID"]) }
+            "run" -> runCatching { run(args, request.sessionId, process = request.env["MINIS_EXECUTION_ID"],
+                call = app.momoding.task.ShellWork.toolCall(request.env["MINIS_EXECUTION_ID"])) }
                 .getOrElse { NativeOffloadResult(2, "momoding-hands: ${it.message}\n") }
             "stop" -> runCatching {
                 val sid = requireNotNull(request.sessionId) { "a screen task needs its conversation" }
@@ -92,7 +93,9 @@ class HandsOffloadHandler(private val context: Context) : NativeOffloadHandler {
         }
     }
 
-    private fun run(args: OffloadArgs, sessionId: String?, persistent: Boolean = true, process: String? = null, modelEntry: String? = null): NativeOffloadResult {
+    private fun run(args: OffloadArgs, sessionId: String?, persistent: Boolean = true, process: String? = null, modelEntry: String? = null,
+        call: app.momoding.task.ToolCall? = null,
+    ): NativeOffloadResult {
         val task = args.get("task")?.trim().orEmpty()
         if (task.isEmpty()) return NativeOffloadResult(2, "momoding-hands run: --task is required\n")
         if (!Hands.enabled(context)) return refused("off", "Operating the screen is switched off in Settings → Hands.")
@@ -124,7 +127,7 @@ class HandsOffloadHandler(private val context: Context) : NativeOffloadHandler {
         if (persistent) {
             val sid = requireNotNull(sessionId) { "a screen task needs its conversation" }
             val parent = runBlocking { TaskEngine.executionTask(context, sid, process) }
-            val work = runBlocking { TaskEngine.openScreen(context, opts, parent?.id) }
+            val work = runBlocking { TaskEngine.openScreen(context, opts, parent?.id, call = call) }
             return ok(JSONObject().put("task", work.id).put("state", work.state.lowercase())
                 .put("note", "The screen task is saved and will run when the screen is free. Its result arrives here automatically. Do not repeat it or poll."))
         }

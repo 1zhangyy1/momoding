@@ -26,7 +26,7 @@ class TaskOffloadHandler(private val context: Context) : NativeOffloadHandler {
         return runCatching {
             when (val verb = args.positional.firstOrNull()) {
                 null, "help", "--help", "-h" -> NativeOffloadResult(0, HELP)
-                "new" -> new(args, sid)
+                "new" -> new(args, sid, ShellWork.toolCall(request.env["MINIS_EXECUTION_ID"]))
                 "tell" -> tell(args, sid)
                 "stop" -> stop(args, sid)
                 "report" -> report(args, sid)
@@ -35,25 +35,25 @@ class TaskOffloadHandler(private val context: Context) : NativeOffloadHandler {
         }.getOrElse { NativeOffloadResult(2, "momoding-task: ${it.message}\n") }
     }
 
-    private fun new(args: OffloadArgs, sid: String): NativeOffloadResult {
+    private fun new(args: OffloadArgs, sid: String, call: ToolCall?): NativeOffloadResult {
         if (MoApps.ofSession(context, sid) != null) throw IllegalStateException("an app's Momoding hands no work on: do it yourself, or say what is needed")
         if (runBlocking { Helpers.isHelper(context, sid) }) throw IllegalStateException("a helper hands no work on: do it yourself")
         val to = args.get("to")?.trim().orEmpty()
         val brief = args.positional.drop(1).joinToString(" ").trim()
         require(brief.isNotEmpty()) { "momoding-task new --to helper|bot:<name> --title \"…\" \"<what to do>\"" }
         val title = args.get("title")?.trim().orEmpty().ifEmpty { brief.lineSequence().first().take(30) }
-        val hand = when {
+        val task = when {
             to == "helper" -> {
                 check(com.openminis.app.tools.AgentToolSwitch.AGENTS.isEnabled(context)) { "helpers are turned off in settings" }
-                runBlocking { Helpers.create(context, sid, title) }
+                runBlocking { TaskEngine.openHelper(context, sid, title, brief, call) }
             }
             to.startsWith("bot:") -> {
                 val app = MoApps.get(context, to.removePrefix("bot:")) ?: throw IllegalArgumentException("no Momoding called ${to.removePrefix("bot:")} (momoding-app list)")
-                app.botSession ?: throw IllegalStateException("${app.name} has no chat of its own")
+                val hand = app.botSession ?: throw IllegalStateException("${app.name} has no chat of its own")
+                runBlocking { TaskEngine.open(context, sid, title, hand, brief, call = call) }
             }
             else -> throw IllegalArgumentException("--to helper | bot:<name>")
         }
-        val task = runBlocking { TaskEngine.open(context, sid, title, hand, brief) }
         return ok(JSONObject().put("task", task.id).put("state", task.state.lowercase())
             .put("note", "It has its own line in this chat and reports back here when there is a result, a question or a problem; no need to wait or check."))
     }

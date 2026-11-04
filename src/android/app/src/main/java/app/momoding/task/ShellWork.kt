@@ -19,11 +19,14 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 /** A shell keeps its existing process; after ten seconds its task owns the wait and result.
- * Only cancellation handles live here. Task state and completion receipts live in Room. */
+ * Live process handles retain their original invocation; task state and receipts live in Room. */
 object ShellWork {
     const val FOREGROUND_MS = 10_000L
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val runs = ConcurrentHashMap<String, Deferred<ToolExecutionResult>>()
+    private data class Run(val execution: Deferred<ToolExecutionResult>, val call: ToolCall?)
+    private val runs = ConcurrentHashMap<String, Run>()
+
+    internal fun toolCall(process: String?): ToolCall? = process?.let { runs[it]?.call }
 
     data class Command(val id: String, val process: String, val text: String) {
         fun json(): String = JSONObject().put("id", id).put("process", process).put("text", text).toString()
@@ -69,8 +72,9 @@ object ShellWork {
                 ToolExecutionResult("The helper's time budget was exhausted while its command was running.", false, timedOut = true)
             }
         }
-        runs[command.process] = execution
-        execution.invokeOnCompletion { runs.remove(command.process, execution) }
+        val run = Run(execution, kotlinx.coroutines.currentCoroutineContext()[ToolCall])
+        runs[command.process] = run
+        execution.invokeOnCompletion { runs.remove(command.process, run) }
         execution.start()
         var handedOn = false
         var settled = false
@@ -122,7 +126,7 @@ object ShellWork {
     }
 
     suspend fun stop(process: String) {
-        val execution = runs[process]
+        val execution = runs[process]?.execution
         execution?.cancel()
         ExecutionCoordinator.stopCurrentCommand(process)
         execution?.join()

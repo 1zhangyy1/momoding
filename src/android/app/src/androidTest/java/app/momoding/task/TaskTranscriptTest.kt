@@ -56,6 +56,14 @@ class TaskTranscriptTest {
         tasks.insertInbox(InboxEntity(id = receive, toSession = chat, sender = "USER", text = "fixture", arrivedAt = 1, readAt = 2))
     }
 
+    private suspend fun handoff(id: String = "saved-task", state: String = "RUNNING", outcome: String? = null) {
+        val now = System.currentTimeMillis()
+        tasks.insertTask(TaskEntity(id, chat, title = "saved helper", hand = "saved-helper-$id", state = state,
+            outcome = outcome, createdAt = now, updatedAt = now))
+        tasks.insertLog(TaskLogEntity(taskId = id, at = now, kind = "HANDOFF", body = JSONObject()
+            .put("tool", ToolCall(message, "one", "shell_execute").json()).put("session", chat).put("task", id).toString()))
+    }
+
     @Test fun aCommittedReceiptFillsItsOriginalInvocationOnce(): Unit = runBlocking {
         val action = action()
         assertEquals(1, recover())
@@ -101,7 +109,7 @@ class TaskTranscriptTest {
         db.withTransaction { TaskTranscript.resultsIn(db.chatDao(), tasks, message, JSONArray().put(result("one", "complete tool output"))) }
         assertEquals(0, recover())
         assertTrue(receipt().partsJson.contains("complete tool output"))
-        assertTrue(tasks.untranscribedActions().isEmpty())
+        assertTrue(tasks.untranscribedCalls().isEmpty())
     }
 
     @Test fun anAbsentResultIsNotFabricatedAndUnknownStaysAnError(): Unit = runBlocking {
@@ -142,14 +150,14 @@ class TaskTranscriptTest {
         db.chatDao().deleteMessagesAfter(chat, before.sortOrder)
         assertEquals(0, recover())
         assertEquals(1, db.chatDao().loadMessagesPage(chat, 0, 20).size)
-        assertTrue(tasks.untranscribedActions().isEmpty())
+        assertTrue(tasks.untranscribedCalls().isEmpty())
     }
 
     @Test fun argumentsCannotMakeAnotherMessagesReceiptLookTranscribed(): Unit = runBlocking {
         val second = ChatRepository(db.chatDao()).appendMessage(chat, "assistant", db.chatDao().message(message)!!.partsJson)
         action(source = second.id, nestedMessage = message)
         db.withTransaction { TaskTranscript.resultsIn(db.chatDao(), tasks, message, JSONArray().put(result("one", "first turn result"))) }
-        assertEquals(1, tasks.untranscribedActions().size)
+        assertEquals(1, tasks.untranscribedCalls().size)
         assertEquals(1, recover())
         val row = db.chatDao().nextMessage(chat, db.chatDao().message(second.id)!!.sortOrder)!!
         assertTrue(row.partsJson.contains("actual receipt"))
@@ -176,5 +184,46 @@ class TaskTranscriptTest {
         for (i in 0 until parts.length()) assertFalse(parts.getJSONObject(i).getJSONObject("value").getBoolean("success"))
         assertTrue(tasks.recentTasks(20).isEmpty())
         assertEquals(0, recover())
+    }
+
+    @Test fun aCommittedHandoffReturnsItsTaskWithoutPretendingTheWholeCommandFinished(): Unit = runBlocking {
+        handoff()
+        assertEquals(1, recover())
+        val value = JSONArray(receipt().partsJson).getJSONObject(0).getJSONObject("value")
+        assertFalse(value.getBoolean("success"))
+        val saved = JSONObject(value.getString("output"))
+        assertTrue(saved.getBoolean("interrupted"))
+        assertEquals("saved-task", saved.getJSONArray("tasks").getJSONObject(0).getString("task"))
+        assertEquals(0, recover())
+        assertEquals(1, tasks.recentTasks(10).size)
+    }
+
+    @Test fun aPartialMultiTaskCommandKeepsAllCommittedTaskIdsAndCurrentOutcomes(): Unit = runBlocking {
+        handoff("first")
+        handoff("second", "ENDED", "DONE")
+        assertEquals(1, recover())
+        val value = JSONArray(receipt().partsJson).getJSONObject(0).getJSONObject("value")
+        val saved = JSONObject(value.getString("output")).getJSONArray("tasks")
+        assertEquals(2, saved.length())
+        assertEquals("first", saved.getJSONObject(0).getString("task"))
+        assertEquals("done", saved.getJSONObject(1).getString("outcome"))
+    }
+
+    @Test fun aNormalToolReturnAlsoSettlesItsHandoffRecord(): Unit = runBlocking {
+        handoff()
+        db.withTransaction { TaskTranscript.resultsIn(db.chatDao(), tasks, message, JSONArray().put(result("one", "the actual complete shell return"))) }
+        assertTrue(tasks.untranscribedCalls().isEmpty())
+        assertEquals(0, recover())
+        assertTrue(receipt().partsJson.contains("actual complete"))
+    }
+
+    @Test fun aDeletedOrMismatchedInvocationCannotStartAnEffect(): Unit = runBlocking {
+        val spec = Approval.Spec(RiskRequest(sessionId = chat, kind = GuardKind.SHELL,
+            assessment = RiskAssessment(RiskClass.OUTBOUND, "fixture", "fixture:recipient"), preview = "fixture"),
+            Approval.Mode.SHELL, """{"command":"fixture only"}""")
+        assertTrue(runCatching { db.withTransaction { TaskEngine.actionStartedIn(tasks, spec, call = ToolCall(message, "missing", "shell_execute")) } }.isFailure)
+        db.chatDao().deleteMessagesAfter(chat, db.chatDao().message(message)!!.sortOrder)
+        assertTrue(runCatching { action() }.isFailure)
+        assertTrue(tasks.recentTasks(10).isEmpty())
     }
 }

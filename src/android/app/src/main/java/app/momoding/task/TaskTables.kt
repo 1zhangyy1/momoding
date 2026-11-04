@@ -99,14 +99,17 @@ data class TaskLogEntity(
     val kind: String,
     val body: String,
 ) {
-    enum class Kind { AUTHORIZED, PASSED_ON, STARTED, PAUSED, ROUTINE, ROUTINE_RECORDED, COMMAND, COMMAND_RESULT, CHILD, SCREEN, SCREEN_RESULT, APPROVAL, APPROVAL_DECISION, APPROVAL_USED, APPROVAL_CLOSED, ABOUT_TO, RESULT, DRAFT, TRANSCRIBED, REPORT, END }
+    enum class Kind { AUTHORIZED, PASSED_ON, STARTED, PAUSED, ROUTINE, ROUTINE_RECORDED, COMMAND, COMMAND_RESULT, CHILD, SCREEN, SCREEN_RESULT, APPROVAL, APPROVAL_DECISION, APPROVAL_USED, APPROVAL_CLOSED, ABOUT_TO, RESULT, DRAFT, HANDOFF, TRANSCRIBED, REPORT, END }
 }
 
 @Dao
 interface TaskDao {
-    /** A receipt still owed to the transcript, identified by its immutable ABOUT_TO row. */
-    @Query("SELECT a.* FROM task_log a WHERE a.kind = 'ABOUT_TO' AND instr(a.body, '\"tool\":') > 0 AND instr(a.body, :messageNeedle) > 0 AND NOT EXISTS (SELECT 1 FROM task_log done WHERE done.task_id = a.task_id AND done.kind = 'TRANSCRIBED' AND done.body = CAST(a.id AS TEXT)) ORDER BY a.id")
-    suspend fun untranscribedActions(messageNeedle: String = ""): List<TaskLogEntity>
+    /** An effect or handoff whose original tool return has not reached the transcript. */
+    @Query("SELECT a.* FROM task_log a WHERE a.kind IN ('ABOUT_TO', 'HANDOFF') AND instr(a.body, '\"tool\":') > 0 AND instr(a.body, :messageNeedle) > 0 AND NOT EXISTS (SELECT 1 FROM task_log done WHERE done.task_id = a.task_id AND done.kind = 'TRANSCRIBED' AND done.body = CAST(a.id AS TEXT)) ORDER BY a.id")
+    suspend fun untranscribedCalls(messageNeedle: String = ""): List<TaskLogEntity>
+
+    @Query("SELECT parts_json FROM messages WHERE id = :message AND session_id = :session AND role = 'assistant'")
+    suspend fun toolMessage(session: String, message: String): String?
 
     // ── inbox ──
     @Insert

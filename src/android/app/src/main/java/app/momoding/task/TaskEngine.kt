@@ -80,29 +80,53 @@ object TaskEngine {
     /** The task the person's words started: a new one for [hand], or in line behind the one it is on. */
     suspend fun open(context: Context, conversation: String, title: String, hand: String, brief: String,
         prefill: List<com.openminis.app.scheduled.PrefilledToolCall> = emptyList(), routine: RoutineFire? = null,
+        call: ToolCall? = null,
     ): TaskEntity {
-        val source = if (routine != null) null else ChatViewModelStore.existing(conversation)?.messages?.value
-            ?.lastOrNull { it.rendersAsUserBubble() && !it.unread }
+        val source = if (routine != null) null else source(conversation)
         val helper = Helpers.isHelper(context, hand)
+        val invocation = call ?: kotlinx.coroutines.currentCoroutineContext()[ToolCall]
         return change(context) { dao, after ->
-            if (helper) check(dao.heldBy(hand) == null) { "a helper keeps one task; use tell to add instructions" }
-            val busy = !free(dao, hand, helper)
-            val now = System.currentTimeMillis()
-            val task = TaskEntity(
-                id = newId(), conversation = conversation, sourceMessageId = source?.id, title = title.trim(), hand = hand,
-                state = (if (busy) TaskEntity.State.QUEUED else TaskEntity.State.RUNNING).name, createdAt = now, updatedAt = now,
-            )
-            dao.insertTask(task)
-            source?.content?.let { log(dao, task.id, TaskLogEntity.Kind.AUTHORIZED, it) }
-            log(dao, task.id, TaskLogEntity.Kind.PASSED_ON, brief)
-            if (!busy) log(dao, task.id, TaskLogEntity.Kind.STARTED, "started")
-            routine?.let { log(dao, task.id, TaskLogEntity.Kind.ROUTINE, it.json()) }
-            // Each helper has its own chat: its queued payload can safely be stored now.
-            // A busy Bot must not see another task's instructions until that task starts.
-            if (helper || !busy) postForHand(context, dao, task, brief, prefill)
-            if (!busy) after += { deliver(context, task) }
-            task
+            openIn(context, dao, after, conversation, title, hand, brief, helper, source?.id, source?.content, prefill, routine, invocation)
         }
+    }
+
+    /** Creating the hidden chat and handing work to it are one committed operation. */
+    suspend fun openHelper(context: Context, conversation: String, title: String, brief: String, call: ToolCall? = null): TaskEntity {
+        val source = source(conversation)
+        val invocation = call ?: kotlinx.coroutines.currentCoroutineContext()[ToolCall]
+        return change(context) { dao, after ->
+            invocation?.requireStoredIn(dao, conversation)
+            val hand = Helpers.create(context, conversation, title)
+            openIn(context, dao, after, conversation, title, hand, brief, true, source?.id, source?.content, call = invocation)
+        }
+    }
+
+    private fun source(conversation: String) = ChatViewModelStore.existing(conversation)?.messages?.value
+        ?.lastOrNull { it.rendersAsUserBubble() && !it.unread }
+
+    private suspend fun openIn(context: Context, dao: TaskDao, after: MutableList<suspend () -> Unit>,
+        conversation: String, title: String, hand: String, brief: String, helper: Boolean, sourceId: String?, authorized: String?,
+        prefill: List<com.openminis.app.scheduled.PrefilledToolCall> = emptyList(), routine: RoutineFire? = null, call: ToolCall? = null,
+    ): TaskEntity {
+        call?.requireStoredIn(dao, conversation)
+        if (helper) check(dao.heldBy(hand) == null) { "a helper keeps one task; use tell to add instructions" }
+        val busy = !free(dao, hand, helper)
+        val now = System.currentTimeMillis()
+        val task = TaskEntity(
+            id = newId(), conversation = conversation, sourceMessageId = sourceId, title = title.trim(), hand = hand,
+            state = (if (busy) TaskEntity.State.QUEUED else TaskEntity.State.RUNNING).name, createdAt = now, updatedAt = now,
+        )
+        dao.insertTask(task)
+        authorized?.let { log(dao, task.id, TaskLogEntity.Kind.AUTHORIZED, it) }
+        log(dao, task.id, TaskLogEntity.Kind.PASSED_ON, brief)
+        handoffIn(dao, task, call)
+        if (!busy) log(dao, task.id, TaskLogEntity.Kind.STARTED, "started")
+        routine?.let { log(dao, task.id, TaskLogEntity.Kind.ROUTINE, it.json()) }
+        // Each helper has its own chat: its queued payload can safely be stored now.
+        // A busy Bot must not see another task's instructions until that task starts.
+        if (helper || !busy) postForHand(context, dao, task, brief, prefill)
+        if (!busy) after += { deliver(context, task) }
+        return task
     }
 
     /**
@@ -291,6 +315,7 @@ object TaskEngine {
         sourceId: String? = null, authorized: String = spec.request.preview, draft: String? = null, call: ToolCall? = null,
     ): TaskAction {
         val request = spec.request
+        call?.requireStoredIn(dao, request.sessionId)
         if (draft != null) {
             require(!sourceId.isNullOrBlank()) { "A draft send needs its source card." }
             check(dao.draftTask(request.sessionId, sourceId, draftNeedle(draft)) == null) { "This draft already has a task. Inspect its result before sending again." }
@@ -436,9 +461,11 @@ object TaskEngine {
     }
 
     suspend fun openScreen(context: Context, options: app.momoding.hands.HandsOperator.Options, parentId: String? = null,
-        sourceId: String? = null, authorization: String? = null, draft: String? = null,
+        sourceId: String? = null, authorization: String? = null, draft: String? = null, call: ToolCall? = null,
     ): TaskEntity = change(context) { dao, after ->
         val chat = requireNotNull(options.sessionId) { "a screen task needs its conversation" }
+        val invocation = call ?: kotlinx.coroutines.currentCoroutineContext()[ToolCall]
+        invocation?.requireStoredIn(dao, chat)
         if (draft != null) {
             require(!sourceId.isNullOrBlank()) { "A draft send needs its source card." }
             dao.draftTask(chat, sourceId, draftNeedle(draft))?.let { return@change it }
@@ -456,6 +483,7 @@ object TaskEngine {
         if (draft != null) log(dao, task.id, TaskLogEntity.Kind.DRAFT, draft)
         log(dao, task.id, TaskLogEntity.Kind.SCREEN, ScreenWork.Spec(options, parent?.id).json())
         log(dao, task.id, TaskLogEntity.Kind.PASSED_ON, options.task)
+        handoffIn(dao, task, invocation)
         parent?.let { log(dao, it.id, TaskLogEntity.Kind.CHILD, task.id) }
         after += { ScreenWork.wake() }
         task
@@ -1048,6 +1076,11 @@ object TaskEngine {
 
     private suspend fun log(dao: TaskDao, task: String, kind: TaskLogEntity.Kind, body: String) =
         dao.insertLog(TaskLogEntity(taskId = task, at = System.currentTimeMillis(), kind = kind.name, body = body))
+
+    private suspend fun handoffIn(dao: TaskDao, task: TaskEntity, call: ToolCall?) {
+        if (call != null) log(dao, task.id, TaskLogEntity.Kind.HANDOFF,
+            JSONObject().put("tool", call.json()).put("session", task.conversation).put("task", task.id).toString())
+    }
 
     private fun draftNeedle(draft: String): String = "\"id\":" + JSONObject.quote(JSONObject(draft).getString("id"))
 
