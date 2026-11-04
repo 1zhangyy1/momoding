@@ -422,20 +422,47 @@ object TaskEngine {
         if (question == null) screenParentReady(dao, id)
         parent?.let { refreshBudget(dao, it) }
         val ownParent = parent?.let { dao.task(it) }?.takeIf { it.conversation == it.hand }
-        var reportedOutcome = outcome
-        if (question == null && ownParent != null && !pendingWork(dao, ownParent.id)) {
-            val history = dao.log(ownParent.id)
-            val since = history.lastOrNull { it.kind == TaskLogEntity.Kind.STARTED.name }?.id ?: 0
-            val commandFailed = history.any { it.id > since && it.kind == TaskLogEntity.Kind.COMMAND_RESULT.name &&
-                runCatching { !JSONObject(it.body).optBoolean("success", true) }.getOrDefault(false) }
-            reportedOutcome = if (commandFailed) TaskEntity.Outcome.FAILED else outcome
-            dao.updateTask(ownParent.copy(state = TaskEntity.State.ENDED.name, ask = null, progress = null,
-                outcome = reportedOutcome.name, updatedAt = System.currentTimeMillis()))
-            log(dao, ownParent.id, TaskLogEntity.Kind.END, body)
-        }
+        val closed = if (question == null && ownParent != null) completeOwnIn(dao, ownParent.id, outcome, body) else null
+        val reportedOutcome = closed?.outcome ?: outcome
         val receipt = ownParent?.id ?: id
-        Inbox.post(dao, task.conversation, "$REPORT_CUE$receipt · screen · ${if (question != null) "ask" else reportedOutcome.name.lowercase()}] $body", receipt)
+        val words = closed?.words ?: body
+        Inbox.post(dao, task.conversation, "$REPORT_CUE$receipt · screen · ${if (question != null) "ask" else reportedOutcome.name.lowercase()}] $words", receipt)
         after += { tellChat(context, task.conversation) }
+    }
+
+    internal data class Closeout(val outcome: TaskEntity.Outcome, val words: String)
+
+    internal suspend fun closeoutIn(dao: TaskDao, id: String, outcome: TaskEntity.Outcome, words: String): Closeout {
+        val history = dao.log(id)
+        // A pause/resume is still the same attempt. Only an END separates an explicit retry.
+        val current = history.drop(history.indexOfLast { it.kind == TaskLogEntity.Kind.END.name } + 1)
+        val commands = current.filter { it.kind == TaskLogEntity.Kind.COMMAND_RESULT.name }
+            .mapNotNull { runCatching { JSONObject(it.body) }.getOrNull() }.filter { !it.optBoolean("success", true) }
+        val childIds = current.filter { it.kind == TaskLogEntity.Kind.CHILD.name }.map { it.body }.toSet()
+        val children = dao.children(id).filter { it.id in childIds && it.outcome in listOf(TaskEntity.Outcome.FAILED.name, TaskEntity.Outcome.STOPPED.name) }
+        val result = when {
+            outcome == TaskEntity.Outcome.FAILED || commands.isNotEmpty() || children.any { it.outcome == TaskEntity.Outcome.FAILED.name } -> TaskEntity.Outcome.FAILED
+            outcome == TaskEntity.Outcome.STOPPED || children.isNotEmpty() -> TaskEntity.Outcome.STOPPED
+            else -> outcome
+        }
+        val details = commands.map { it.optString("output").ifBlank { "A background command failed." } }.toMutableList()
+        for (child in children) {
+            val last = dao.log(child.id).lastOrNull { it.kind == TaskLogEntity.Kind.END.name }?.body
+            details += child.title + ": " + child.outcome.orEmpty().lowercase() + last?.let { "\n$it" }.orEmpty()
+        }
+        val other = details.filter { it.isNotBlank() && it != words }.distinct()
+        return Closeout(result, if (other.isEmpty()) words else "Other results in this attempt:\n" + other.joinToString("\n\n") + "\n\nLatest result:\n" + words)
+    }
+
+    /** Called inside the same transaction as the last result and its receipt. */
+    internal suspend fun completeOwnIn(dao: TaskDao, id: String, outcome: TaskEntity.Outcome, words: String): Closeout? {
+        val task = dao.task(id) ?: return null
+        if (task.conversation != task.hand || task.state !in listOf(TaskEntity.State.RUNNING.name, TaskEntity.State.WAITING.name) || pendingWork(dao, id)) return null
+        val closed = closeoutIn(dao, id, outcome, words)
+        dao.updateTask(task.copy(state = TaskEntity.State.ENDED.name, ask = null, progress = null,
+            outcome = closed.outcome.name, updatedAt = System.currentTimeMillis()))
+        log(dao, id, TaskLogEntity.Kind.END, closed.words)
+        return closed
     }
 
     private suspend fun recoverScreens(context: Context) = change(context) { dao, after ->
@@ -718,16 +745,8 @@ object TaskEngine {
             return@change
         }
         refreshBudget(dao, id)
-        val ownCommand = task.conversation == task.hand
-        val completeOwn = ownCommand && !pendingWork(dao, id)
-        val kind = if (result.success) "done" else "failed"
-        if (completeOwn) {
-            dao.updateTask(task.copy(state = TaskEntity.State.ENDED.name,
-                outcome = (if (result.success) TaskEntity.Outcome.DONE else TaskEntity.Outcome.FAILED).name,
-                updatedAt = System.currentTimeMillis()))
-            log(dao, id, TaskLogEntity.Kind.END, result.output)
-        }
-        val words = "$REPORT_CUE$id · command · ${if (completeOwn) kind else "command_result"}] ${result.output}"
+        val closed = completeOwnIn(dao, id, if (result.success) TaskEntity.Outcome.DONE else TaskEntity.Outcome.FAILED, result.output)
+        val words = "$REPORT_CUE$id · command · ${closed?.outcome?.name?.lowercase() ?: "command_result"}] ${closed?.words ?: result.output}"
         if (announce) {
             Inbox.post(dao, task.hand, words, id, sender = InboxEntity.Sender.COMMAND)
             after += { tellChat(context, task.hand) }
