@@ -27,6 +27,44 @@ import org.junit.Test
 class IdleTimeoutFlowTest {
 
     @Test
+    fun `normal long reasoning silence fits the existing ten minute budget`() = runTest {
+        val chunks = flow {
+            emit("started")
+            delay(190_000L)
+            emit("reply")
+        }.withIdleTimeout(600_000L, startAfterFirst = true) { fail("normal reasoning was cut short") }.toList()
+        assertEquals(listOf("started", "reply"), chunks)
+    }
+
+    @Test
+    fun `provider connection time is excluded when it owns the first event deadline`() = runTest {
+        val chunks = flow {
+            delay(150_000L)
+            emit("started")
+            delay(10_000L)
+            emit("reply")
+        }.withIdleTimeout(30_000L, startAfterFirst = true) { fail("upload time is not stream idle") }.toList()
+        assertEquals(listOf("started", "reply"), chunks)
+    }
+
+    @Test
+    fun `a provider that starts and then goes silent times out`() = runTest {
+        var idle = 0L
+        try {
+            flow {
+                emit("started")
+                delay(100_000L)
+                emit("too late")
+            }.withIdleTimeout(30_000L, startAfterFirst = true) { idle = it; throw IllegalStateException("stalled") }.toList()
+            fail("silence after Started must time out")
+        } catch (e: IllegalStateException) {
+            assertEquals("stalled", e.message)
+        }
+        assertEquals(30_000L, idle)
+        assertEquals(30_000L, testScheduler.currentTime)
+    }
+
+    @Test
     fun `a slow but continuous stream survives far past the idle limit`() = runTest {
         // 600 chunks, one per second = 600s total, with a 100s idle limit.
         // Under the old total-elapsed budget this is the exact shape that got
