@@ -111,6 +111,12 @@ interface TaskDao {
     @Query("SELECT parts_json FROM messages WHERE id = :message AND session_id = :session AND role = 'assistant'")
     suspend fun toolMessage(session: String, message: String): String?
 
+    @Query("SELECT i.* FROM inbox i JOIN messages received ON received.id = i.id JOIN messages call ON call.id = :message WHERE i.to_session = :session AND received.session_id = :session AND call.session_id = :session AND received.sort_order < call.sort_order AND i.read_at IS NOT NULL ORDER BY i.read_at DESC, CASE WHEN i.sender = 'USER' THEN 0 ELSE 1 END, received.sort_order DESC LIMIT 1")
+    suspend fun inputForCall(session: String, message: String): InboxEntity?
+
+    @Query("SELECT * FROM task WHERE conversation = :conversation AND source_message_id = :message")
+    suspend fun sourceTasks(conversation: String, message: String): List<TaskEntity>
+
     // ── inbox ──
     @Insert
     suspend fun insertInbox(row: InboxEntity)
@@ -126,6 +132,12 @@ interface TaskDao {
 
     @Query("SELECT * FROM inbox WHERE id = :id")
     suspend fun inbox(id: String): InboxEntity?
+
+    @Query("SELECT * FROM inbox WHERE read_at IS NOT NULL AND failed_at IS NULL ORDER BY arrived_at, rowid")
+    suspend fun interruptedInbox(): List<InboxEntity>
+
+    @Query("UPDATE inbox SET prefill = NULL WHERE to_session = :to AND read_at IS NOT NULL")
+    suspend fun clearReadPrefill(to: String)
 
     @Query("SELECT DISTINCT to_session FROM inbox WHERE read_at IS NULL AND failed_at IS NULL")
     suspend fun sessionsWithUnread(): List<String>

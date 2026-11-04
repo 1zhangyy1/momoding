@@ -598,6 +598,7 @@
     <string name="chat_typing_indicator">%1$s is thinking</string>
     <string name="read_aloud_unavailable">Read aloud failed: no usable voice engine. Check Voice Output settings or install a system speech engine.</string>
     <string name="chat_error_stream_dropped_partial">The connection dropped — this reply may be incomplete. Tap Retry to continue.</string>
+    <string name="chat_error_reply_incomplete">This reply ended before completion.</string>
     <!-- Composer placeholder. %1$s is the Soul-customized assistant name (default "Minis"). The parenthetical is an inline hint reminding the user that typing '@' opens the file-mention picker. T-android-placeholder-single-line collapses the prior two-row (title + hint) layout into a single line, matching iOS 19e1d61f. -->
     <string name="chat_input_placeholder">Message %1$s (@ to mention files)</string>
     <string name="chat_input_placeholder_hint_1">Try @ to mention files for %1$s to read</string>

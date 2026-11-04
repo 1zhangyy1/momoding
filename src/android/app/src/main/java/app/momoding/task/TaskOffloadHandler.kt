@@ -27,7 +27,7 @@ class TaskOffloadHandler(private val context: Context) : NativeOffloadHandler {
             when (val verb = args.positional.firstOrNull()) {
                 null, "help", "--help", "-h" -> NativeOffloadResult(0, HELP)
                 "new" -> new(args, sid, ShellWork.toolCall(request.env["MINIS_EXECUTION_ID"]))
-                "tell" -> tell(args, sid)
+                "tell" -> tell(args, sid, ShellWork.toolCall(request.env["MINIS_EXECUTION_ID"]))
                 "stop" -> stop(args, sid)
                 "report" -> report(args, sid)
                 else -> NativeOffloadResult(2, "momoding-task: unknown verb '$verb'\n$HELP")
@@ -58,13 +58,13 @@ class TaskOffloadHandler(private val context: Context) : NativeOffloadHandler {
             .put("note", "It has its own line in this chat and reports back here when there is a result, a question or a problem; no need to wait or check."))
     }
 
-    private fun tell(args: OffloadArgs, sid: String): NativeOffloadResult {
+    private fun tell(args: OffloadArgs, sid: String, call: ToolCall?): NativeOffloadResult {
         val id = args.positional.getOrNull(1) ?: throw IllegalArgumentException("momoding-task tell <id> \"<words>\"")
         val text = args.positional.drop(2).joinToString(" ").trim()
         require(text.isNotEmpty()) { "momoding-task tell $id \"<words>\"" }
         val owner = runBlocking { TaskEngine.dao(context).task(id) }?.conversation
         if (owner != null && owner != sid) throw IllegalArgumentException("task $id belongs to another chat")
-        val task = runBlocking { TaskEngine.tell(context, id, text) }
+        val task = runBlocking { TaskEngine.tell(context, id, text, call) }
         return ok(JSONObject().put("task", task.id).put("state", task.state.lowercase()))
     }
 

@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.room.withTransaction
 import app.momoding.apps.AppBots
 import app.momoding.apps.MoApps
-import app.momoding.chat.WorkResume
 import com.openminis.app.MinisApp
 import com.openminis.app.logging.AppLogger
 import com.openminis.app.ui.chat.ChatViewModelStore
@@ -61,7 +60,11 @@ object TaskEngine {
                 recoverScreens(app)
                 approvalHands = recoverApprovals(app)
                 val db = (app as MinisApp).database
-                db.withTransaction { TaskTranscript.recoverIn(db.chatDao(), db.taskDao()) }
+                db.withTransaction {
+                    TaskTranscript.recoverIn(db.chatDao(), db.taskDao())
+                    Inbox.recoverIn(db.taskDao())
+                }
+                app.getSharedPreferences("momoding", Context.MODE_PRIVATE).edit().remove("work.running").apply()
                 recovered.complete(Unit)
             } catch (error: Throwable) {
                 recovered.completeExceptionally(error)
@@ -69,7 +72,6 @@ object TaskEngine {
                 return@launch
             }
             ScreenWork.start(app)
-            WorkResume.start(app)
             Inbox.wakeAll(app)
             approvalHands.forEach { tellChat(app, it) }
             kotlinx.coroutines.delay(3000)
@@ -109,6 +111,7 @@ object TaskEngine {
         prefill: List<com.openminis.app.scheduled.PrefilledToolCall> = emptyList(), routine: RoutineFire? = null, call: ToolCall? = null,
     ): TaskEntity {
         call?.requireStoredIn(dao, conversation)
+        TaskGuard.checkIn(dao, TaskGuard.Binding(conversation, null, call?.message), outward = true)?.let { throw TaskAction.NotStarted(it) }
         if (helper) check(dao.heldBy(hand) == null) { "a helper keeps one task; use tell to add instructions" }
         val busy = !free(dao, hand, helper)
         val now = System.currentTimeMillis()
@@ -133,9 +136,14 @@ object TaskEngine {
      * More words for a task's hand. It reads them before its next step when it is at work; they
      * answer what it waits on; a task that is done or did not work picks up again with the same hand.
      */
-    suspend fun tell(context: Context, id: String, text: String): TaskEntity {
+    suspend fun tell(context: Context, id: String, text: String, call: ToolCall? = null): TaskEntity {
         val helper = dao(context).task(id)?.let { Helpers.isHelper(context, it.hand) } ?: false
-        return change(context) { dao, after -> tellIn(context, dao, after, id, text, helper) }
+        return change(context) { dao, after ->
+            val owner = requireNotNull(dao.task(id)) { "no task $id" }.conversation
+            call?.requireStoredIn(dao, owner)
+            TaskGuard.checkIn(dao, TaskGuard.Binding(owner, null, call?.message), outward = true, targetTaskId = id)?.let { throw TaskAction.NotStarted(it) }
+            tellIn(context, dao, after, id, text, helper)
+        }
     }
 
     private suspend fun tellIn(context: Context, dao: TaskDao, after: MutableList<suspend () -> Unit>, id: String, text: String, helper: Boolean): TaskEntity {
@@ -182,8 +190,8 @@ object TaskEngine {
         return change(context) { dao, after -> reportIn(context, dao, after, hand, kind, text, helper) }
     }
 
-    private suspend fun reportIn(context: Context, dao: TaskDao, after: MutableList<suspend () -> Unit>, hand: String, kind: Report, text: String, helper: Boolean): TaskEntity {
-        val task = dao.heldBy(hand) ?: throw IllegalStateException("you are on no task: just answer in your chat")
+    private suspend fun reportIn(context: Context, dao: TaskDao, after: MutableList<suspend () -> Unit>, hand: String, kind: Report, text: String, helper: Boolean, taskId: String? = null): TaskEntity {
+        val task = (if (taskId == null) dao.heldBy(hand) else dao.task(taskId)?.takeIf { it.hand == hand }) ?: throw IllegalStateException("you are on no task: just answer in your chat")
         if (kind == Report.DONE && pendingWork(dao, task.id)) {
             throw IllegalStateException("Work for this task is still running or waiting. Its result will arrive automatically; do not report done yet.")
         }
@@ -333,7 +341,7 @@ object TaskEngine {
             }
         }
         val hand = if (spec.mode == Approval.Mode.SCREEN) TaskEntity.SCREEN else request.sessionId
-        TaskGuard.checkIn(dao, TaskGuard.Binding(hand, id), outward = true,
+        TaskGuard.checkIn(dao, TaskGuard.Binding(hand, id, call?.message), outward = true,
             allowWaiting = Approval.pending(task.ask).isNotEmpty())?.let { throw TaskAction.NotStarted(it) }
         val history = dao.log(id)
         check(history.none { it.kind == TaskLogEntity.Kind.ABOUT_TO.name && JSONObject(it.body).getString("id") == request.id }) {
@@ -466,6 +474,7 @@ object TaskEngine {
         val chat = requireNotNull(options.sessionId) { "a screen task needs its conversation" }
         val invocation = call ?: kotlinx.coroutines.currentCoroutineContext()[ToolCall]
         invocation?.requireStoredIn(dao, chat)
+        TaskGuard.checkIn(dao, TaskGuard.Binding(chat, null, invocation?.message), outward = true)?.let { throw TaskAction.NotStarted(it) }
         if (draft != null) {
             require(!sourceId.isNullOrBlank()) { "A draft send needs its source card." }
             dao.draftTask(chat, sourceId, draftNeedle(draft))?.let { return@change it }
@@ -986,21 +995,40 @@ object TaskEngine {
      */
     suspend fun turnFinished(context: Context, hand: String, taskId: String?, completion: TaskCompletion, hasFollowUp: Boolean) {
         val helper = Helpers.isHelper(context, hand)
-        change(context) { dao, after ->
-            val current = taskId?.let { dao.task(it) }
-            if (current?.hand == hand && current.state == TaskEntity.State.RUNNING.name && !hasFollowUp && !pendingWork(dao, current.id)) {
-                reportIn(context, dao, after, hand, if (completion.done) Report.DONE else Report.FAILED, completion.words, helper)
+        change(context) { dao, after -> finishTurnIn(context, dao, after, hand, taskId, completion, hasFollowUp, helper) }
+    }
+
+    /** The final reply, read input and original hand's closeout commit together. */
+    suspend fun <T> reply(context: Context, hand: String, taskId: String?, completion: TaskCompletion, persist: suspend () -> T): T {
+        val helper = Helpers.isHelper(context, hand)
+        return change(context) { dao, after -> replyIn(context, dao, after, hand, taskId, completion, helper, persist) }
+    }
+
+    internal suspend fun <T> replyIn(context: Context, dao: TaskDao, after: MutableList<suspend () -> Unit>,
+        hand: String, taskId: String?, completion: TaskCompletion, helper: Boolean, persist: suspend () -> T,
+    ): T {
+        val value = persist()
+        dao.completeRead(hand)
+        finishTurnIn(context, dao, after, hand, taskId, completion, dao.unread(hand).isNotEmpty(), helper)
+        return value
+    }
+
+    private suspend fun finishTurnIn(context: Context, dao: TaskDao, after: MutableList<suspend () -> Unit>,
+        hand: String, taskId: String?, completion: TaskCompletion, hasFollowUp: Boolean, helper: Boolean,
+    ) {
+        val current = taskId?.let { dao.task(it) }
+        if (current?.hand == hand && current.state == TaskEntity.State.RUNNING.name && !hasFollowUp && !pendingWork(dao, current.id)) {
+            reportIn(context, dao, after, hand, if (completion.done) Report.DONE else Report.FAILED, completion.words, helper, current.id)
+        }
+        if (helper && current != null && dao.task(current.id)?.state == TaskEntity.State.ENDED.name) {
+            after += { Helpers.ended(context, hand, current.conversation) }
+        }
+        current?.let { refreshBudget(dao, it.id, ignoreModel = true) }
+        after += {
+            val deferred = kotlinx.coroutines.withContext(Dispatchers.Main) {
+                ChatViewModelStore.existing(hand)?.afterTurn { scope.launch { handIdle(context, hand) } } == true
             }
-            if (helper && current != null && dao.task(current.id)?.state == TaskEntity.State.ENDED.name) {
-                after += { Helpers.ended(context, hand, current.conversation) }
-            }
-            current?.let { refreshBudget(dao, it.id, ignoreModel = true) }
-            after += {
-                val deferred = kotlinx.coroutines.withContext(Dispatchers.Main) {
-                    ChatViewModelStore.existing(hand)?.afterTurn { scope.launch { handIdle(context, hand) } } == true
-                }
-                if (!deferred) handIdle(context, hand)
-            }
+            if (!deferred) handIdle(context, hand)
         }
     }
 

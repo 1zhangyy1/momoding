@@ -78,6 +78,21 @@ object Inbox {
 
     suspend fun retry(context: Context, id: String) = TaskEngine.dao(context).retryInbox(id)
 
+    /** A consumed message is the durable cursor. Reuse it, unless its work stopped or waits on a person. */
+    internal suspend fun recoverIn(dao: TaskDao) {
+        val now = System.currentTimeMillis()
+        for (row in dao.interruptedInbox()) {
+            val handed = row.taskId?.let { dao.task(it) }?.takeIf { it.hand == row.toSession && it.conversation != row.toSession }
+            val stoppedOrWaiting = handed?.let { it.state != TaskEntity.State.RUNNING.name || it.ask != null || it.hold != null } == true ||
+                dao.sourceTasks(row.toSession, row.id).any { task ->
+                    task.hand == row.toSession && ((task.state == TaskEntity.State.ENDED.name && task.outcome == TaskEntity.Outcome.STOPPED.name) ||
+                        task.state == TaskEntity.State.WAITING.name || task.ask != null || task.hold != null)
+                }
+            if (stoppedOrWaiting) dao.deleteInbox(listOf(row.id))
+            else dao.failInbox(listOf(row.id), now, terminal = false)
+        }
+    }
+
     /** A transaction can post work or a result with the task state that authorized it. */
     suspend fun post(dao: TaskDao, to: String, text: String, taskId: String? = null, sender: InboxEntity.Sender = InboxEntity.Sender.HAND, prefill: List<PrefilledToolCall> = emptyList(), id: String = java.util.UUID.randomUUID().toString()) {
         dao.insertInbox(InboxEntity(

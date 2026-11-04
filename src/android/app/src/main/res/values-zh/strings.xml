@@ -533,6 +533,7 @@
     <string name="chat_typing_indicator">%1$s 正在思考</string>
     <string name="read_aloud_unavailable">朗读失败：没有可用的语音引擎。请检查语音输出设置，或安装系统语音引擎。</string>
     <string name="chat_error_stream_dropped_partial">连接中断，此回复可能不完整。点击重试以继续。</string>
+    <string name="chat_error_reply_incomplete">回复尚未完成。</string>
     <string name="chat_input_placeholder">发消息给 %1$s（@ 提及文件）</string>
     <string name="chat_input_placeholder_hint_1">试试用 @ 提及文件，让 %1$s 读取</string>
     <string name="chat_input_placeholder_hint_2">输入 / 使用技能和快捷命令</string>
