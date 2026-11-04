@@ -597,9 +597,11 @@ class HandsOperator(private val context: Context) {
         val assessment = RiskAssessment(cls, TapWords.reason(cls, short, appLabel), appLabel?.let { "app:$it" })
         val decidable = cls != RiskClass.MONEY
         capsule.approval(ui.getString(if (decidable) com.openminis.app.R.string.mo_hands_approval_here else com.openminis.app.R.string.mo_hands_approval_detail, short), decidable)
+        val approvalAt = System.currentTimeMillis()
         val outcome = runBlocking {
             RiskGate.check(sessionId ?: "hands", GuardKind.SCREEN, assessment, preview = "Tap “$short”", pageUrl = appLabel, elementText = short, taskId = durableTaskId)
         }
+        pausedMs.addAndGet(System.currentTimeMillis() - approvalAt)
         // The user may have opened nanoMuse to answer; put the operated app back in front.
         val (nowPkg, _) = svc.foregroundPackage()
         if (nowPkg == context.packageName && pkg != null && pkg != context.packageName) {
@@ -610,6 +612,7 @@ class HandsOperator(private val context: Context) {
         return when (outcome) {
             is GateOutcome.Allowed -> TapGate(notice = outcome.notice, shown = shown, gated = true, app = appLabel)
             is GateOutcome.Denied -> TapGate(denied = outcome.message, shown = shown, gated = true, app = appLabel)
+            is GateOutcome.Waiting -> error("A screen approval waits on its saved task.")
         }
     }
 
@@ -627,9 +630,11 @@ class HandsOperator(private val context: Context) {
         val where = appLabel ?: ui.getString(com.openminis.app.R.string.mo_hands_this_phone)
         val assessment = RiskAssessment(RiskClass.OUTBOUND, "presses Enter in a message field, which sends it ($where)", appLabel?.let { "app:$it" })
         capsule.approval(ui.getString(com.openminis.app.R.string.mo_hands_approval_here, ui.getString(com.openminis.app.R.string.mo_hands_fx_enter)), decidable = true)
+        val approvalAt = System.currentTimeMillis()
         val outcome = runBlocking {
             RiskGate.check(sessionId ?: "hands", GuardKind.SCREEN, assessment, preview = "Enter → send", pageUrl = appLabel, elementText = ui.getString(com.openminis.app.R.string.mo_hands_fx_enter), taskId = durableTaskId)
         }
+        pausedMs.addAndGet(System.currentTimeMillis() - approvalAt)
         val (nowPkg, _) = svc.foregroundPackage()
         if (nowPkg == context.packageName && pkg != null && pkg != context.packageName) {
             if (bg == null) HandsApps.launchable(context).firstOrNull { it.packageName == pkg }?.let { openApp(it) }
@@ -639,6 +644,7 @@ class HandsOperator(private val context: Context) {
         return when (outcome) {
             is GateOutcome.Allowed -> TapGate(notice = outcome.notice, shown = "Enter")
             is GateOutcome.Denied -> TapGate(denied = outcome.message, shown = "Enter")
+            is GateOutcome.Waiting -> error("A screen approval waits on its saved task.")
         }
     }
 

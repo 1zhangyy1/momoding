@@ -9567,6 +9567,7 @@ class ChatViewModel(
     ): com.openminis.app.scheduled.ScriptedToolTurn? {
         if (prefill.isEmpty()) return null
         val available = agentTools.map { it.name }.toSet()
+        app.momoding.task.Approval.checkPrefill(prefill, available)
         val turn = com.openminis.app.scheduled.ScriptedToolTurn.from(prefill, available)
         if (turn == null || turn.calls.size < prefill.size) {
             AppLogger.warning(
@@ -9591,6 +9592,7 @@ class ChatViewModel(
         val taskAtStart = app.momoding.task.TaskEngine.modelTask(context, activeSessionId)?.id
         if (runningTaskId != null && runningTaskId != taskAtStart) throw CancellationException("The task ended before its run started.")
         runningTaskId = taskAtStart
+        app.momoding.task.TaskEngine.turnStarted(context, taskAtStart)
         val previousTail = agentHistory.lastOrNull()
         var loopReturned = false
         var loopFailure: String? = null
@@ -12309,8 +12311,19 @@ class ChatViewModel(
         val args = runCatching { JSONObject(argsJson) }.getOrElse { return ToolExecutionResult("Error: ${it.message}", false) }
         val command = args.optString("command", "")
         val title = args.optString("tool_title").ifBlank { command.lineSequence().firstOrNull().orEmpty().take(60) }
-        return app.momoding.task.ShellWork.run(context, activeSessionId, runningTaskId, title, command) { process, foreground ->
-            executeShellCommandForeground(argsJson, toolId, toolBlocks, assistantId, currentText, process, foreground)
+        if (command.isBlank()) return ToolExecutionResult("Error: 'command' is required", false)
+        val gate = app.momoding.guard.RiskGate.checkShell(activeSessionId, command, title,
+            taskId = runningTaskId, shellArgs = argsJson, defer = true)
+        when (gate) {
+            is app.momoding.guard.GateOutcome.Denied -> return ToolExecutionResult(gate.message, false, toolTitle = title)
+            is app.momoding.guard.GateOutcome.Waiting -> return ToolExecutionResult(
+                "Task " + gate.taskId + " is waiting for approval. Its exact command is saved; the card has no timeout. " +
+                    "Do not retry, wait or poll; you can answer other messages meanwhile.", true, toolTitle = title)
+            is app.momoding.guard.GateOutcome.Allowed -> Unit
+        }
+        val task = gate.permit?.spec?.request?.taskId ?: runningTaskId
+        return app.momoding.task.ShellWork.run(context, activeSessionId, task, title, command, permit = gate.permit) { process, foreground ->
+            executeShellCommandForeground(argsJson, toolId, toolBlocks, assistantId, currentText, process, foreground, gate.notice)
         }
     }
 
@@ -12322,6 +12335,7 @@ class ChatViewModel(
         currentText: String,
         processId: String,
         foreground: () -> Boolean,
+        approvalNotice: String?,
     ): ToolExecutionResult {
         return try {
             val args = JSONObject(argsJson)
@@ -12340,17 +12354,6 @@ class ChatViewModel(
 
             if (command.isBlank()) {
                 return ToolExecutionResult("Error: 'command' is required", false, toolTitle = toolTitle)
-            }
-
-            // momoding: delete / change / send / pay stop for the user's yes; installs run with a notice
-            var approvalNotice: String? = null
-            when (val gate = app.momoding.guard.RiskGate.checkShell(activeSessionId, command, toolTitle.takeIf { it != "shell_execute" })) {
-                is app.momoding.guard.GateOutcome.Denied -> {
-                    val idx = toolBlocks.indexOfFirst { it.id == toolId }
-                    if (foreground() && idx >= 0) toolBlocks[idx] = toolBlocks[idx].copy(content = "")
-                    return ToolExecutionResult(gate.message, false, toolTitle = toolTitle)
-                }
-                is app.momoding.guard.GateOutcome.Allowed -> approvalNotice = gate.notice
             }
 
             // [T-android-overlay-finalize item 1] Removed the

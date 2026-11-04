@@ -34,16 +34,15 @@ class RiskGateTaskTest {
 
     @After fun cleanup() = runBlocking {
         if (::chat.isInitialized) {
-            RiskGate.open.value.filter { it.sessionId == chat }.forEach { RiskGate.decide(it.id, RiskDecision.DENY) }
+            app.database.chatDao().deleteSession(chat)
             withTimeout(5_000) { while (RiskGate.open.value.any { it.sessionId == chat }) delay(25) }
             Grants.clearSession(chat)
-            app.database.chatDao().deleteSession(chat)
         }
     }
 
     private suspend fun request() = RiskGate.check(chat, GuardKind.SHELL,
         RiskAssessment(RiskClass.DESTRUCTIVE, "fixture only; no command is executed", "/tmp/m41-guard-fixture"),
-        preview = "fixture only", taskId = task.id)
+        preview = "fixture only", taskId = task.id, shellArgs = """{"command":"printf fixture"}""")
 
     @Test fun approvingAfterStopCannotActForTheNextTask() = runBlocking {
         val answer = async(Dispatchers.Default) { request() }
@@ -60,7 +59,7 @@ class RiskGateTaskTest {
     @Test fun aHoldAddedWhileTheCardWaitsStillBlocksTheApprovedAction() = runBlocking {
         val answer = async(Dispatchers.Default) { request() }
         val pending = withTimeout(5_000) { RiskGate.open.first { all -> all.any { it.sessionId == chat } }.single { it.sessionId == chat } }
-        app.database.taskDao().updateTask(task.copy(hold = "ask before changing anything"))
+        app.database.taskDao().updateTask(app.database.taskDao().task(task.id)!!.copy(hold = "ask before changing anything"))
         RiskGate.decide(pending.id, RiskDecision.ALLOW_ONCE)
         val result = withTimeout(5_000) { answer.await() }
         assertTrue(result is GateOutcome.Denied && result.message.contains("ask before changing anything"))

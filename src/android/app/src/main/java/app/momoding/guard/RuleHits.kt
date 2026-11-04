@@ -27,7 +27,7 @@ object RuleHits {
     val hits: StateFlow<List<Hit>> = _hits
     private var app: Context? = null
 
-    fun init(context: Context) {
+    @Synchronized fun init(context: Context) {
         app = context.applicationContext
         _hits.value = runCatching {
             val a = JSONArray(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, "[]"))
@@ -35,16 +35,26 @@ object RuleHits {
         }.getOrDefault(emptyList())
     }
 
-    fun record(sessionId: String, label: String, kind: String = RULE, at: Long = System.currentTimeMillis()) {
+    @Synchronized fun record(sessionId: String, label: String, kind: String = RULE, at: Long = System.currentTimeMillis()) {
         val next = (_hits.value + Hit(sessionId, label, at, kind)).takeLast(KEEP)
+        write(next)
+    }
+
+    @Synchronized fun clearSession(sessionId: String) {
+        if (_hits.value.any { it.sessionId == sessionId }) write(_hits.value.filterNot { it.sessionId == sessionId })
+    }
+
+    private fun write(next: List<Hit>) {
         _hits.value = next
         app?.let { c ->
             val a = JSONArray().apply { next.forEach { put(JSONObject().put("s", it.sessionId).put("l", it.label).put("t", it.at).put("k", it.kind)) } }
-            c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, a.toString()).apply()
+            val edit = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            if (next.isEmpty()) edit.remove(KEY) else edit.putString(KEY, a.toString())
+            edit.apply()
         }
     }
 
-    fun clear() {
+    @Synchronized fun clear() {
         _hits.value = emptyList()
         app?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)?.edit()?.remove(KEY)?.apply()
     }

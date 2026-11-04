@@ -36,7 +36,7 @@ class RiskApprovalNotifier(
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !nm.areNotificationsEnabled()) return false
 
         // the Momoding that asks, by its name. Silencing a Bot quiets its news, never its questions:
-        // unanswered, a question times out as a no
+        // unanswered approvals remain attached to their task
         val bot = app.momoding.apps.BotStatus.botOf(context, request.sessionId)
         val name = app.momoding.apps.BotStatus.name(context, bot)
         // in the app's language, not the phone's
@@ -46,7 +46,7 @@ class RiskApprovalNotifier(
 
         val open = PendingIntent.getActivity(
             context, request.id.hashCode(),
-            OwnScheme.intent(context, Uri.parse("minis://session/${request.sessionId}"), Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            OwnScheme.intent(context, Uri.parse("minis://session/${request.conversation ?: request.sessionId}"), Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         fun action(decision: RiskDecision, code: Int): PendingIntent = PendingIntent.getBroadcast(
@@ -75,7 +75,6 @@ class RiskApprovalNotifier(
             // Its own group, so Android never folds it into an auto-grouped "Momoding (n)" bundle
             // with the chat's other notifications, where its buttons are hidden.
             .setGroup("$TAG_NOTIF-${request.id}")
-            .setTimeoutAfter(RiskGate.TIMEOUT_MS)
             .build()
         return try {
             nm.notify(TAG_NOTIF, request.id.hashCode(), notification)
@@ -118,7 +117,8 @@ class RiskApprovalReceiver : BroadcastReceiver() {
         val decision = runCatching { RiskDecision.valueOf(intent.getStringExtra(EXTRA_DECISION) ?: "") }.getOrNull() ?: return
         // Only allow-once and deny come from a notification; anything else is ignored.
         if (decision != RiskDecision.ALLOW_ONCE && decision != RiskDecision.DENY) return
-        RiskGate.decide(id, decision)
+        val pending = goAsync()
+        RiskGate.decide(id, decision).invokeOnCompletion { pending.finish() }
     }
 
     companion object {

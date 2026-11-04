@@ -49,6 +49,7 @@ object TaskEngine {
             _parentsWithWork.value = it.map { task -> task.conversation }.toSet()
         } }
         scope.launch {
+            recoverApprovals(app)
             recoverCommands(app)
             recoverScreens(app)
             ScreenWork.start(app)
@@ -97,6 +98,7 @@ object TaskEngine {
     private suspend fun tellIn(context: Context, dao: TaskDao, after: MutableList<suspend () -> Unit>, id: String, text: String, helper: Boolean): TaskEntity {
         val task = dao.task(id) ?: throw IllegalArgumentException("no task $id (the table of tasks lists them)")
         if (task.outcome == TaskEntity.Outcome.STOPPED.name) throw IllegalStateException("task $id was stopped: open a new one")
+        invalidateApprovals(dao, id)
         log(dao, id, TaskLogEntity.Kind.PASSED_ON, text)
         val waitingScreen = task.ask?.let { runCatching { JSONObject(it).optString("screen") }.getOrNull() }?.takeIf { it.isNotBlank() }
         if (waitingScreen != null && dao.children(id).any { it.id == waitingScreen && it.state == TaskEntity.State.WAITING.name }) {
@@ -145,8 +147,9 @@ object TaskEngine {
         val now = System.currentTimeMillis()
         val next = when (kind) {
             Report.PROGRESS -> task.copy(progress = text.lineSequence().first().take(120))
-            Report.ASK -> task.copy(state = TaskEntity.State.WAITING.name, ask = JSONObject().put("question", text)
-                .put("screen", task.ask?.let { runCatching { JSONObject(it).optString("screen") }.getOrNull() }?.takeIf { it.isNotBlank() }).toString())
+            Report.ASK -> task.copy(state = TaskEntity.State.WAITING.name, ask =
+                if (Approval.pending(task.ask).isNotEmpty()) JSONObject(task.ask!!).put("question", text).toString()
+                else JSONObject().put("question", text).put("screen", task.ask?.let { runCatching { JSONObject(it).optString("screen") }.getOrNull() }?.takeIf { it.isNotBlank() }).toString())
             Report.DONE, Report.FAILED -> task.copy(
                 state = TaskEntity.State.ENDED.name, ask = null,
                 outcome = (if (kind == Report.DONE) TaskEntity.Outcome.DONE else TaskEntity.Outcome.FAILED).name,
@@ -230,8 +233,11 @@ object TaskEngine {
         DeletedSessions(ids, tasks, unfinished.size)
     }
 
-    suspend fun pendingWork(dao: TaskDao, id: String): Boolean =
-        ShellWork.pending(dao.log(id)).isNotEmpty() || dao.children(id).any { it.state != TaskEntity.State.ENDED.name }
+    suspend fun pendingWork(dao: TaskDao, id: String): Boolean {
+        val history = dao.log(id)
+        return ShellWork.pending(history).isNotEmpty() || Approval.unclaimed(history).isNotEmpty() ||
+            Approval.pending(dao.task(id)?.ask).isNotEmpty() || dao.children(id).any { it.state != TaskEntity.State.ENDED.name }
+    }
 
     /** Native commands retain the task of the process that launched them, even after its model turn. */
     suspend fun executionTask(context: Context, chat: String, process: String?): TaskEntity? =
@@ -308,6 +314,8 @@ object TaskEngine {
         val next = task.copy(state = TaskEntity.State.RUNNING.name, updatedAt = System.currentTimeMillis())
         dao.updateTask(next)
         log(dao, task.id, TaskLogEntity.Kind.STARTED, "screen lease acquired")
+        dao.screenSpec(task.id)?.let { JSONObject(it).optString("parent").takeIf(String::isNotBlank) }
+            ?.let { refreshApprovalBudget(dao, it) }
         return next
     }
 
@@ -402,6 +410,7 @@ object TaskEngine {
                 ask = JSONObject().put("kind", "screen_question").put("screen", id).put("question", question).toString(), updatedAt = System.currentTimeMillis()))
         }
         if (question == null) screenParentReady(dao, id)
+        parent?.let { refreshApprovalBudget(dao, it) }
         val ownParent = parent?.let { dao.task(it) }?.takeIf { it.conversation == it.hand }
         var reportedOutcome = outcome
         if (question == null && ownParent != null && !pendingWork(dao, ownParent.id)) {
@@ -443,9 +452,223 @@ object TaskEngine {
         }
 
     internal suspend fun elapsed(context: Context, id: String): Long {
-        val dao = dao(context)
-        val at = dao.log(id).lastOrNull { it.kind == TaskLogEntity.Kind.STARTED.name }?.at ?: dao.task(id)?.createdAt
-        return at?.let { (System.currentTimeMillis() - it).coerceAtLeast(0) } ?: 0
+        return elapsedIn(dao(context), id)
+    }
+
+    internal suspend fun elapsedIn(dao: TaskDao, id: String): Long {
+        val task = dao.task(id) ?: return 0
+        if (task.state == TaskEntity.State.WAITING.name) Approval.elapsed(task.ask)?.let { return it }
+        val started = dao.log(id).lastOrNull { it.kind == TaskLogEntity.Kind.STARTED.name }
+        val at = started?.at ?: task.createdAt
+        val carried = started?.body?.let { runCatching { JSONObject(it).optLong("elapsed_ms") }.getOrDefault(0) } ?: 0
+        return carried + (System.currentTimeMillis() - at).coerceAtLeast(0)
+    }
+
+    suspend fun waitForApproval(context: Context, spec: Approval.Spec): Approval.Spec = change(context) { dao, _ ->
+        val source = ChatViewModelStore.existing(spec.request.sessionId)?.messages?.value?.lastOrNull { it.rendersAsUserBubble() && !it.unread }
+        queueApprovalIn(dao, spec, if (spec.mode == Approval.Mode.NATIVE) null else source?.id,
+            if (spec.mode == Approval.Mode.NATIVE) spec.request.summary else source?.content)
+    }
+
+    suspend fun findApproval(context: Context, id: String): Approval.Spec? =
+        (context.applicationContext as MinisApp).database.withTransaction {
+            dao(context).approvalTasks().flatMap { Approval.pending(it.ask) }.firstOrNull { it.request.id == id }
+        }
+
+    internal suspend fun queueApprovalIn(dao: TaskDao, spec: Approval.Spec, sourceId: String? = null, sourceWords: String? = null): Approval.Spec {
+        if (spec.mode in listOf(Approval.Mode.SHELL, Approval.Mode.NATIVE)) {
+            val recipe = requireNotNull(spec.shellArgs) { "Approval needs the exact saved command parameters." }
+            com.openminis.app.scheduled.PrefilledToolCall("shell_execute", recipe).validationError()?.let { throw IllegalArgumentException(it) }
+        }
+        val request = spec.request
+        val now = System.currentTimeMillis()
+        val task = request.taskId?.let { dao.task(it) ?: error("the task was deleted") } ?: run {
+            require(spec.mode != Approval.Mode.SCREEN) { "A screen approval needs a saved screen task; use momoding-hands run." }
+            TaskEntity(newId(), request.sessionId, sourceId, (request.summary ?: request.preview).lineSequence().first().take(60),
+                request.sessionId, TaskEntity.State.RUNNING.name, createdAt = now, updatedAt = now).also {
+                dao.insertTask(it)
+                sourceWords?.let { words -> log(dao, it.id, TaskLogEntity.Kind.AUTHORIZED, words) }
+            }
+        }
+        val hand = if (spec.mode == Approval.Mode.SCREEN) TaskEntity.SCREEN else request.sessionId
+        TaskGuard.checkIn(dao, TaskGuard.Binding(hand, task.id), outward = true, allowWaiting = true)?.let { error(it) }
+        check(task.ask == null || Approval.pending(task.ask).isNotEmpty()) { "Answer the task's current question before requesting this approval." }
+        val parent = if (spec.mode == Approval.Mode.SCREEN) dao.screenSpec(task.id)
+            ?.let { JSONObject(it).optString("parent").takeIf(String::isNotBlank) }?.let { dao.task(it) } else null
+        val captured = spec.copy(request = request.copy(taskId = task.id, conversation = parent?.conversation ?: task.conversation))
+        val sequence = log(dao, task.id, TaskLogEntity.Kind.APPROVAL, captured.json().toString())
+        val bound = captured.copy(request = captured.request.copy(sequence = sequence))
+        setApprovalAsk(dao, task, Approval.pending(task.ask) + bound)
+        if (spec.mode == Approval.Mode.SCREEN) {
+            parent?.let { owner ->
+                check(owner.ask == null || Approval.pending(owner.ask).isNotEmpty()) { "The parent task is waiting on another question." }
+                setApprovalAsk(dao, owner, Approval.pending(owner.ask) + bound)
+            }
+            log(dao, task.id, TaskLogEntity.Kind.REPORT, "Waiting for approval; the proposed action has not run.")
+        }
+        return bound
+    }
+
+    private suspend fun setApprovalAsk(dao: TaskDao, task: TaskEntity, requests: List<Approval.Spec>, ignoreModel: Boolean = false) {
+        val carried = elapsedIn(dao, task.id)
+        val model = ChatViewModelStore.existing(task.hand)
+        val active = requests.isEmpty() || ShellWork.pending(dao.log(task.id)).isNotEmpty() ||
+            dao.children(task.id).any { it.state == TaskEntity.State.RUNNING.name } ||
+            (!ignoreModel && model?.activeTaskId == task.id && model.turnIsRunning)
+        dao.updateTask(task.copy(state = (if (active) TaskEntity.State.RUNNING else TaskEntity.State.WAITING).name,
+            ask = Approval.ask(requests, carried), updatedAt = System.currentTimeMillis()))
+        if (active && task.state == TaskEntity.State.WAITING.name) {
+            log(dao, task.id, TaskLogEntity.Kind.STARTED, JSONObject().put("resumed", "approval").put("elapsed_ms", carried).toString())
+        }
+    }
+
+    private suspend fun refreshApprovalBudget(dao: TaskDao, id: String, ignoreModel: Boolean = false) {
+        val task = dao.task(id)?.takeIf { it.state != TaskEntity.State.ENDED.name } ?: return
+        val requests = Approval.pending(task.ask)
+        if (requests.isNotEmpty()) setApprovalAsk(dao, task, requests, ignoreModel)
+    }
+
+    suspend fun turnStarted(context: Context, taskId: String?) = change(context) { dao, _ ->
+        taskId?.let { refreshApprovalBudget(dao, it) }
+    }
+
+    suspend fun decideApproval(context: Context, spec: Approval.Spec, answer: app.momoding.guard.RiskDecision): Approval.Decision? = change(context) { dao, after ->
+        val live = app.momoding.guard.RiskGate.isWaiting(spec.request.id)
+        val decided = decideApprovalIn(dao, spec, answer, live) ?: return@change null
+        val task = dao.task(requireNotNull(spec.request.taskId)) ?: return@change decided
+        if (spec.mode == Approval.Mode.SCREEN) {
+            if (!ScreenWork.isRunning(task.id)) {
+                if (decided.allowed && Approval.pending(task.ask).isEmpty()) {
+                    dao.updateTask(task.copy(state = TaskEntity.State.QUEUED.name))
+                    dao.screenSpec(task.id)?.let { JSONObject(it).optString("parent").takeIf(String::isNotBlank) }
+                        ?.let { refreshApprovalBudget(dao, it) }
+                    after += { ScreenWork.wake() }
+                } else if (!decided.allowed) after += { screenFinished(context, task.id, app.momoding.hands.HandsOperator.Result(
+                    app.momoding.hands.HandsOperator.Outcome.Infeasible("The person did not allow this action."),
+                    0, spec.request.id, null, null, emptyList(), null)) }
+            }
+        } else if (!live) after += { tellChat(context, task.hand) }
+        decided
+    }
+
+    internal suspend fun decideApprovalIn(dao: TaskDao, spec: Approval.Spec, answer: app.momoding.guard.RiskDecision, live: Boolean): Approval.Decision? {
+        val task = spec.request.taskId?.let { dao.task(it) } ?: return null
+        if (task.state == TaskEntity.State.ENDED.name) return null
+        val stored = Approval.pending(task.ask).firstOrNull { it.request.id == spec.request.id } ?: return null
+        val decision = Approval.Decision(stored, answer)
+        log(dao, task.id, TaskLogEntity.Kind.APPROVAL_DECISION, decision.json())
+        setApprovalAsk(dao, task, Approval.pending(task.ask).filterNot { it.request.id == stored.request.id })
+        if (stored.mode == Approval.Mode.SCREEN) {
+            dao.screenSpec(task.id)?.let { JSONObject(it).optString("parent").takeIf(String::isNotBlank) }?.let { id ->
+                dao.task(id)?.takeIf { it.state != TaskEntity.State.ENDED.name }?.let { parent ->
+                    setApprovalAsk(dao, parent, Approval.pending(parent.ask).filterNot { it.request.id == stored.request.id })
+                }
+            }
+        } else if (decision.allowed && !live) {
+            postApprovedShell(dao, decision)
+        } else if (!decision.allowed) {
+            val words = "The person did not allow this (" + stored.request.assessment.reason + "). It was not run. Do not retry or work around it."
+            if (task.conversation == task.hand && !pendingWork(dao, task.id)) {
+                dao.updateTask(dao.task(task.id)!!.copy(state = TaskEntity.State.ENDED.name, outcome = TaskEntity.Outcome.FAILED.name, ask = null))
+                log(dao, task.id, TaskLogEntity.Kind.END, words)
+            }
+            if (!live) Inbox.post(dao, task.hand, REPORT_CUE + task.id + " · approval · command_result] " + words, task.id)
+        }
+        return decision
+    }
+
+    private suspend fun postApprovedShell(dao: TaskDao, decision: Approval.Decision) {
+        val spec = decision.spec
+        val task = dao.task(requireNotNull(spec.request.taskId)) ?: return
+        if (task.state == TaskEntity.State.ENDED.name || Approval.unclaimed(dao.log(task.id)).none { it.spec.request.id == spec.request.id }) return
+        val args = spec.shellArgs?.let(::JSONObject) ?: return
+        val message = "approval:" + spec.request.id
+        val row = dao.inbox(message)
+        if (row == null) Inbox.post(dao, task.hand, REPORT_CUE + task.id + " · approval · command_result] The person approved the exact prefilled command. Execute it once and use its result; do not repeat it.",
+            task.id, sender = InboxEntity.Sender.COMMAND,
+            prefill = listOf(com.openminis.app.scheduled.PrefilledToolCall("shell_execute", args.put(Approval.TICKET_ARG, spec.ticket).toString())), id = message)
+        else if (row.readAt != null) dao.retryInbox(message)
+    }
+
+    suspend fun resumeApproved(context: Context, taskId: String) = change(context) { dao, after ->
+        for (decision in Approval.unclaimed(dao.log(taskId))) {
+            if (decision.spec.mode in listOf(Approval.Mode.SHELL, Approval.Mode.NATIVE)) postApprovedShell(dao, decision)
+        }
+        dao.task(taskId)?.takeIf { dao.unread(it.hand).isNotEmpty() }?.let { after += { tellChat(context, it.hand) } }
+    }
+
+    suspend fun claimApproval(context: Context, session: String, ticket: String, args: String? = null,
+        actual: app.momoding.guard.RiskRequest? = null,
+    ): Approval.Claim = change(context) { dao, _ ->
+        claimApprovalIn(dao, session, ticket, args, actual)
+    }
+
+    internal suspend fun claimApprovalIn(dao: TaskDao, session: String, ticket: String, args: String? = null,
+        actual: app.momoding.guard.RiskRequest? = null,
+    ): Approval.Claim {
+        val taskId = ticket.substringBefore(':')
+        val id = ticket.substringAfter(':', "")
+        val task = dao.task(taskId) ?: return Approval.Claim.Denied("The approval's task was deleted.")
+        val decision = dao.log(taskId).filter { it.kind == TaskLogEntity.Kind.APPROVAL_DECISION.name }.map { Approval.Decision.parse(it.body) }
+            .lastOrNull { it.spec.request.id == id } ?: return Approval.Claim.Denied("That approval is no longer available.")
+        if (!decision.allowed) return Approval.Claim.Denied("The person did not allow this (" + decision.spec.request.assessment.reason + "). Do not retry it.")
+        if (Approval.unclaimed(dao.log(taskId)).none { it.spec.request.id == id }) return Approval.Claim.Denied("That approval was already used or withdrawn. Do not repeat the command.")
+        val spec = decision.spec
+        if (spec.request.sessionId != session) return Approval.Claim.Denied("That approval belongs to another conversation.")
+        val hand = if (spec.mode == Approval.Mode.SCREEN) TaskEntity.SCREEN else session
+        val denied = when {
+            spec.mode == Approval.Mode.SHELL && args == null -> "An approved shell call needs its saved parameters."
+            args != null && (spec.shellArgs == null || Approval.shellSignature(args) != Approval.shellSignature(spec.shellArgs)) -> "The command or its parameters changed; that approval does not apply."
+            actual != null && !spec.sameAction(actual) -> "The target changed; that approval does not apply."
+            else -> TaskGuard.checkIn(dao, TaskGuard.Binding(hand, taskId), outward = true, allowWaiting = Approval.pending(task.ask).isNotEmpty())
+        }
+        if (denied != null) {
+            log(dao, taskId, TaskLogEntity.Kind.APPROVAL_CLOSED, JSONObject().put("id", id).put("reason", denied).toString())
+            if (task.state != TaskEntity.State.ENDED.name && task.ask == null) {
+                dao.updateTask(task.copy(state = TaskEntity.State.WAITING.name,
+                    ask = JSONObject().put("kind", "approval_invalid").put("question", denied).toString()))
+            }
+            return Approval.Claim.Denied(denied)
+        }
+        log(dao, taskId, TaskLogEntity.Kind.APPROVAL_USED, JSONObject().put("id", id).toString())
+        val command = if (spec.mode in listOf(Approval.Mode.SHELL, Approval.Mode.NATIVE)) {
+            ShellWork.Command(id, session + "~command~" + id, JSONObject(requireNotNull(spec.shellArgs)).getString("command"))
+                .also { log(dao, taskId, TaskLogEntity.Kind.COMMAND, it.json()) }
+        } else null
+        refreshApprovalBudget(dao, taskId)
+        return Approval.Claim.Granted(Approval.Permit(spec, decision.answer, command))
+    }
+
+    suspend fun screenApproval(context: Context, actual: app.momoding.guard.RiskRequest): Approval.Claim? = change(context) { dao, _ ->
+        val id = actual.taskId ?: return@change null
+        val unused = Approval.unclaimed(dao.log(id)).filter { it.spec.mode == Approval.Mode.SCREEN }
+        unused.firstOrNull { it.spec.sameAction(actual) }?.let { return@change claimApprovalIn(dao, actual.sessionId, it.spec.ticket, actual = actual) }
+        unused.forEach { log(dao, id, TaskLogEntity.Kind.APPROVAL_CLOSED, JSONObject().put("id", it.spec.request.id).put("reason", "screen target changed").toString()) }
+        null
+    }
+
+    internal suspend fun invalidateApprovals(dao: TaskDao, id: String) {
+        for (decision in Approval.unclaimed(dao.log(id))) {
+            log(dao, id, TaskLogEntity.Kind.APPROVAL_CLOSED, JSONObject().put("id", decision.spec.request.id).put("reason", "new instructions").toString())
+            dao.deleteInbox(listOf("approval:" + decision.spec.request.id))
+        }
+    }
+
+    private suspend fun recoverApprovals(context: Context) = change(context) { dao, after ->
+        recoverApprovalsIn(dao).forEach { hand -> after += { tellChat(context, hand) } }
+    }
+
+    internal suspend fun recoverApprovalsIn(dao: TaskDao): Set<String> {
+        val wake = mutableSetOf<String>()
+        for (task in dao.approvalTasks()) {
+            for (decision in Approval.unclaimed(dao.log(task.id))) {
+                if (decision.spec.mode == Approval.Mode.SCREEN) {
+                    if (Approval.pending(task.ask).isEmpty()) dao.updateTask(task.copy(state = TaskEntity.State.QUEUED.name))
+                } else postApprovedShell(dao, decision)
+            }
+            if (dao.unread(task.hand).isNotEmpty()) wake += task.hand
+        }
+        return wake
     }
 
     internal suspend fun commandStarted(context: Context, chat: String, taskAtStart: String?, title: String,
@@ -468,7 +691,7 @@ object TaskEngine {
     }
 
     internal suspend fun commandFinished(context: Context, id: String, command: ShellWork.Command,
-        result: com.openminis.app.tools.ToolExecutionResult, budgetExpired: Boolean = false,
+        result: com.openminis.app.tools.ToolExecutionResult, budgetExpired: Boolean = false, announce: Boolean = true,
     ) = change(context) { dao, after ->
         val task = dao.task(id) ?: return@change
         if (task.state == TaskEntity.State.ENDED.name || ShellWork.pending(dao.log(id)).none { it.id == command.id }) return@change
@@ -479,6 +702,7 @@ object TaskEngine {
             after += { handIdle(context, task.hand) }
             return@change
         }
+        refreshApprovalBudget(dao, id)
         val ownCommand = task.conversation == task.hand
         val completeOwn = ownCommand && !pendingWork(dao, id)
         val kind = if (result.success) "done" else "failed"
@@ -489,8 +713,10 @@ object TaskEngine {
             log(dao, id, TaskLogEntity.Kind.END, result.output)
         }
         val words = "$REPORT_CUE$id · command · ${if (completeOwn) kind else "command_result"}] ${result.output}"
-        Inbox.post(dao, task.hand, words, id, sender = InboxEntity.Sender.COMMAND)
-        after += { tellChat(context, task.hand) }
+        if (announce) {
+            Inbox.post(dao, task.hand, words, id, sender = InboxEntity.Sender.COMMAND)
+            after += { tellChat(context, task.hand) }
+        }
     }
 
     /** A killed process cannot prove a command's effect. Keep it waiting for verification. */
@@ -534,6 +760,7 @@ object TaskEngine {
             if (helper && current != null && dao.task(current.id)?.state == TaskEntity.State.ENDED.name) {
                 after += { Helpers.ended(context, hand, current.conversation) }
             }
+            current?.let { refreshApprovalBudget(dao, it.id, ignoreModel = true) }
             after += {
                 val deferred = kotlinx.coroutines.withContext(Dispatchers.Main) {
                     ChatViewModelStore.existing(hand)?.afterTurn { scope.launch { handIdle(context, hand) } } == true
@@ -640,5 +867,7 @@ object TaskEngine {
             )
         }
         return JSONObject().put("tasks", tasks).put("inbox", inbox)
+            .put("active_ids", JSONArray(active.value.map { it.id }))
+            .put("approval_ids", JSONArray(app.momoding.guard.RiskGate.open.value.map { it.id }))
     }
 }

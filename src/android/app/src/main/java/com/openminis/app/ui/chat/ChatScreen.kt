@@ -5263,8 +5263,14 @@ fun ChatScreen(
                 // overlay around the input Column below, mirroring iOS
                 // AIChatView.swift:1817 (.overlay(alignment: .topTrailing)).
 
-                // T-chat-title-pill: sticky session title overlay. Sits
-                // above the LazyColumn (top-center), animates in once the
+                // Approval occupies the message area; the composer remains available while it waits.
+                app.momoding.ui.guard.RiskScrim(sessionId = viewModel.activeSessionId)
+                Box(
+                    Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                        .wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = CHAT_MAX_CONTENT_WIDTH),
+                ) {
+                    app.momoding.ui.guard.RiskApprovalHost(sessionId = viewModel.activeSessionId)
+                }
             }
 
             // T-chat-title-pill-edit: reuse SessionEditSheet from the session
@@ -7772,12 +7778,6 @@ fun ChatScreen(
 
     // Offload permission dialog
     OffloadPermissionDialog()
-
-    // momoding: "Needs approval" — the conversation dims and the card sits at the bottom of the chat
-    app.momoding.ui.guard.RiskScrim(sessionId = viewModel.activeSessionId)
-    Box(Modifier.fillMaxSize().navigationBarsPadding().imePadding(), contentAlignment = Alignment.BottomCenter) {
-        app.momoding.ui.guard.RiskApprovalHost(sessionId = viewModel.activeSessionId)
-    }
 
     // URL preview sheet — shown when a markdown link is tapped
     previewUrl?.let { url ->

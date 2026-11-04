@@ -99,7 +99,7 @@ data class TaskLogEntity(
     val kind: String,
     val body: String,
 ) {
-    enum class Kind { AUTHORIZED, PASSED_ON, STARTED, ROUTINE, ROUTINE_RECORDED, COMMAND, COMMAND_RESULT, CHILD, SCREEN, SCREEN_RESULT, ABOUT_TO, RESULT, REPORT, END }
+    enum class Kind { AUTHORIZED, PASSED_ON, STARTED, ROUTINE, ROUTINE_RECORDED, COMMAND, COMMAND_RESULT, CHILD, SCREEN, SCREEN_RESULT, APPROVAL, APPROVAL_DECISION, APPROVAL_USED, APPROVAL_CLOSED, ABOUT_TO, RESULT, REPORT, END }
 }
 
 @Dao
@@ -207,6 +207,9 @@ interface TaskDao {
     @Query("SELECT * FROM task WHERE state != 'ENDED' AND id IN (SELECT task_id FROM task_log WHERE kind = 'COMMAND')")
     suspend fun commandTasks(): List<TaskEntity>
 
+    @Query("SELECT * FROM task WHERE state != 'ENDED' AND id IN (SELECT task_id FROM task_log WHERE kind = 'APPROVAL')")
+    suspend fun approvalTasks(): List<TaskEntity>
+
     @Query("SELECT t.* FROM task t JOIN task_log l ON l.task_id = t.id WHERE t.hand = :hand AND l.kind = 'COMMAND' AND instr(l.body, :processNeedle) > 0 ORDER BY l.id DESC LIMIT 1")
     suspend fun byExecution(hand: String, processNeedle: String): TaskEntity?
 
@@ -236,7 +239,7 @@ interface TaskDao {
     suspend fun queuedHelpers(): List<TaskEntity>
 
     @Insert
-    suspend fun insertLog(row: TaskLogEntity)
+    suspend fun insertLog(row: TaskLogEntity): Long
 
     @Query("SELECT * FROM task_log WHERE task_id = :taskId ORDER BY id")
     suspend fun log(taskId: String): List<TaskLogEntity>

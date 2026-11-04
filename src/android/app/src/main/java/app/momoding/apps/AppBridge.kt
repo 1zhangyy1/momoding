@@ -1,5 +1,9 @@
 package app.momoding.apps
 
+import app.momoding.home.MainChat
+import app.momoding.task.TaskEngine
+import com.openminis.app.MinisApp
+
 import android.content.Context
 import android.content.res.Configuration
 import android.os.Handler
@@ -189,12 +193,31 @@ class AppBridge(private val context: Context, private val webView: WebView, priv
             MoApps.log(app, "log preview", "momoding.run(${JSONObject.quote(command)}) — not done in a check; on the phone it would be")
             return JSONObject().put("code", 0).put("output", "").put("preview", true)
         }
-        // the same gate as the agent's own commands, in the app's Bot chat (and on the app's screen)
-        when (val gate = RiskGate.checkShell(app.botSession ?: (GATE_PREFIX + app.name), command, summary = "${app.title}: $command")) {
+        // The UI keeps its original promise; an interrupted caller can resume from its saved recipe.
+        val gateSession = app.botSession ?: MainChat.resolve(context, (context.applicationContext as MinisApp).chatRepository)
+        val recipe = JSONObject().put("command", command).put("tool_title", app.title + ": " + command).toString()
+        val gate = RiskGate.checkShell(gateSession, command, summary = app.title + ": " + command,
+            shellArgs = recipe)
+        when (gate) {
             is GateOutcome.Denied -> throw IllegalStateException(gate.message)
+            is GateOutcome.Waiting -> return JSONObject().put("code", 202).put("task", gate.taskId).put("output", "Waiting for approval.")
             is GateOutcome.Allowed -> Unit
         }
-        val r = NativeOffloadServer.dispatch(NativeOffloadRequest(pid = 0, argv = argv, env = emptyMap(), cwd = "/", sessionId = app.botSession))
+        val permit = gate.permit
+        var executed: com.openminis.app.sandbox.NativeOffloadResult? = null
+        val r = try {
+            NativeOffloadServer.dispatch(NativeOffloadRequest(pid = 0, argv = argv,
+                env = permit?.command?.let { mapOf("MINIS_EXECUTION_ID" to it.process) }.orEmpty(),
+                cwd = "/", sessionId = gateSession)).also { executed = it }
+        } finally {
+            permit?.command?.let { saved ->
+                kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                    TaskEngine.commandFinished(context, requireNotNull(permit.spec.request.taskId), saved,
+                        com.openminis.app.tools.ToolExecutionResult(executed?.output ?: "The native command was interrupted; verify its outcome before repeating.",
+                            executed?.exitCode == 0), announce = false)
+                }
+            }
+        }
         val out = JSONObject().put("code", r.exitCode).put("output", r.output)
         runCatching { JSONTokener(r.output.trim()).nextValue() }.getOrNull()?.takeIf { it is JSONObject || it is JSONArray }?.let { out.put("json", it) }
         AppLogger.info(TAG, "${app.name} ran $name -> ${r.exitCode}")

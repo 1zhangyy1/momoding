@@ -42,10 +42,12 @@ object ShellWork {
     }
 
     suspend fun run(context: Context, chat: String, taskAtStart: String?, title: String, text: String,
+        permit: Approval.Permit? = null,
         execute: suspend (process: String, foreground: () -> Boolean) -> ToolExecutionResult,
     ): ToolExecutionResult {
         val id = java.util.UUID.randomUUID().toString()
-        val command = Command(id, "$chat~command~$id", text)
+        val command = permit?.command ?: Command(id, "$chat~command~$id", text)
+        val registered = permit?.spec?.request?.taskId
         val foreground = AtomicBoolean(true)
         val budgetExpired = AtomicBoolean(false)
         val remaining = if (taskAtStart != null && Helpers.isHelper(context, chat)) {
@@ -53,6 +55,11 @@ object ShellWork {
                 com.openminis.app.agent.jobs.HelperRunner.WRAP_UP_GRACE_MS - TaskEngine.elapsed(context, taskAtStart)
         } else null
         val execution = scope.async(start = CoroutineStart.LAZY) {
+            if (registered != null) {
+                val allowedWaiting = Approval.pending(TaskEngine.dao(context).task(registered)?.ask).isNotEmpty()
+                TaskGuard.check(context, TaskGuard.Binding(chat, registered), outward = true, allowWaiting = allowedWaiting)
+                    ?.let { return@async ToolExecutionResult(it, false) }
+            }
             if (remaining == null) execute(command.process, foreground::get)
             else (if (remaining <= 0) null else withTimeoutOrNull(remaining) { execute(command.process, foreground::get) }) ?: run {
                 budgetExpired.set(true)
@@ -65,10 +72,14 @@ object ShellWork {
         execution.start()
         var handedOn = false
         try {
-            withTimeoutOrNull(FOREGROUND_MS) { execution.await() }?.let { return it }
+            withTimeoutOrNull(FOREGROUND_MS) { execution.await() }?.let {
+                if (registered != null) withContext(NonCancellable) { TaskEngine.commandFinished(context, registered, command, it, announce = false) }
+                return it
+            }
             foreground.set(false)
             return withContext(NonCancellable) {
-                val task = TaskEngine.commandStarted(context, chat, taskAtStart, title, command)
+                val task = if (registered == null) TaskEngine.commandStarted(context, chat, taskAtStart, title, command)
+                    else requireNotNull(TaskEngine.dao(context).task(registered)).also { check(it.state != TaskEntity.State.ENDED.name) { "The task ended before its command was handed on." } }
                 com.openminis.app.service.SessionActivityTracker.keepBackgroundWork(command.process, chat) {
                     scope.launch { stop(command.process) }
                 }

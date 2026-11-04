@@ -60,6 +60,7 @@ object SessionDeleter {
             withContext(Dispatchers.Main) { ChatViewModelStore.release(id) }
             HeadlessChatRunner.forget(id)
             app.momoding.guard.Grants.clearSession(id)
+            app.momoding.guard.RuleHits.clearSession(id)
             // No live writer remains when files are removed.
             freed += storage.deleteFiles(id)
             SessionBadgeStore.clear(id)

@@ -10,6 +10,8 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,6 +41,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,7 +77,7 @@ import app.momoding.ui.Design
 fun RiskApprovalHost(sessionId: String) {
     val open by RiskGate.open.collectAsState()
     // this chat's own, or one of a Momoding this chat handed work to: questions come to where the person asked
-    val own = open.firstOrNull { it.sessionId == sessionId || app.momoding.task.TaskEngine.conversationOf(it.sessionId) == sessionId }
+    val own = open.firstOrNull { it.conversation == sessionId || it.sessionId == sessionId || app.momoding.task.TaskEngine.conversationOf(it.sessionId) == sessionId }
     val request = own ?: open.firstOrNull()
     val mine = own != null
     // nothing waits: another Momoding that has just done something for the person says so here
@@ -86,7 +89,9 @@ fun RiskApprovalHost(sessionId: String) {
     ) {
         // Keep drawing the last request through the exit animation.
         val shown = request ?: return@AnimatedVisibility
-        if (mine) RiskApprovalCard(shown) else ElsewhereBanner(shown)
+        key(shown.id) {
+            if (mine) RiskApprovalCard(shown) else ElsewhereBanner(shown)
+        }
     }
 }
 
@@ -94,7 +99,7 @@ fun RiskApprovalHost(sessionId: String) {
 @Composable
 fun RiskScrim(sessionId: String) {
     val open by RiskGate.open.collectAsState()
-    val visible = open.any { it.sessionId == sessionId || app.momoding.task.TaskEngine.conversationOf(it.sessionId) == sessionId }
+    val visible = open.any { it.conversation == sessionId || it.sessionId == sessionId || app.momoding.task.TaskEngine.conversationOf(it.sessionId) == sessionId }
     AnimatedVisibility(visible = visible, enter = fadeIn(tween(220)), exit = fadeOut(tween(160))) {
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.28f)).clickable(enabled = false) {})
     }
@@ -121,7 +126,7 @@ internal fun RiskApprovalCard(request: RiskRequest) {
         shape = RoundedCornerShape(Design.Radius.Card),
         color = Tones.surface,
     ) {
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 16.dp)) {
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     Modifier.size(40.dp).clip(CircleShape).background(Tones.fill),
@@ -317,7 +322,9 @@ private fun ElsewhereBanner(request: RiskRequest) {
     val context = LocalContext.current
     val bot = app.momoding.apps.BotStatus.botOf(context, request.sessionId)
     BannerPill(stringResource(R.string.mo_bot_waiting_banner, app.momoding.apps.BotStatus.name(context, bot), request.summary ?: request.preview.lines().first())) {
-        app.momoding.apps.AppChat.home(context, bot, app.momoding.apps.MoApps.ofSession(context, bot), raise = true)
+        val destination = request.conversation
+        if (destination != null) context.startActivity(app.momoding.deeplink.OwnScheme.intent(context, android.net.Uri.parse("minis://session/" + destination)))
+        else app.momoding.apps.AppChat.home(context, bot, app.momoding.apps.MoApps.ofSession(context, bot), raise = true)
     }
 }
 
