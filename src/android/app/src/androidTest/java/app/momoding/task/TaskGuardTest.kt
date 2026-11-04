@@ -30,6 +30,14 @@ class TaskGuardTest {
     private suspend fun check(binding: TaskGuard.Binding, outward: Boolean = false) =
         db.withTransaction { TaskGuard.checkIn(db.taskDao(), binding, outward) }
 
+    @Test fun aPendingQuestionStillBlocksOutwardActionsWhileOtherWorkContinues() = runBlocking {
+        val row = task("question")
+        db.taskDao().updateTask(row.copy(ask = """{"question":"which date?"}"""))
+        val binding = TaskGuard.Binding(chat, row.id)
+        assertNull(check(binding))
+        assertTrue(check(binding, outward = true)!!.contains("waiting"))
+    }
+
     @Test fun anIndependentMessageDoesNotBorrowTheMainChatsDetachedTask() = runBlocking {
         task("background", hold = "wait for me")
         val independent = db.withTransaction { TaskGuard.bindIn(db.taskDao(), chat) }

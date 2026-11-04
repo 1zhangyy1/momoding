@@ -59,14 +59,11 @@ object Approval {
         }
     }.orEmpty()
 
-    fun ask(requests: List<Spec>, elapsedMs: Long): String? = requests.takeIf { it.isNotEmpty() }?.let {
+    fun ask(requests: List<Spec>): String? = requests.takeIf { it.isNotEmpty() }?.let {
         JSONObject().put("kind", "approval").put("requests", JSONArray(it.map(Spec::json)))
             .put("question", it.first().request.summary ?: it.first().request.assessment.reason)
-            .put("elapsed_ms", elapsedMs)
             .put("screen", it.firstOrNull { s -> s.mode == Mode.SCREEN }?.request?.taskId).toString()
     }
-
-    fun elapsed(ask: String?): Long? = ask?.let { JSONObject(it).takeIf { o -> o.optString("kind") == "approval" }?.optLong("elapsed_ms") }
 
     fun checkPrefill(calls: List<com.openminis.app.scheduled.PrefilledToolCall>, available: Set<String>) {
         if (calls.none { it.args().has(TICKET_ARG) }) return

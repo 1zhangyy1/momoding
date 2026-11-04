@@ -107,6 +107,7 @@ object TaskEngine {
         }
         if (task.hand == TaskEntity.SCREEN) {
             val live = ScreenWork.isRunning(id)
+            clock(dao, task, live, "screen continued", reset = task.state == TaskEntity.State.ENDED.name)
             val next = task.copy(state = (if (live) TaskEntity.State.RUNNING else TaskEntity.State.QUEUED).name,
                 ask = null, outcome = null, updatedAt = System.currentTimeMillis())
             dao.updateTask(next)
@@ -120,10 +121,12 @@ object TaskEngine {
             else -> TaskEntity.State.RUNNING
         }
         val next = task.copy(state = state.name, ask = null, outcome = null, updatedAt = System.currentTimeMillis())
+        if (task.state == TaskEntity.State.WAITING.name || task.state == TaskEntity.State.ENDED.name) {
+            clock(dao, task, state == TaskEntity.State.RUNNING, "resumed", reset = task.state == TaskEntity.State.ENDED.name)
+        }
         dao.updateTask(next)
         if (helper || state == TaskEntity.State.RUNNING) postForHand(context, dao, next, text)
         if (state == TaskEntity.State.RUNNING) {
-            if (task.state == TaskEntity.State.ENDED.name || task.state == TaskEntity.State.WAITING.name) log(dao, id, TaskLogEntity.Kind.STARTED, "resumed")
             if (task.state == TaskEntity.State.ENDED.name) dao.retryTaskInbox(task.id, task.hand)
             after += { deliver(context, next) }
         }
@@ -145,7 +148,7 @@ object TaskEngine {
             throw IllegalStateException("There are unread instructions for this hand. Read them at the next step before reporting done.")
         }
         val now = System.currentTimeMillis()
-        val next = when (kind) {
+        val draft = when (kind) {
             Report.PROGRESS -> task.copy(progress = text.lineSequence().first().take(120))
             Report.ASK -> task.copy(state = TaskEntity.State.WAITING.name, ask =
                 if (Approval.pending(task.ask).isNotEmpty()) JSONObject(task.ask!!).put("question", text).toString()
@@ -155,7 +158,8 @@ object TaskEngine {
                 outcome = (if (kind == Report.DONE) TaskEntity.Outcome.DONE else TaskEntity.Outcome.FAILED).name,
             )
         }.copy(updatedAt = now)
-        dao.updateTask(next)
+        val next = if (kind == Report.ASK) setAskIn(dao, task, draft.ask)
+            else draft.also { dao.updateTask(it) }
         if (kind == Report.FAILED) {
             for (child in dao.children(task.id)) stopTree(context, dao, after, child.id, "The task it belonged to ended.")
             ShellWork.pending(dao.log(task.id)).forEach { command -> after += { ShellWork.stop(command.process) } }
@@ -236,7 +240,7 @@ object TaskEngine {
     suspend fun pendingWork(dao: TaskDao, id: String): Boolean {
         val history = dao.log(id)
         return ShellWork.pending(history).isNotEmpty() || Approval.unclaimed(history).isNotEmpty() ||
-            Approval.pending(dao.task(id)?.ask).isNotEmpty() || dao.children(id).any { it.state != TaskEntity.State.ENDED.name }
+            dao.task(id)?.ask != null || dao.children(id).any { it.state != TaskEntity.State.ENDED.name }
     }
 
     /** Native commands retain the task of the process that launched them, even after its model turn. */
@@ -311,11 +315,11 @@ object TaskEngine {
         if (dao.heldBy(TaskEntity.SCREEN) != null) return null
         val task = dao.nextFor(TaskEntity.SCREEN) ?: return null
         if (!claim()) return null
+        clock(dao, task, true, "screen lease acquired")
         val next = task.copy(state = TaskEntity.State.RUNNING.name, updatedAt = System.currentTimeMillis())
         dao.updateTask(next)
-        log(dao, task.id, TaskLogEntity.Kind.STARTED, "screen lease acquired")
         dao.screenSpec(task.id)?.let { JSONObject(it).optString("parent").takeIf(String::isNotBlank) }
-            ?.let { refreshApprovalBudget(dao, it) }
+            ?.let { refreshBudget(dao, it) }
         return next
     }
 
@@ -352,22 +356,27 @@ object TaskEngine {
     }
 
     suspend fun screenWaiting(context: Context, id: String, question: String) = change(context) { dao, _ ->
-        val task = dao.task(id)?.takeIf { it.state != TaskEntity.State.ENDED.name } ?: return@change
+        screenWaitingIn(dao, id, question)
+    }
+
+    internal suspend fun screenWaitingIn(dao: TaskDao, id: String, question: String) {
+        val task = dao.task(id)?.takeIf { it.state != TaskEntity.State.ENDED.name } ?: return
         val ask = JSONObject().put("kind", "screen_takeover").put("screen", id).put("question", question).toString()
-        dao.updateTask(task.copy(state = TaskEntity.State.WAITING.name, ask = ask, updatedAt = System.currentTimeMillis()))
+        setAskIn(dao, task, ask)
         log(dao, id, TaskLogEntity.Kind.REPORT, question)
-        screenSpec(context, id).parent?.let { parent -> dao.task(parent)?.takeIf { it.state != TaskEntity.State.ENDED.name }?.let {
-            dao.updateTask(it.copy(state = TaskEntity.State.WAITING.name, ask = ask, updatedAt = System.currentTimeMillis()))
+        dao.screenSpec(id)?.let { JSONObject(it).optString("parent").takeIf(String::isNotBlank) }?.let { parent -> dao.task(parent)?.takeIf { it.state != TaskEntity.State.ENDED.name }?.let {
+            setAskIn(dao, it, ask)
         } }
     }
 
     private suspend fun screenParentReady(dao: TaskDao, id: String) {
         val spec = dao.log(id).firstOrNull { it.kind == TaskLogEntity.Kind.SCREEN.name }?.body?.let { ScreenWork.Spec.parse(it) } ?: return
         spec.parent?.let { parent -> dao.task(parent)?.takeIf {
-            it.state == TaskEntity.State.WAITING.name && it.ask?.let { ask -> JSONObject(ask).optString("screen") } == id
+            it.state in listOf(TaskEntity.State.RUNNING.name, TaskEntity.State.WAITING.name) &&
+                it.ask?.let { ask -> JSONObject(ask).optString("screen") } == id
         }?.let {
+            clock(dao, it, true, "screen continued")
             dao.updateTask(it.copy(state = TaskEntity.State.RUNNING.name, ask = null, updatedAt = System.currentTimeMillis()))
-            log(dao, it.id, TaskLogEntity.Kind.STARTED, "screen continued")
         } }
     }
 
@@ -376,6 +385,7 @@ object TaskEngine {
         val task = dao.task(id) ?: return false
         if (through == null || task.state == TaskEntity.State.ENDED.name ||
             dao.log(id).none { it.kind == TaskLogEntity.Kind.PASSED_ON.name && it.id > through }) return false
+        clock(dao, task, false, "screen queued")
         dao.updateTask(task.copy(state = TaskEntity.State.QUEUED.name, ask = null, outcome = null,
             progress = null, updatedAt = System.currentTimeMillis()))
         screenParentReady(dao, id)
@@ -399,18 +409,18 @@ object TaskEngine {
             is app.momoding.hands.HandsOperator.Outcome.Stopped -> TaskEntity.Outcome.STOPPED
             else -> TaskEntity.Outcome.FAILED
         }
-        dao.updateTask(task.copy(state = (if (question != null) TaskEntity.State.WAITING else TaskEntity.State.ENDED).name,
-            ask = question?.let { JSONObject().put("kind", "screen_question").put("screen", id).put("question", it).toString() },
-            outcome = if (question == null) outcome.name else null, progress = null, updatedAt = System.currentTimeMillis()))
+        if (question != null) setAskIn(dao, task.copy(progress = null),
+            JSONObject().put("kind", "screen_question").put("screen", id).put("question", question).toString())
+        else dao.updateTask(task.copy(state = TaskEntity.State.ENDED.name, ask = null,
+            outcome = outcome.name, progress = null, updatedAt = System.currentTimeMillis()))
         log(dao, id, if (question == null) TaskLogEntity.Kind.END else TaskLogEntity.Kind.REPORT, body)
         val parent = screenSpec(context, id).parent
         if (parent != null && dao.task(parent)?.state !in listOf(TaskEntity.State.RUNNING.name, TaskEntity.State.WAITING.name)) return@change
         if (question != null && parent != null) dao.task(parent)?.let {
-            dao.updateTask(it.copy(state = TaskEntity.State.WAITING.name,
-                ask = JSONObject().put("kind", "screen_question").put("screen", id).put("question", question).toString(), updatedAt = System.currentTimeMillis()))
+            setAskIn(dao, it, JSONObject().put("kind", "screen_question").put("screen", id).put("question", question).toString())
         }
         if (question == null) screenParentReady(dao, id)
-        parent?.let { refreshApprovalBudget(dao, it) }
+        parent?.let { refreshBudget(dao, it) }
         val ownParent = parent?.let { dao.task(it) }?.takeIf { it.conversation == it.hand }
         var reportedOutcome = outcome
         if (question == null && ownParent != null && !pendingWork(dao, ownParent.id)) {
@@ -432,11 +442,11 @@ object TaskEngine {
         for (task in dao.interruptedScreens()) {
             val words = "The app restarted while the screen was working. Check the current screen and any outward effect before continuing; do not repeat an action whose outcome is unknown."
             val ask = JSONObject().put("kind", "screen_outcome_unknown").put("screen", task.id).put("question", words).toString()
-            dao.updateTask(task.copy(state = TaskEntity.State.WAITING.name, ask = ask, updatedAt = System.currentTimeMillis()))
+            setAskIn(dao, task, ask)
             log(dao, task.id, TaskLogEntity.Kind.REPORT, words)
             val parent = screenSpec(context, task.id).parent?.let { dao.task(it) }
             val owner = parent?.conversation ?: task.conversation
-            if (parent != null && parent.state != TaskEntity.State.ENDED.name) dao.updateTask(parent.copy(state = TaskEntity.State.WAITING.name, ask = ask, updatedAt = System.currentTimeMillis()))
+            if (parent != null && parent.state != TaskEntity.State.ENDED.name) setAskIn(dao, parent, ask)
             Inbox.post(dao, owner, "$REPORT_CUE${parent?.id ?: task.id} · screen · ask] $words", parent?.id ?: task.id)
             after += { tellChat(context, owner) }
         }
@@ -455,13 +465,9 @@ object TaskEngine {
         return elapsedIn(dao(context), id)
     }
 
-    internal suspend fun elapsedIn(dao: TaskDao, id: String): Long {
+    internal suspend fun elapsedIn(dao: TaskDao, id: String, now: Long = System.currentTimeMillis()): Long {
         val task = dao.task(id) ?: return 0
-        if (task.state == TaskEntity.State.WAITING.name) Approval.elapsed(task.ask)?.let { return it }
-        val started = dao.log(id).lastOrNull { it.kind == TaskLogEntity.Kind.STARTED.name }
-        val at = started?.at ?: task.createdAt
-        val carried = started?.body?.let { runCatching { JSONObject(it).optLong("elapsed_ms") }.getOrDefault(0) } ?: 0
-        return carried + (System.currentTimeMillis() - at).coerceAtLeast(0)
+        return TaskClock.elapsed(task, dao.log(id), now)
     }
 
     suspend fun waitForApproval(context: Context, spec: Approval.Spec): Approval.Spec = change(context) { dao, _ ->
@@ -510,26 +516,36 @@ object TaskEngine {
     }
 
     private suspend fun setApprovalAsk(dao: TaskDao, task: TaskEntity, requests: List<Approval.Spec>, ignoreModel: Boolean = false) {
-        val carried = elapsedIn(dao, task.id)
-        val model = ChatViewModelStore.existing(task.hand)
-        val active = requests.isEmpty() || ShellWork.pending(dao.log(task.id)).isNotEmpty() ||
-            dao.children(task.id).any { it.state == TaskEntity.State.RUNNING.name } ||
-            (!ignoreModel && model?.activeTaskId == task.id && model.turnIsRunning)
-        dao.updateTask(task.copy(state = (if (active) TaskEntity.State.RUNNING else TaskEntity.State.WAITING).name,
-            ask = Approval.ask(requests, carried), updatedAt = System.currentTimeMillis()))
-        if (active && task.state == TaskEntity.State.WAITING.name) {
-            log(dao, task.id, TaskLogEntity.Kind.STARTED, JSONObject().put("resumed", "approval").put("elapsed_ms", carried).toString())
-        }
+        setAskIn(dao, task, Approval.ask(requests), ignoreModel)
     }
 
-    private suspend fun refreshApprovalBudget(dao: TaskDao, id: String, ignoreModel: Boolean = false) {
+    internal suspend fun setAskIn(dao: TaskDao, task: TaskEntity, ask: String?, ignoreModel: Boolean = false): TaskEntity {
+        val model = ChatViewModelStore.existing(task.hand)
+        val active = ask == null || ShellWork.pending(dao.log(task.id)).isNotEmpty() ||
+            dao.children(task.id).any { it.state == TaskEntity.State.RUNNING.name } ||
+            (!ignoreModel && model?.activeTaskId == task.id && model.turnIsRunning)
+        clock(dao, task, active, "ask")
+        return task.copy(state = (if (active) TaskEntity.State.RUNNING else TaskEntity.State.WAITING).name,
+            ask = ask, updatedAt = System.currentTimeMillis()).also { dao.updateTask(it) }
+    }
+
+    private suspend fun clock(dao: TaskDao, task: TaskEntity, running: Boolean, reason: String, reset: Boolean = false) {
+        val history = dao.log(task.id)
+        val mark = TaskClock.latest(history)
+        if (!reset && mark != null && (mark.kind == TaskLogEntity.Kind.STARTED.name) == running &&
+            (!running || task.state == TaskEntity.State.RUNNING.name)) return
+        val elapsed = if (reset) 0 else TaskClock.elapsed(task, history)
+        log(dao, task.id, if (running) TaskLogEntity.Kind.STARTED else TaskLogEntity.Kind.PAUSED,
+            JSONObject().put("elapsed_ms", elapsed).put("reason", reason).toString())
+    }
+
+    private suspend fun refreshBudget(dao: TaskDao, id: String, ignoreModel: Boolean = false) {
         val task = dao.task(id)?.takeIf { it.state != TaskEntity.State.ENDED.name } ?: return
-        val requests = Approval.pending(task.ask)
-        if (requests.isNotEmpty()) setApprovalAsk(dao, task, requests, ignoreModel)
+        task.ask?.let { setAskIn(dao, task, it, ignoreModel) }
     }
 
     suspend fun turnStarted(context: Context, taskId: String?) = change(context) { dao, _ ->
-        taskId?.let { refreshApprovalBudget(dao, it) }
+        taskId?.let { refreshBudget(dao, it) }
     }
 
     suspend fun decideApproval(context: Context, spec: Approval.Spec, answer: app.momoding.guard.RiskDecision): Approval.Decision? = change(context) { dao, after ->
@@ -541,7 +557,7 @@ object TaskEngine {
                 if (decided.allowed && Approval.pending(task.ask).isEmpty()) {
                     dao.updateTask(task.copy(state = TaskEntity.State.QUEUED.name))
                     dao.screenSpec(task.id)?.let { JSONObject(it).optString("parent").takeIf(String::isNotBlank) }
-                        ?.let { refreshApprovalBudget(dao, it) }
+                        ?.let { refreshBudget(dao, it) }
                     after += { ScreenWork.wake() }
                 } else if (!decided.allowed) after += { screenFinished(context, task.id, app.momoding.hands.HandsOperator.Result(
                     app.momoding.hands.HandsOperator.Outcome.Infeasible("The person did not allow this action."),
@@ -625,8 +641,7 @@ object TaskEngine {
         if (denied != null) {
             log(dao, taskId, TaskLogEntity.Kind.APPROVAL_CLOSED, JSONObject().put("id", id).put("reason", denied).toString())
             if (task.state != TaskEntity.State.ENDED.name && task.ask == null) {
-                dao.updateTask(task.copy(state = TaskEntity.State.WAITING.name,
-                    ask = JSONObject().put("kind", "approval_invalid").put("question", denied).toString()))
+                setAskIn(dao, task, JSONObject().put("kind", "approval_invalid").put("question", denied).toString())
             }
             return Approval.Claim.Denied(denied)
         }
@@ -635,7 +650,7 @@ object TaskEngine {
             ShellWork.Command(id, session + "~command~" + id, JSONObject(requireNotNull(spec.shellArgs)).getString("command"))
                 .also { log(dao, taskId, TaskLogEntity.Kind.COMMAND, it.json()) }
         } else null
-        refreshApprovalBudget(dao, taskId)
+        refreshBudget(dao, taskId)
         return Approval.Claim.Granted(Approval.Permit(spec, decision.answer, command))
     }
 
@@ -702,7 +717,7 @@ object TaskEngine {
             after += { handIdle(context, task.hand) }
             return@change
         }
-        refreshApprovalBudget(dao, id)
+        refreshBudget(dao, id)
         val ownCommand = task.conversation == task.hand
         val completeOwn = ownCommand && !pendingWork(dao, id)
         val kind = if (result.success) "done" else "failed"
@@ -726,9 +741,7 @@ object TaskEngine {
             if (commands.isEmpty()) continue
             val words = "The app restarted while a command was running; its outcome is unknown. Verify what happened before running it again."
             commands.forEach { log(dao, task.id, TaskLogEntity.Kind.COMMAND_RESULT, JSONObject().put("id", it.id).put("unknown", true).toString()) }
-            dao.updateTask(task.copy(state = TaskEntity.State.WAITING.name,
-                ask = JSONObject().put("question", words).put("kind", "command_outcome_unknown").toString(),
-                updatedAt = System.currentTimeMillis()))
+            setAskIn(dao, task, JSONObject().put("question", words).put("kind", "command_outcome_unknown").toString())
             log(dao, task.id, TaskLogEntity.Kind.REPORT, words)
             Inbox.post(dao, task.conversation, "$REPORT_CUE${task.id} · command · ask] $words", task.id)
             after += { tellChat(context, task.conversation) }
@@ -760,7 +773,7 @@ object TaskEngine {
             if (helper && current != null && dao.task(current.id)?.state == TaskEntity.State.ENDED.name) {
                 after += { Helpers.ended(context, hand, current.conversation) }
             }
-            current?.let { refreshApprovalBudget(dao, it.id, ignoreModel = true) }
+            current?.let { refreshBudget(dao, it.id, ignoreModel = true) }
             after += {
                 val deferred = kotlinx.coroutines.withContext(Dispatchers.Main) {
                     ChatViewModelStore.existing(hand)?.afterTurn { scope.launch { handIdle(context, hand) } } == true
@@ -793,9 +806,9 @@ object TaskEngine {
 
     /** A task that waited its turn starts once this change commits, with everything passed on for it. */
     private suspend fun start(dao: TaskDao, task: TaskEntity, after: MutableList<suspend () -> Unit>, context: Context) {
+        clock(dao, task, true, "started")
         val next = task.copy(state = TaskEntity.State.RUNNING.name, updatedAt = System.currentTimeMillis())
         dao.updateTask(next)
-        log(dao, task.id, TaskLogEntity.Kind.STARTED, "started")
         val brief = dao.log(task.id).filter { it.kind == TaskLogEntity.Kind.PASSED_ON.name }.joinToString("\n\n") { it.body }
         dao.retryTaskInbox(task.id, task.hand)
         if (dao.unread(task.hand).none { it.taskId == task.id }) postForHand(context, dao, next, brief)
@@ -851,11 +864,13 @@ object TaskEngine {
         val tasks = JSONArray()
         for (t in dao.recentTasks(limit)) {
             val log = JSONArray()
-            dao.log(t.id).forEach { log.put(JSONObject().put("at", it.at).put("kind", it.kind).put("body", it.body)) }
+            val history = dao.log(t.id)
+            history.forEach { log.put(JSONObject().put("at", it.at).put("kind", it.kind).put("body", it.body)) }
             tasks.put(
                 JSONObject().put("id", t.id).put("conversation", t.conversation).put("source", t.sourceMessageId)
                     .put("title", t.title).put("hand", t.hand).put("state", t.state).put("progress", t.progress)
-                    .put("ask", t.ask).put("hold", t.hold).put("outcome", t.outcome).put("log", log),
+                    .put("ask", t.ask).put("hold", t.hold).put("outcome", t.outcome).put("log", log)
+                    .put("elapsed_ms", TaskClock.elapsed(t, history)),
             )
         }
         val inbox = JSONArray()

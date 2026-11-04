@@ -30,6 +30,66 @@ class ScreenTaskQueueTest {
         hand = TaskEntity.SCREEN, state = TaskEntity.State.QUEUED.name, createdAt = 1, updatedAt = 1))
     private suspend fun take(claim: () -> Boolean = { true }) = db.withTransaction { TaskEngine.acquireScreen(db.taskDao(), claim) }
 
+    private suspend fun takeover(): Long {
+        val dao = db.taskDao()
+        val started = System.currentTimeMillis() - 100_000
+        dao.insertTask(TaskEntity("parent", chat, title = "parent", hand = chat, state = "RUNNING", createdAt = started, updatedAt = started))
+        dao.insertLog(TaskLogEntity(taskId = "parent", at = started, kind = "STARTED", body = "started"))
+        queued("screen"); take()
+        val spec = ScreenWork.Spec(app.momoding.hands.HandsOperator.Options("look", sessionId = chat), "parent").json()
+        dao.insertLog(TaskLogEntity(taskId = "screen", at = started, kind = "SCREEN", body = spec))
+        dao.insertLog(TaskLogEntity(taskId = "parent", at = started, kind = "CHILD", body = "screen"))
+        val cursor = dao.insertLog(TaskLogEntity(taskId = "screen", at = started, kind = "PASSED_ON", body = "look"))
+        db.withTransaction { TaskEngine.screenWaitingIn(dao, "screen", "scan the fixture") }
+        return cursor
+    }
+
+    @Test fun takeoverWaitingDoesNotSpendTheParentsRemainingBudget() = runBlocking {
+        takeover()
+        val afterFiveHundredSecondsOfWaiting = TaskEngine.elapsedIn(db.taskDao(), "parent", System.currentTimeMillis() + 500_000)
+        assertTrue("human waiting spent the budget: $afterFiveHundredSecondsOfWaiting", afterFiveHundredSecondsOfWaiting in 100_000L..105_000L)
+    }
+
+    @Test fun takeoverContinuationDoesNotResetTheParentsSpentBudget() = runBlocking {
+        val cursor = takeover()
+        db.taskDao().insertLog(TaskLogEntity(taskId = "screen", at = System.currentTimeMillis(), kind = "PASSED_ON", body = "continue"))
+        assertTrue(db.withTransaction { TaskEngine.requeueScreenFollowUp(db.taskDao(), "screen", cursor) })
+        assertEquals("RUNNING", db.taskDao().task("parent")!!.state)
+        val spent = TaskEngine.elapsedIn(db.taskDao(), "parent")
+        assertTrue("continuation reset the budget: $spent", spent in 100_000L..105_000L)
+    }
+
+    @Test fun aContinuedScreenKeepsItsSpentTimeWhileItWaitsToBeAcquiredAgain() = runBlocking {
+        val cursor = takeover()
+        val dao = db.taskDao()
+        val spent = TaskEngine.elapsedIn(dao, "screen")
+        dao.insertLog(TaskLogEntity(taskId = "screen", at = System.currentTimeMillis(), kind = "PASSED_ON", body = "continue"))
+        assertTrue(db.withTransaction { TaskEngine.requeueScreenFollowUp(dao, "screen", cursor) })
+        assertEquals(spent, TaskEngine.elapsedIn(dao, "screen", System.currentTimeMillis() + 500_000))
+        take()
+        assertTrue(TaskEngine.elapsedIn(dao, "screen") in spent..spent + 5_000)
+    }
+
+    @Test fun aQuestionDoesNotPauseWorkThatIsStillRunning() = runBlocking {
+        val dao = db.taskDao()
+        val started = System.currentTimeMillis() - 100_000
+        val task = TaskEntity("work", chat, title = "work", hand = chat, state = "RUNNING", createdAt = started, updatedAt = started)
+        dao.insertTask(task)
+        dao.insertLog(TaskLogEntity(taskId = "work", at = started, kind = "STARTED", body = "started"))
+        val command = ShellWork.Command("one", "fixture-process", "printf fixture")
+        dao.insertLog(TaskLogEntity(taskId = "work", at = started, kind = "COMMAND", body = command.json()))
+        val ask = """{"question":"which date?"}"""
+        db.withTransaction { TaskEngine.setAskIn(dao, task, ask) }
+        assertEquals("RUNNING", dao.task("work")!!.state)
+        assertTrue(TaskEngine.elapsedIn(dao, "work", System.currentTimeMillis() + 500_000) >= 600_000)
+        dao.insertLog(TaskLogEntity(taskId = "work", at = System.currentTimeMillis(), kind = "COMMAND_RESULT", body = """{"id":"one","success":true}"""))
+        assertTrue(TaskEngine.pendingWork(dao, "work"))
+        db.withTransaction { TaskEngine.setAskIn(dao, dao.task("work")!!, ask) }
+        val paused = TaskEngine.elapsedIn(dao, "work")
+        assertEquals("WAITING", dao.task("work")!!.state)
+        assertEquals(paused, TaskEngine.elapsedIn(dao, "work", System.currentTimeMillis() + 500_000))
+    }
+
     @Test fun aBusyPhysicalScreenLeavesEveryTaskQueuedThenStartsInArrivalOrder() = runBlocking {
         queued("z-first"); queued("a-second")
         assertNull(take { false })

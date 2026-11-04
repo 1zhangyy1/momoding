@@ -53,14 +53,13 @@ class RiskGateTest {
         assertFalse(original.sameAction(original.request.copy(sessionId = "other actor")))
     }
 
-    @Test fun multipleCardsAndThePausedBudgetSurviveInOneTaskAsk() {
+    @Test fun multipleCardsSurviveInOneTaskAsk() {
         val requests = listOf(spec("one"), spec("two").copy(mode = Approval.Mode.SCREEN))
-        val ask = Approval.ask(requests, 97_000)!!
+        val ask = Approval.ask(requests)!!
         assertEquals(requests.map { it.request }, Approval.pending(ask).map { it.request })
-        assertEquals(97_000L, Approval.elapsed(ask))
         assertEquals("task", JSONObject(ask).getString("screen"))
         assertTrue(Approval.pending("""{"kind":"screen_question","question":"scan"}""").isEmpty())
-        assertNull(Approval.ask(emptyList(), 0))
+        assertNull(Approval.ask(emptyList()))
     }
 
     @Test fun anUnavailableApprovedCommandCannotFallBackToModelGuessing() {

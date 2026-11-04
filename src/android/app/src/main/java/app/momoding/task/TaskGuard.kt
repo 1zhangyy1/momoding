@@ -43,7 +43,7 @@ object TaskGuard {
             if (current.state == TaskEntity.State.ENDED.name) return "Task ${current.id} ended (${current.outcome?.lowercase() ?: "ended"}). This old run may not use tools."
             if (current.state == TaskEntity.State.QUEUED.name) return "Task ${current.id} has not started. Wait for its turn."
             if (outward && !current.hold.isNullOrBlank()) return "Task ${current.id} is on hold: ${current.hold}. Wait for the person before acting outside the workspace."
-            if (outward && !allowWaiting && (current.state == TaskEntity.State.WAITING.name || Approval.pending(current.ask).isNotEmpty())) return "Task ${current.id} is waiting for the person. Do not perform this outward action yet."
+            if (outward && !allowWaiting && (current.state == TaskEntity.State.WAITING.name || current.ask != null)) return "Task ${current.id} is waiting for the person. Do not perform this outward action yet."
             val parent = dao.screenSpec(current.id)?.let { JSONObject(it).optString("parent").takeIf(String::isNotBlank) }
             if (parent != null) remaining.add(dao.task(parent) ?: return "The parent task $parent was deleted. This old run may not act for it.")
         }

@@ -123,7 +123,7 @@ class ApprovalLifecycleTest {
         val before = System.currentTimeMillis() - 100_000
         dao.insertTask(TaskEntity("budget", chat, title = "budget", hand = chat, state = "RUNNING", createdAt = before, updatedAt = before))
         val one = queue(proposal("budget"))
-        val paused = Approval.elapsed(task(one).ask)
+        val paused = TaskEngine.elapsedIn(dao, task(one).id)
         val two = queue(proposal(one.request.taskId))
         assertEquals(2, Approval.pending(task(one).ask).size)
         decide(one)
@@ -133,17 +133,15 @@ class ApprovalLifecycleTest {
         assertNull(task(two).ask)
         val resumed = dao.log(two.request.taskId!!).last { it.kind == "STARTED" }
         val spent = JSONObject(resumed.body).getLong("elapsed_ms")
-        assertTrue(spent >= paused!! && spent < paused + 5_000)
+        assertTrue(spent >= paused && spent < paused + 5_000)
         assertTrue(claim(two) is Approval.Claim.Granted)
     }
 
     @Test fun pureHumanWaitingDoesNotConsumeOrResetTheRemainingBudget() = runBlocking {
-        val before = System.currentTimeMillis() - 600_000
+        val before = System.currentTimeMillis() - 100_000
         dao.insertTask(TaskEntity("paused", chat, title = "paused", hand = chat, state = "RUNNING", createdAt = before, updatedAt = before))
         val saved = queue(proposal("paused"))
-        // Persisted shape after 100 seconds of work followed by 500 seconds of human waiting.
-        dao.updateTask(task(saved).copy(ask = JSONObject(task(saved).ask!!).put("elapsed_ms", 100_000).toString()))
-        assertEquals(100_000L, TaskEngine.elapsedIn(dao, "paused"))
+        assertTrue(TaskEngine.elapsedIn(dao, "paused", System.currentTimeMillis() + 500_000) in 100_000L..105_000L)
         decide(saved)
         assertTrue(TaskEngine.elapsedIn(dao, "paused") in 100_000L..105_000L)
         assertTrue(claim(saved) is Approval.Claim.Granted)
