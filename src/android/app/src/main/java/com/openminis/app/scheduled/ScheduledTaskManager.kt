@@ -57,37 +57,40 @@ class ScheduledTaskManager(private val context: Context) {
      */
     fun update(task: ScheduledTask): ScheduledTask {
         cancelAlarm(task.id)
-        val merged = store.get(task.id)?.let { prev -> mergeBookkeeping(task, prev) } ?: task
-        store.upsert(merged)
+        val merged = store.update(task.id) { mergeBookkeeping(task, it) }
+            ?: task.also { store.upsert(it) }
         if (merged.enabled) registerAlarm(merged)
         return merged
     }
 
     fun setEnabled(taskId: String, enabled: Boolean) {
-        val t = store.get(taskId) ?: return
         // [T-android-scheduled-triggers] Re-enabling a relative trigger starts
         // it over: "after 30m" counts from now again, and an interval gets its
         // full count back. A calendar task simply resumes its schedule.
-        val updated = if (enabled && t.usesAnchor) {
+        val updated = store.update(taskId) { t -> if (enabled && t.pendingDispatch != null) {
+            t.copy(enabled = true)
+        } else if (enabled && t.usesAnchor) {
             t.copy(enabled = true, anchorMs = System.currentTimeMillis(), triggeredCount = 0)
         } else if (enabled && t.triggerKind == ScheduledTriggerKind.ON_COMPLETION) {
             t.copy(enabled = true, triggeredCount = 0)
         } else {
-            t.copy(enabled = enabled)
-        }
-        store.upsert(updated)
+            t.copy(enabled = enabled, pendingDispatch = if (enabled) t.pendingDispatch else null)
+        } } ?: return
         if (enabled) registerAlarm(updated) else cancelAlarm(taskId)
     }
 
-    /**
-     * [T-android-scheduled-triggers] Atomically take a one-shot fire that is
-     * not driven by an alarm (on-completion): false when it is disabled or has
-     * already fired, so two callers cannot both fire it.
-     */
-    fun claimOneShotFire(taskId: String): Boolean =
+    /** Claim and keep the exact substituted input until its Room handoff commits. */
+    fun claimCompletionFire(taskId: String, result: String?): PendingScheduledFire? =
         store.update(taskId) { t ->
-            if (!t.enabled || (t.triggeredCount ?: 0) >= 1) null
-            else t.copy(enabled = false, triggeredCount = 1)
+            if (!t.enabled || t.triggerKind != ScheduledTriggerKind.ON_COMPLETION ||
+                (t.triggeredCount ?: 0) >= 1 || t.pendingDispatch != null) null
+            else t.copy(enabled = false, triggeredCount = 1,
+                pendingDispatch = PendingScheduledFire.create(t.copy(prompt = ScheduledCompletionTriggers.substitute(t.prompt, result))))
+        }?.pendingDispatch
+
+    fun acknowledgeDispatch(taskId: String, dispatchId: String): Boolean =
+        store.update(taskId) { t ->
+            if (t.pendingDispatch?.id != dispatchId) null else t.copy(pendingDispatch = null)
         } != null
 
     /**
@@ -186,16 +189,18 @@ class ScheduledTaskManager(private val context: Context) {
     fun markFired(
         taskId: String, sessionId: String?, resultPreview: String?, ok: Boolean = true,
         firedAt: Long = System.currentTimeMillis(),
+        scheduled: Boolean? = null, workId: String? = null, resultMessageId: String? = null, dispatchId: String? = null,
     ): Boolean {
         val now = firedAt
-        val run = ScheduledRun(firedAt = now, sessionId = sessionId, preview = resultPreview, ok = ok)
+        val run = ScheduledRun(firedAt = now, sessionId = sessionId, preview = resultPreview, ok = ok,
+            scheduled = scheduled, workId = workId, resultMessageId = resultMessageId, dispatchId = dispatchId)
         var added = false
         store.update(taskId) { task ->
-            if (task.runHistory.any { it.firedAt == firedAt && it.sessionId == sessionId }) null
+            if (task.runHistory.any { it == run }) null
             // Older records outside the retained window cannot become "new" on a replay.
             else if (task.runHistory.size >= ScheduledTask.MAX_RUN_HISTORY && firedAt < task.runHistory.last().firedAt) null
             else {
-                added = true
+                added = task.runHistory.none { sameFire(it, run) }
                 recordRun(task, run)
             }
         }
@@ -257,12 +262,17 @@ class ScheduledTaskManager(private val context: Context) {
     }
 
     companion object {
+        private fun sameFire(a: ScheduledRun, b: ScheduledRun): Boolean =
+            if (a.dispatchId != null && b.dispatchId != null) a.dispatchId == b.dispatchId
+            else a.firedAt == b.firedAt && a.sessionId == b.sessionId
+
         internal fun recordRun(task: ScheduledTask, run: ScheduledRun): ScheduledTask {
-            if (task.runHistory.any { it.firedAt == run.firedAt && it.sessionId == run.sessionId }) return task
-            val history = (task.runHistory + run).sortedByDescending { it.firedAt }.take(ScheduledTask.MAX_RUN_HISTORY)
+            val same = task.runHistory.firstOrNull { sameFire(it, run) }
+            if (same == run) return task
+            val history = (task.runHistory.filterNot { it === same } + run).sortedByDescending { it.firedAt }.take(ScheduledTask.MAX_RUN_HISTORY)
             val latest = history.first()
             return task.copy(lastFiredAt = latest.firedAt, lastResultPreview = latest.preview,
-                lastResultSessionId = latest.sessionId, runHistory = history, fireCount = task.firesSoFar + 1)
+                lastResultSessionId = latest.sessionId, runHistory = history, fireCount = task.firesSoFar + if (same == null) 1 else 0)
         }
 
         private const val TAG = "ScheduledTaskManager"
@@ -323,6 +333,7 @@ class ScheduledTaskManager(private val context: Context) {
                 fireCount = incoming.fireCount ?: prev.fireCount,
                 anchorMs = incoming.anchorMs ?: prev.anchorMs,
                 triggeredCount = incoming.triggeredCount ?: prev.triggeredCount,
+                pendingDispatch = prev.pendingDispatch,
             )
         /** Momoding: an on-notification task runs at most once a minute. */
         const val NOTIFICATION_COOLDOWN_MS = 60_000L

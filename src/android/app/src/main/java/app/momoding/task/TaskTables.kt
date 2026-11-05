@@ -111,6 +111,27 @@ interface TaskDao {
     @Query("SELECT t.* FROM task t JOIN task_log r ON r.task_id = t.id WHERE r.kind = 'RECOVERY' AND r.body = :key LIMIT 1")
     suspend fun recovered(key: String): TaskEntity?
 
+    @Query("SELECT * FROM messages WHERE id = :id")
+    suspend fun routineMessage(id: String): com.openminis.app.data.db.MessageEntity?
+
+    @Query("UPDATE messages SET parts_json = :parts WHERE id = :id")
+    suspend fun routineMessageParts(id: String, parts: String)
+
+    @Query("SELECT * FROM messages WHERE role = 'user' AND instr(parts_json, '\"routineResult\":') > 0 AND instr(parts_json, '\"recorded\":false') > 0 ORDER BY created_at, sort_order")
+    fun routineResultsFlow(): Flow<List<com.openminis.app.data.db.MessageEntity>>
+
+    @Query("SELECT * FROM inbox WHERE to_session = :session AND read_at IS NOT NULL")
+    suspend fun readInbox(session: String): List<InboxEntity>
+
+    @Query("SELECT * FROM task WHERE id IN (SELECT task_id FROM task_log WHERE kind = 'ROUTINE' AND instr(body, :key) > 0) ORDER BY created_at")
+    suspend fun routineTasks(key: String): List<TaskEntity>
+
+    @Query("SELECT EXISTS(SELECT 1 FROM inbox WHERE sender = 'ROUTINE' AND failed_at IS NULL AND instr(parts_json, :key) > 0 AND instr(parts_json, '\"scheduled\":true') > 0)")
+    suspend fun hasRoutineInput(key: String): Boolean
+
+    @Query("SELECT EXISTS(SELECT 1 FROM messages WHERE role = 'user' AND instr(parts_json, :key) > 0 AND instr(parts_json, '\"routineResult\":') > 0 AND instr(parts_json, '\"recorded\":false') > 0)")
+    suspend fun hasRoutineResult(key: String): Boolean
+
     @Query("SELECT parts_json FROM messages WHERE id = :message AND session_id = :session AND role = 'assistant'")
     suspend fun toolMessage(session: String, message: String): String?
 

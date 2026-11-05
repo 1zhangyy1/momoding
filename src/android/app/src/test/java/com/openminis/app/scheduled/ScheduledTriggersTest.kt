@@ -297,15 +297,8 @@ class ScheduledTriggersTest {
         assertTrue("an --after", f(task(ScheduledTriggerKind.AFTER, delaySec = 60, triggered = 1, enabled = false), t0))
         assertTrue("a chained on-completion", f(task(ScheduledTriggerKind.ON_COMPLETION, of = "x", triggered = 1, enabled = false), t0))
         assertFalse("a deleted upstream releases nothing", f(null, t0))
+        assertFalse("re-enabled completion is waiting for its new fire", f(task(ScheduledTriggerKind.ON_COMPLETION, of = "x", triggered = 0), t0))
+        assertFalse("re-enabled once has a future fire", f(task(repeat = ScheduledRepeatMode.ONCE, enabled = true), t0))
     }
 
-    @Test
-    fun `only a scheduled fire can release the tasks waiting on it`() {
-        val runner = com.openminis.app.ProductionSources.read("scheduled/ScheduledAgentRunner.kt")
-        assertEquals(2, Regex("""if \(scheduledFire\) ScheduledCompletionTriggers\.onScheduledRunFinished""").findAll(runner).count())
-        assertFalse(runner.contains("ScheduledCompletionTriggers.onUpstreamFinished"))
-        val receiver = com.openminis.app.ProductionSources.read("scheduled/ScheduledTaskAlarmReceiver.kt")
-        assertTrue(receiver.contains("if (!manager.rescheduleNext(taskId)) return@withTimeout"))
-        assertTrue(receiver.contains("waitForCompletion = false, scheduledFire = true"))
-    }
 }

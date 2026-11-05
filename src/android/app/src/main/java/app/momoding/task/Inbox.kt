@@ -72,6 +72,8 @@ object Inbox {
         return db.withTransaction {
             if (ids == null) db.taskDao().failRead(to, System.currentTimeMillis(), terminal)
             else db.taskDao().failInbox(ids, System.currentTimeMillis(), terminal)
+            RoutineReceipt.completeIn(db.taskDao(), db.taskDao().inboxFor(to).filter { it.failedAt != null && (ids == null || it.id in ids) },
+                TaskCompletion(false, "The routine could not finish. Its original input remains available for retry."), null)
             db.taskDao().unread(to).isNotEmpty()
         }
     }
@@ -90,7 +92,13 @@ object Inbox {
                         task.state == TaskEntity.State.WAITING.name || task.ask != null || task.hold != null)
                 }
             if (stoppedOrWaiting) dao.deleteInbox(listOf(row.id))
-            else if (row.id !in deferred) dao.failInbox(listOf(row.id), now, terminal = false)
+            else if (row.id !in deferred) {
+                dao.failInbox(listOf(row.id), now, terminal = false)
+                dao.inbox(row.id)?.takeIf { it.failedAt != null }?.let {
+                    RoutineReceipt.completeIn(dao, listOf(it), TaskCompletion(false,
+                        "The routine could not finish. Its original input remains available for retry."), null)
+                }
+            }
         }
     }
 

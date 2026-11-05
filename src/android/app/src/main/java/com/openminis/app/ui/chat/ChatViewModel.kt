@@ -7461,6 +7461,9 @@ class ChatViewModel(
             prepared.map { prompt ->
                 app.momoding.task.TaskEngine.dao(context).inboxParts(prompt.id, prompt.partsJson!!)
                 chatRepository.appendMessage(sid, "user", prompt.partsJson, id = prompt.id).also {
+                    if (prompt.isScheduledFire) com.openminis.app.scheduled.ScheduledTaskMarker.parse(prompt.text)?.let { marker ->
+                        app.momoding.chat.RoutineWakes.arm(context, sid, marker.label)
+                    }
                     app.momoding.chat.RoutineWakes.claim(sid, it.id)
                     // A retry can follow newer inputs. Keep the audit order and rebind the
                     // model to this receive with a separate, uniquely anchored context row.

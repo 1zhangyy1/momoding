@@ -24,4 +24,28 @@ class ScheduledRunRecordingTest {
         assertEquals("new", both.lastResultSessionId)
         assertEquals(2, both.fireCount)
     }
+    @Test fun `a retried original fire updates its outcome without counting twice`() {
+        val failed = ScheduledRun(100, "chat", "failed", false, scheduled = true)
+        val first = ScheduledTaskManager.recordRun(routine(), failed)
+        val recovered = failed.copy(preview = "actual answer", ok = true, resultMessageId = "reply")
+        val next = ScheduledTaskManager.recordRun(first, recovered)
+        assertEquals(listOf(recovered), next.runHistory); assertEquals(1, next.fireCount)
+        assertEquals("actual answer", next.lastResultPreview)
+    }
+    @Test fun `the fire and its result pointers survive settings serialization`() {
+        val run = ScheduledRun(100, "chat", "preview", true, scheduled = true, workId = "work", resultMessageId = "reply", dispatchId = "dispatch")
+        assertEquals(run, ScheduledRun.fromJson(run.toJson()))
+        val task = routine(); val pending = PendingScheduledFire.create(task.copy(prompt = "substituted result"), 100)
+        val restored = ScheduledTask.fromJson(task.copy(enabled = false, triggeredCount = 1, pendingDispatch = pending).toJson())
+        assertEquals(pending, restored.pendingDispatch)
+        assertEquals("substituted result", restored.pendingDispatch!!.task.prompt)
+        assertNull(restored.pendingDispatch!!.task.pendingDispatch)
+    }
+    @Test fun `two fires in the same millisecond keep their own identities`() {
+        val first = ScheduledRun(100, "chat", "one", true, dispatchId = "one")
+        val second = first.copy(preview = "two", dispatchId = "two")
+        val both = ScheduledTaskManager.recordRun(ScheduledTaskManager.recordRun(routine(), first), second)
+        assertEquals(2, both.fireCount); assertEquals(setOf("one", "two"), both.runHistory.map { it.dispatchId }.toSet())
+        assertEquals(both, ScheduledTaskManager.recordRun(both, second))
+    }
 }

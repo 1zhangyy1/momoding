@@ -193,7 +193,7 @@ object TaskEngine {
         prefill: List<com.openminis.app.scheduled.PrefilledToolCall> = emptyList(), routine: RoutineFire? = null,
         thinkingLevel: com.openminis.app.data.model.ThinkingLevel? = null,
     ): TaskEntity {
-        val invocation = call ?: kotlinx.coroutines.currentCoroutineContext()[ToolCall]
+        val invocation = if (routine?.scheduled == true) null else call ?: kotlinx.coroutines.currentCoroutineContext()[ToolCall]
         return change(context) { dao, after ->
             openHelperIn(context, dao, after, conversation, title, brief, prefill, routine, invocation) {
                 Helpers.create(context, conversation, title).also { hand ->
@@ -209,8 +209,9 @@ object TaskEngine {
         conversation: String, title: String, brief: String, prefill: List<com.openminis.app.scheduled.PrefilledToolCall>,
         routine: RoutineFire?, call: ToolCall?, createHand: suspend () -> String,
     ): TaskEntity {
+        routine?.dispatchId?.let { id -> dao.routineTasks("\"dispatch\":" + JSONObject.quote(id)).firstOrNull()?.let { return it } }
         call?.requireStoredIn(dao, conversation)
-        val source = if (routine == null) source(dao, conversation, call) else null
+        val source = if (routine == null || (!routine.scheduled && call != null)) source(dao, conversation, call) else null
         val hand = createHand()
         return openIn(context, dao, after, conversation, title, hand, brief, true, source?.id, source?.words, prefill, routine, call)
     }
@@ -1267,6 +1268,7 @@ object TaskEngine {
         hand: String, taskId: String?, completion: TaskCompletion, helper: Boolean, persist: suspend () -> T,
     ): T {
         val value = persist()
+        RoutineReceipt.completeIn(dao, dao.readInbox(hand), completion, value as? com.openminis.app.data.db.MessageEntity)
         dao.completeRead(hand)
         finishTurnIn(context, dao, after, hand, taskId, completion, dao.unread(hand).isNotEmpty(), helper)
         return value

@@ -5,7 +5,10 @@ import app.momoding.chat.InputContinuation
 import app.momoding.chat.FireIf
 import app.momoding.chat.NotifyDecision
 import app.momoding.chat.RoutineAttention
-import app.momoding.chat.RoutineWakes // momoding (a local `app` shadows the package root here)
+import app.momoding.task.Inbox
+import app.momoding.task.InboxEntity
+import app.momoding.task.RoutineReceipt
+import androidx.room.withTransaction
 import app.momoding.apps.MoApps
 import app.momoding.task.RoutineFire
 import app.momoding.task.TaskEngine
@@ -56,169 +59,85 @@ object ScheduledAgentRunner {
     private val bgScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val completionMutex = Mutex()
 
-    /**
-     * Fire a scheduled task.
-     *
-     * @param waitForCompletion when true, suspend until the agent loop
-     *   finishes, then mark-fired + post the completion notification before
-     *   returning. When false, return as soon as the session is resolved and
-     *   the prompt is dispatched — the agent keeps running in the background
-     *   and the completion (mark-fired + notification) is finished off an
-     *   app-scoped coroutine. Mirrors iOS SendPromptIntent's waitForResult
-     *   flag.
-     *
-     *   [GH#197] NEVER pass true from a BroadcastReceiver. Waiting here can
-     *   take up to [RUN_TIMEOUT_MS] (10 min) and the wait lands on the main
-     *   thread (HeadlessChatRunner.prompt/retry are
-     *   `withContext(Dispatchers.Main)`), so a receiver that waits blows its
-     *   ~10s broadcast budget and gets the whole process ANR-killed, along
-     *   with every PRoot sandbox child. The alarm path passing the default
-     *   `true` was exactly that bug. Waiting is only safe off a broadcast —
-     *   e.g. the minis-scheduled CLI, which runs in its own offload thread.
-     * @return the session id once the action has been DISPATCHED (resolved +
-     *   prompt sent), or null when the runner couldn't even start (no provider,
-     *   target chat gone, MinisApp not initialized).
-     * @param scheduledFire true for a fire of the task's own schedule (its
-     *   alarm, or its on-completion trigger); false for "Run now". Only a
-     *   scheduled fire can finish the schedule and release the tasks waiting
-     *   on it ([ScheduledCompletionTriggers.onScheduledRunFinished]).
-     */
+    /** Return only after the identified input (or helper task) has committed to Room. */
     suspend fun run(
         context: Context,
         task: ScheduledTask,
         waitForCompletion: Boolean = true,
         scheduledFire: Boolean = false,
-        /** momoding: the task's --if was already checked for this fire. */
         conditionChecked: Boolean = false,
-    ): String? {
-        // [T-android-scheduled-lateinit-crash-156] `as? MinisApp` only rules out
-        // a null / wrong-type Application — it does NOT mean the Application is
-        // INITIALIZED, which is what the old comment here claimed. Every
-        // `app.chatRepository` read below goes through a lateinit getter that
-        // throws UninitializedPropertyAccessException when onCreate
-        // early-returned (safe-mode) or aborted partway.
-        //
-        // GH#156: an alarm fires while the process is in that state and the app
-        // crashes. A scheduled task is the worst case for this because the alarm
-        // can START the process — Android creates the Application, onCreate
-        // early-returns under safe-mode, and the receiver runs against a
-        // permanently half-built app with no Activity anywhere in the picture
-        // (so MainActivity's guard never gets a say).
-        //
-        // Skipping the run is the right degradation: the task stays scheduled
-        // and its next occurrence was already armed by the receiver before this
-        // call, so a skipped fire self-heals on the following launch.
-        val app = context.applicationContext as? MinisApp ?: run {
-            AppLogger.error(TAG, "Application is not MinisApp — skipping task ${task.id}")
-            return null
-        }
-        if (!app.subsystemsReady()) {
-            AppLogger.error(
-                TAG,
-                "MinisApp subsystems not initialized (safe-mode or failed init) — skipping task ${task.id}",
-            )
-            return null
-        }
+    ): String? = runFire(context, task, waitForCompletion,
+        RoutineFire(task.id, System.currentTimeMillis(), scheduledFire, java.util.UUID.randomUUID().toString()), conditionChecked)
 
-        // momoding: a routine's --if, checked before anything runs (manual "Run now" is not). It is a
-        // model call, so a caller that does not wait (the alarm's few-second handoff) gets it on the
-        // background scope; a fire whose condition does not hold is recorded as skipped, says nothing.
-        val condition = task.fireIf?.takeIf { it.isNotBlank() }
-        if (scheduledFire && condition != null && !conditionChecked) {
+    private suspend fun runFire(context: Context, task: ScheduledTask, wait: Boolean, fire: RoutineFire, conditionChecked: Boolean): String? {
+        val app = context.applicationContext as? MinisApp ?: return null
+        if (!app.subsystemsReady()) return null
+        app.providerRepository.awaitConfigLoaded()
+        TaskEngine.awaitRecovery()
+        val condition = task.fireIf?.takeIf(String::isNotBlank)
+        if (fire.scheduled && condition != null && !conditionChecked) {
             val checked: suspend () -> String? = {
-                if (FireIf.holds(app, condition, task.targetMode.sessionIdOrNull)) {
-                    run(app, task, waitForCompletion, scheduledFire = true, conditionChecked = true)
-                } else {
-                    ScheduledTaskManager(app).markFired(task.id, task.targetMode.sessionIdOrNull, app.getString(com.openminis.app.R.string.mo_routine_skipped), ok = true)
+                if (FireIf.holds(app, condition, task.targetMode.sessionIdOrNull)) runFire(app, task, wait, fire, true)
+                else {
+                    ScheduledTaskManager(app).markFired(task.id, task.targetMode.sessionIdOrNull,
+                        app.getString(com.openminis.app.R.string.mo_routine_skipped), firedAt = fire.firedAt, scheduled = true, dispatchId = fire.dispatchId)
                     ScheduledCompletionTriggers.onScheduledRunFinished(app, task.id, null)
                     null
                 }
             }
-            if (waitForCompletion) return checked()
-            bgScope.launch { checked() }
-            return null
+            if (wait) return checked()
+            bgScope.launch { checked() }; return null
         }
-
-        // Kick the FGS so the agent loop survives Doze / screen-off. The
-        // existing service is idempotent and reused by chat UI; we pass a
-        // generic status string so it shows up in the ongoing notification.
-        AgentForegroundService.startService(
-            context = app,
-            sessionCount = 1,
-            toolStatus = "Scheduled: ${task.label.ifBlank { "task" }}",
-        )
-
-        // [T-scheduled-task-detail] One timestamp for this fire, written into
-        // its envelope and its run record so the two can be matched.
-        val firedAt = System.currentTimeMillis()
+        AgentForegroundService.startService(app, 1, "Scheduled: ${task.label.ifBlank { "task" }}")
         if (task.targetMode is ScheduledTargetMode.ChildOfCurrent) {
-            val work = dispatchChild(app, task, task.targetMode.sessionId, firedAt, scheduledFire) ?: return null
-            if (waitForCompletion) {
+            val work = dispatchChild(app, task, task.targetMode.sessionId, fire) ?: return null
+            if (wait) {
                 val ended = TaskEngine.dao(app).taskFlow(work.id).filterNotNull().first { it.state == TaskEntity.State.ENDED.name }
                 recordChildCompletion(app, ended)
             }
             return work.hand
         }
-        val sessionId = withContext(Dispatchers.IO) {
-            resolveSessionId(app, task)
+        val sid = runCatching { app.database.withTransaction {
+            val dao = TaskEngine.dao(app)
+            val id = requireNotNull(fire.dispatchId)
+            dao.inbox(id)?.let { return@withTransaction it.toSession }
+            dao.routineMessage(id)?.let { return@withTransaction it.sessionId }
+            val session = resolveSessionId(app, task) ?: return@withTransaction null
+            val (text, parts, prefill) = input(app, task, session, fire)
+            Inbox.post(dao, session, text, sender = InboxEntity.Sender.ROUTINE, prefill = prefill, id = id)
+            dao.inboxParts(id, RoutineReceipt.frame(parts, fire))
+            task.thinkingLevel?.let { app.database.chatDao().updateThinkingOverride(session, it.name) }
+            session
+        } }.getOrElse {
+            AppLogger.error(TAG, "task ${task.id} dispatch failed: ${it.message}"); null
         } ?: return null
-
-        AppLogger.info(
-            TAG,
-            "running task=${task.id} label=\"${task.label}\" " +
-                "mode=${task.targetMode.encode()} session=$sessionId wait=$waitForCompletion",
-        )
-
-        if (waitForCompletion) {
-            val result = dispatch(app, task, sessionId, wait = true, firedAt = firedAt, scheduledFire = scheduledFire)
-            val ok = result.status != "Error" && result.status != "Timeout" && result.status != "Rejected"
-            // momoding: the routine's reply says whether it is worth a notification (NotifyDecision)
-            val decision = NotifyDecision.decide(result.responseText, failed = !ok)
-            ScheduledTaskManager(app).markFired(task.id, sessionId, decision.body, ok = ok, firedAt = firedAt)
-            if (decision.notify) postCompletionNotification(app, task, sessionId, decision.body)
-            // momoding: a routine nobody reads pauses itself (replaces the notice above when it does)
-            if (scheduledFire) RoutineAttention.afterScheduledFire(app, task, sessionId, app.isAppForeground())
-            // [T-android-scheduled-triggers] Tasks waiting on this one run
-            // once its whole schedule is over.
-            if (scheduledFire) ScheduledCompletionTriggers.onScheduledRunFinished(app, task.id, result.responseText)
-            return sessionId
+        bgScope.launch { runCatching {
+            if (task.thinkingLevel != null) withContext(Dispatchers.Main) {
+                val vm = HeadlessChatRunner.viewModelFor(app, sid)
+                kotlinx.coroutines.withTimeoutOrNull(5_000) { vm.activeEntryId.first { it != null } }
+                vm.setThinkingLevel(task.thinkingLevel)
+            }
+            Inbox.wake(app, sid)
         }
-
-        // Fire-and-forget: the session is resolved and the FGS is up, so the
-        // task HAS started. Run the actual dispatch + completion entirely off
-        // the app scope (wait=true so we still mark-fired + notify when it
-        // finishes), and return the session id immediately so the UI can show
-        // "task started" without blocking on the agent loop. Leaving the editor
-        // can't cancel it because bgScope outlives the screen.
-        bgScope.launch {
-            val result = dispatch(app, task, sessionId, wait = true, firedAt = firedAt, scheduledFire = scheduledFire)
-            val ok = result.status != "Error" && result.status != "Timeout" && result.status != "Rejected"
-            // momoding: the routine's reply says whether it is worth a notification (NotifyDecision)
-            val decision = NotifyDecision.decide(result.responseText, failed = !ok)
-            ScheduledTaskManager(app).markFired(task.id, sessionId, decision.body, ok = ok, firedAt = firedAt)
-            if (decision.notify) postCompletionNotification(app, task, sessionId, decision.body)
-            // momoding: a routine nobody reads pauses itself (replaces the notice above when it does)
-            if (scheduledFire) RoutineAttention.afterScheduledFire(app, task, sessionId, app.isAppForeground())
-            // [T-android-scheduled-triggers] Tasks waiting on this one run
-            // once its whole schedule is over.
-            if (scheduledFire) ScheduledCompletionTriggers.onScheduledRunFinished(app, task.id, result.responseText)
+            .onFailure { AppLogger.warning(TAG, "wake $sid: ${it.message}") } }
+        if (wait) kotlinx.coroutines.withTimeoutOrNull(RUN_TIMEOUT_MS) {
+            while (true) {
+                val row = TaskEngine.dao(app).routineMessage(requireNotNull(fire.dispatchId))
+                if (row != null && RoutineReceipt.result(row.partsJson) != null) {
+                    recordMainCompletion(app, row); break
+                }
+                kotlinx.coroutines.delay(100)
+            }
         }
-        return sessionId
+        return sid
     }
 
-    /** Every fire appends an identified routine input; saved-message schedules retain their source payload. */
-    private suspend fun dispatch(
-        app: MinisApp,
-        task: ScheduledTask,
-        sessionId: String,
-        wait: Boolean,
-        firedAt: Long,
-        scheduledFire: Boolean,
-    ): HeadlessChatRunner.PromptResult = runCatching {
+    private data class Input(val text: String, val parts: String, val prefill: List<PrefilledToolCall>)
+    /** RERUN repeats its saved input and attachments; it never rewinds history. */
+    private suspend fun input(app: MinisApp, task: ScheduledTask, session: String, fire: RoutineFire): Input {
         val mode = task.targetMode
-        // RERUN is an existing stored target. Repeat its input, never rewind its conversation.
         val saved = if (mode is ScheduledTargetMode.RerunMessage) {
-            val source = app.chatRepository.dao.loadMessages(sessionId).firstOrNull { it.id == mode.messageId }
+            val source = app.chatRepository.dao.loadMessages(session).firstOrNull { it.id == mode.messageId }
             require(source?.role == "user") { "The saved message is no longer available." }
             require(InputContinuation.source(source.partsJson) == null) { "A continuation is not a saved input." }
             org.json.JSONArray(source.partsJson).also { parts ->
@@ -239,49 +158,57 @@ object ScheduledAgentRunner {
         val words = saved?.let { parts -> (0 until parts.length()).mapNotNull {
             parts.getJSONObject(it).takeIf { part -> part.getString("type") == "text" }?.getString("value")
         }.joinToString("") } ?: task.prompt
-        val marker = ScheduledTaskMarker(
-            taskId = task.id,
-            label = task.label,
-            nextFireAtMs = task.nextTriggerMs(),
-            prompt = words,
-            prefilledTool = prefill.firstOrNull()?.toolName,
-            firedAtMs = firedAt,
-        )
-        val marked = marker.xml
-        val partsJson = saved?.let { original ->
-            val parts = org.json.JSONArray().put(org.json.JSONObject().put("type", "text").put("value", marker.opening))
-            for (i in 0 until original.length()) {
-                val part = original.getJSONObject(i)
+        val marker = ScheduledTaskMarker(task.id, task.label, task.nextTriggerMs(), words,
+            prefilledTool = prefill.firstOrNull()?.toolName, firedAtMs = fire.firedAt)
+        val parts = org.json.JSONArray()
+        if (saved == null) parts.put(org.json.JSONObject().put("type", "text").put("value", marker.xml))
+        else {
+            parts.put(org.json.JSONObject().put("type", "text").put("value", marker.opening))
+            for (i in 0 until saved.length()) {
+                val part = saved.getJSONObject(i)
                 parts.put(if (part.getString("type") == "text") org.json.JSONObject().put("type", "text").put("value", part.getString("value")) else part)
             }
             parts.put(org.json.JSONObject().put("type", "text").put("value", "\n</${ScheduledTaskMarker.TAG}>"))
-            parts.toString()
         }
-        // momoding: the row this sends is the routine's, not the person's: the chat draws it as
-        // a quiet line and the model is told so for this one turn (RoutineWakes)
-        RoutineWakes.arm(app, sessionId, task.label)
-        HeadlessChatRunner.prompt(
-            context = app,
-            sessionId = sessionId,
-            text = marked,
-            attachments = emptyList(),
-            // [T-android-scheduled-task-thinking] Was hardcoded null, so a
-            // task could not run with any reasoning effort. null still means
-            // "inherit" inside HeadlessChatRunner.
-            thinkingLevel = task.thinkingLevel,
-            wait = wait,
-            timeoutMs = RUN_TIMEOUT_MS,
-            prefill = prefill,
-            partsJson = partsJson,
-        )
-    }.getOrElse { t ->
-        AppLogger.error(TAG, "task ${task.id} dispatch failed: ${t.message}")
-        HeadlessChatRunner.PromptResult(
-            status = "Error",
-            responseText = "Error: ${t.message}",
-            timedOut = false,
-        )
-    }.also { if (it.status == "Error") RoutineWakes.disarm(sessionId) } // momoding: a prompt that never went out leaves no mark
+        return Input(marker.xml, parts.toString(), prefill)
+    }
+
+    private val deliveries = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Job>()
+
+    /** One pending payload bridges the preference claim and the Room transaction. Startup replays it. */
+    fun deliverPending(context: Context, pending: PendingScheduledFire) {
+        val job = bgScope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
+            val app = context.applicationContext as? MinisApp ?: return@launch
+            if (!app.subsystemsReady()) return@launch
+            app.providerRepository.awaitConfigLoaded(); TaskEngine.awaitRecovery()
+            val manager = ScheduledTaskManager(app)
+            if (manager.get(pending.task.id)?.pendingDispatch?.id != pending.id) return@launch
+            val dao = TaskEngine.dao(app)
+            if (dao.inbox(pending.id) != null || dao.routineMessage(pending.id) != null ||
+                dao.routineTasks("\"dispatch\":" + org.json.JSONObject.quote(pending.id)).isNotEmpty()) {
+                manager.acknowledgeDispatch(pending.task.id, pending.id)
+                return@launch
+            }
+            val condition = pending.task.fireIf?.takeIf(String::isNotBlank)
+            val holds = condition == null || FireIf.holds(app, condition, pending.task.targetMode.sessionIdOrNull)
+            if (manager.get(pending.task.id)?.pendingDispatch?.id != pending.id) return@launch
+            if (!holds) {
+                manager.markFired(pending.task.id, pending.task.targetMode.sessionIdOrNull,
+                    app.getString(com.openminis.app.R.string.mo_routine_skipped), firedAt = pending.at, scheduled = true, dispatchId = pending.id)
+                manager.acknowledgeDispatch(pending.task.id, pending.id)
+                ScheduledCompletionTriggers.onScheduledRunFinished(app, pending.task.id, null)
+            } else if (runFire(app, pending.task, false, RoutineFire(pending.task.id, pending.at, true, pending.id), true) != null) {
+                manager.acknowledgeDispatch(pending.task.id, pending.id)
+            }
+        }
+        if (deliveries.putIfAbsent(pending.id, job) == null) {
+            job.invokeOnCompletion { error ->
+                deliveries.remove(pending.id, job)
+                if (error != null) AppLogger.warning(TAG, "pending ${pending.id}: ${error.message}")
+            }
+            job.start()
+        } else job.cancel()
+    }
 
     private suspend fun resolveSessionId(app: MinisApp, task: ScheduledTask): String? {
         return when (val mode = task.targetMode) {
@@ -374,7 +301,7 @@ object ScheduledAgentRunner {
     }
 
     /** A routine's helper is an ordinary persisted task hand, with the same model and slots. */
-    private suspend fun dispatchChild(app: MinisApp, task: ScheduledTask, parentSid: String, firedAt: Long, scheduled: Boolean): TaskEntity? {
+    private suspend fun dispatchChild(app: MinisApp, task: ScheduledTask, parentSid: String, fire: RoutineFire): TaskEntity? {
         if (!com.openminis.app.tools.AgentToolSwitch.AGENTS.isEnabled(app)) {
             AppLogger.warning(TAG, "task ${task.id}: agents are turned off — abort child-of-current")
             return null
@@ -386,10 +313,10 @@ object ScheduledAgentRunner {
         }
         val prefill = listOfNotNull(task.prefillToolCall?.takeIf { it.validationError() == null })
         val marker = ScheduledTaskMarker(task.id, task.label, task.nextTriggerMs(), task.prompt,
-            prefilledTool = prefill.firstOrNull()?.toolName, firedAtMs = firedAt)
+            prefilledTool = prefill.firstOrNull()?.toolName, firedAtMs = fire.firedAt)
         return runCatching {
             TaskEngine.openHelper(app, parentSid, task.label.ifBlank { task.prompt.take(40) }, marker.xml,
-                prefill = prefill, routine = RoutineFire(task.id, firedAt, scheduled), thinkingLevel = task.thinkingLevel)
+                prefill = prefill, routine = fire, thinkingLevel = task.thinkingLevel)
         }.getOrElse { error ->
             AppLogger.error(TAG, "task ${task.id} helper handoff failed: ${error.message}")
             null
@@ -407,15 +334,30 @@ object ScheduledAgentRunner {
         if (routine != null) {
             val text = logs.lastOrNull { it.kind == TaskLogEntity.Kind.END.name }?.body
             val decision = NotifyDecision.decide(text, failed = work.outcome != TaskEntity.Outcome.DONE.name)
-            if (manager.markFired(routine.id, work.hand, decision.body, ok = work.outcome == TaskEntity.Outcome.DONE.name, firedAt = fire.firedAt)) {
-                if (decision.notify) postCompletionNotification(context, routine, work.conversation, decision.body)
-                if (fire.scheduled) RoutineAttention.afterScheduledFire(context, routine, work.conversation, (context.applicationContext as MinisApp).isAppForeground())
-            }
-            // The history may already have been committed before process death.
-            // Claiming downstream schedules is itself idempotent, so replay this part.
-            if (fire.scheduled) ScheduledCompletionTriggers.onScheduledRunFinished(context, routine.id, text)
+            val added = manager.markFired(routine.id, work.hand, decision.body,
+                ok = work.outcome == TaskEntity.Outcome.DONE.name, firedAt = fire.firedAt, scheduled = fire.scheduled, workId = work.id, dispatchId = fire.dispatchId)
+            if (decision.notify) postCompletionNotification(context, routine, work.conversation, decision.body)
+            if (added && fire.scheduled) RoutineAttention.afterScheduledFire(context, routine, work.conversation, (context.applicationContext as MinisApp).isAppForeground())
         }
         TaskEngine.routineRecorded(context, work.id)
+    }
+
+    /** The completion receipt was committed with the reply, before its consumed inbox rows were removed. */
+    suspend fun recordMainCompletion(context: Context, message: com.openminis.app.data.db.MessageEntity) = completionMutex.withLock {
+        val dao = TaskEngine.dao(context)
+        val row = dao.routineMessage(message.id) ?: return@withLock
+        val fire = RoutineReceipt.fire(row) ?: return@withLock
+        val receipt = RoutineReceipt.result(row.partsJson)?.takeIf { !it.recorded } ?: return@withLock
+        val manager = ScheduledTaskManager(context)
+        manager.get(fire.routineId)?.let { routine ->
+            val text = receipt.response?.let { dao.routineMessage(it)?.partsJson }?.let(RoutineReceipt::text) ?: receipt.fallback
+            val decision = NotifyDecision.decide(text, failed = !receipt.done)
+            val added = manager.markFired(routine.id, row.sessionId, decision.body, receipt.done, fire.firedAt,
+                scheduled = fire.scheduled, resultMessageId = receipt.response, dispatchId = fire.dispatchId)
+            if (decision.notify) postCompletionNotification(context, routine, row.sessionId, decision.body)
+            if (added && fire.scheduled) RoutineAttention.afterScheduledFire(context, routine, row.sessionId, (context.applicationContext as MinisApp).isAppForeground())
+        }
+        (context.applicationContext as MinisApp).database.withTransaction { RoutineReceipt.acknowledgeIn(dao, row.id, receipt.key) }
     }
 
     private fun parseGroupIdFromBinding(json: String): String? = runCatching {
@@ -455,6 +397,7 @@ object ScheduledAgentRunner {
             .setContentText(preview)
             .setStyle(NotificationCompat.BigTextStyle().bigText(preview))
             .setContentIntent(contentPi)
+            .setOnlyAlertOnce(true)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
