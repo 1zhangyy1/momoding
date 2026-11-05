@@ -11,6 +11,7 @@ import coil.request.Options
 import android.content.Context
 import android.util.Log
 import com.openminis.app.sandbox.PRootKernel
+import com.openminis.app.sandbox.MinisResourceUri
 import com.openminis.app.sandbox.SessionMounts
 import okio.buffer
 import okio.source
@@ -149,24 +150,7 @@ class MinisImageFetcher(
         }
 
         /** `?session=` (or `?sessionId=`) on the URI wins over the request parameter. */
-        internal fun sessionOf(uri: String, paramSession: String?): String? {
-            val query = uri.substringAfter('?', "")
-            if (query.isNotEmpty()) {
-                for (pair in query.split('&')) {
-                    val k = pair.substringBefore('=')
-                    if (k == "session" || k == "sessionId") {
-                        val v = runCatching { java.net.URLDecoder.decode(pair.substringAfter('=', ""), "UTF-8") }
-                            .getOrNull()
-                        if (!v.isNullOrBlank() && isSafeSessionId(v)) return v
-                    }
-                }
-            }
-            return paramSession?.takeIf { it.isNotBlank() && isSafeSessionId(it) }
-        }
-
-        /** A session id is one path segment; anything else could walk out of minis-sessions. */
-        private fun isSafeSessionId(id: String): Boolean =
-            id != "." && id != ".." && '/' !in id && '\\' !in id
+        internal fun sessionOf(uri: String, paramSession: String?): String? = MinisResourceUri.sessionOf(uri, paramSession)
 
         /**
          * Host file for [uri], or null. Order:
@@ -182,6 +166,9 @@ class MinisImageFetcher(
             resolve(context.filesDir, uri, sessionId)
 
         internal fun resolve(filesDir: java.io.File, uri: String, sessionId: String?): java.io.File? {
+            val scoped = MinisResourceUri.hasSession(uri)
+            val owner = sessionOf(uri, sessionId)
+            if (scoped && owner == null) return null
             // Strip minis:// and any ?query, then percent-decode so
             // Chinese/emoji/space filenames resolve to the actual file.
             val stripped = uri.removePrefix("minis://").substringBefore('?')
@@ -196,13 +183,15 @@ class MinisImageFetcher(
             val rest = decoded.substringAfter('/', "")
 
             if (PRootKernel.isPerSessionPath(linuxPath)) {
-                if (sessionId != null) {
-                    val direct = SessionMounts.sessionDir(filesDir, sessionId, sub)
+                if (owner != null) {
+                    val direct = SessionMounts.sessionDir(filesDir, owner, sub)
                         .let { if (rest.isEmpty()) it else java.io.File(it, rest) }
                     if (direct.isFile) return direct
                 }
+                // A named owner is authoritative; a missing image is never another chat's image.
+                if (scoped) return null
                 PRootKernel.resolveHostPath(linuxPath)?.takeIf { it.isFile }?.let { return it }
-                return searchSessions(filesDir, sub, rest, exclude = sessionId)
+                return searchSessions(filesDir, sub, rest, exclude = owner)
             }
             if (sub in SessionMounts.GLOBAL_SUBDIRS) {
                 val f = java.io.File(filesDir, "minis-global/$decoded")

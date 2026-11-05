@@ -2999,6 +2999,9 @@ private fun BrokenImagePlaceholder(alt: String?) {
  */
 internal fun resolveMdMediaFile(context: Context, url: String, sessionId: String? = null): File? {
     if (url.isBlank()) return null
+    if (url.startsWith("minis://") && com.openminis.app.sandbox.MinisResourceUri.hasSession(url)) {
+        return com.openminis.app.ui.MinisImageFetcher.resolve(context, url, sessionId)
+    }
     // Strip a real query (`?`), but NOT `#` — attachment filenames legitimately
     // contain '#' (hashtags). `minis://` URLs don't carry fragments anyway,
     // and truncating here would hide the '.mp4' extension and the file's real

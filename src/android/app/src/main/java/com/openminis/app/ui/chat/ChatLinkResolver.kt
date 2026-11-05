@@ -6,6 +6,7 @@ import androidx.core.net.toUri
 import com.openminis.app.deeplink.DeepLinkAction
 import com.openminis.app.deeplink.DeepLinkHandler
 import com.openminis.app.sandbox.PRootKernel
+import com.openminis.app.sandbox.MinisResourceUri
 import com.openminis.app.ui.sandbox.FileItem
 import java.io.File
 
@@ -51,7 +52,9 @@ object ChatLinkResolver {
         //    `PRootKernel.bindMounts` is last-writer-wins, so on a device
         //    with multiple sessions the resolver otherwise points at
         //    whichever session booted its shell most recently.
-        val hostFile = resolveSandboxFile(trimmed, scheme, sessionId, context)
+        val owner = if (scheme == "minis") MinisResourceUri.sessionOf(trimmed, sessionId) else sessionId
+        if (scheme == "minis" && MinisResourceUri.hasSession(trimmed) && (owner == null || context == null)) return ChatLinkAction.Web(trimmed)
+        val hostFile = resolveSandboxFile(trimmed, scheme, owner, context)
         android.util.Log.w("ChatLinkDiag",
             "resolve url=${trimmed.take(200)} sid=$sessionId hostFile=${hostFile?.absolutePath} exists=${hostFile?.exists()}")
         if (hostFile != null && hostFile.exists() && !hostFile.isDirectory) {
@@ -61,7 +64,7 @@ object ChatLinkResolver {
         // Before, a folder fell through to Web, and a web preview of a
         // minis:// folder URL renders nothing — the link looked dead.
         if (hostFile != null && hostFile.isDirectory) {
-            sandboxFolderLinuxPath(trimmed, scheme, sessionId, context)
+            sandboxFolderLinuxPath(trimmed, scheme, owner, context)
                 ?.let { return ChatLinkAction.SandboxFolder(it) }
         }
 

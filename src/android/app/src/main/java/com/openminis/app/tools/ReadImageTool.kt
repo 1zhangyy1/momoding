@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import com.openminis.app.data.model.AgentToolDefinition
 import com.openminis.app.data.model.AgentToolParam
 import com.openminis.app.sandbox.PRootKernel
+import com.openminis.app.sandbox.MinisResourceUri
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 
@@ -49,13 +50,18 @@ object ReadImageTool {
                 return ToolExecutionResult("Error: 'path' is required", false, toolTitle = toolTitle)
             }
 
-            val path = if (rawPath.startsWith("minis://")) {
-                "/var/minis/" + java.net.URLDecoder.decode(rawPath.removePrefix("minis://"), "UTF-8")
+            val isMinis = rawPath.startsWith("minis://")
+            val owner = if (isMinis) MinisResourceUri.sessionOf(rawPath, sessionId) else sessionId
+            if (isMinis && MinisResourceUri.hasSession(rawPath) && (owner == null || context == null)) {
+                return ToolExecutionResult("Error: Cannot resolve this image's original session", false, toolTitle = toolTitle)
+            }
+            val path = if (isMinis) {
+                "/var/minis/" + java.net.URLDecoder.decode(rawPath.removePrefix("minis://").substringBefore('?'), "UTF-8")
             } else rawPath
 
             val file = (
-                if (sessionId != null && context != null) {
-                    PRootKernel.resolveSessionHostPath(sessionId, path, context)
+                if (owner != null && context != null) {
+                    PRootKernel.resolveSessionHostPath(owner, path, context)
                 } else null
             ) ?: PRootKernel.resolveHostPath(path)
                 ?: return ToolExecutionResult("Error: Cannot resolve path: $path", false, toolTitle = toolTitle)

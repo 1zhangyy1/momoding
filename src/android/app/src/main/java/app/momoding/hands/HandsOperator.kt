@@ -16,6 +16,7 @@ import com.openminis.app.data.model.ThinkingLevel
 import com.openminis.app.logging.AppLogger
 import com.openminis.app.provider.ProviderFactory
 import com.openminis.app.sandbox.PRootKernel
+import com.openminis.app.sandbox.MinisResourceUri
 import com.openminis.app.service.SessionActivityTracker
 import app.momoding.guard.GateOutcome
 import app.momoding.guard.GuardKind
@@ -165,7 +166,10 @@ class HandsOperator(private val context: Context) {
         pausedMs.set(0)
         val log = mutableListOf<String>()
         done.clear()
-        val traceDir = traceDir(opts.sessionId, runId)
+        val filesSession = opts.sessionId?.let { actor -> runBlocking {
+            (context.applicationContext as? com.openminis.app.MinisApp)?.chatRepository?.getSession(actor)?.parentSessionId
+        } ?: actor }
+        val traceDir = traceDir(filesSession, runId)
         var lastScreen: String? = null
         var steps = 0
         val model = Hands.screenModel(context, entryOverride = opts.modelEntryId)
@@ -272,7 +276,7 @@ class HandsOperator(private val context: Context) {
                 screenH = shot.height
                 jpeg = encode(shot, tree)
                 shot.recycle()
-                lastScreen = save(traceDir, steps, jpeg, runId)
+                lastScreen = save(traceDir, steps, jpeg, runId, filesSession)
                 if (jpeg.black) {
                     blackScreens++
                     if (blackScreens > 2) return finish(Outcome.Infeasible("the screen stays protected (black screenshot); the app does not allow it to be read"), steps, runId, lastScreen, traceDir, log, model.label)
@@ -890,10 +894,7 @@ class HandsOperator(private val context: Context) {
     // ── the trace ──────────────────────────────────────────────────────────
 
     private fun traceDir(sessionId: String?, runId: String): File? {
-        val filesSession = sessionId?.let { actor -> runBlocking {
-            (context.applicationContext as? com.openminis.app.MinisApp)?.chatRepository?.getSession(actor)?.parentSessionId
-        } ?: actor }
-        val base = if (filesSession != null) File(context.filesDir, "minis-sessions/$filesSession/attachments")
+        val base = if (sessionId != null) File(context.filesDir, "minis-sessions/$sessionId/attachments")
         else PRootKernel.resolveHostPath("/var/minis/attachments")
         val hands = base?.let { File(it, "hands") } ?: return null
         // the person's screen is not kept without bound: older runs keep their trace and last screen
@@ -901,11 +902,12 @@ class HandsOperator(private val context: Context) {
         return File(hands, runId).apply { mkdirs() }
     }
 
-    private fun save(dir: File?, step: Int, jpeg: Jpeg, runId: String): String? {
+    private fun save(dir: File?, step: Int, jpeg: Jpeg, runId: String, session: String?): String? {
         dir ?: return null
         return runCatching {
             File(dir, "step-$step.jpg").writeBytes(jpeg.plain)
-            "minis://attachments/hands/$runId/step-$step.jpg"
+            val uri = "minis://attachments/hands/$runId/step-$step.jpg"
+            session?.let { MinisResourceUri.withSession(uri, it) } ?: uri
         }.getOrNull()
     }
 

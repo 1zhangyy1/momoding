@@ -34,10 +34,11 @@ fun HandsTrail(lastScreen: String, sessionId: String?, onOpen: (String) -> Unit)
     val steps = remember(lastScreen, sessionId) {
         val file = (ChatLinkResolver.resolve(lastScreen, sessionId, context) as? ChatLinkAction.SandboxFile)?.item?.file
         val dir = file?.parentFile ?: return@remember emptyList()
-        val base = lastScreen.substringBeforeLast('/')
+        val base = lastScreen.substringBefore('?').substringBeforeLast('/')
+        val query = lastScreen.substringAfter('?', "").let { if (it.isEmpty()) "" else "?$it" }
         dir.listFiles { f -> f.name.matches(Regex("""step-\d+\.jpg""")) }.orEmpty()
             .sortedBy { it.name.removePrefix("step-").removeSuffix(".jpg").toIntOrNull() ?: 0 }
-            .map { it to "$base/${it.name}" }
+            .map { it to "$base/${it.name}$query" }
     }
     if (steps.isEmpty()) return
     Row(
