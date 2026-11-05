@@ -1,6 +1,7 @@
 package app.momoding.task
 
 import android.content.Context
+import androidx.room.withTransaction
 import com.openminis.app.logging.AppLogger
 import com.openminis.app.sandbox.ExecutionCoordinator
 import com.openminis.app.tools.ToolExecutionResult
@@ -57,6 +58,54 @@ object ShellWork {
         val finished = log.filter { it.kind == TaskLogEntity.Kind.COMMAND_RESULT.name }.map { runCatching { JSONObject(it.body).getString("id") }.getOrDefault(it.body) }.toSet()
         return log.filter { it.kind == TaskLogEntity.Kind.COMMAND.name }.mapNotNull { Command.parse(it.body) }
             .filter { it.id !in finished }
+    }
+
+    /** Same durable command, new process handle. Concurrent wakeups cannot launch it twice. */
+    internal fun resume(context: Context, read: ReadRecovery.Pending,
+        execute: suspend () -> ToolExecutionResult = { ReadRecovery.execute(context, read) },
+    ): Deferred<ToolExecutionResult> {
+        val command = read.command
+        val budgetExpired = AtomicBoolean(false)
+        val execution = scope.async(start = CoroutineStart.LAZY) {
+            TaskGuard.check(context, TaskGuard.Binding(read.task.hand, read.task.id, command.call?.message))
+                ?.let { return@async ToolExecutionResult(it, false) }
+            val db = (context.applicationContext as com.openminis.app.MinisApp).database
+            val pending = db.withTransaction {
+                val dao = db.taskDao()
+                val task = dao.task(read.task.id) ?: return@withTransaction false
+                command in pending(dao.log(task.id)) && ReadRecovery.pendingIn(dao, task, command)?.args == read.args
+            }
+            check(pending) { "The original read is no longer pending or its saved invocation changed." }
+            val remaining = if (Helpers.isHelper(context, read.task.hand)) {
+                app.momoding.prompt.MomodingHelper.MAX_MINUTES * 60_000L +
+                    com.openminis.app.agent.jobs.HelperRunner.WRAP_UP_GRACE_MS - TaskEngine.elapsed(context, read.task.id)
+            } else null
+            if (remaining == null) execute()
+            else (if (remaining <= 0) null else withTimeoutOrNull(remaining) { execute() }) ?: run {
+                budgetExpired.set(true)
+                ExecutionCoordinator.stopCurrentCommand(command.process)
+                ToolExecutionResult("The helper's time budget was exhausted while its command was running.", false, timedOut = true)
+            }
+        }
+        val run = Run(execution, command.call)
+        runs.putIfAbsent(command.process, run)?.let { execution.cancel(); return it.execution }
+        com.openminis.app.service.SessionActivityTracker.keepBackgroundWork(command.process, read.task.hand)
+        scope.launch {
+            val observed = runCatching { execution.await() }
+            try {
+                TaskEngine.commandFinished(context, read.task.id, command,
+                    observed.getOrElse { ToolExecutionResult("The read could not resume: ${it.message}", false) },
+                    budgetExpired = budgetExpired.get(), unknown = observed.isFailure)
+            } catch (error: Exception) {
+                AppLogger.warning("ShellWork", "read recovery ${read.task.id}: ${error.message}")
+            } finally {
+                runs.remove(command.process, run)
+                com.openminis.app.service.SessionActivityTracker.finishBackgroundWork(command.process)
+                ExecutionCoordinator.sessionDidTerminate(command.process)
+            }
+        }
+        execution.start()
+        return execution
     }
 
     suspend fun run(context: Context, chat: String, taskAtStart: String?, title: String, text: String,

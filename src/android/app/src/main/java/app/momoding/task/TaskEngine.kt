@@ -54,15 +54,16 @@ object TaskEngine {
         } }
         scope.launch {
             val approvalHands: Set<String>
+            val reads: List<ReadRecovery.Pending>
             try {
-                recoverCommands(app)
+                reads = change(app, recovering = true) { dao, _ -> recoverCommandsIn(dao) }
                 recoverActions(app)
                 recoverScreens(app)
                 approvalHands = recoverApprovals(app)
                 val db = (app as MinisApp).database
                 db.withTransaction {
                     TaskTranscript.recoverIn(db.chatDao(), db.taskDao())
-                    Inbox.recoverIn(db.taskDao())
+                    Inbox.recoverIn(db.taskDao(), ReadRecovery.deferredInputsIn(db.taskDao(), reads))
                 }
                 app.getSharedPreferences("momoding", Context.MODE_PRIVATE).edit().remove("work.running").apply()
                 recovered.complete(Unit)
@@ -71,6 +72,7 @@ object TaskEngine {
                 AppLogger.error(TAG, "startup recovery: ${error.message}")
                 return@launch
             }
+            reads.forEach { ShellWork.resume(app, it) }
             ScreenWork.start(app)
             Inbox.wakeAll(app)
             approvalHands.forEach { tellChat(app, it) }
@@ -759,7 +761,7 @@ object TaskEngine {
     /** Called inside the same transaction as the last result and its receipt. */
     internal suspend fun completeOwnIn(dao: TaskDao, id: String, outcome: TaskEntity.Outcome, words: String): Closeout? {
         val task = dao.task(id) ?: return null
-        if (task.conversation != task.hand || task.state !in listOf(TaskEntity.State.RUNNING.name, TaskEntity.State.WAITING.name) || pendingWork(dao, id)) return null
+        if (task.conversation != task.hand || task.state != TaskEntity.State.RUNNING.name || task.ask != null || task.hold != null || pendingWork(dao, id)) return null
         val closed = closeoutIn(dao, id, outcome, words)
         dao.updateTask(task.copy(state = TaskEntity.State.ENDED.name, ask = null, progress = null,
             outcome = closed.outcome.name, updatedAt = System.currentTimeMillis()))
@@ -1091,10 +1093,15 @@ object TaskEngine {
         }
     }
 
-    /** A killed process cannot prove a command's effect. Keep it waiting for verification. */
-    private suspend fun recoverCommands(context: Context) = change(context, recovering = true) { dao, _ ->
+    /** Known reads can resume; a killed process cannot prove an outward effect. */
+    internal suspend fun recoverCommandsIn(dao: TaskDao): List<ReadRecovery.Pending> {
+        val reads = mutableListOf<ReadRecovery.Pending>()
         for (task in dao.commandTasks()) {
-            val commands = ShellWork.pending(dao.log(task.id))
+            val commands = ShellWork.pending(dao.log(task.id)).filter { command ->
+                val read = ReadRecovery.pendingIn(dao, task, command)
+                if (read != null) reads += read
+                read == null
+            }
             if (commands.isEmpty()) continue
             val fallback = "The app restarted while a command was running; its outcome is unknown. Verify what happened before running it again."
             commands.forEach { log(dao, task.id, TaskLogEntity.Kind.COMMAND_RESULT, JSONObject().put("id", it.id).put("unknown", true).toString()) }
@@ -1104,6 +1111,7 @@ object TaskEngine {
             log(dao, task.id, TaskLogEntity.Kind.REPORT, words)
             Inbox.post(dao, task.conversation, "$REPORT_CUE${task.id} · command · ask] $words", task.id)
         }
+        return reads
     }
 
     /** A routine's history/notification consumer acknowledged this persisted completion. */
