@@ -48,17 +48,15 @@ object ShellWork {
         companion object {
             fun parse(text: String): Command? = runCatching {
                 val row = JSONObject(text)
-                Command(row.getString("id"), row.getString("process"), row.getString("text"),
+                Command(row.get("id") as String, row.get("process") as String, row.get("text") as String,
                     row.optJSONObject("tool")?.let { runCatching { ToolCall.parse(it) }.getOrNull() })
+                    .also { require(it.id.isNotBlank() && it.process.isNotBlank() && it.text.isNotBlank()) }
             }.getOrNull()
         }
     }
 
-    internal fun pending(log: List<TaskLogEntity>): List<Command> {
-        val finished = log.filter { it.kind == TaskLogEntity.Kind.COMMAND_RESULT.name }.map { runCatching { JSONObject(it.body).getString("id") }.getOrDefault(it.body) }.toSet()
-        return log.filter { it.kind == TaskLogEntity.Kind.COMMAND.name }.mapNotNull { Command.parse(it.body) }
-            .filter { it.id !in finished }
-    }
+    internal fun pending(log: List<TaskLogEntity>): List<Command> =
+        TaskReceipt.pending(log, TaskLogEntity.Kind.COMMAND, TaskLogEntity.Kind.COMMAND_RESULT).mapNotNull { Command.parse(it.row.body) }
 
     /** Same durable command, new process handle. Concurrent wakeups cannot launch it twice. */
     internal fun resume(context: Context, read: ReadRecovery.Pending,

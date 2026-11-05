@@ -66,8 +66,7 @@ object TaskTranscript {
                 val values = effects.filter { it.kind == TaskLogEntity.Kind.ABOUT_TO.name }.map { action ->
                     val about = JSONObject(action.body)
                     require(source.sessionId == about.getString("session")) { "The action belongs to another conversation." }
-                    tasks.log(action.taskId).lastOrNull { it.kind == TaskLogEntity.Kind.RESULT.name &&
-                        JSONObject(it.body).getString("id") == about.getString("id") }?.body?.let(::JSONObject)
+                    TaskReceipt.result(tasks.log(action.taskId), TaskLogEntity.Kind.RESULT, TaskReceipt.Entry(action, about).id)
                 } + effects.filter { it.kind == TaskLogEntity.Kind.HANDOFF.name }.mapNotNull { handoff ->
                     JSONObject(handoff.body).optString("command").takeIf(String::isNotBlank)?.let { command ->
                         handoff.taskId to command

@@ -392,7 +392,7 @@ object TaskEngine {
 
     suspend fun pendingWork(dao: TaskDao, id: String): Boolean {
         val history = dao.log(id)
-        return ShellWork.pending(history).isNotEmpty() || Approval.unclaimed(history).isNotEmpty() ||
+        return TaskReceipt.pending(history, TaskLogEntity.Kind.COMMAND, TaskLogEntity.Kind.COMMAND_RESULT).isNotEmpty() || Approval.unclaimed(history).isNotEmpty() ||
             TaskAction.pending(history).isNotEmpty() || dao.task(id)?.ask != null ||
             dao.children(id).any { it.state != TaskEntity.State.ENDED.name }
     }
@@ -489,7 +489,7 @@ object TaskEngine {
 
     internal suspend fun actionResultIn(dao: TaskDao, task: String, id: String, output: String, success: Boolean, unknown: Boolean = false): Boolean {
         val history = dao.log(task)
-        if (history.none { it.kind == TaskLogEntity.Kind.ABOUT_TO.name && JSONObject(it.body).getString("id") == id }) return false
+        if (TaskReceipt.entries(history, TaskLogEntity.Kind.ABOUT_TO).none { it.id == id }) return false
         val previous = TaskReceipt.result(history, TaskLogEntity.Kind.RESULT, id)
         if (previous != null && (!previous.optBoolean("unknown") || unknown)) return false
         val result = JSONObject().put("id", id).put("output", output)
@@ -524,12 +524,12 @@ object TaskEngine {
         val pending = TaskAction.pending(dao.log(task.id))
         if (pending.isEmpty()) return null
         val words = "An outward action has no recorded result; its outcome is unknown. Verify the current external state before continuing; do not repeat it.\n" +
-            pending.joinToString("\n") { it.request.preview }
-        val commands = ShellWork.pending(dao.log(task.id)).map { it.id }.toSet()
+            pending.joinToString("\n") { it.value?.optString("preview").orEmpty().ifBlank { "Unrecorded action details (${it.id}); verify its effect." } }
+        val commands = TaskReceipt.pending(dao.log(task.id), TaskLogEntity.Kind.COMMAND, TaskLogEntity.Kind.COMMAND_RESULT).map { it.id }.toSet()
         for (action in pending) {
-            if (action.request.id in commands) log(dao, task.id, TaskLogEntity.Kind.COMMAND_RESULT,
-                JSONObject().put("id", action.request.id).put("unknown", true).toString())
-            actionResultIn(dao, task.id, action.request.id, words, false, unknown = true)
+            if (action.id in commands) log(dao, task.id, TaskLogEntity.Kind.COMMAND_RESULT,
+                JSONObject().put("id", action.id).put("unknown", true).toString())
+            actionResultIn(dao, task.id, action.id, words, false, unknown = true)
         }
         if (task.state != TaskEntity.State.ENDED.name) actionUnknownIn(dao, task, words)
         return words
@@ -891,14 +891,7 @@ object TaskEngine {
     private suspend fun working(dao: TaskDao, task: TaskEntity, ignoreModel: Boolean): Boolean {
         val model = ChatViewModelStore.existing(task.hand)
         val history = dao.log(task.id)
-        // Clock activity needs only an action id and its receipt, not a complete approval recipe.
-        val action = history.any { row ->
-            if (row.kind != TaskLogEntity.Kind.ABOUT_TO.name) false
-            else runCatching { JSONObject(row.body).getString("id") }.getOrNull()?.let {
-                TaskReceipt.result(history, TaskLogEntity.Kind.RESULT, it) == null
-            } == true
-        }
-        return ShellWork.pending(history).isNotEmpty() || action ||
+        return TaskReceipt.pending(history, TaskLogEntity.Kind.COMMAND, TaskLogEntity.Kind.COMMAND_RESULT).isNotEmpty() || TaskAction.pending(history).isNotEmpty() ||
             dao.children(task.id).any { it.state == TaskEntity.State.RUNNING.name } ||
             (!ignoreModel && model?.activeTaskId == task.id && model.turnIsRunning)
     }
@@ -1147,8 +1140,8 @@ object TaskEngine {
     internal suspend fun recoverCommandsIn(dao: TaskDao): List<ReadRecovery.Pending> {
         val reads = mutableListOf<ReadRecovery.Pending>()
         for (task in dao.commandTasks()) {
-            val commands = ShellWork.pending(dao.log(task.id)).filter { command ->
-                val read = ReadRecovery.pendingIn(dao, task, command)
+            val commands = TaskReceipt.pending(dao.log(task.id), TaskLogEntity.Kind.COMMAND, TaskLogEntity.Kind.COMMAND_RESULT).filter { entry ->
+                val read = ShellWork.Command.parse(entry.row.body)?.let { ReadRecovery.pendingIn(dao, task, it) }
                 if (read != null) reads += read
                 read == null
             }

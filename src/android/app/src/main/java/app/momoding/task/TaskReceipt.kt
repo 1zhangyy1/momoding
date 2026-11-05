@@ -5,10 +5,23 @@ import org.json.JSONObject
 
 /** Observations from the existing journal; a successful return is not proof of delivery. */
 internal object TaskReceipt {
+    data class Entry(val row: TaskLogEntity, val value: JSONObject?) {
+        val id: String get() = (value?.opt("id") as? String)?.takeIf(String::isNotBlank) ?: "log:${row.id}"
+    }
+
+    fun entries(history: List<TaskLogEntity>, kind: TaskLogEntity.Kind): List<Entry> =
+        history.filter { it.kind == kind.name }.map { Entry(it, runCatching { JSONObject(it.body) }.getOrNull()) }
+
+    /** Observe an intent without rebuilding execution parameters that an old row may lack. */
+    fun pending(history: List<TaskLogEntity>, kind: TaskLogEntity.Kind, resultKind: TaskLogEntity.Kind): List<Entry> {
+        val finished = entries(history, resultKind).filter { outcome(it.value) }.map { it.id }.toSet()
+        return entries(history, kind).filter { it.id !in finished }.distinctBy { it.id }
+    }
+
+    private fun outcome(value: JSONObject?): Boolean = value?.opt("success") is Boolean || value?.opt("unknown") == true
+
     fun result(history: List<TaskLogEntity>, kind: TaskLogEntity.Kind, id: String): JSONObject? =
-        history.asReversed().firstNotNullOfOrNull { row ->
-            if (row.kind != kind.name) null else runCatching { JSONObject(row.body) }.getOrNull()?.takeIf { it.optString("id") == id }
-        }
+        entries(history, kind).asReversed().firstOrNull { it.id == id && outcome(it.value) }?.value
 
     fun belongsToEarlierAttempt(history: List<TaskLogEntity>, kind: TaskLogEntity.Kind, id: String): Boolean {
         val source = history.firstOrNull { it.kind == kind.name && runCatching { JSONObject(it.body).optString("id") == id }.getOrDefault(false) }
@@ -35,22 +48,22 @@ internal object TaskReceipt {
             where.put(JSONObject().put("task", task.id).put("title", task.title).put("hand", task.hand)
                 .put("state_before_stop", task.state.lowercase()).put("checkpoint", checkpoint ?: "No further checkpoint was recorded.")
                 .put("waiting_on", task.ask).put("hold", task.hold))
-            val actions = current.filter { it.kind == TaskLogEntity.Kind.ABOUT_TO.name }
-            val actionIds = actions.mapNotNull { runCatching { JSONObject(it.body).getString("id") }.getOrNull() }.toSet()
+            val actions = entries(current, TaskLogEntity.Kind.ABOUT_TO)
+            val actionIds = actions.map { it.id }.toSet()
             for (action in actions) {
-                val about = runCatching { JSONObject(action.body) }.getOrNull()
-                val id = about?.optString("id").orEmpty().ifBlank { "log:${action.id}" }
+                val about = action.value
+                val id = action.id
                 val value = result(history, TaskLogEntity.Kind.RESULT, id)
                 outward.put(JSONObject().put("task", task.id).put("id", id)
                     .put("action", brief(about?.optString("summary").orEmpty().ifBlank { about?.optString("preview").orEmpty().ifBlank { "Unparseable outward action; verify its effect." } }, 300))
                     .put("preview", brief(about?.optString("preview").orEmpty(), 1000))
                     .put("return", status(value)).put("output", brief(value?.optString("output").orEmpty(), 1000)))
             }
-            for (row in current.filter { it.kind == TaskLogEntity.Kind.COMMAND.name }) {
-                val command = ShellWork.Command.parse(row.body) ?: continue
+            for (command in entries(current, TaskLogEntity.Kind.COMMAND)) {
                 if (command.id in actionIds) continue
                 val value = result(history, TaskLogEntity.Kind.COMMAND_RESULT, command.id)
-                commands.put(JSONObject().put("task", task.id).put("id", command.id).put("command", brief(command.text, 300))
+                commands.put(JSONObject().put("task", task.id).put("id", command.id).put("command",
+                    brief(command.value?.optString("text").orEmpty().ifBlank { "Unreadable command; verify its effect." }, 300))
                     .put("return", status(value)).put("output", brief(value?.optString("output").orEmpty(), 1000)))
             }
             val received = dao.unread(task.hand).filter { it.taskId == task.id }.map { it.text }
