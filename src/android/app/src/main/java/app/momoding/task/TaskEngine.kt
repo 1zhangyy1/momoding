@@ -174,6 +174,14 @@ object TaskEngine {
      * More words for a task's hand. It reads them before its next step when it is at work; they
      * answer what it waits on; a task that is done or did not work picks up again with the same hand.
      */
+    /** The person's own condition on a task ([words]), or null once they give the go-ahead. While held, nothing on it goes out. */
+    suspend fun hold(context: Context, id: String, words: String?): TaskEntity = change(context) { dao, _ ->
+        val task = requireNotNull(dao.task(id)) { "no task $id" }
+        dao.updateTask(task.copy(hold = words, updatedAt = System.currentTimeMillis()))
+        log(dao, id, TaskLogEntity.Kind.REPORT, words?.let { "On hold: $it" } ?: "Released by the person.")
+        requireNotNull(dao.task(id))
+    }
+
     suspend fun tell(context: Context, id: String, text: String, call: ToolCall? = null): TaskEntity {
         val helper = dao(context).task(id)?.let { Helpers.isHelper(context, it.hand) } ?: false
         return change(context) { dao, after ->
@@ -285,12 +293,15 @@ object TaskEngine {
             append("## Tasks\nWork tracked in this chat. A message starting $REPORT_CUE<id> · <hand> · done|ask|failed|stopped] is that task's report, not the person: ")
             append("tell the person what came of it in your own words, in a line or two (with a link to open a Momoding's app when there is something to see); for an ask, ask the person. ")
             append("A command_result is a background tool result for the current task: use it to continue before reporting the task done. ")
-            append("Their answer, or anything more they want of a task, goes to its hand with `momoding-task tell <id> \"<their words>\"`.\n")
+            append("Their answer, or anything more they want of a task, goes to its hand with `momoding-task tell <id> \"<their words>\"`. ")
+            append("When they make a task wait on their word (\"check with me first\", \"only cancel if it can be refunded\"), `momoding-task hold <id> \"<their words>\"`; ")
+            append("only their own go-ahead lifts it: `momoding-task release <id> \"<their words>\"`.\n")
             (open + ended).forEach { t ->
                 append("- ").append(t.id).append(" · ").append(if (t.hand == t.conversation) "this chat" else handName(context, t.hand)).append(" · ").append(t.title).append(" · ")
                 append(t.outcome?.lowercase() ?: t.state.lowercase())
                 t.progress?.takeIf { t.state == TaskEntity.State.RUNNING.name }?.let { append(" (").append(it).append(")") }
                 t.ask?.let { runCatching { JSONObject(it).optString("question") }.getOrNull() }?.let { append(" — asks: ").append(it) }
+                t.hold?.let { append(" — on hold: ").append(it) }
                 append("\n")
             }
         }.trimEnd()

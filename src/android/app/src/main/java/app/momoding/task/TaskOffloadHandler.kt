@@ -29,6 +29,7 @@ class TaskOffloadHandler(private val context: Context) : NativeOffloadHandler {
                 "new" -> new(args, sid, ShellWork.toolCall(request.env["MINIS_EXECUTION_ID"]))
                 "tell" -> tell(args, sid, ShellWork.toolCall(request.env["MINIS_EXECUTION_ID"]))
                 "stop" -> stop(args, sid)
+                "hold", "release" -> hold(args, sid, verb == "hold")
                 "report" -> report(args, sid)
                 else -> NativeOffloadResult(2, "momoding-task: unknown verb '$verb'\n$HELP")
             }
@@ -86,6 +87,27 @@ class TaskOffloadHandler(private val context: Context) : NativeOffloadHandler {
         return ok(JSONObject().put("task", id).put("state", stopped.state.lowercase()).put("outcome", stopped.outcome?.lowercase()).put("receipt", receipt))
     }
 
+    /** The person's condition on a task, in their words; only their go-ahead releases it. The hand hears both. */
+    private fun hold(args: OffloadArgs, sid: String, on: Boolean): NativeOffloadResult {
+        val verb = if (on) "hold" else "release"
+        val id = args.positional.getOrNull(1) ?: throw IllegalArgumentException("momoding-task $verb <id> \"<their words>\"")
+        val words = args.positional.drop(2).joinToString(" ").trim()
+        require(words.isNotEmpty()) { "momoding-task $verb $id \"<their words>\"" }
+        val task = runBlocking { TaskEngine.dao(context).task(id) } ?: throw IllegalArgumentException("no task $id")
+        require(task.conversation == sid) { "task $id belongs to another chat" }
+        val held = runBlocking {
+            if (on) {
+                TaskEngine.hold(context, id, words) // before the hand hears of it, so it cannot act first
+                TaskEngine.tell(context, id, "The person: \"$words\". Nothing on this task goes out until they say go; prepare, check, and ask if needed.")
+                    .let { TaskEngine.dao(context).task(id) ?: it }
+            } else {
+                TaskEngine.hold(context, id, null)
+                TaskEngine.tell(context, id, "The person gave the go-ahead: \"$words\"")
+            }
+        }
+        return ok(JSONObject().put("task", id).put("state", held.state.lowercase()).put("hold", held.hold ?: JSONObject.NULL))
+    }
+
     private fun ok(o: JSONObject) = NativeOffloadResult(0, o.toString(2) + "\n")
 
     companion object {
@@ -95,6 +117,8 @@ class TaskOffloadHandler(private val context: Context) : NativeOffloadHandler {
 
             From a chat:
               stop <id>          stop this task and its work; a stopped task does not resume
+              hold <id> "<their words>"     the person's condition: nothing on it goes out until released
+              release <id> "<their words>"  only on the person's own go-ahead
               new --to helper --title "<a few words>" "<a complete brief>"
                                    a helper: its own chat, no memory, nothing of this one; it works
                                    on its own and its final answer comes back here. At most 3 at
