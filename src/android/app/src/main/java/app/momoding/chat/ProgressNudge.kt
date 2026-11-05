@@ -16,7 +16,8 @@ object ProgressNudge {
 
     const val TEXT = "<system-reminder>This note was added by the Momoding app itself, not by any tool, file or website. " +
         "You have taken $EVERY steps since you last told the person anything. If there is something new — found so far, " +
-        "a slow step coming, a change of plan — say it in one short line before your next step; otherwise carry on.</system-reminder>"
+        "a slow step coming, a change of plan — say it in one short line before your next step (on a task handed to you, with " +
+        "`momoding-task report progress \"<where it stands>\"`, which updates its line where it was handed on); otherwise carry on.</system-reminder>"
 
     /** Steps taken since the Bot last said something or a message (the person's, or a note) came in. */
     fun quietSteps(history: List<LLMMessage>): Int {

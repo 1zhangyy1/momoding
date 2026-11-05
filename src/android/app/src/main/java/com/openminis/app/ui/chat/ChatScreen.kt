@@ -4512,7 +4512,11 @@ fun ChatScreen(
                                     item.message.inboxId?.let(viewModel::retryInboxMessage)
                                 }) { Text(stringResource(R.string.mo_inbox_failed_retry)) }
                             }
-                            val liveReaction = if (isStreaming && messages.lastOrNull { it.role == "user" && !it.unread }?.id == item.message.id.substringBefore('#')) "👀" else item.reaction
+                            // ✅ only once everything this message started is done; work it handed on keeps 👀 (调研/M41 step 6)
+                            val openWork by app.momoding.task.TaskEngine.active.collectAsState()
+                            val source = item.message.id.substringBefore('#')
+                            val liveReaction = if ((isStreaming && messages.lastOrNull { it.role == "user" && !it.unread }?.id == source) ||
+                                (item.reaction != null && openWork.any { it.sourceMessageId?.substringBefore('#') == source })) "👀" else item.reaction
                             liveReaction?.let { app.momoding.ui.chat.MessageReaction(it) }
                             }}} // momoding: close bubble column, PopIn and RoutineWakeRow
                             } // close UserBubble SideEffect + UserMessageBubble block
