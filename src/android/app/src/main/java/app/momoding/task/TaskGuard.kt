@@ -38,6 +38,9 @@ object TaskGuard {
         // Scope a recovery to the input that caused this invocation. Another user message
         // in the same chat is not an authorization to replay this input's uncertain work.
         if (outward && binding.message != null) {
+            dao.recovered("call:" + binding.message)?.takeIf { it.conversation == binding.hand || it.hand == binding.hand }?.let {
+                return "This invocation was interrupted and parked for verification. Use a new instruction after checking the old outcome; do not replay this old call."
+            }
             val input = dao.inputForCall(binding.hand, binding.message)
             if (input != null) {
                 if (input.sender != InboxEntity.Sender.USER.name && input.text.contains(" · late_result]") &&

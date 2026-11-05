@@ -68,11 +68,16 @@ object TaskEngine {
                 recoverScreens(app)
                 approvalHands = recoverApprovals(app)
                 val db = (app as MinisApp).database
-                db.withTransaction {
-                    TaskTranscript.recoverIn(db.chatDao(), db.taskDao())
+                val legacy = prefs.getString(LegacyWork.KEY, null)
+                val saved = db.withTransaction {
+                    val interrupted = TaskTranscript.recoveryTurnsIn(db.chatDao(), legacy)
+                    val saved = recoverLegacyIn(db.chatDao(), db.taskDao(), legacy, interrupted)
+                    recoverOrphansIn(db.taskDao(), interrupted)
+                    TaskTranscript.recoverIn(db.chatDao(), db.taskDao(), interrupted)
                     Inbox.recoverIn(db.taskDao(), ReadRecovery.deferredInputsIn(db.taskDao(), reads))
+                    saved
                 }
-                app.getSharedPreferences("momoding", Context.MODE_PRIVATE).edit().remove("work.running").apply()
+                if (!LegacyWork.acknowledge(prefs, legacy, saved)) AppLogger.warning(TAG, "could not acknowledge legacy work; the saved recovery is idempotent")
                 recovered.complete(Unit)
             } catch (error: Throwable) {
                 recovered.completeExceptionally(error)
@@ -109,6 +114,65 @@ object TaskEngine {
                 body = JSONObject().put("elapsed_ms", TaskClock.interrupted(task, history, lastAliveAt, now))
                     .put("reason", "app restarted").toString()))
         }
+    }
+
+    /** Retire only entries whose existing conversation can hold a durable explanation. */
+    internal suspend fun recoverLegacyIn(chat: com.openminis.app.data.db.ChatDao, dao: TaskDao, raw: String?,
+        interrupted: List<com.openminis.app.data.db.MessageEntity>,
+    ): Set<String> {
+        val saved = mutableSetOf<String>()
+        for (entry in LegacyWork.entries(raw)) {
+            if (dao.recovered(entry.key) != null) { saved += entry.session; continue }
+            val session = chat.getSession(entry.session) ?: continue
+            val owner = session.parentSessionId ?: session.id
+            if (chat.getSession(owner) == null) continue
+            val held = dao.onHand(session.id).let { tasks -> tasks.singleOrNull() ?: tasks.singleOrNull { it.conversation != it.hand } }
+            val now = System.currentTimeMillis()
+            val task = held ?: TaskEntity(java.util.UUID.nameUUIDFromBytes(entry.key.toByteArray()).toString(), owner,
+                title = "Interrupted older activity", hand = session.id, state = TaskEntity.State.RUNNING.name,
+                createdAt = now, updatedAt = now).also { dao.insertTask(it) }
+            parkRecoveryIn(dao, task, entry.key,
+                "An older app left this conversation active without a durable continuation. Its remaining work and effects are unverified. Check what happened before continuing.",
+                interrupted, setOf(session.id), "Legacy work.running entry: " + entry.raw)
+            saved += entry.session
+        }
+        return saved
+    }
+
+    /** A running row alone cannot reconstruct a lost model loop. Keep recorded sub-results intact. */
+    internal suspend fun recoverOrphansIn(dao: TaskDao, interrupted: List<com.openminis.app.data.db.MessageEntity>) {
+        for (task in dao.unfinishedTasks()) {
+            if (task.state != TaskEntity.State.RUNNING.name || task.hand == TaskEntity.SCREEN || task.ask != null || task.hold != null || pendingWork(dao, task.id)) continue
+            if (dao.inboxFor(task.hand).any { it.failedAt == null && (it.taskId == task.id || it.id == task.sourceMessageId) }) continue
+            val attempt = dao.log(task.id).lastOrNull { it.kind in listOf("AUTHORIZED", "PASSED_ON", "END") }?.id ?: 0
+            parkRecoveryIn(dao, task, "attempt:${task.id}:$attempt",
+                "The app restarted with this task active, but its original continuation is missing. Recorded results remain available; check the remaining work before continuing.",
+                interrupted, setOf(task.hand))
+        }
+    }
+
+    /** Park before bypassing a broken reference. Nothing here supplies execution parameters or authorization. */
+    internal suspend fun parkRecoveryIn(dao: TaskDao, task: TaskEntity, key: String, words: String,
+        interrupted: List<com.openminis.app.data.db.MessageEntity>, sessions: Set<String>, evidence: String? = null,
+    ) {
+        if (dao.recovered(key) != null) return
+        log(dao, task.id, TaskLogEntity.Kind.RECOVERY, key)
+        if (task.state != TaskEntity.State.ENDED.name) {
+            for (call in interrupted.filter { it.sessionId in sessions })
+                log(dao, task.id, TaskLogEntity.Kind.RECOVERY, "call:" + call.id)
+            val consumed = dao.interruptedInbox().filter { it.toSession in sessions }
+            consumed.forEach { log(dao, task.id, TaskLogEntity.Kind.RECOVERY, "input:" + it.id) }
+            // The transcript remains. Only the interrupted receive is retired; new unread input is independent.
+            dao.deleteInbox(consumed.map { it.id })
+            if (task.ask == null) actionUnknownIn(dao, requireNotNull(dao.task(task.id)), words)
+            val parked = requireNotNull(dao.task(task.id))
+            clock(dao, parked, false, "recovery parked")
+            dao.updateTask(parked.copy(state = TaskEntity.State.WAITING.name))
+        }
+        log(dao, task.id, TaskLogEntity.Kind.REPORT, words + evidence?.let { "\n$it" }.orEmpty())
+        if (task.state == TaskEntity.State.ENDED.name) return
+        val target = TaskReceipt.target(dao, task) ?: return
+        Inbox.post(dao, target.conversation, "$REPORT_CUE${target.task} · recovery · ask] $words", target.task)
     }
 
     /** The task the person's words started: a new one for [hand], or in line behind the one it is on. */

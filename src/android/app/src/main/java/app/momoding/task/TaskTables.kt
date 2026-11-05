@@ -99,14 +99,17 @@ data class TaskLogEntity(
     val kind: String,
     val body: String,
 ) {
-    enum class Kind { AUTHORIZED, PASSED_ON, STARTED, PAUSED, ROUTINE, ROUTINE_RECORDED, COMMAND, COMMAND_RESULT, CHILD, SCREEN, SCREEN_RESULT, APPROVAL, APPROVAL_DECISION, APPROVAL_USED, APPROVAL_CLOSED, ABOUT_TO, RESULT, DRAFT, HANDOFF, TRANSCRIBED, REPORT, END }
+    enum class Kind { AUTHORIZED, PASSED_ON, STARTED, PAUSED, ROUTINE, ROUTINE_RECORDED, COMMAND, COMMAND_RESULT, CHILD, SCREEN, SCREEN_RESULT, APPROVAL, APPROVAL_DECISION, APPROVAL_USED, APPROVAL_CLOSED, ABOUT_TO, RESULT, DRAFT, HANDOFF, TRANSCRIBED, RECOVERY, REPORT, END }
 }
 
 @Dao
 interface TaskDao {
     /** An effect or handoff whose original tool return has not reached the transcript. */
-    @Query("SELECT a.* FROM task_log a WHERE a.kind IN ('ABOUT_TO', 'HANDOFF') AND instr(a.body, '\"tool\":') > 0 AND instr(a.body, :messageNeedle) > 0 AND NOT EXISTS (SELECT 1 FROM task_log done WHERE done.task_id = a.task_id AND done.kind = 'TRANSCRIBED' AND done.body = CAST(a.id AS TEXT)) ORDER BY a.id")
+    @Query("SELECT a.* FROM task_log a WHERE a.kind IN ('ABOUT_TO', 'HANDOFF') AND instr(a.body, '\"tool\":') > 0 AND instr(a.body, :messageNeedle) > 0 AND NOT EXISTS (SELECT 1 FROM task_log done WHERE done.task_id = a.task_id AND ((done.kind = 'TRANSCRIBED' AND done.body = CAST(a.id AS TEXT)) OR (done.kind = 'RECOVERY' AND done.body = 'record:' || a.id))) ORDER BY a.id")
     suspend fun untranscribedCalls(messageNeedle: String = ""): List<TaskLogEntity>
+
+    @Query("SELECT t.* FROM task t JOIN task_log r ON r.task_id = t.id WHERE r.kind = 'RECOVERY' AND r.body = :key LIMIT 1")
+    suspend fun recovered(key: String): TaskEntity?
 
     @Query("SELECT parts_json FROM messages WHERE id = :message AND session_id = :session AND role = 'assistant'")
     suspend fun toolMessage(session: String, message: String): String?
@@ -117,7 +120,7 @@ interface TaskDao {
     @Query("SELECT i.* FROM inbox i JOIN messages received ON received.id = i.id WHERE i.to_session = :session AND received.session_id = :session AND i.read_at IS NOT NULL ORDER BY i.read_at DESC, CASE WHEN i.sender = 'USER' THEN 0 ELSE 1 END, received.sort_order DESC LIMIT 1")
     suspend fun consumedInput(session: String): InboxEntity?
 
-    @Query("SELECT * FROM task WHERE conversation = :conversation AND source_message_id = :message")
+    @Query("SELECT * FROM task WHERE conversation = :conversation AND (source_message_id = :message OR EXISTS (SELECT 1 FROM task_log r WHERE r.task_id = task.id AND r.kind = 'RECOVERY' AND r.body = 'input:' || :message))")
     suspend fun sourceTasks(conversation: String, message: String): List<TaskEntity>
 
     // ── inbox ──
