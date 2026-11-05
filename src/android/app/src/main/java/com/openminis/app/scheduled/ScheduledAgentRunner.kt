@@ -22,7 +22,6 @@ import androidx.core.app.NotificationCompat
 import com.openminis.app.MinisApp
 import com.openminis.app.debug.HeadlessChatRunner
 import com.openminis.app.logging.AppLogger
-import com.openminis.app.service.AgentForegroundService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -88,7 +87,6 @@ object ScheduledAgentRunner {
             if (wait) return checked()
             bgScope.launch { checked() }; return null
         }
-        AgentForegroundService.startService(app, 1, "Scheduled: ${task.label.ifBlank { "task" }}")
         if (task.targetMode is ScheduledTargetMode.ChildOfCurrent) {
             val work = dispatchChild(app, task, task.targetMode.sessionId, fire) ?: return null
             if (wait) {

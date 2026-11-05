@@ -1,6 +1,12 @@
 package com.openminis.app.sandbox.offload
 
 import android.content.Context
+import app.momoding.apps.MoApps
+import app.momoding.task.Helpers
+import app.momoding.task.ShellWork
+import app.momoding.task.TaskEngine
+import app.momoding.task.TaskGuard
+import com.openminis.app.MinisApp
 import com.openminis.app.logging.AppLogger
 import com.openminis.app.sandbox.NativeOffloadHandler
 import com.openminis.app.sandbox.NativeOffloadRequest
@@ -16,6 +22,7 @@ import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Calendar
+import kotlin.coroutines.EmptyCoroutineContext
 
 /**
  * [T-android-scheduled-tasks-full] minis-scheduled — CLI surface for the
@@ -80,7 +87,7 @@ class ScheduledTaskOffloadHandler(private val context: Context) : NativeOffloadH
                 "delete", "remove", "rm" -> handleDelete(args)
                 "enable" -> handleSetEnabled(args, true)
                 "disable" -> handleSetEnabled(args, false)
-                "run" -> handleRun(args)
+                "run" -> handleRun(args, request)
                 else -> NativeOffloadResult(2, "minis-scheduled: unknown subcommand '$sub'\n$HELP")
             }
         } catch (e: IllegalArgumentException) {
@@ -215,13 +222,30 @@ class ScheduledTaskOffloadHandler(private val context: Context) : NativeOffloadH
         return NativeOffloadResult(0, JSONObject().put("id", id).put("enabled", enabled).toString())
     }
 
-    private fun handleRun(args: OffloadArgs): NativeOffloadResult {
+    private fun handleRun(args: OffloadArgs, request: NativeOffloadRequest): NativeOffloadResult {
         val id = args.get("id") ?: throw IllegalArgumentException("--id required")
         val task = manager.get(id) ?: return NativeOffloadResult(1, "minis-scheduled: no task with id=$id")
-        // Fire immediately, off-schedule. Blocks until the agent loop finishes
-        // (ScheduledAgentRunner waits internally). Mirrors the editor "Run now".
-        val sessionId = runBlocking {
-            com.openminis.app.scheduled.ScheduledAgentRunner.run(context, task)
+        val call = ShellWork.toolCall(request.env["MINIS_EXECUTION_ID"])
+        val sessionId = runBlocking(call ?: EmptyCoroutineContext) {
+            val caller = request.sessionId ?: call?.let {
+                (context.applicationContext as MinisApp).database.chatDao().message(it.message)?.sessionId
+            }
+            if (caller != null) {
+                check(MoApps.ofSession(context, caller) == null) { "An app's Momoding hands no work on: do it yourself, or say what is needed." }
+                check(!Helpers.isHelper(context, caller)) { "A helper hands no work on: do it yourself." }
+            }
+            if (call != null) {
+                requireNotNull(caller) { "The original conversation is no longer available." }
+                call.requireStoredIn(TaskEngine.dao(context), caller)
+                TaskGuard.check(context, TaskGuard.bind(context, caller, process = request.env["MINIS_EXECUTION_ID"]), outward = true)
+                    ?.let { throw IllegalStateException(it) }
+            }
+            if (task.targetMode is ScheduledTargetMode.ChildOfCurrent && caller != null) {
+                require(caller == task.targetMode.sessionId) { "Run this helper from its owning chat." }
+                require(call != null) { "The original tool invocation is unavailable. Use a fresh instruction." }
+            }
+            // Dispatch commits before returning; the existing task/receipt observers own completion.
+            com.openminis.app.scheduled.ScheduledAgentRunner.run(context, task, waitForCompletion = false)
         }
         val out = JSONObject()
             .put("id", id)
