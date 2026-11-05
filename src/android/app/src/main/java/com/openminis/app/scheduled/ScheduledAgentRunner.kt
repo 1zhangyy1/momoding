@@ -7,7 +7,6 @@ import app.momoding.chat.NotifyDecision
 import app.momoding.chat.RoutineAttention
 import app.momoding.chat.RoutineWakes // momoding (a local `app` shadows the package root here)
 import app.momoding.apps.MoApps
-import app.momoding.task.Helpers
 import app.momoding.task.RoutineFire
 import app.momoding.task.TaskEngine
 import app.momoding.task.TaskEntity
@@ -152,6 +151,14 @@ object ScheduledAgentRunner {
         // [T-scheduled-task-detail] One timestamp for this fire, written into
         // its envelope and its run record so the two can be matched.
         val firedAt = System.currentTimeMillis()
+        if (task.targetMode is ScheduledTargetMode.ChildOfCurrent) {
+            val work = dispatchChild(app, task, task.targetMode.sessionId, firedAt, scheduledFire) ?: return null
+            if (waitForCompletion) {
+                val ended = TaskEngine.dao(app).taskFlow(work.id).filterNotNull().first { it.state == TaskEntity.State.ENDED.name }
+                recordChildCompletion(app, ended)
+            }
+            return work.hand
+        }
         val sessionId = withContext(Dispatchers.IO) {
             resolveSessionId(app, task)
         } ?: return null
@@ -164,7 +171,6 @@ object ScheduledAgentRunner {
 
         if (waitForCompletion) {
             val result = dispatch(app, task, sessionId, wait = true, firedAt = firedAt, scheduledFire = scheduledFire)
-            if (task.targetMode is ScheduledTargetMode.ChildOfCurrent) return sessionId
             val ok = result.status != "Error" && result.status != "Timeout" && result.status != "Rejected"
             // momoding: the routine's reply says whether it is worth a notification (NotifyDecision)
             val decision = NotifyDecision.decide(result.responseText, failed = !ok)
@@ -186,7 +192,6 @@ object ScheduledAgentRunner {
         // can't cancel it because bgScope outlives the screen.
         bgScope.launch {
             val result = dispatch(app, task, sessionId, wait = true, firedAt = firedAt, scheduledFire = scheduledFire)
-            if (task.targetMode is ScheduledTargetMode.ChildOfCurrent) return@launch
             val ok = result.status != "Error" && result.status != "Timeout" && result.status != "Rejected"
             // momoding: the routine's reply says whether it is worth a notification (NotifyDecision)
             val decision = NotifyDecision.decide(result.responseText, failed = !ok)
@@ -252,37 +257,23 @@ object ScheduledAgentRunner {
             parts.put(org.json.JSONObject().put("type", "text").put("value", "\n</${ScheduledTaskMarker.TAG}>"))
             parts.toString()
         }
-        if (mode is ScheduledTargetMode.ChildOfCurrent) {
-            val work = TaskEngine.open(app, mode.sessionId, task.label.ifBlank { task.prompt.take(40) }, sessionId,
-                marked, prefill = prefill, routine = RoutineFire(task.id, firedAt, scheduledFire))
-            if (!wait) HeadlessChatRunner.PromptResult(status = if (work.state == TaskEntity.State.QUEUED.name) "Queued" else "Running",
-                responseText = null, timedOut = false)
-            else {
-                val ended = TaskEngine.dao(app).taskFlow(work.id).filterNotNull().first { it.state == TaskEntity.State.ENDED.name }
-                recordChildCompletion(app, ended)
-                val words = TaskEngine.dao(app).log(work.id).lastOrNull { it.kind == TaskLogEntity.Kind.END.name }?.body
-                HeadlessChatRunner.PromptResult(status = if (ended.outcome == TaskEntity.Outcome.DONE.name) "Completed" else "Error",
-                    responseText = words, timedOut = false)
-            }
-        } else {
-            // momoding: the row this sends is the routine's, not the person's: the chat draws it as
-            // a quiet line and the model is told so for this one turn (RoutineWakes)
-            RoutineWakes.arm(app, sessionId, task.label)
-            HeadlessChatRunner.prompt(
-                context = app,
-                sessionId = sessionId,
-                text = marked,
-                attachments = emptyList(),
-                // [T-android-scheduled-task-thinking] Was hardcoded null, so a
-                // task could not run with any reasoning effort. null still means
-                // "inherit" inside HeadlessChatRunner.
-                thinkingLevel = task.thinkingLevel,
-                wait = wait,
-                timeoutMs = RUN_TIMEOUT_MS,
-                prefill = prefill,
-                partsJson = partsJson,
-            )
-        }
+        // momoding: the row this sends is the routine's, not the person's: the chat draws it as
+        // a quiet line and the model is told so for this one turn (RoutineWakes)
+        RoutineWakes.arm(app, sessionId, task.label)
+        HeadlessChatRunner.prompt(
+            context = app,
+            sessionId = sessionId,
+            text = marked,
+            attachments = emptyList(),
+            // [T-android-scheduled-task-thinking] Was hardcoded null, so a
+            // task could not run with any reasoning effort. null still means
+            // "inherit" inside HeadlessChatRunner.
+            thinkingLevel = task.thinkingLevel,
+            wait = wait,
+            timeoutMs = RUN_TIMEOUT_MS,
+            prefill = prefill,
+            partsJson = partsJson,
+        )
     }.getOrElse { t ->
         AppLogger.error(TAG, "task ${task.id} dispatch failed: ${t.message}")
         HeadlessChatRunner.PromptResult(
@@ -312,7 +303,7 @@ object ScheduledAgentRunner {
                     mode.sessionId
                 }
             }
-            is ScheduledTargetMode.ChildOfCurrent -> resolveChildOfCurrent(app, task, mode.sessionId)
+            is ScheduledTargetMode.ChildOfCurrent -> null // Its hand is created with the task, never by session resolution.
             ScheduledTargetMode.NewSession -> {
                 // Resolution priority (mirrors the UI's normal-chat boot):
                 //   1. task.modelBinding (user picked a group or specific entry
@@ -383,7 +374,7 @@ object ScheduledAgentRunner {
     }
 
     /** A routine's helper is an ordinary persisted task hand, with the same model and slots. */
-    private suspend fun resolveChildOfCurrent(app: MinisApp, task: ScheduledTask, parentSid: String): String? {
+    private suspend fun dispatchChild(app: MinisApp, task: ScheduledTask, parentSid: String, firedAt: Long, scheduled: Boolean): TaskEntity? {
         if (!com.openminis.app.tools.AgentToolSwitch.AGENTS.isEnabled(app)) {
             AppLogger.warning(TAG, "task ${task.id}: agents are turned off — abort child-of-current")
             return null
@@ -393,10 +384,16 @@ object ScheduledAgentRunner {
             AppLogger.warning(TAG, "task ${task.id}: only the main chat can start helpers")
             return null
         }
-        val child = Helpers.create(app, parentSid, task.label.ifBlank { task.prompt.take(40) })
-        app.chatRepository.dao.updateSource(child, "scheduled")
-        task.thinkingLevel?.let { app.chatRepository.dao.updateThinkingOverride(child, it.name) }
-        return child
+        val prefill = listOfNotNull(task.prefillToolCall?.takeIf { it.validationError() == null })
+        val marker = ScheduledTaskMarker(task.id, task.label, task.nextTriggerMs(), task.prompt,
+            prefilledTool = prefill.firstOrNull()?.toolName, firedAtMs = firedAt)
+        return runCatching {
+            TaskEngine.openHelper(app, parentSid, task.label.ifBlank { task.prompt.take(40) }, marker.xml,
+                prefill = prefill, routine = RoutineFire(task.id, firedAt, scheduled), thinkingLevel = task.thinkingLevel)
+        }.getOrElse { error ->
+            AppLogger.error(TAG, "task ${task.id} helper handoff failed: ${error.message}")
+            null
+        }
     }
 
     /** Replayed from the task log at startup too. The record and acknowledgement are idempotent. */

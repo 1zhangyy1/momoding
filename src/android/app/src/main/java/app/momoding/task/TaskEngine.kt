@@ -189,14 +189,30 @@ object TaskEngine {
     }
 
     /** Creating the hidden chat and handing work to it are one committed operation. */
-    suspend fun openHelper(context: Context, conversation: String, title: String, brief: String, call: ToolCall? = null): TaskEntity {
+    suspend fun openHelper(context: Context, conversation: String, title: String, brief: String, call: ToolCall? = null,
+        prefill: List<com.openminis.app.scheduled.PrefilledToolCall> = emptyList(), routine: RoutineFire? = null,
+        thinkingLevel: com.openminis.app.data.model.ThinkingLevel? = null,
+    ): TaskEntity {
         val invocation = call ?: kotlinx.coroutines.currentCoroutineContext()[ToolCall]
         return change(context) { dao, after ->
-            invocation?.requireStoredIn(dao, conversation)
-            val source = source(dao, conversation, invocation)
-            val hand = Helpers.create(context, conversation, title)
-            openIn(context, dao, after, conversation, title, hand, brief, true, source?.id, source?.words, call = invocation)
+            openHelperIn(context, dao, after, conversation, title, brief, prefill, routine, invocation) {
+                Helpers.create(context, conversation, title).also { hand ->
+                    val chat = (context.applicationContext as MinisApp).database.chatDao()
+                    if (routine != null) chat.updateSource(hand, "scheduled")
+                    thinkingLevel?.let { chat.updateThinkingOverride(hand, it.name) }
+                }
+            }
         }
+    }
+
+    internal suspend fun openHelperIn(context: Context, dao: TaskDao, after: MutableList<suspend () -> Unit>,
+        conversation: String, title: String, brief: String, prefill: List<com.openminis.app.scheduled.PrefilledToolCall>,
+        routine: RoutineFire?, call: ToolCall?, createHand: suspend () -> String,
+    ): TaskEntity {
+        call?.requireStoredIn(dao, conversation)
+        val source = if (routine == null) source(dao, conversation, call) else null
+        val hand = createHand()
+        return openIn(context, dao, after, conversation, title, hand, brief, true, source?.id, source?.words, prefill, routine, call)
     }
 
     private data class Source(val id: String, val words: String?)
