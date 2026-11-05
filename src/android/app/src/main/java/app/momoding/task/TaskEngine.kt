@@ -1023,7 +1023,7 @@ object TaskEngine {
             dao.task(id)?.also { check(it.state != TaskEntity.State.ENDED.name) { "the task ended before the command was handed on" } }
                 ?: error("the task was deleted")
         }
-        val source = source(dao, chat, kotlinx.coroutines.currentCoroutineContext()[ToolCall] ?: ShellWork.toolCall(command.process))
+        val source = source(dao, chat, command.call ?: kotlinx.coroutines.currentCoroutineContext()[ToolCall] ?: ShellWork.toolCall(command.process))
         val now = System.currentTimeMillis()
         val task = existing ?: TaskEntity(newId(), chat, source?.id, title, chat, TaskEntity.State.RUNNING.name,
             createdAt = now, updatedAt = now).also {
@@ -1031,8 +1031,17 @@ object TaskEngine {
             source?.words?.let { words -> log(dao, it.id, TaskLogEntity.Kind.AUTHORIZED, words) }
             log(dao, it.id, TaskLogEntity.Kind.PASSED_ON, command.text)
         }
-        log(dao, task.id, TaskLogEntity.Kind.COMMAND, command.json())
+        recordCommandIn(dao, task, command)
         task
+    }
+
+    /** The command and its original return path commit together, including a helper's own calls. */
+    internal suspend fun recordCommandIn(dao: TaskDao, task: TaskEntity, command: ShellWork.Command) {
+        if (command.call != null) check(command.savedArgs(dao, task.hand) != null) {
+            "The original command invocation is missing or no longer matches."
+        }
+        log(dao, task.id, TaskLogEntity.Kind.COMMAND, command.json())
+        handoffIn(dao, task, command.call, session = task.hand, command = command.id)
     }
 
     internal suspend fun commandFinished(context: Context, id: String, command: ShellWork.Command,
@@ -1224,9 +1233,11 @@ object TaskEngine {
     private suspend fun log(dao: TaskDao, task: String, kind: TaskLogEntity.Kind, body: String) =
         dao.insertLog(TaskLogEntity(taskId = task, at = System.currentTimeMillis(), kind = kind.name, body = body))
 
-    private suspend fun handoffIn(dao: TaskDao, task: TaskEntity, call: ToolCall?) {
+    private suspend fun handoffIn(dao: TaskDao, task: TaskEntity, call: ToolCall?, session: String = task.conversation, command: String? = null) {
         if (call != null) log(dao, task.id, TaskLogEntity.Kind.HANDOFF,
-            JSONObject().put("tool", call.json()).put("session", task.conversation).put("task", task.id).toString())
+            JSONObject().put("tool", call.json()).put("session", session).put("task", task.id).apply {
+                command?.let { put("command", it) }
+            }.toString())
     }
 
     private fun draftNeedle(draft: String): String = "\"id\":" + JSONObject.quote(JSONObject(draft).getString("id"))

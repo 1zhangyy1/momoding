@@ -28,12 +28,27 @@ object ShellWork {
 
     internal fun toolCall(process: String?): ToolCall? = process?.let { runs[it]?.call }
 
-    data class Command(val id: String, val process: String, val text: String) {
-        fun json(): String = JSONObject().put("id", id).put("process", process).put("text", text).toString()
+    data class Command(val id: String, val process: String, val text: String, val call: ToolCall? = null) {
+        fun json(): String = JSONObject().put("id", id).put("process", process).put("text", text)
+            .apply { call?.let { put("tool", it.json()) } }.toString()
+
+        /** The exact saved arguments, only while this command still matches its original invocation. */
+        internal suspend fun savedArgs(dao: TaskDao, session: String): String? = runCatching {
+            val source = call?.takeIf { it.name == "shell_execute" } ?: return null
+            val parts = org.json.JSONArray(dao.toolMessage(session, source.message) ?: return null)
+            val value = (0 until parts.length()).map { parts.getJSONObject(it) }
+                .filter { it.optString("type") == "toolUse" }.map { it.getJSONObject("value") }
+                .singleOrNull { it.optString("name") == source.name &&
+                    com.openminis.app.provider.ToolPairing.key(it.optString("toolUseId")) == com.openminis.app.provider.ToolPairing.key(source.id) }
+                ?: return null
+            value.getString("input").takeIf { JSONObject(it).optString("command") == text }
+        }.getOrNull()
+
         companion object {
             fun parse(text: String): Command? = runCatching {
                 val row = JSONObject(text)
-                Command(row.getString("id"), row.getString("process"), row.getString("text"))
+                Command(row.getString("id"), row.getString("process"), row.getString("text"),
+                    row.optJSONObject("tool")?.let { runCatching { ToolCall.parse(it) }.getOrNull() })
             }.getOrNull()
         }
     }
@@ -50,7 +65,8 @@ object ShellWork {
         execute: suspend (process: String, foreground: () -> Boolean) -> ToolExecutionResult,
     ): ToolExecutionResult {
         val id = java.util.UUID.randomUUID().toString()
-        val command = action?.command ?: permit?.command ?: Command(id, "$chat~command~$id", text)
+        val command = action?.command ?: permit?.command ?: Command(id, "$chat~command~$id", text,
+            kotlinx.coroutines.currentCoroutineContext()[ToolCall])
         val registered = action?.taskId ?: permit?.spec?.request?.taskId
         val outward = action != null || permit != null
         val foreground = AtomicBoolean(true)

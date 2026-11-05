@@ -68,7 +68,11 @@ object TaskTranscript {
                     require(source.sessionId == about.getString("session")) { "The action belongs to another conversation." }
                     tasks.log(action.taskId).lastOrNull { it.kind == TaskLogEntity.Kind.RESULT.name &&
                         JSONObject(it.body).getString("id") == about.getString("id") }?.body?.let(::JSONObject)
-                }
+                } + effects.filter { it.kind == TaskLogEntity.Kind.HANDOFF.name }.mapNotNull { handoff ->
+                    JSONObject(handoff.body).optString("command").takeIf(String::isNotBlank)?.let { command ->
+                        handoff.taskId to command
+                    }
+                }.map { (task, command) -> TaskReceipt.result(tasks.log(task), TaskLogEntity.Kind.COMMAND_RESULT, command) }
                 if (saved.isEmpty() && (values.isEmpty() || values.any { it == null })) continue
                 val results = values.filterNotNull()
                 val unknown = results.any { it.optBoolean("unknown") }
