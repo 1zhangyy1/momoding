@@ -76,6 +76,7 @@ object ShellWork {
                 command in pending(dao.log(task.id)) && ReadRecovery.pendingIn(dao, task, command)?.args == read.args
             }
             check(pending) { "The original read is no longer pending or its saved invocation changed." }
+            TaskEngine.commandResumed(context, read.task.id, command)
             val remaining = if (Helpers.isHelper(context, read.task.hand)) {
                 app.momoding.prompt.MomodingHelper.MAX_MINUTES * 60_000L +
                     com.openminis.app.agent.jobs.HelperRunner.WRAP_UP_GRACE_MS - TaskEngine.elapsed(context, read.task.id)

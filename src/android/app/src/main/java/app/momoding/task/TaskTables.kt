@@ -204,6 +204,10 @@ interface TaskDao {
     @Query("SELECT * FROM task WHERE state != 'ENDED' ORDER BY created_at")
     fun activeFlow(): Flow<List<TaskEntity>>
 
+    /** A live clock, including a read while waiting; queued and ended work never keeps it ticking. */
+    @Query("SELECT EXISTS(SELECT 1 FROM task t JOIN task_log l ON l.task_id = t.id WHERE t.state IN ('RUNNING', 'WAITING') AND l.id = (SELECT MAX(c.id) FROM task_log c WHERE c.task_id = t.id AND c.kind IN ('STARTED', 'PAUSED')) AND l.kind = 'STARTED')")
+    fun runningClockFlow(): Flow<Boolean>
+
     @Query("SELECT * FROM task WHERE state != 'ENDED' ORDER BY created_at")
     suspend fun unfinishedTasks(): List<TaskEntity>
 

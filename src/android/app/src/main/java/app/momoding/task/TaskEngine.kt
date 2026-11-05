@@ -14,6 +14,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
@@ -27,6 +29,7 @@ import org.json.JSONObject
  */
 object TaskEngine {
     private const val TAG = "TaskEngine"
+    internal const val LAST_ALIVE = "work.last_alive_at"
     /** How a hand's report starts, in the conversation it goes to: `[task <id> · <hand> · <kind>] <words>`. */
     const val REPORT_CUE = "[task "
 
@@ -48,6 +51,7 @@ object TaskEngine {
     /** Keep the UI's view of persisted work current; a loop explicitly reports its end. */
     fun start(context: Context) {
         val app = context.applicationContext
+        val prefs = app.getSharedPreferences("momoding", Context.MODE_PRIVATE)
         scope.launch { dao(app).activeFlow().collect {
             _active.value = it
             _parentsWithWork.value = it.map { task -> task.conversation }.toSet()
@@ -56,6 +60,9 @@ object TaskEngine {
             val approvalHands: Set<String>
             val reads: List<ReadRecovery.Pending>
             try {
+                change(app, recovering = true) { dao, _ ->
+                    recoverClocksIn(dao, prefs.getLong(LAST_ALIVE, 0).takeIf { it > 0 })
+                }
                 reads = change(app, recovering = true) { dao, _ -> recoverCommandsIn(dao) }
                 recoverActions(app)
                 recoverScreens(app)
@@ -78,6 +85,29 @@ object TaskEngine {
             approvalHands.forEach { tellChat(app, it) }
             kotlinx.coroutines.delay(3000)
             dao(app).queuedHands().forEach { hand -> handIdle(app, hand) }
+        }
+        scope.launch {
+            runCatching { awaitRecovery() }.getOrElse { return@launch }
+            dao(app).runningClockFlow().distinctUntilChanged().collectLatest { running ->
+                if (running) while (true) {
+                    // One process-liveness timestamp, not a second task store or a log row per tick.
+                    if (!prefs.edit().putLong(LAST_ALIVE, System.currentTimeMillis()).commit())
+                        AppLogger.warning(TAG, "could not save the live clock checkpoint")
+                    kotlinx.coroutines.delay(1_000)
+                }
+            }
+        }
+    }
+
+    /** Freeze before any recovery writes; a second crash cannot charge the same interval twice. */
+    internal suspend fun recoverClocksIn(dao: TaskDao, lastAliveAt: Long?, now: Long = System.currentTimeMillis()) {
+        for (task in dao.unfinishedTasks()) {
+            val history = dao.log(task.id)
+            val mark = TaskClock.latest(history)
+            if (mark?.kind == TaskLogEntity.Kind.PAUSED.name || (mark == null && task.state == TaskEntity.State.QUEUED.name)) continue
+            dao.insertLog(TaskLogEntity(taskId = task.id, at = now, kind = TaskLogEntity.Kind.PAUSED.name,
+                body = JSONObject().put("elapsed_ms", TaskClock.interrupted(task, history, lastAliveAt, now))
+                    .put("reason", "app restarted").toString()))
         }
     }
 
@@ -661,7 +691,7 @@ object TaskEngine {
             it.state in listOf(TaskEntity.State.RUNNING.name, TaskEntity.State.WAITING.name) &&
                 it.ask?.let { ask -> JSONObject(ask).optString("screen") } == id
         }?.let {
-            clock(dao, it, true, "screen continued")
+            clock(dao, it, working(dao, it, ignoreModel = false), "screen continued")
             dao.updateTask(it.copy(state = TaskEntity.State.RUNNING.name, ask = null, updatedAt = System.currentTimeMillis()))
         } }
     }
@@ -852,13 +882,25 @@ object TaskEngine {
     }
 
     internal suspend fun setAskIn(dao: TaskDao, task: TaskEntity, ask: String?, ignoreModel: Boolean = false): TaskEntity {
+        val working = working(dao, task, ignoreModel)
+        clock(dao, task, working, "ask")
+        return task.copy(state = (if (ask == null || working) TaskEntity.State.RUNNING else TaskEntity.State.WAITING).name,
+            ask = ask, updatedAt = System.currentTimeMillis()).also { dao.updateTask(it) }
+    }
+
+    private suspend fun working(dao: TaskDao, task: TaskEntity, ignoreModel: Boolean): Boolean {
         val model = ChatViewModelStore.existing(task.hand)
-        val active = ask == null || ShellWork.pending(dao.log(task.id)).isNotEmpty() ||
+        val history = dao.log(task.id)
+        // Clock activity needs only an action id and its receipt, not a complete approval recipe.
+        val action = history.any { row ->
+            if (row.kind != TaskLogEntity.Kind.ABOUT_TO.name) false
+            else runCatching { JSONObject(row.body).getString("id") }.getOrNull()?.let {
+                TaskReceipt.result(history, TaskLogEntity.Kind.RESULT, it) == null
+            } == true
+        }
+        return ShellWork.pending(history).isNotEmpty() || action ||
             dao.children(task.id).any { it.state == TaskEntity.State.RUNNING.name } ||
             (!ignoreModel && model?.activeTaskId == task.id && model.turnIsRunning)
-        clock(dao, task, active, "ask")
-        return task.copy(state = (if (active) TaskEntity.State.RUNNING else TaskEntity.State.WAITING).name,
-            ask = ask, updatedAt = System.currentTimeMillis()).also { dao.updateTask(it) }
     }
 
     private suspend fun clock(dao: TaskDao, task: TaskEntity, running: Boolean, reason: String, reset: Boolean = false) {
@@ -873,7 +915,14 @@ object TaskEngine {
 
     private suspend fun refreshBudget(dao: TaskDao, id: String, ignoreModel: Boolean = false) {
         val task = dao.task(id)?.takeIf { it.state != TaskEntity.State.ENDED.name } ?: return
-        task.ask?.let { setAskIn(dao, task, it, ignoreModel) }
+        if (task.ask != null) setAskIn(dao, task, task.ask, ignoreModel)
+        else clock(dao, task, working(dao, task, ignoreModel), "work changed")
+    }
+
+    internal suspend fun commandResumed(context: Context, id: String, command: ShellWork.Command) = change(context) { dao, _ ->
+        dao.task(id)?.takeIf { TaskGuard.checkIn(dao, TaskGuard.Binding(it.hand, it.id)) == null }
+            ?.takeIf { command in ShellWork.pending(dao.log(id)) }
+            ?.let { clock(dao, it, true, "read resumed") }
     }
 
     suspend fun turnStarted(context: Context, taskId: String?) = change(context) { dao, _ ->
@@ -1032,6 +1081,7 @@ object TaskEngine {
             dao.insertTask(it)
             source?.words?.let { words -> log(dao, it.id, TaskLogEntity.Kind.AUTHORIZED, words) }
             log(dao, it.id, TaskLogEntity.Kind.PASSED_ON, command.text)
+            clock(dao, it, true, "command handed on")
         }
         recordCommandIn(dao, task, command)
         task
