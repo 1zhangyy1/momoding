@@ -715,7 +715,7 @@ class BrowserTabPool(private val context: Context) : BrowserTabPoolRegistry.Regi
                     _tabs.value.any { it.id == reqId }
                 }
                 if (serialTabId != null) {
-                    executeSerialized(serialTabId, input)
+                    executeSerialized(serialTabId, input, owner)
                 } else {
                     // [T-browser-readaction-follow-tab-and-yolo-android]
                     // Decide whether this tab-less action may fan out to a fresh
@@ -750,7 +750,7 @@ class BrowserTabPool(private val context: Context) : BrowserTabPoolRegistry.Regi
                         // is idempotent — but relying on that would leave the
                         // one write that is not serialised with the rest.
                         withContext(Dispatchers.Main) { lastTabByOwner[owner!!] = agentTarget }
-                        executeSerialized(agentTarget, input)
+                        executeSerialized(agentTarget, input, owner)
                     } else if (!isPrivileged(owner)) {
                         // The agent owns nothing usable yet: give it a fresh tab
                         // of its own rather than borrowing the chat's.
@@ -763,7 +763,7 @@ class BrowserTabPool(private val context: Context) : BrowserTabPoolRegistry.Regi
                         val sel = _selectedTabId.value
                         val targetId = if (_tabs.value.any { it.id == sel }) sel
                             else _tabs.value.maxByOrNull { it.lastActivityDate }!!.id
-                        executeSerialized(targetId, input)
+                        executeSerialized(targetId, input, owner)
                     } else {
                         // Empty pool (first call) OR an opens-new-page action in
                         // the default agent path → original acquire/fan-out.
@@ -783,7 +783,7 @@ class BrowserTabPool(private val context: Context) : BrowserTabPoolRegistry.Regi
      * the lock-acquisition wait — once the lock is held, the underlying page
      * operation runs with its own existing timeout, unchanged.
      */
-    private suspend fun executeSerialized(tabId: Int, input: BrowserActionInput): BrowserActionResult {
+    private suspend fun executeSerialized(tabId: Int, input: BrowserActionInput, owner: String?): BrowserActionResult {
         val mutex = lockForTab(tabId)
         // (GH#245) Two separate limits. Only a lock that ANOTHER call kept past
         // the window is "tab busy"; the operation run under the lock has its own
@@ -807,7 +807,7 @@ class BrowserTabPool(private val context: Context) : BrowserTabPoolRegistry.Regi
             // override acquireTab(null) would re-run the fan-out and could
             // land on a DIFFERENT tab than the one we locked, defeating
             // both the serialization and the follow-tab fix.
-            return runAcquiredAction(input, implicitTab = false, acquireTabId = tabId)
+            return runAcquiredAction(input, implicitTab = false, acquireTabId = tabId, owner = owner)
         } finally {
             // Also runs on cancellation (the CLI's 90s timeout), so an
             // abandoned call never leaves the tab locked.

@@ -134,9 +134,9 @@ class BrowserUseOffloadHandler(private val app: MinisApp) : NativeOffloadHandler
                     // YOLO single-tab mode so every tab-less action sticks to the
                     // selected tab. Explicit --tab-id still routes normally.
                     // Mirrors iOS BrowserUseOffloadBridge passing singleTab=true.
-                    // No owner, as on iOS: the chat drives its own pool with
-                    // full access.
-                    pool.execute(input, singleTab = true)
+                    // Helpers share their parent's pool, so keep the shell's
+                    // caller identity just as the browser_use tool does.
+                    pool.execute(input, singleTab = true, owner = request.sessionId)
                 }
             }
         } catch (_: TimeoutCancellationException) {
