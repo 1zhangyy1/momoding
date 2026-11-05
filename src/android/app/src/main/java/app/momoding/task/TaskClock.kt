@@ -30,10 +30,4 @@ internal object TaskClock {
         return carried + (until - (mark?.at ?: task.createdAt)).coerceAtLeast(0)
     }
 
-    /** Only charge through a saved proof of liveness, never through the next launch's wall time. */
-    fun interrupted(task: TaskEntity, history: List<TaskLogEntity>, lastAliveAt: Long?, now: Long): Long {
-        val durable = maxOf(task.createdAt, task.updatedAt, history.maxOfOrNull { it.at } ?: task.createdAt)
-        val cutoff = maxOf(lastAliveAt ?: durable, durable).coerceAtMost(now)
-        return elapsed(task, history, cutoff)
-    }
 }

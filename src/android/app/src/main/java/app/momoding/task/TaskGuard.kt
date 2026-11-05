@@ -35,17 +35,9 @@ object TaskGuard {
     }
 
     internal suspend fun checkIn(dao: TaskDao, binding: Binding, outward: Boolean = false, allowWaiting: Boolean = false, targetTaskId: String? = null): String? {
-        // Scope a recovery to the input that caused this invocation. Another user message
-        // in the same chat is not an authorization to replay this input's uncertain work.
         if (outward && binding.message != null) {
-            dao.recovered("call:" + binding.message)?.takeIf { it.conversation == binding.hand || it.hand == binding.hand }?.let {
-                return "This invocation was interrupted and parked for verification. Use a new instruction after checking the old outcome; do not replay this old call."
-            }
             val input = dao.inputForCall(binding.hand, binding.message)
             if (input != null) {
-                if (input.sender != InboxEntity.Sender.USER.name && input.text.contains(" · late_result]") &&
-                    (targetTaskId == null || dao.task(targetTaskId)?.state != TaskEntity.State.RUNNING.name))
-                    return "This is a late receipt, not permission to restart work. Report it once; wait for the person before any new outward action."
                 val sourceWork = dao.sourceTasks(binding.hand, input.id) + listOfNotNull(input.taskId?.let { dao.task(it) }
                     ?.takeIf { it.conversation == binding.hand })
                 val work = when {

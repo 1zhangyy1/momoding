@@ -10,32 +10,15 @@ import com.openminis.app.provider.ToolPairing
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Hand a committed effect receipt to its original tool call, without running that call again. */
+/** Tool results go in the row right after their call; a call the app never returned from gets "interrupted". */
 object TaskTranscript {
-    private data class Effect(val row: TaskLogEntity, val body: JSONObject, val call: ToolCall)
-    private fun effect(row: TaskLogEntity): Effect? = runCatching {
-        val body = JSONObject(row.body)
-        val tool = body.getJSONObject("tool")
-        require(listOf("message", "id", "name").all { (tool.opt(it) as? String)?.isNotBlank() == true })
-        Effect(row, body, ToolCall.parse(tool))
-    }.getOrNull()
-
-    /** Pre-inbox WorkResume sessions have no receive cursor. Retire their stored calls too. */
-    internal suspend fun recoveryTurnsIn(chat: ChatDao, legacy: String?): List<MessageEntity> {
-        val turns = chat.interruptedToolTurns().toMutableList()
-        for (session in LegacyWork.entries(legacy).map { it.session }.distinct()) {
-            turns += chat.loadMessages(session).filter { row -> row.role == "assistant" &&
-                runCatching { parts(row.partsJson).any { it.optString("type") == "toolUse" } }.getOrDefault(false) }
-        }
-        return turns.distinctBy { it.id }
-    }
 
     suspend fun results(context: Context, message: String, parts: String): String {
         val db = (context.applicationContext as MinisApp).database
-        return db.withTransaction { resultsIn(db.chatDao(), db.taskDao(), message, JSONArray(parts)).id }
+        return db.withTransaction { resultsIn(db.chatDao(), message, JSONArray(parts)).id }
     }
 
-    internal suspend fun resultsIn(chat: ChatDao, tasks: TaskDao, message: String, incoming: JSONArray): MessageEntity {
+    internal suspend fun resultsIn(chat: ChatDao, message: String, incoming: JSONArray): MessageEntity {
         val source = requireNotNull(chat.message(message)) { "The tool invocation was deleted." }
         require(source.role == "assistant")
         val uses = parts(source.partsJson).filter { it.optString("type") == "toolUse" }
@@ -58,76 +41,14 @@ object TaskTranscript {
             MessageEntity("$message:tools", source.sessionId, "user", json, System.currentTimeMillis(), sortOrder = source.sortOrder + 1)
                 .also { chat.insertMessage(it) }
         }
-        val keys = added.map { key(it.getJSONObject("value")) }.toSet()
         chat.touchSession(source.sessionId, System.currentTimeMillis())
-        for (action in tasks.untranscribedCalls(needle(message))) {
-            val saved = effect(action) ?: continue
-            if (saved.body.optString("session") == source.sessionId && saved.call.message == message && ToolPairing.key(saved.call.id) in keys &&
-                runCatching { saved.call.requireStoredIn(tasks, source.sessionId) }.isSuccess) transcribed(tasks, action)
-        }
         return row
     }
 
     /** Must run in the startup transaction, before a chat can load or resume its history. */
-    internal suspend fun recoverIn(chat: ChatDao, tasks: TaskDao): Int = recoverIn(chat, tasks, chat.interruptedToolTurns())
-
-    internal suspend fun recoverIn(chat: ChatDao, tasks: TaskDao, interrupted: List<MessageEntity>): Int {
+    internal suspend fun recoverIn(chat: ChatDao): Int {
         var restored = 0
-        val linked = mutableListOf<Effect>()
-        for (row in tasks.untranscribedCalls()) {
-            val saved = effect(row)
-            val source = saved?.call?.message?.let { chat.message(it) }
-            if (saved != null && source == null) { transcribed(tasks, row); continue }
-            val task = tasks.task(row.taskId) ?: continue
-            if (saved != null && source != null && saved.body.optString("session") == source.sessionId &&
-                source.sessionId in setOf(task.conversation, task.hand) && runCatching { saved.call.requireStoredIn(tasks, source.sessionId) }.isSuccess) {
-                linked += saved
-            } else TaskEngine.parkRecoveryIn(tasks, task, "record:${row.id}",
-                "A saved invocation cannot be linked to its original conversation and tool. Its recorded facts remain intact; verify the unfinished work before continuing.",
-                interrupted, setOf(task.conversation, task.hand))
-        }
-        for ((message, entries) in linked.groupBy { it.call.message }) {
-            val actions = entries.map { it.row }
-            val source = chat.message(message)
-            if (source == null) {
-                // Deleting a message is not permission to recreate it on the next launch.
-                actions.forEach { transcribed(tasks, it) }
-                continue
-            }
-            val receipts = JSONArray()
-            for ((call, effects) in actions.groupBy { ToolCall.parse(JSONObject(it.body).getJSONObject("tool")) }) {
-                require(effects.all { JSONObject(it.body).getString("session") == source.sessionId }) { "The call belongs to another conversation." }
-                val saved = effects.filter { it.kind == TaskLogEntity.Kind.HANDOFF.name }.mapNotNull { tasks.task(it.taskId) }.distinctBy { it.id }
-                val values = effects.filter { it.kind == TaskLogEntity.Kind.ABOUT_TO.name }.map { action ->
-                    val about = JSONObject(action.body)
-                    require(source.sessionId == about.getString("session")) { "The action belongs to another conversation." }
-                    TaskReceipt.result(tasks.log(action.taskId), TaskLogEntity.Kind.RESULT, TaskReceipt.Entry(action, about).id)
-                } + effects.filter { it.kind == TaskLogEntity.Kind.HANDOFF.name }.mapNotNull { handoff ->
-                    JSONObject(handoff.body).optString("command").takeIf(String::isNotBlank)?.let { command ->
-                        handoff.taskId to command
-                    }
-                }.map { (task, command) -> TaskReceipt.result(tasks.log(task), TaskLogEntity.Kind.COMMAND_RESULT, command) }
-                if (saved.isEmpty() && (values.isEmpty() || values.any { it == null })) continue
-                val results = values.filterNotNull()
-                val unknown = results.any { it.optBoolean("unknown") }
-                val handoff = if (saved.isEmpty()) "" else JSONObject()
-                    .put("interrupted", values.isEmpty() || values.any { it == null })
-                    .put("tasks", JSONArray(saved.map { task -> JSONObject().put("task", task.id).put("title", task.title)
-                        .put("hand", task.hand).put("state", task.state.lowercase()).put("outcome", task.outcome?.lowercase()) }))
-                    .put("note", "These tasks were already saved before the tool returned. Do not create duplicates; inspect their state and continue any remaining work.").toString()
-                val output = listOf(results.joinToString("\n") { it.optString("output") }, handoff).filter { it.isNotBlank() }.joinToString("\n") +
-                    if (unknown) "\nThe external outcome is unknown. Verify what happened; do not repeat this action." else ""
-                val value = JSONObject().put("toolUseId", call.id).put("name", call.name).put("output", output)
-                    .put("success", values.isNotEmpty() && values.none { it == null } && !unknown && results.all { it.optBoolean("success") })
-                    .put("snapshot", JSONObject().put("type", "text").put("text", output.lines().takeLast(30).joinToString("\n")))
-                receipts.put(JSONObject().put("type", "toolResult").put("value", value))
-            }
-            if (receipts.length() > 0) {
-                resultsIn(chat, tasks, message, receipts)
-                restored += receipts.length()
-            }
-        }
-        for (source in interrupted) {
+        for (source in chat.interruptedToolTurns()) {
             val next = chat.nextMessage(source.sessionId, source.sortOrder)
             val returned = next?.takeIf { it.role == "user" }?.let { parts(it.partsJson) }
                 .orEmpty().filter { it.optString("type") == "toolResult" }.map { key(it.getJSONObject("value")) }.toSet()
@@ -142,16 +63,13 @@ object TaskTranscript {
                     .put("output", output).put("success", false).put("recovered", true)))
             }
             if (interrupted.length() > 0) {
-                resultsIn(chat, tasks, source.id, interrupted)
+                resultsIn(chat, source.id, interrupted)
                 restored += interrupted.length()
             }
         }
         return restored
     }
 
-    private suspend fun transcribed(tasks: TaskDao, action: TaskLogEntity) = tasks.insertLog(
-        TaskLogEntity(taskId = action.taskId, at = System.currentTimeMillis(), kind = TaskLogEntity.Kind.TRANSCRIBED.name, body = action.id.toString()))
-    private fun needle(message: String) = "\"message\":" + JSONObject.quote(message)
     private fun key(value: JSONObject) = ToolPairing.key(value.getString("toolUseId"))
     private fun parts(json: String): List<JSONObject> = JSONArray(json).let { a -> List(a.length()) { a.getJSONObject(it) } }
 

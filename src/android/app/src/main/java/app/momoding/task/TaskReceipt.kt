@@ -78,18 +78,6 @@ internal object TaskReceipt {
             .put("note", "These are recorded returns at stop time, not independent delivery confirmation. Missing or unknown returns must be verified before any retry.").toString(2)
     }
 
-    data class Target(val conversation: String, val task: String)
-    suspend fun target(dao: TaskDao, task: TaskEntity): Target? {
-        val parentId = dao.screenSpec(task.id)?.let { JSONObject(it).optString("parent").takeIf(String::isNotBlank) }
-        val owner = if (parentId == null) task else dao.task(parentId) ?: return null
-        return Target(owner.conversation, owner.id)
-    }
-
-    fun late(task: TaskEntity, kind: String, id: String, output: String, success: Boolean): String =
-        "A late $kind return arrived for ${task.title} (${task.id}), operation $id: ${if (success) "success" else "failure"}.\n" +
-            "The task is still ${task.state.lowercase()}${task.outcome?.let { " (${it.lowercase()})" }.orEmpty()}. This receipt starts no steps and does not independently confirm delivery. " +
-            "Tell the person once, reconciling it with the earlier stop/interruption report. Do not repeat the operation.\n\n" + output
-
     private fun status(value: JSONObject?): String = when {
         value == null || value.optBoolean("unknown") || !value.has("success") -> "unknown"
         value.optBoolean("success") -> "success"

@@ -29,7 +29,6 @@ import org.json.JSONObject
  */
 object TaskEngine {
     private const val TAG = "TaskEngine"
-    internal const val LAST_ALIVE = "work.last_alive_at"
     /** How a hand's report starts, in the conversation it goes to: `[task <id> · <hand> · <kind>] <words>`. */
     const val REPORT_CUE = "[task "
 
@@ -48,131 +47,49 @@ object TaskEngine {
     private val _parentsWithWork = MutableStateFlow<Set<String>>(emptySet())
     val parentsWithWork: StateFlow<Set<String>> = _parentsWithWork.asStateFlow()
 
-    /** Keep the UI's view of persisted work current; a loop explicitly reports its end. */
+    /** Keep the UI's view of persisted work current, and pick work up again after a restart. */
     fun start(context: Context) {
         val app = context.applicationContext
-        val prefs = app.getSharedPreferences("momoding", Context.MODE_PRIVATE)
         scope.launch { dao(app).activeFlow().collect {
             _active.value = it
             _parentsWithWork.value = it.map { task -> task.conversation }.toSet()
         } }
         scope.launch {
-            val approvalHands: Set<String>
-            val reads: List<ReadRecovery.Pending>
-            try {
-                change(app, recovering = true) { dao, _ ->
-                    recoverClocksIn(dao, prefs.getLong(LAST_ALIVE, 0).takeIf { it > 0 })
-                }
-                reads = change(app, recovering = true) { dao, _ -> recoverCommandsIn(dao) }
-                recoverActions(app)
-                recoverScreens(app)
-                approvalHands = recoverApprovals(app)
+            val approvalHands = try {
                 val db = (app as MinisApp).database
-                val legacy = prefs.getString(LegacyWork.KEY, null)
-                val saved = db.withTransaction {
-                    val interrupted = TaskTranscript.recoveryTurnsIn(db.chatDao(), legacy)
-                    val saved = recoverLegacyIn(db.chatDao(), db.taskDao(), legacy, interrupted)
-                    recoverOrphansIn(db.taskDao(), interrupted)
-                    TaskTranscript.recoverIn(db.chatDao(), db.taskDao(), interrupted)
-                    Inbox.recoverIn(db.taskDao(), ReadRecovery.deferredInputsIn(db.taskDao(), reads))
-                    saved
-                }
-                if (!LegacyWork.acknowledge(prefs, legacy, saved)) AppLogger.warning(TAG, "could not acknowledge legacy work; the saved recovery is idempotent")
-                recovered.complete(Unit)
+                db.withTransaction { recoverIn(app, db.chatDao(), db.taskDao()) }.also { recovered.complete(Unit) }
             } catch (error: Throwable) {
                 recovered.completeExceptionally(error)
                 AppLogger.error(TAG, "startup recovery: ${error.message}")
                 return@launch
             }
-            reads.forEach { ShellWork.resume(app, it) }
             ScreenWork.start(app)
             Inbox.wakeAll(app)
             approvalHands.forEach { tellChat(app, it) }
             kotlinx.coroutines.delay(3000)
             dao(app).queuedHands().forEach { hand -> handIdle(app, hand) }
         }
-        scope.launch {
-            runCatching { awaitRecovery() }.getOrElse { return@launch }
-            dao(app).runningClockFlow().distinctUntilChanged().collectLatest { running ->
-                if (running) while (true) {
-                    // One process-liveness timestamp, not a second task store or a log row per tick.
-                    if (!prefs.edit().putLong(LAST_ALIVE, System.currentTimeMillis()).commit())
-                        AppLogger.warning(TAG, "could not save the live clock checkpoint")
-                    kotlinx.coroutines.delay(1_000)
-                }
-            }
-        }
     }
 
-    /** Freeze before any recovery writes; a second crash cannot charge the same interval twice. */
-    internal suspend fun recoverClocksIn(dao: TaskDao, lastAliveAt: Long?, now: Long = System.currentTimeMillis()) {
+    /**
+     * After a restart (调研/M41 step 4), three rules: an outward action with no recorded result
+     * waits for the person; screen work does not carry on by itself; everything else picks up
+     * again — a cut-off command is reported failed to its hand, and words being read are read again.
+     */
+    internal suspend fun recoverIn(context: Context, chat: com.openminis.app.data.db.ChatDao, dao: TaskDao): Set<String> {
+        TaskTranscript.recoverIn(chat)
         for (task in dao.unfinishedTasks()) {
-            val history = dao.log(task.id)
-            val mark = TaskClock.latest(history)
-            if (mark?.kind == TaskLogEntity.Kind.PAUSED.name || (mark == null && task.state == TaskEntity.State.QUEUED.name)) continue
-            dao.insertLog(TaskLogEntity(taskId = task.id, at = now, kind = TaskLogEntity.Kind.PAUSED.name,
-                body = JSONObject().put("elapsed_ms", TaskClock.interrupted(task, history, lastAliveAt, now))
-                    .put("reason", "app restarted").toString()))
+            val words = recoverActionsIn(dao, task) ?: continue
+            val owner = dao.screenSpec(task.id)?.let { ScreenWork.Spec.parse(it).parent }?.let { dao.task(it)?.conversation } ?: task.conversation
+            Inbox.post(dao, owner, "$REPORT_CUE${task.id} · action · ask] $words", task.id)
         }
-    }
-
-    /** Retire only entries whose existing conversation can hold a durable explanation. */
-    internal suspend fun recoverLegacyIn(chat: com.openminis.app.data.db.ChatDao, dao: TaskDao, raw: String?,
-        interrupted: List<com.openminis.app.data.db.MessageEntity>,
-    ): Set<String> {
-        val saved = mutableSetOf<String>()
-        for (entry in LegacyWork.entries(raw)) {
-            if (dao.recovered(entry.key) != null) { saved += entry.session; continue }
-            val session = chat.getSession(entry.session) ?: continue
-            val owner = session.parentSessionId ?: session.id
-            if (chat.getSession(owner) == null) continue
-            val held = dao.onHand(session.id).let { tasks -> tasks.singleOrNull() ?: tasks.singleOrNull { it.conversation != it.hand } }
-            val now = System.currentTimeMillis()
-            val task = held ?: TaskEntity(java.util.UUID.nameUUIDFromBytes(entry.key.toByteArray()).toString(), owner,
-                title = "Interrupted older activity", hand = session.id, state = TaskEntity.State.RUNNING.name,
-                createdAt = now, updatedAt = now).also { dao.insertTask(it) }
-            parkRecoveryIn(dao, task, entry.key,
-                "An older app left this conversation active without a durable continuation. Its remaining work and effects are unverified. Check what happened before continuing.",
-                interrupted, setOf(session.id), "Legacy work.running entry: " + entry.raw)
-            saved += entry.session
-        }
-        return saved
-    }
-
-    /** A running row alone cannot reconstruct a lost model loop. Keep recorded sub-results intact. */
-    internal suspend fun recoverOrphansIn(dao: TaskDao, interrupted: List<com.openminis.app.data.db.MessageEntity>) {
-        for (task in dao.unfinishedTasks()) {
-            if (task.state != TaskEntity.State.RUNNING.name || task.hand == TaskEntity.SCREEN || task.ask != null || task.hold != null || pendingWork(dao, task.id)) continue
-            if (dao.inboxFor(task.hand).any { it.failedAt == null && (it.taskId == task.id || it.id == task.sourceMessageId) }) continue
-            val attempt = dao.log(task.id).lastOrNull { it.kind in listOf("AUTHORIZED", "PASSED_ON", "END") }?.id ?: 0
-            parkRecoveryIn(dao, task, "attempt:${task.id}:$attempt",
-                "The app restarted with this task active, but its original continuation is missing. Recorded results remain available; check the remaining work before continuing.",
-                interrupted, setOf(task.hand))
-        }
-    }
-
-    /** Park before bypassing a broken reference. Nothing here supplies execution parameters or authorization. */
-    internal suspend fun parkRecoveryIn(dao: TaskDao, task: TaskEntity, key: String, words: String,
-        interrupted: List<com.openminis.app.data.db.MessageEntity>, sessions: Set<String>, evidence: String? = null,
-    ) {
-        if (dao.recovered(key) != null) return
-        log(dao, task.id, TaskLogEntity.Kind.RECOVERY, key)
-        if (task.state != TaskEntity.State.ENDED.name) {
-            for (call in interrupted.filter { it.sessionId in sessions })
-                log(dao, task.id, TaskLogEntity.Kind.RECOVERY, "call:" + call.id)
-            val consumed = dao.interruptedInbox().filter { it.toSession in sessions }
-            consumed.forEach { log(dao, task.id, TaskLogEntity.Kind.RECOVERY, "input:" + it.id) }
-            // The transcript remains. Only the interrupted receive is retired; new unread input is independent.
-            dao.deleteInbox(consumed.map { it.id })
-            if (task.ask == null) actionUnknownIn(dao, requireNotNull(dao.task(task.id)), words)
-            val parked = requireNotNull(dao.task(task.id))
-            clock(dao, parked, false, "recovery parked")
-            dao.updateTask(parked.copy(state = TaskEntity.State.WAITING.name))
-        }
-        log(dao, task.id, TaskLogEntity.Kind.REPORT, words + evidence?.let { "\n$it" }.orEmpty())
-        if (task.state == TaskEntity.State.ENDED.name) return
-        val target = TaskReceipt.target(dao, task) ?: return
-        Inbox.post(dao, target.conversation, "$REPORT_CUE${target.task} · recovery · ask] $words", target.task)
+        recoverScreensIn(dao)
+        for (task in dao.commandTasks()) for (command in ShellWork.pending(dao.log(task.id)))
+            commandFinishedIn(context, dao, mutableListOf(), task.id, command, com.openminis.app.tools.ToolExecutionResult(
+                "The app restarted while this command ran, so it was cut off. Run it again if it only reads; check first if it changes anything.", false))
+        val approvalHands = recoverApprovalsIn(dao)
+        Inbox.recoverIn(dao)
+        return approvalHands
     }
 
     /** The task the person's words started: a new one for [hand], or in line behind the one it is on. */
@@ -369,7 +286,6 @@ object TaskEngine {
             append("## Tasks\nWork tracked in this chat. A message starting $REPORT_CUE<id> · <hand> · done|ask|failed|stopped] is that task's report, not the person: ")
             append("tell the person what came of it in your own words, in a line or two (with a link to open a Momoding's app when there is something to see); for an ask, ask the person. ")
             append("A command_result is a background tool result for the current task: use it to continue before reporting the task done. ")
-            append("A late_result is a return from an earlier interrupted or ended operation: tell the person once, reconcile it with the stop snapshot, and do not restart that operation. A stop snapshot records checkpoints and returns, not independent delivery confirmation. ")
             append("Their answer, or anything more they want of a task, goes to its hand with `momoding-task tell <id> \"<their words>\"`.\n")
             (open + ended).forEach { t ->
                 append("- ").append(t.id).append(" · ").append(if (t.hand == t.conversation) "this chat" else handName(context, t.hand)).append(" · ").append(t.title).append(" · ")
@@ -563,7 +479,6 @@ object TaskEngine {
         if (!actionResultIn(dao, task.id, action.id, output, success, unknown)) return null
         val late = task.state == TaskEntity.State.ENDED.name || previous?.optBoolean("unknown") == true ||
             TaskReceipt.belongsToEarlierAttempt(history, TaskLogEntity.Kind.ABOUT_TO, action.id)
-        if (late && !unknown) return lateReceiptIn(dao, task, "action", action.id, output, success)
         if (unknown && !late) actionUnknownIn(dao, task, output)
         return null
     }
@@ -577,16 +492,6 @@ object TaskEngine {
         if (unknown) result.put("unknown", true) else result.put("success", success)
         log(dao, task, TaskLogEntity.Kind.RESULT, result.toString())
         return true
-    }
-
-    /** The result write and this delivery share the caller's transaction. Never reopen work. */
-    internal suspend fun lateReceiptIn(dao: TaskDao, task: TaskEntity, kind: String, id: String, output: String, success: Boolean): String? {
-        val target = TaskReceipt.target(dao, task) ?: return null
-        val words = TaskReceipt.late(task, kind, id, output, success)
-        log(dao, task.id, TaskLogEntity.Kind.REPORT, words)
-        Inbox.post(dao, target.conversation, "$REPORT_CUE${target.task} · $kind · late_result] $words", target.task,
-            id = "late:${task.id}:$kind:$id")
-        return target.conversation
     }
 
     private suspend fun actionUnknownIn(dao: TaskDao, task: TaskEntity, words: String) {
@@ -614,14 +519,6 @@ object TaskEngine {
         }
         if (task.state != TaskEntity.State.ENDED.name) actionUnknownIn(dao, task, words)
         return words
-    }
-
-    private suspend fun recoverActions(context: Context) = change(context, recovering = true) { dao, _ ->
-        for (task in dao.unfinishedTasks()) {
-            val words = recoverActionsIn(dao, task) ?: continue
-            val owner = dao.screenSpec(task.id)?.let { ScreenWork.Spec.parse(it).parent }?.let { dao.task(it)?.conversation } ?: task.conversation
-            Inbox.post(dao, owner, "$REPORT_CUE${task.id} · action · ask] $words", task.id)
-        }
     }
 
     /** Native commands retain the task of the process that launched them, even after its model turn. */
@@ -808,12 +705,7 @@ object TaskEngine {
             result.copy(outcome = app.momoding.hands.HandsOperator.Outcome.NeedsUser(uncertain)) else result
         val body = ScreenWork.resultJson(observed).toString()
         if (!recorded) log(dao, task.id, TaskLogEntity.Kind.SCREEN_RESULT, body)
-        if (task.state == TaskEntity.State.ENDED.name) {
-            if (result.outcome !is app.momoding.hands.HandsOperator.Outcome.Stopped)
-                lateReceiptIn(dao, task, "screen", result.runId, body, result.outcome is app.momoding.hands.HandsOperator.Outcome.Done)
-                    ?.let { owner -> after += { tellChat(context, owner) } }
-            return
-        }
+        if (task.state == TaskEntity.State.ENDED.name) return
         if (requeueScreenFollowUp(dao, id, result.instructionsThrough)) {
             after += { ScreenWork.wake() }
             return
@@ -881,13 +773,13 @@ object TaskEngine {
         return closed
     }
 
-    private suspend fun recoverScreens(context: Context) = change(context, recovering = true) { dao, _ ->
+    private suspend fun recoverScreensIn(dao: TaskDao) {
         for (task in dao.interruptedScreens()) {
             val words = "The app restarted while the screen was working. Check the current screen and any outward effect before continuing; do not repeat an action whose outcome is unknown."
             val ask = JSONObject().put("kind", "screen_outcome_unknown").put("screen", task.id).put("question", words).toString()
             setAskIn(dao, task, ask)
             log(dao, task.id, TaskLogEntity.Kind.REPORT, words)
-            val parent = screenSpec(context, task.id).parent?.let { dao.task(it) }
+            val parent = dao.screenSpec(task.id)?.let { ScreenWork.Spec.parse(it).parent }?.let { dao.task(it) }
             val owner = parent?.conversation ?: task.conversation
             if (parent != null && parent.state != TaskEntity.State.ENDED.name) setAskIn(dao, parent, ask)
             Inbox.post(dao, owner, "$REPORT_CUE${parent?.id ?: task.id} · screen · ask] $words", parent?.id ?: task.id)
@@ -992,12 +884,6 @@ object TaskEngine {
         val task = dao.task(id)?.takeIf { it.state != TaskEntity.State.ENDED.name } ?: return
         if (task.ask != null) setAskIn(dao, task, task.ask, ignoreModel)
         else clock(dao, task, working(dao, task, ignoreModel), "work changed")
-    }
-
-    internal suspend fun commandResumed(context: Context, id: String, command: ShellWork.Command) = change(context) { dao, _ ->
-        dao.task(id)?.takeIf { TaskGuard.checkIn(dao, TaskGuard.Binding(it.hand, it.id)) == null }
-            ?.takeIf { command in ShellWork.pending(dao.log(id)) }
-            ?.let { clock(dao, it, true, "read resumed") }
     }
 
     suspend fun turnStarted(context: Context, taskId: String?) = change(context) { dao, _ ->
@@ -1125,10 +1011,6 @@ object TaskEngine {
         }
     }
 
-    private suspend fun recoverApprovals(context: Context): Set<String> = change(context, recovering = true) { dao, _ ->
-        recoverApprovalsIn(dao)
-    }
-
     internal suspend fun recoverApprovalsIn(dao: TaskDao): Set<String> {
         val wake = mutableSetOf<String>()
         for (task in dao.approvalTasks()) {
@@ -1192,10 +1074,7 @@ object TaskEngine {
         actionResultIn(dao, id, command.id, result.output, result.success, unknown)
         val late = task.state == TaskEntity.State.ENDED.name || previous?.optBoolean("unknown") == true ||
             TaskReceipt.belongsToEarlierAttempt(history, TaskLogEntity.Kind.COMMAND, command.id)
-        if (late) {
-            if (!unknown) lateReceiptIn(dao, task, "command", command.id, result.output, result.success)?.let { owner -> after += { tellChat(context, owner) } }
-            return
-        }
+        if (late) return
         if (unknown) {
             val words = "The command was interrupted; its outward effect is unknown. Verify what happened before repeating it.\n" + result.output
             actionUnknownIn(dao, task, words)
@@ -1216,27 +1095,6 @@ object TaskEngine {
             Inbox.post(dao, task.hand, words, id, sender = InboxEntity.Sender.COMMAND)
             after += { tellChat(context, task.hand) }
         }
-    }
-
-    /** Known reads can resume; a killed process cannot prove an outward effect. */
-    internal suspend fun recoverCommandsIn(dao: TaskDao): List<ReadRecovery.Pending> {
-        val reads = mutableListOf<ReadRecovery.Pending>()
-        for (task in dao.commandTasks()) {
-            val commands = TaskReceipt.pending(dao.log(task.id), TaskLogEntity.Kind.COMMAND, TaskLogEntity.Kind.COMMAND_RESULT).filter { entry ->
-                val read = ShellWork.Command.parse(entry.row.body)?.let { ReadRecovery.pendingIn(dao, task, it) }
-                if (read != null) reads += read
-                read == null
-            }
-            if (commands.isEmpty()) continue
-            val fallback = "The app restarted while a command was running; its outcome is unknown. Verify what happened before running it again."
-            commands.forEach { log(dao, task.id, TaskLogEntity.Kind.COMMAND_RESULT, JSONObject().put("id", it.id).put("unknown", true).toString()) }
-            val words = recoverActionsIn(dao, task) ?: fallback.also {
-                setAskIn(dao, task, JSONObject().put("question", it).put("kind", "command_outcome_unknown").toString())
-            }
-            log(dao, task.id, TaskLogEntity.Kind.REPORT, words)
-            Inbox.post(dao, task.conversation, "$REPORT_CUE${task.id} · command · ask] $words", task.id)
-        }
-        return reads
     }
 
     /** A routine's history/notification consumer acknowledged this persisted completion. */
@@ -1355,8 +1213,8 @@ object TaskEngine {
     }
 
     /** One change: [block] in a transaction, then what it set off. */
-    private suspend fun <T> change(context: Context, recovering: Boolean = false, block: suspend (TaskDao, MutableList<suspend () -> Unit>) -> T): T {
-        if (!recovering) awaitRecovery()
+    private suspend fun <T> change(context: Context, block: suspend (TaskDao, MutableList<suspend () -> Unit>) -> T): T {
+        awaitRecovery()
         val db = (context.applicationContext as MinisApp).database
         val after = mutableListOf<suspend () -> Unit>()
         val result = db.withTransaction { block(db.taskDao(), after) }

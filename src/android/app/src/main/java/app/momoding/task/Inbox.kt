@@ -82,7 +82,7 @@ object Inbox {
     suspend fun retry(context: Context, id: String) = TaskEngine.dao(context).retryInbox(id)
 
     /** A consumed message is the durable cursor. Reuse it, unless its work stopped or waits on a person. */
-    internal suspend fun recoverIn(dao: TaskDao, deferred: Set<String> = emptySet()) {
+    internal suspend fun recoverIn(dao: TaskDao) {
         val now = System.currentTimeMillis()
         for (row in dao.interruptedInbox()) {
             val handed = row.taskId?.let { dao.task(it) }?.takeIf { it.hand == row.toSession && it.conversation != row.toSession }
@@ -92,7 +92,7 @@ object Inbox {
                         task.state == TaskEntity.State.WAITING.name || task.ask != null || task.hold != null)
                 }
             if (stoppedOrWaiting) dao.deleteInbox(listOf(row.id))
-            else if (row.id !in deferred) {
+            else {
                 dao.failInbox(listOf(row.id), now, terminal = false)
                 dao.inbox(row.id)?.takeIf { it.failedAt != null }?.let {
                     RoutineReceipt.completeIn(dao, listOf(it), TaskCompletion(false,

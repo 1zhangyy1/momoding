@@ -11434,23 +11434,6 @@ class ChatViewModel(
         }
     }
 
-    /** A restart resumes the original read, without opening another model turn or changing its composer. */
-    internal suspend fun resumeReadCommand(taskId: String, command: app.momoding.task.ShellWork.Command, args: String): ToolExecutionResult {
-        sessionLoaded.first { it }
-        val db = (context.applicationContext as com.openminis.app.MinisApp).database
-        val call = requireNotNull(command.call)
-        val allowed = db.withTransaction {
-            val dao = db.taskDao()
-            val task = dao.task(taskId) ?: return@withTransaction false
-            task.hand == activeSessionId && app.momoding.task.ShellWork.pending(dao.log(taskId)).contains(command) &&
-                app.momoding.task.ReadRecovery.pendingIn(dao, task, command)?.args == args
-        }
-        check(allowed) { "The original read is no longer pending or its saved invocation changed." }
-        return withContext(Dispatchers.IO + call) {
-            executeShellCommandForeground(args, call.id, mutableListOf(), call.message, "", command.process, { false }, null)
-        }
-    }
-
     private suspend fun executeShellCommandForeground(
         argsJson: String,
         toolId: String,

@@ -99,17 +99,11 @@ data class TaskLogEntity(
     val kind: String,
     val body: String,
 ) {
-    enum class Kind { AUTHORIZED, PASSED_ON, STARTED, PAUSED, ROUTINE, ROUTINE_RECORDED, COMMAND, COMMAND_RESULT, CHILD, SCREEN, SCREEN_RESULT, APPROVAL, APPROVAL_DECISION, APPROVAL_USED, APPROVAL_CLOSED, ABOUT_TO, RESULT, DRAFT, HANDOFF, TRANSCRIBED, RECOVERY, REPORT, END }
+    enum class Kind { AUTHORIZED, PASSED_ON, STARTED, PAUSED, ROUTINE, ROUTINE_RECORDED, COMMAND, COMMAND_RESULT, CHILD, SCREEN, SCREEN_RESULT, APPROVAL, APPROVAL_DECISION, APPROVAL_USED, APPROVAL_CLOSED, ABOUT_TO, RESULT, DRAFT, HANDOFF, REPORT, END }
 }
 
 @Dao
 interface TaskDao {
-    /** An effect or handoff whose original tool return has not reached the transcript. */
-    @Query("SELECT a.* FROM task_log a WHERE a.kind IN ('ABOUT_TO', 'HANDOFF') AND instr(a.body, '\"tool\":') > 0 AND instr(a.body, :messageNeedle) > 0 AND NOT EXISTS (SELECT 1 FROM task_log done WHERE done.task_id = a.task_id AND ((done.kind = 'TRANSCRIBED' AND done.body = CAST(a.id AS TEXT)) OR (done.kind = 'RECOVERY' AND done.body = 'record:' || a.id))) ORDER BY a.id")
-    suspend fun untranscribedCalls(messageNeedle: String = ""): List<TaskLogEntity>
-
-    @Query("SELECT t.* FROM task t JOIN task_log r ON r.task_id = t.id WHERE r.kind = 'RECOVERY' AND r.body = :key LIMIT 1")
-    suspend fun recovered(key: String): TaskEntity?
 
     @Query("SELECT * FROM messages WHERE id = :id")
     suspend fun routineMessage(id: String): com.openminis.app.data.db.MessageEntity?
@@ -228,10 +222,6 @@ interface TaskDao {
     @Query("SELECT * FROM task WHERE state != 'ENDED' ORDER BY created_at")
     fun activeFlow(): Flow<List<TaskEntity>>
 
-    /** A live clock, including a read while waiting; queued and ended work never keeps it ticking. */
-    @Query("SELECT EXISTS(SELECT 1 FROM task t JOIN task_log l ON l.task_id = t.id WHERE t.state IN ('RUNNING', 'WAITING') AND l.id = (SELECT MAX(c.id) FROM task_log c WHERE c.task_id = t.id AND c.kind IN ('STARTED', 'PAUSED')) AND l.kind = 'STARTED')")
-    fun runningClockFlow(): Flow<Boolean>
-
     @Query("SELECT * FROM task WHERE state != 'ENDED' ORDER BY created_at")
     suspend fun unfinishedTasks(): List<TaskEntity>
 
@@ -294,9 +284,6 @@ interface TaskDao {
     /** Helpers (hidden child chats) on a task now; they share [Helpers.SLOTS]. */
     @Query("SELECT COUNT(*) FROM task t JOIN sessions s ON s.id = t.hand WHERE s.parent_session_id IS NOT NULL AND t.state IN ('RUNNING', 'WAITING')")
     suspend fun helpersAtWork(): Int
-
-    @Query("SELECT t.* FROM task t JOIN sessions s ON s.id = t.hand WHERE s.parent_session_id IS NOT NULL AND t.state = 'QUEUED' ORDER BY t.created_at LIMIT 1")
-    suspend fun nextForHelpers(): TaskEntity?
 
     @Query("SELECT t.* FROM task t JOIN sessions s ON s.id = t.hand WHERE s.parent_session_id IS NOT NULL AND t.state = 'QUEUED' ORDER BY t.created_at")
     suspend fun queuedHelpers(): List<TaskEntity>

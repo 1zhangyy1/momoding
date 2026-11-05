@@ -40,42 +40,9 @@ class TaskClockTest {
         assertEquals(100L, TaskClock.elapsed(task("RUNNING"), history, 200))
     }
 
-    @Test fun restartStopsAtTheLastLiveCheckpointWithoutResettingSpentTime() {
-        val history = listOf(mark(100, "STARTED", """{"elapsed_ms":400}"""))
-        assertEquals(500L, TaskClock.interrupted(task("RUNNING"), history, 200, 10_000))
-    }
-
-    @Test fun aLaterDurableEventIsAlsoProofThatTheProcessWasAlive() {
-        val history = listOf(mark(100, "STARTED", """{"elapsed_ms":400}"""), mark(250, "REPORT", "working"))
-        assertEquals(550L, TaskClock.interrupted(task("RUNNING"), history, 200, 10_000))
-    }
-
-    @Test fun aSecondRestartWhilePausedDoesNotChargeTheOfflineIntervalAgain() {
-        val history = listOf(mark(100, "STARTED", """{"elapsed_ms":400}"""), mark(10_000, "PAUSED", """{"elapsed_ms":500}"""))
-        assertEquals(500L, TaskClock.interrupted(task("RUNNING"), history, 20_000, 50_000))
-        val resumed = history + mark(50_000, "STARTED", """{"elapsed_ms":500}""")
-        assertEquals(510L, TaskClock.elapsed(task("RUNNING"), resumed, 50_010))
-    }
-
-    @Test fun oldRecordsUseTheirLastDurableEventRatherThanInventingTimeUntilThisLaunch() {
-        val history = listOf(mark(100, "STARTED"), mark(250, "REPORT", "working"))
-        assertEquals(150L, TaskClock.interrupted(task("RUNNING"), history, null, 100_000))
-    }
-
     @Test fun newReadClockCanRunWhileTheTaskStillHasALegacyWaitingQuestion() {
         val history = listOf(mark(100, "STARTED", """{"elapsed_ms":400}"""))
         assertEquals(500L, TaskClock.elapsed(task("WAITING", """{"elapsed_ms":20}"""), history, 200))
     }
 
-    @Test fun queueAndUserWaitDoNotSpendThePersistedBudget() {
-        val history = listOf(mark(100, "PAUSED", """{"elapsed_ms":400}"""))
-        assertEquals(400L, TaskClock.interrupted(task("QUEUED"), history, 9_000, 10_000))
-        assertEquals(400L, TaskClock.interrupted(task("WAITING"), history, 9_000, 10_000))
-        assertEquals(0L, TaskClock.interrupted(task("QUEUED"), emptyList(), 9_000, 10_000))
-    }
-
-    @Test fun aClockBeforeItsStartCannotSubtractAlreadySpentTime() {
-        val history = listOf(mark(500, "STARTED", """{"elapsed_ms":400}"""))
-        assertEquals(400L, TaskClock.interrupted(task("RUNNING"), history, 200, 300))
-    }
 }
