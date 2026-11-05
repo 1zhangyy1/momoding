@@ -222,6 +222,7 @@ data class ScheduledTask(
      * last alarm fire (INTERVAL), or re-enabling. Absolute, so a reboot or a
      * killed process resumes the same schedule instead of restarting it.
      * ON_NOTIFICATION: the last fire, for its cooldown.
+     * CALENDAR: the last claimed slot or explicit (re)arming time.
      */
     val anchorMs: Long? = null,
     /**
@@ -293,7 +294,8 @@ data class ScheduledTask(
 
         // Earliest instant we may fire: max(now, start-of-startDate). This lets
         // a task created today with a future startDate wait until that day.
-        val floor = maxOf(now, startDateMs ?: Long.MIN_VALUE)
+        // A calendar fire claims its slot too, including a delivery a few seconds early.
+        val floor = maxOf(now, startDateMs ?: Long.MIN_VALUE, anchorMs?.plus(1) ?: Long.MIN_VALUE)
 
         val cal = Calendar.getInstance().apply {
             timeInMillis = floor

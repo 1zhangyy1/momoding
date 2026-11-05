@@ -16,9 +16,9 @@ import kotlinx.coroutines.withTimeout
  * hands the task off to [ScheduledAgentRunner].
  *
  * This is a HANDOFF, not a run: everything here must finish in
- * milliseconds. goAsync() covers only "load the task, arm the next
- * occurrence, start the FGS and dispatch the prompt"; the agent loop
- * itself then runs on [ScheduledAgentRunner]'s app-scoped scope, kept
+ * milliseconds. goAsync() covers the durable claim and starts delivery;
+ * Room acceptance arms the next occurrence. The agent loop runs on
+ * the app scope, kept
  * alive by the foreground service (and its wake lock) rather than by this
  * broadcast.
  *
@@ -49,48 +49,11 @@ class ScheduledTaskAlarmReceiver : BroadcastReceiver() {
                 // instead of holding it until the system ANRs us.
                 withTimeout(HANDOFF_TIMEOUT_MS) {
                     val manager = ScheduledTaskManager(appContext)
-                    val task = manager.get(taskId) ?: run {
-                        AppLogger.warning(TAG, "task $taskId not found in store — skipping")
-                        return@withTimeout
-                    }
-                    if (!task.enabled) {
-                        AppLogger.info(TAG, "task $taskId disabled — skipping fire")
-                        return@withTimeout
-                    }
-                    // Schedule the next occurrence FIRST so a long-running
-                    // prompt doesn't block tomorrow's fire even if we crash.
-                    // [T-android-scheduled-fire-claim] False for a stale second
-                    // delivery of a relative trigger's fire: nothing to run.
-                    if (!manager.rescheduleNext(taskId)) return@withTimeout
-                    // [T-android-scheduled-triggers] Run the row as it is NOW:
-                    // rescheduleNext just advanced an interval's anchor and
-                    // count, and the fire's envelope shows the NEXT fire time.
-                    val current = manager.get(taskId) ?: task
-
-                    // [GH#197] waitForCompletion=false is load-bearing, not a
-                    // tweak. With the default (true) this call suspends until
-                    // the whole agent loop finishes — up to RUN_TIMEOUT_MS
-                    // (10 min) — and because HeadlessChatRunner.prompt/retry
-                    // are `withContext(Dispatchers.Main)`, that wait also
-                    // lands back on the main thread. pending.finish() then
-                    // sits behind it, blowing far past the ~10s budget a
-                    // manifest-declared receiver gets, so the system ANRs the
-                    // process and kills it — taking every PRoot sandbox child
-                    // with it. The UI "Run now" path already passes false
-                    // (638f3eb0b); the alarm path silently kept the default.
-                    //
-                    // Nothing is lost by not waiting: run() still resolves the
-                    // session and starts the foreground service (which holds
-                    // the wake lock) before returning, and mark-fired plus the
-                    // completion notification are finished off ScheduledAgent-
-                    // Runner's app-scoped bgScope, which outlives this
-                    // receiver.
-                    ScheduledAgentRunner.run(appContext, current, waitForCompletion = false, scheduledFire = true)
+                    val fire = manager.claimAlarmFire(taskId) ?: manager.get(taskId)?.pendingDispatch ?: return@withTimeout
+                    ScheduledAgentRunner.deliverPending(appContext, fire)
                 }
             } catch (t: Throwable) {
-                // Includes TimeoutCancellationException. The task stays
-                // scheduled (rescheduleNext already armed the next occurrence)
-                // so a wedged fire self-heals instead of killing the process.
+                // A claimed input remains persisted even when this handoff is interrupted.
                 AppLogger.error(TAG, "task $taskId fire failed: ${t.message}")
             } finally {
                 pending.finish()
