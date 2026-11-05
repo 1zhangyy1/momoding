@@ -420,12 +420,7 @@ class ChatRepository(internal val dao: ChatDao) {
     suspend fun deleteMessagesAfter(sessionId: String, keepCount: Int) =
         dao.deleteMessagesAfter(sessionId, keepCount)
 
-    /**
-     * Rewrite a single message row's parts_json in place. Used by
-     * [com.openminis.app.ui.chat.ChatViewModel.rerunFromToolBlock]'s block-
-     * boundary cut to trim the kept assistant row to the parts before the
-     * target tool_use. Mirrors iOS ChatStore.updateMessageParts.
-     */
+    /** Reconcile a stored invocation/result while retaining its message id. */
     suspend fun updateMessageParts(id: String, partsJson: String) =
         dao.updateMessageParts(id, partsJson)
 

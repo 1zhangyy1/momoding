@@ -114,6 +114,9 @@ interface TaskDao {
     @Query("SELECT i.* FROM inbox i JOIN messages received ON received.id = i.id JOIN messages call ON call.id = :message WHERE i.to_session = :session AND received.session_id = :session AND call.session_id = :session AND received.sort_order < call.sort_order AND i.read_at IS NOT NULL ORDER BY i.read_at DESC, CASE WHEN i.sender = 'USER' THEN 0 ELSE 1 END, received.sort_order DESC LIMIT 1")
     suspend fun inputForCall(session: String, message: String): InboxEntity?
 
+    @Query("SELECT i.* FROM inbox i JOIN messages received ON received.id = i.id WHERE i.to_session = :session AND received.session_id = :session AND i.read_at IS NOT NULL ORDER BY i.read_at DESC, CASE WHEN i.sender = 'USER' THEN 0 ELSE 1 END, received.sort_order DESC LIMIT 1")
+    suspend fun consumedInput(session: String): InboxEntity?
+
     @Query("SELECT * FROM task WHERE conversation = :conversation AND source_message_id = :message")
     suspend fun sourceTasks(conversation: String, message: String): List<TaskEntity>
 
@@ -154,8 +157,12 @@ interface TaskDao {
     @Query("UPDATE inbox SET read_at = NULL, tries = tries + 1, failed_at = CASE WHEN :terminal OR tries + 1 >= 3 THEN :at ELSE NULL END WHERE id IN (:ids) AND failed_at IS NULL")
     suspend fun failInbox(ids: List<String>, at: Long, terminal: Boolean)
 
-    @Query("UPDATE inbox SET read_at = NULL, tries = 0, failed_at = NULL WHERE id = :id")
-    suspend fun retryInbox(id: String)
+    @Query("UPDATE inbox SET read_at = NULL, tries = 0, failed_at = NULL WHERE id = :id AND failed_at IS NOT NULL")
+    suspend fun retryInbox(id: String): Int
+
+    /** Called only after the durable approval ledger proves its exact ticket is unclaimed. */
+    @Query("UPDATE inbox SET read_at = NULL, tries = 0, failed_at = NULL WHERE id = :id AND task_id = :task AND to_session = :to AND sender = 'COMMAND' AND read_at IS NOT NULL AND prefill IS NOT NULL")
+    suspend fun restoreApprovalEnvelope(id: String, task: String, to: String)
 
     @Query("UPDATE inbox SET failed_at = :at WHERE id = :id AND read_at IS NULL")
     suspend fun rejectInbox(id: String, at: Long)

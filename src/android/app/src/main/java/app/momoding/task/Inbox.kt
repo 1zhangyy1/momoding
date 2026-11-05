@@ -76,6 +76,7 @@ object Inbox {
         }
     }
 
+    /** Claims only a failed receive; zero means another caller already claimed or removed it. */
     suspend fun retry(context: Context, id: String) = TaskEngine.dao(context).retryInbox(id)
 
     /** A consumed message is the durable cursor. Reuse it, unless its work stopped or waits on a person. */

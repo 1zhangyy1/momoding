@@ -173,7 +173,6 @@ class DebugRPCHandler(private val context: Context) {
             "chat.prompt" -> ChatMutationMethods.prompt(context, params)
             "chat.uiPrompt" -> ChatMutationMethods.uiPrompt(context, params)
             "chat.retry" -> ChatMutationMethods.retry(context, params)
-            "chat.rerunFromToolBlock" -> ChatMutationMethods.rerunFromToolBlock(context, params)
             "chat.session.status" -> ChatMutationMethods.status(context, params)
             "chat.session.cancel" -> ChatMutationMethods.cancel(context, params)
             "chat.session.selectModel" -> ChatMutationMethods.selectModel(context, params)

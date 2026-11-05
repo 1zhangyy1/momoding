@@ -1,6 +1,5 @@
 package com.openminis.app.ui.chat
 
-import com.openminis.app.ProductionSources
 import com.openminis.app.data.db.MessageEntity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -201,15 +200,6 @@ class BubbleRowLocatorTest {
         assertFalse(BubbleRowLocator.isVisibleUserRow(toolResult))
         assertFalse(BubbleRowLocator.isVisibleUserRow(text("<system-reminder>x</system-reminder>")))
         assertFalse(BubbleRowLocator.isVisibleUserRow(text("<user-attached-files>f</user-attached-files>")))
-    }
-
-    // ── wiring ────────────────────────────────────────────────────────────
-
-    @Test
-    fun `legacy retry anchors through the locator without a counting loop`() {
-        val vm = ProductionSources.read("ui/chat/ChatViewModel.kt")
-        assertTrue(vm.contains("logBubbleAnchor(\"retry\", messageId, located)"))
-        assertFalse("the per-operation ordinal loops are gone", vm.contains("visibleUserCount"))
     }
 
 }

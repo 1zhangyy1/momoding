@@ -373,13 +373,9 @@ internal fun UserMessageBubble(
                     val shape = app.momoding.ui.chat.BubbleShape.user() // momoding: iMessage-like tail corner
                     // The whole LazyColumn is wrapped in a SelectionContainer,
                     // which by default starts text-selection on long-press. We
-                    // want long-press on a user bubble to open the Copy/Retry
-                    // menu instead, with NO selection ever registered against
-                    // this Text. If we let selection register and the user
-                    // taps "Retry", retryFromMessage truncates the list and
-                    // the SelectionManager toolbar update then sorts stale
-                    // LayoutCoordinates → IllegalArgumentException
-                    // ("layouts are not part of the same hierarchy").
+                    // want long-press on a user bubble to open its action menu.
+                    // History deletion must not leave stale LayoutCoordinates
+                    // registered with the SelectionManager toolbar.
                     // DisableSelection scopes the bubble out of selection.
                     // Long-press is captured on the outer Box (above) so
                     // press coords share a LayoutCoordinates space with the

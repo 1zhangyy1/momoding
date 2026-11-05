@@ -59,7 +59,10 @@ data class ScheduledTaskMarker(
      *  Null on envelopes written before this existed. */
     val firedAtMs: Long? = null,
 ) {
-    val xml: String
+    val xml: String get() = "$opening$prompt\n</$TAG>"
+
+    /** Also wraps structured saved inputs without moving their pasted/media parts. */
+    val opening: String
         get() {
             val attrs = buildString {
                 append("id=\"").append(escapeAttr(taskId)).append('"')
@@ -76,7 +79,7 @@ data class ScheduledTaskMarker(
                 prefilledTool != null -> prefillNote(prefilledTool) + "\n"
                 else -> ""
             }
-            return "<$TAG $attrs>\n$note$prompt\n</$TAG>"
+            return "<$TAG $attrs>\n$note"
         }
 
     companion object {

@@ -227,6 +227,7 @@ internal object HeadlessChatRunner {
         prefill: List<com.openminis.app.scheduled.PrefilledToolCall> = emptyList(),
         // momoding: how it waits when the session is at work; null = PROGRAMMATIC (until the turn ends)
         origin: com.openminis.app.ui.chat.QueuedPromptOrigin? = null,
+        partsJson: String? = null,
     ): PromptResult = ChatViewModelStore.holdingForSend(sessionId) {
         withContext(Dispatchers.Main) {
             val vm = viewModel(context, sessionId)
@@ -291,7 +292,7 @@ internal object HeadlessChatRunner {
             val rowsBeforeSubmit = if (com.openminis.app.scheduled.ScheduledTaskMarker.isMarkerText(text)) {
                 app(context).chatRepository.dao.loadMessages(sessionId).size
             } else -1
-            val outcome = vm.submitPrompt(text, prefill, origin, attachments)
+            val outcome = vm.submitPrompt(text, prefill, origin, attachments, partsJson)
             if (outcome is ChatViewModel.SubmitOutcome.Rejected) {
                 return@withContext PromptResult(status = "Rejected", responseText = outcome.reason, timedOut = false)
             }
@@ -330,6 +331,7 @@ internal object HeadlessChatRunner {
         }
     }
 
+    /** Retry a failed receive without deleting or replaying completed history. */
     suspend fun retry(
         context: Context,
         sessionId: String,
@@ -339,134 +341,30 @@ internal object HeadlessChatRunner {
     ): PromptResult = ChatViewModelStore.holdingForSend(sessionId) {
         withContext(Dispatchers.Main) {
             val app = app(context)
+            val dao = app.database.taskDao()
+            val target = if (messageId == null) dao.inboxFor(sessionId).lastOrNull { it.failedAt != null }
+                else dao.inbox(messageId)?.takeIf { it.toSession == sessionId && it.failedAt != null }
+            if (target == null) throw RPCException(-32602, "Only a failed inbox message can be retried")
             val vm = viewModel(context, sessionId)
-            val targetMsgId = messageId ?: run {
-                val msgs = app.chatRepository.dao.loadMessages(sessionId)
-                msgs.lastOrNull { it.role == "user" }?.id
-                    ?: throw RPCException(-32602, "Session has no user messages")
-            }
-            // Validate it points at a user message.
-            val all = app.chatRepository.dao.loadMessages(sessionId)
-            val target = all.firstOrNull { it.id == targetMsgId }
-                ?: throw RPCException(-32602, "Message not found in session")
-            if (target.role != "user") throw RPCException(-32602, "Target is not a user message")
-            val deletedCount = all.size - all.indexOf(target) - 1
-
-            // Same readiness gate as prompt() — retryFromMessage hits the same
-            // currentProvider-null early-return if invoked before resolve.
-            val ready = withContext(Dispatchers.Default) {
-                withTimeoutOrNull(5000L) {
-                    vm.activeEntryId.first { it != null }
-                }
-            }
-            if (ready == null) {
-                return@withContext PromptResult(
-                    status = "Error",
-                    responseText = "no_provider_resolved_in_5s",
-                    timedOut = false,
-                    deletedMessageCount = deletedCount,
-                    retriedMessageId = targetMsgId,
-                )
-            }
-            vm.retryFromMessage(targetMsgId)
-            if (!wait) {
-                return@withContext PromptResult(
-                    status = "Retrying",
-                    responseText = null,
-                    timedOut = false,
-                    deletedMessageCount = deletedCount,
-                    retriedMessageId = targetMsgId,
-                )
-            }
+            withTimeoutOrNull(5000L) { vm.activeEntryId.first { it != null } }
+                ?: return@withContext PromptResult("Error", "no_provider_resolved_in_5s", false, retriedMessageId = target.id)
+            val before = app.chatRepository.dao.loadMessages(sessionId).size
+            if (!vm.retryFailedInbox(target.id)) throw RPCException(-32602, "The message is no longer failed")
+            if (!wait) return@withContext PromptResult("Retrying", null, false, retriedMessageId = target.id)
             val finished = withTimeoutOrNull(timeoutMs) {
-                if (vm.isStreaming.value) {
-                    vm.isStreaming.first { !it }
-                }
+                dao.inboxFlow(sessionId).first { rows -> rows.none { it.id == target.id && it.failedAt == null } }
                 true
             } ?: false
-            val msgs = app.chatRepository.dao.loadMessages(sessionId)
-            val lastAssistant = msgs.lastOrNull { it.role == "assistant" }
-            val responseText = lastAssistant?.let { extractText(it.partsJson) }
-            PromptResult(
-                status = if (finished) "Completed" else "Timeout",
-                responseText = responseText,
-                timedOut = !finished,
-                deletedMessageCount = deletedCount,
-                retriedMessageId = targetMsgId,
-            )
+            val messages = app.chatRepository.dao.loadMessages(sessionId)
+            val status = when {
+                !finished -> "Timeout"
+                dao.inbox(target.id)?.failedAt != null -> "Error"
+                messages.none { it.id == target.id } -> "Cancelled"
+                else -> "Completed"
+            }
+            PromptResult(status, messages.drop(before).lastOrNull { it.role == "assistant" }?.let { extractText(it.partsJson) },
+                !finished, retriedMessageId = target.id)
         }
-    }
-
-    /**
-     * [T-android-rerun-from-tool-block-position] Drive
-     * [ChatViewModel.rerunFromToolBlock] headlessly so automation / e2e can
-     * exercise the block-boundary re-run (the in-app trigger is a tool-bubble
-     * long-press). [assistantMessageId] is the UI assistant bubble id and
-     * [blockId] is the tool block's id (== its tool_use id). Returns the same
-     * [PromptResult] shape as [retry]; `responseText` is the latest assistant
-     * text after the re-run settles (when [wait]).
-     */
-    suspend fun rerunFromToolBlock(
-        context: Context,
-        sessionId: String,
-        assistantMessageId: String,
-        blockId: String,
-        wait: Boolean,
-        timeoutMs: Long,
-    ): PromptResult = withContext(Dispatchers.Main) {
-        val app = app(context)
-        val vm = viewModel(context, sessionId)
-        val ready = withContext(Dispatchers.Default) {
-            withTimeoutOrNull(5000L) { vm.activeEntryId.first { it != null } }
-        }
-        if (ready == null) {
-            return@withContext PromptResult(
-                status = "Error",
-                responseText = "no_provider_resolved_in_5s",
-                timedOut = false,
-                deletedMessageCount = 0,
-                retriedMessageId = assistantMessageId,
-            )
-        }
-        val before = app.chatRepository.dao.loadMessages(sessionId).size
-        // The in-memory assistant bubble id is a volatile `assistant_<ts>`
-        // runtime id, not the DB row id a harness reads from chat.messages.list.
-        // Resolve the live bubble that owns this tool block; fall back to the
-        // caller-supplied id (covers a freshly-reloaded session whose bubble id
-        // IS the DB row id).
-        val liveAssistantId = vm.assistantMessageIdForToolBlock(blockId) ?: assistantMessageId
-        val accepted = vm.rerunFromToolBlock(liveAssistantId, blockId)
-        if (!accepted) {
-            return@withContext PromptResult(
-                status = "Error",
-                responseText = "rerun_rejected (streaming / not_found / not_tool_block)",
-                timedOut = false,
-                deletedMessageCount = 0,
-                retriedMessageId = assistantMessageId,
-            )
-        }
-        if (!wait) {
-            return@withContext PromptResult(
-                status = "Rerunning",
-                responseText = null,
-                timedOut = false,
-                deletedMessageCount = 0,
-                retriedMessageId = assistantMessageId,
-            )
-        }
-        val finished = withTimeoutOrNull(timeoutMs) {
-            if (vm.isStreaming.value) vm.isStreaming.first { !it }
-            true
-        } ?: false
-        val msgs = app.chatRepository.dao.loadMessages(sessionId)
-        val lastAssistant = msgs.lastOrNull { it.role == "assistant" }
-        PromptResult(
-            status = if (finished) "Completed" else "Timeout",
-            responseText = lastAssistant?.let { extractText(it.partsJson) },
-            timedOut = !finished,
-            deletedMessageCount = (before - msgs.size).coerceAtLeast(0),
-            retriedMessageId = assistantMessageId,
-        )
     }
 
     /**

@@ -45,8 +45,8 @@ data class ScheduledRun(
  *                      fresh chat.
  *   APPEND_TO        ≈ FollowUpSessionIntent             → enqueue prompt into
  *                      an existing chat (follow-up).
- *   RERUN            ≈ RetryRunIntent                     → re-run an existing
- *                      chat from a chosen user message.
+ *   RERUN            legacy stored target                 → append a saved input
+ *                      as a new routine fire, preserving the existing chat.
  *
  * Persistence: serialized to JSON via [toJson] / [fromJson] and stored in
  * [ScheduledTaskStore] (SharedPreferences). Schema lives here so the store
@@ -82,8 +82,8 @@ enum class ScheduledTriggerKind { CALENDAR, AFTER, INTERVAL, ON_COMPLETION, ON_N
  * What the task does when it fires. Mirrors the iOS App Intent set.
  *  - [NewSession]: run [ScheduledTask.prompt] in a brand-new chat.
  *  - [AppendToSession]: append the prompt to an existing chat (follow-up).
- *  - [RerunMessage]: re-run an existing chat from a specific user message
- *    (the prompt is ignored — the message itself is replayed).
+ *  - [RerunMessage]: repeat a saved input as a new routine fire, retaining history.
+ *    The existing wire name is kept; the task prompt is ignored.
  */
 sealed class ScheduledTargetMode {
     object NewSession : ScheduledTargetMode()

@@ -1304,49 +1304,23 @@ curl -s http://localhost:8321 -d '{
 
 ### `chat.retry`
 
-Retry from a specific user message in a session. Equivalent to `RetryRunIntent`. All messages after the target are deleted; the agent re-runs from that point with optional replacement attachments.
+Retry one failed inbox message using its original id and saved payload. History is preserved. A completed message, a live attempt, a missing id or a message owned by another session is rejected with `-32602`; `chat.rerunFromToolBlock` has been removed.
 
 **Params:**
 
-| Name                | Type       | Default | Description                                                                               |
-|---------------------|------------|---------|-------------------------------------------------------------------------------------------|
-| `sessionId`         | `string`   | —       | **Required.** Target session.                                                             |
-| `messageId`         | `string`   | `null`  | ID of the user message to retry from. Omit to retry from the most recent user message.    |
-| `replaceAttachments`| `[object]` | `null`  | Same shape as `chat.prompt`'s `attachments`. When provided, replaces the target message's original attachments. `null` = keep originals. `[]` = explicitly drop all attachments. |
-| `modelEntryId`      | `string`   | `null`  | Pin the retry to a specific model entry (from `chat.models.list`). Mutually exclusive with `modelGroupId`. Applies just to this retry — session binding is untouched. |
-| `modelGroupId`      | `string`   | `null`  | Pin the retry to a specific model group. The group's routing strategy picks the member. Applies just to this retry. |
-| `thinkingLevel`     | `string`   | `null`  | Override thinking level for this retry (same values as `chat.prompt`).                    |
-| `wait`              | `bool`     | `false` | Block until retry completes.                                                              |
-| `waitTimeout`       | `int`      | `600`   | Same semantics as `chat.prompt`.                                                          |
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `sessionId` | `string` | — | **Required.** Target session. |
+| `messageId` | `string` | `null` | Failed inbox id; omit for the latest failed receive. |
+| `modelEntryId` | `string` | `null` | Optional model entry override. |
+| `modelGroupId` | `string` | `null` | Optional model group override, mutually exclusive with `modelEntryId`. |
+| `wait` | `bool` | `false` | Wait for this receive to finish or fail again. |
+| `waitTimeout` | `int` | `600` | Seconds, clamped to 1–1800. |
 
-**Response:**
+The result contains `sessionId`, `status`, `retriedMessageId`, `deletedMessageCount` (always 0), `modelName`, `responseText`, and optionally `timedOut`. Status is `Retrying`, `Completed`, `Error`, `Cancelled` (removed while waiting), or `Timeout`. A wait covers the persisted receive, including time spent behind a running turn.
 
 ```json
-{
-  "sessionId": "6D0F…",
-  "status": "Retrying",
-  "retriedMessageId": "msg_abc",
-  "deletedMessageCount": 3,
-  "modelName": "DeepSeek V4 Flash",
-  "responseText": null
-}
-```
-
-Returns `{ "error": { "code": -32602, "message": "Session has no user messages" } }` if the session is empty or `messageId` doesn't point to a user message.
-
-**Example — retry with a different model to A/B compare outputs:**
-
-```bash
-curl -s http://localhost:8321 -d '{
-  "jsonrpc": "2.0", "id": 5,
-  "method": "chat.retry",
-  "params": {
-    "sessionId": "6D0F…",
-    "messageId": "msg_abc",
-    "modelEntryId": "entry_claude_sonnet",
-    "wait": true
-  }
-}' | python3 -m json.tool
+{"jsonrpc":"2.0","id":5,"method":"chat.retry","params":{"sessionId":"6D0F…","messageId":"failed_receive_id","wait":true}}
 ```
 
 ---

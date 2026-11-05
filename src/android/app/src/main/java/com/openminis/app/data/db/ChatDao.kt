@@ -388,11 +388,7 @@ interface ChatDao {
     @Query("UPDATE messages SET stream_interrupt_count = stream_interrupt_count + 1, updated_at = :updatedAt WHERE id = :id")
     suspend fun incrementStreamInterruptCount(id: String, updatedAt: Long = System.currentTimeMillis())
 
-    // Messages: rewrite a single row's parts_json in place. Mirrors iOS
-    // ChatStore.updateMessageParts. Used by rerunFromToolBlock's block-
-    // boundary cut: deleteMessagesAfter drops whole rows after the boundary,
-    // but the kept assistant row itself needs its parts trimmed to before the
-    // target tool_use — that's an UPDATE of an existing row, not a delete.
+    // Reconcile a persisted invocation/result without changing its message identity.
     @Query("UPDATE messages SET parts_json = :partsJson, updated_at = :updatedAt WHERE id = :id")
     suspend fun updateMessageParts(id: String, partsJson: String, updatedAt: Long = System.currentTimeMillis())
 

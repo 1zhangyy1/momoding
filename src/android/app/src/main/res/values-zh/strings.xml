@@ -1272,7 +1272,7 @@
     <string name="chat_edit_exit_button">退出编辑</string>
     <string name="chat_show_sidebar">显示会话列表</string>
     <string name="chat_hide_sidebar">隐藏会话列表</string>
-    <string name="chat_clear_dialog_body">删除此会话的所有消息？工作区文件、附件和卸载内容会保留。</string>
+    <string name="chat_clear_dialog_body">清空对话并停止相关的未完成工作？文件和附件会保留。</string>
     <string name="chat_clear_dialog_confirm">清除</string>
     <string name="settings_shared_folders">共享文件夹</string>
     <string name="settings_shared_folders_subtitle">浏览 /var/minis 下的共享、技能、记忆目录</string>
@@ -1784,7 +1784,7 @@
     <string name="scheduled_task_field_target">触发时，应当</string>
     <string name="scheduled_task_target_new">新建聊天</string>
     <string name="scheduled_task_target_followup">继续追问</string>
-    <string name="scheduled_task_target_rerun">重新运行</string>
+    <string name="scheduled_task_target_rerun">重复指定消息</string>
     <string name="scheduled_task_target_agent">代理任务</string>
     <string name="scheduled_task_field_session">目标聊天</string>
     <string name="scheduled_task_pick_session">选择一个聊天…</string>
@@ -1800,7 +1800,7 @@
     <string name="scheduled_task_field_start_date">开始</string>
     <string name="scheduled_task_field_end_date">结束</string>
     <string name="scheduled_task_date_any">不限</string>
-    <string name="scheduled_task_rerun_note">从所选消息处重新运行选定的聊天。重新运行时不使用提示词字段。</string>
+    <string name="scheduled_task_rerun_note">把指定消息作为一条新的定时输入，保留原对话历史；不使用提示词字段。</string>
     <string name="scheduled_task_no_sessions">还没有聊天。</string>
     <string name="scheduled_task_no_messages_in_session">该聊天中没有用户消息。</string>
     <string name="scheduled_task_no_models">尚未配置模型。</string>
@@ -2070,8 +2070,8 @@
     <string name="scheduled_delivery_new">每次在新会话中运行</string>
     <string name="scheduled_delivery_this_chat">作为新消息追加到本对话</string>
     <string name="scheduled_delivery_other_chat">追加到会话「%1$s」</string>
-    <string name="scheduled_delivery_rerun_this">重新生成本对话中的指定消息</string>
-    <string name="scheduled_delivery_rerun_other">重新生成会话「%1$s」中的指定消息</string>
+    <string name="scheduled_delivery_rerun_this">重复本对话中的指定消息</string>
+    <string name="scheduled_delivery_rerun_other">重复会话「%1$s」中的指定消息</string>
     <string name="scheduled_delivery_child_this">作为子任务运行，结果回传本对话</string>
     <string name="scheduled_delivery_child_other">作为会话「%1$s」的子任务运行</string>
     <string name="scheduled_trigger_once">%1$s 执行一次</string>

@@ -877,10 +877,10 @@ object DebugMethodRegistry {
         ),
         MethodSpec(
             name = "chat.retry",
-            description = "Retry from a specific user message in a session.",
+            description = "Retry a failed inbox message using the same id; keeps all history.",
             params = listOf(
                 ParamSpec("sessionId", "string", required = true, description = "Target session id."),
-                ParamSpec("messageId", "string", required = false, description = "User message id; omit to retry from the most recent user message."),
+                ParamSpec("messageId", "string", required = false, description = "Failed inbox message id; omit to select the latest failed receive."),
                 ParamSpec("modelEntryId", "string", required = false, description = "Pin retry to a specific entry."),
                 ParamSpec("modelGroupId", "string", required = false, description = "Pin retry to a group."),
                 ParamSpec("wait", "bool", required = false, default = false, description = "Block until completion."),
@@ -888,19 +888,6 @@ object DebugMethodRegistry {
             ),
             returns = "{sessionId, status, retriedMessageId, deletedMessageCount, modelName, responseText, timedOut?}",
             example = ex("sessionId" to "6D0F…", "wait" to true),
-        ),
-        MethodSpec(
-            name = "chat.rerunFromToolBlock",
-            description = "Block-boundary re-run: cut at a specific tool_use block (keep earlier blocks in its turn, drop it + everything after) and regenerate. In-app this is the tool-bubble long-press 'Re-run From Here'.",
-            params = listOf(
-                ParamSpec("sessionId", "string", required = true, description = "Target session id."),
-                ParamSpec("assistantMessageId", "string", required = true, description = "UI assistant bubble id owning the tool block."),
-                ParamSpec("blockId", "string", required = true, description = "Tool block id (equals its tool_use id)."),
-                ParamSpec("wait", "bool", required = false, default = false, description = "Block until completion."),
-                ParamSpec("waitTimeout", "int", required = false, default = 600, description = "Seconds; clamped to [1, 1800]."),
-            ),
-            returns = "{sessionId, status, deletedMessageCount, responseText, timedOut?}",
-            example = ex("sessionId" to "6D0F…", "assistantMessageId" to "assistant_…", "blockId" to "call_…", "wait" to true),
         ),
         MethodSpec(
             name = "chat.session.status",

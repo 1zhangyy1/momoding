@@ -45,7 +45,7 @@ import java.util.Calendar
  * Target modes mirror iOS App Intents:
  *   new        ≈ SendPrompt(no session)   — run prompt in a fresh chat
  *   follow-up  ≈ FollowUpSession           — append prompt to --session
- *   rerun      ≈ RetryRun                  — re-run --session from --message
+ *   rerun      repeat a saved input in --session from --message, keeping history
  *
  * [T-android-scheduled-triggers] Triggers follow iOS ScheduledOffload
  * (8b315deba): --after (once, relative), --interval/--count (loop),
@@ -596,8 +596,8 @@ class ScheduledTaskOffloadHandler(private val context: Context) : NativeOffloadH
               new        each fire opens a separate new chat "Scheduled · <label>"; the
                          result does NOT appear in this conversation — only when the user
                          asks for that
-              rerun      re-run a chat (--session) from a chosen user message (--message,
-                         prompt ignored)
+              rerun      repeat a saved user input (--message) as a new scheduled turn in
+                         --session; history is kept and --prompt is ignored
 
             OUTPUT: `create` answers with a `delivery` line saying where every fire will
             land (this chat, another chat, a new chat, a rerun). Check it; if it is not

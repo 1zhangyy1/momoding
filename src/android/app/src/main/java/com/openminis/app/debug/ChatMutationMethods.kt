@@ -123,6 +123,10 @@ internal object ChatMutationMethods {
             ?: throw RPCException(-32602, "Session not found")
         val messageId = if (params.has("messageId") && !params.isNull("messageId")) params.optString("messageId").ifEmpty { null } else null
 
+        val failed = if (messageId == null) app.database.taskDao().inboxFor(sessionId).lastOrNull { it.failedAt != null }
+            else app.database.taskDao().inbox(messageId)?.takeIf { it.toSession == sessionId && it.failedAt != null }
+        if (failed == null) throw RPCException(-32602, "Only a failed inbox message can be retried")
+
         // Apply model override (per-call only; iOS docs say session binding is
         // untouched — but the existing ChatViewModel doesn't expose a per-call
         // override, so we update + restore around the call. Acceptable for
@@ -137,7 +141,7 @@ internal object ChatMutationMethods {
         val result = HeadlessChatRunner.retry(
             context = context,
             sessionId = sessionId,
-            messageId = messageId,
+            messageId = failed.id,
             wait = wait,
             timeoutMs = timeoutSec * 1000L,
         )
@@ -149,43 +153,6 @@ internal object ChatMutationMethods {
             put("retriedMessageId", result.retriedMessageId ?: JSONObject.NULL)
             put("deletedMessageCount", result.deletedMessageCount)
             put("modelName", displayedModelName ?: JSONObject.NULL)
-            put("responseText", result.responseText ?: JSONObject.NULL)
-            if (result.timedOut) put("timedOut", true)
-        }
-    }
-
-    /**
-     * [T-android-rerun-from-tool-block-position] Drive the block-boundary
-     * re-run headlessly (in-app trigger is a tool-bubble long-press). Needs
-     * the UI assistant bubble id + the tool block's id (== tool_use id).
-     */
-    suspend fun rerunFromToolBlock(context: Context, params: JSONObject): JSONObject {
-        val sessionId = params.optString("sessionId", "").ifEmpty {
-            throw RPCException(-32602, "Missing 'sessionId' param")
-        }
-        val assistantMessageId = params.optString("assistantMessageId", "").ifEmpty {
-            throw RPCException(-32602, "Missing 'assistantMessageId' param")
-        }
-        val blockId = params.optString("blockId", "").ifEmpty {
-            throw RPCException(-32602, "Missing 'blockId' param")
-        }
-        val app = app(context)
-        app.chatRepository.dao.getSession(sessionId)
-            ?: throw RPCException(-32602, "Session not found")
-        val wait = params.optBoolean("wait", false)
-        val timeoutSec = params.optInt("waitTimeout", 600).coerceIn(1, 1800)
-        val result = HeadlessChatRunner.rerunFromToolBlock(
-            context = context,
-            sessionId = sessionId,
-            assistantMessageId = assistantMessageId,
-            blockId = blockId,
-            wait = wait,
-            timeoutMs = timeoutSec * 1000L,
-        )
-        return JSONObject().apply {
-            put("sessionId", sessionId)
-            put("status", result.status)
-            put("deletedMessageCount", result.deletedMessageCount)
             put("responseText", result.responseText ?: JSONObject.NULL)
             if (result.timedOut) put("timedOut", true)
         }

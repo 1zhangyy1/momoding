@@ -1408,7 +1408,7 @@
     <string name="chat_edit_exit_button">Exit Edit Mode</string>
     <string name="chat_show_sidebar">Show session list</string>
     <string name="chat_hide_sidebar">Hide session list</string>
-    <string name="chat_clear_dialog_body">Remove all messages from this session? Files in workspace, attachments, and offloads are kept.</string>
+    <string name="chat_clear_dialog_body">Clear this chat and stop its unfinished work? Your files and attachments are kept.</string>
     <string name="chat_clear_dialog_confirm">Clear</string>
 
     <!-- T235 — Shared Folders (fixed: Shared / Skills / Memory) -->
@@ -1966,7 +1966,7 @@
     <string name="scheduled_task_field_target">When it runs, it should</string>
     <string name="scheduled_task_target_new">New chat</string>
     <string name="scheduled_task_target_followup">Follow up</string>
-    <string name="scheduled_task_target_rerun">Re-run</string>
+    <string name="scheduled_task_target_rerun">Repeat saved message</string>
     <string name="scheduled_task_target_agent">Agent task</string>
     <string name="scheduled_task_field_session">Target chat</string>
     <string name="scheduled_task_pick_session">Choose a chat…</string>
@@ -1982,7 +1982,7 @@
     <string name="scheduled_task_field_start_date">Start</string>
     <string name="scheduled_task_field_end_date">End</string>
     <string name="scheduled_task_date_any">Any</string>
-    <string name="scheduled_task_rerun_note">Re-runs the chosen chat from the selected message. The prompt field is not used for re-run.</string>
+    <string name="scheduled_task_rerun_note">Adds the selected saved message as a new scheduled input. Existing history is kept; the prompt field is not used.</string>
     <string name="scheduled_task_no_sessions">No chats yet.</string>
     <string name="scheduled_task_no_messages_in_session">No user messages in this chat.</string>
     <string name="scheduled_task_no_models">No models configured.</string>
@@ -2264,8 +2264,8 @@
     <string name="scheduled_delivery_new">Runs in a new chat each time</string>
     <string name="scheduled_delivery_this_chat">Added to this chat as a new message</string>
     <string name="scheduled_delivery_other_chat">Added to the chat “%1$s”</string>
-    <string name="scheduled_delivery_rerun_this">Regenerates a chosen message in this chat</string>
-    <string name="scheduled_delivery_rerun_other">Regenerates a chosen message in the chat “%1$s”</string>
+    <string name="scheduled_delivery_rerun_this">Repeats a saved message in this chat</string>
+    <string name="scheduled_delivery_rerun_other">Repeats a saved message in the chat “%1$s”</string>
     <string name="scheduled_delivery_child_this">Runs as a sub task; the result comes back to this chat</string>
     <string name="scheduled_delivery_child_other">Runs as a sub task of the chat “%1$s”</string>
     <string name="scheduled_trigger_once">Once at %1$s</string>

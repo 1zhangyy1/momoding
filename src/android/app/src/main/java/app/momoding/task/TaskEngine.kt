@@ -84,27 +84,36 @@ object TaskEngine {
         prefill: List<com.openminis.app.scheduled.PrefilledToolCall> = emptyList(), routine: RoutineFire? = null,
         call: ToolCall? = null,
     ): TaskEntity {
-        val source = if (routine != null) null else source(conversation)
         val helper = Helpers.isHelper(context, hand)
         val invocation = call ?: kotlinx.coroutines.currentCoroutineContext()[ToolCall]
         return change(context) { dao, after ->
-            openIn(context, dao, after, conversation, title, hand, brief, helper, source?.id, source?.content, prefill, routine, invocation)
+            val source = if (routine != null) null else source(dao, conversation, invocation)
+            openIn(context, dao, after, conversation, title, hand, brief, helper, source?.id, source?.words, prefill, routine, invocation)
         }
     }
 
     /** Creating the hidden chat and handing work to it are one committed operation. */
     suspend fun openHelper(context: Context, conversation: String, title: String, brief: String, call: ToolCall? = null): TaskEntity {
-        val source = source(conversation)
         val invocation = call ?: kotlinx.coroutines.currentCoroutineContext()[ToolCall]
         return change(context) { dao, after ->
             invocation?.requireStoredIn(dao, conversation)
+            val source = source(dao, conversation, invocation)
             val hand = Helpers.create(context, conversation, title)
-            openIn(context, dao, after, conversation, title, hand, brief, true, source?.id, source?.content, call = invocation)
+            openIn(context, dao, after, conversation, title, hand, brief, true, source?.id, source?.words, call = invocation)
         }
     }
 
-    private fun source(conversation: String) = ChatViewModelStore.existing(conversation)?.messages?.value
-        ?.lastOrNull { it.rendersAsUserBubble() && !it.unread }
+    private data class Source(val id: String, val words: String?)
+
+    /** The consumed receive owns the work, even when its bubble precedes newer history. */
+    private suspend fun source(dao: TaskDao, conversation: String, call: ToolCall?): Source? {
+        val input = if (call != null) dao.inputForCall(conversation, call.message) else dao.consumedInput(conversation)
+        if (input != null) return Source(input.id, input.text.takeIf { input.sender == InboxEntity.Sender.USER.name })
+        // An old invocation cannot borrow authorization from a newer visible message.
+        if (call != null) return null
+        return ChatViewModelStore.existing(conversation)?.messages?.value
+            ?.lastOrNull { it.rendersAsUserBubble() && !it.unread }?.let { Source(it.id, it.content) }
+    }
 
     private suspend fun openIn(context: Context, dao: TaskDao, after: MutableList<suspend () -> Unit>,
         conversation: String, title: String, hand: String, brief: String, helper: Boolean, sourceId: String?, authorized: String?,
@@ -299,6 +308,26 @@ object TaskEngine {
         return DeletedMessages(ids, stopped)
     }
 
+    /** Existing inputs disappear with their task state; only the new stop receipts remain. */
+    suspend fun clearMessages(context: Context, session: String): DeletedMessages = change(context) { dao, after ->
+        clearMessagesIn(context, (context.applicationContext as MinisApp).database.chatDao(), dao, after, session)
+    }
+
+    internal suspend fun clearMessagesIn(context: Context, chat: com.openminis.app.data.db.ChatDao, dao: TaskDao,
+        after: MutableList<suspend () -> Unit>, session: String,
+    ): DeletedMessages {
+        if (chat.getSession(session) == null) return DeletedMessages(emptySet(), 0)
+        val ids = (chat.loadMessages(session).map { it.id } + dao.inboxFor(session).map { it.id }).toSet()
+        val roots = dao.relatedTo(listOf(session)).filter { it.state != TaskEntity.State.ENDED.name }
+        val stopped = descendants(dao, roots).count { it.state != TaskEntity.State.ENDED.name }
+        dao.clearInbox(session)
+        for (task in roots) stopIn(context, dao, after, task.id, "Stopped because the chat history was cleared.")
+        chat.deleteMessages(session)
+        chat.deleteCompactMarkers(session)
+        chat.updateLastMessage(session, null, System.currentTimeMillis())
+        return DeletedMessages(ids, stopped)
+    }
+
     data class DeletedSessions(val ids: List<String>, val tasks: List<TaskEntity>, val stopped: Int)
 
     /** Rows disappear in the same commit as their tasks stop. A late receive/report cannot
@@ -343,9 +372,8 @@ object TaskEngine {
         val call = kotlinx.coroutines.currentCoroutineContext()[ToolCall]
         return try {
             change(context) { dao, _ ->
-                val source = if (spec.mode == Approval.Mode.SHELL) ChatViewModelStore.existing(spec.request.sessionId)?.messages?.value
-                    ?.lastOrNull { it.rendersAsUserBubble() && !it.unread } else null
-                actionStartedIn(dao, spec, command, sourceId ?: source?.id, authorization ?: source?.content ?: spec.request.summary ?: spec.request.preview, draft, call)
+                val source = if (spec.mode == Approval.Mode.SHELL) source(dao, spec.request.sessionId, call) else null
+                actionStartedIn(dao, spec, command, sourceId ?: source?.id, authorization ?: source?.words ?: spec.request.summary ?: spec.request.preview, draft, call)
             }
         } catch (e: TaskAction.NotStarted) {
             // Claiming approval may already have registered COMMAND. A later hold or
@@ -551,13 +579,13 @@ object TaskEngine {
         val parent = parentId?.let { dao.task(it) ?: error("the parent task was deleted") }
         require(parent == null || parent.hand == chat) { "the parent task belongs to another hand" }
         check(parent == null || parent.state != TaskEntity.State.ENDED.name) { "the parent task ended" }
-        val source = ChatViewModelStore.existing(chat)?.messages?.value?.lastOrNull { it.rendersAsUserBubble() && !it.unread }
+        val source = source(dao, chat, invocation)
         val origin = sourceId ?: if (parent?.conversation == chat) parent.sourceMessageId else source?.id
         val now = System.currentTimeMillis()
         val task = TaskEntity(newId(), chat, origin, options.task.lineSequence().first().take(60), TaskEntity.SCREEN,
             TaskEntity.State.QUEUED.name, createdAt = now, updatedAt = now)
         dao.insertTask(task)
-        (authorization ?: source?.content)?.let { log(dao, task.id, TaskLogEntity.Kind.AUTHORIZED, it) }
+        (authorization ?: source?.words)?.let { log(dao, task.id, TaskLogEntity.Kind.AUTHORIZED, it) }
         if (draft != null) log(dao, task.id, TaskLogEntity.Kind.DRAFT, draft)
         log(dao, task.id, TaskLogEntity.Kind.SCREEN, ScreenWork.Spec(options, parent?.id).json())
         log(dao, task.id, TaskLogEntity.Kind.PASSED_ON, options.task)
@@ -773,9 +801,9 @@ object TaskEngine {
     }
 
     suspend fun waitForApproval(context: Context, spec: Approval.Spec): Approval.Spec = change(context) { dao, _ ->
-        val source = ChatViewModelStore.existing(spec.request.sessionId)?.messages?.value?.lastOrNull { it.rendersAsUserBubble() && !it.unread }
+        val source = source(dao, spec.request.sessionId, kotlinx.coroutines.currentCoroutineContext()[ToolCall])
         queueApprovalIn(dao, spec, if (spec.mode == Approval.Mode.NATIVE) null else source?.id,
-            if (spec.mode == Approval.Mode.NATIVE) spec.request.summary else source?.content)
+            if (spec.mode == Approval.Mode.NATIVE) spec.request.summary else source?.words)
     }
 
     suspend fun findApproval(context: Context, id: String): Approval.Spec? =
@@ -905,7 +933,7 @@ object TaskEngine {
         if (row == null) Inbox.post(dao, task.hand, REPORT_CUE + task.id + " · approval · command_result] The person approved the exact prefilled command. Execute it once and use its result; do not repeat it.",
             task.id, sender = InboxEntity.Sender.COMMAND,
             prefill = listOf(com.openminis.app.scheduled.PrefilledToolCall("shell_execute", args.put(Approval.TICKET_ARG, spec.ticket).toString())), id = message)
-        else if (row.readAt != null) dao.retryInbox(message)
+        else if (row.readAt != null) dao.restoreApprovalEnvelope(message, task.id, task.hand)
     }
 
     suspend fun resumeApproved(context: Context, taskId: String) = change(context) { dao, after ->
@@ -995,12 +1023,12 @@ object TaskEngine {
             dao.task(id)?.also { check(it.state != TaskEntity.State.ENDED.name) { "the task ended before the command was handed on" } }
                 ?: error("the task was deleted")
         }
-        val source = ChatViewModelStore.existing(chat)?.messages?.value?.lastOrNull { it.rendersAsUserBubble() && !it.unread }
+        val source = source(dao, chat, kotlinx.coroutines.currentCoroutineContext()[ToolCall] ?: ShellWork.toolCall(command.process))
         val now = System.currentTimeMillis()
         val task = existing ?: TaskEntity(newId(), chat, source?.id, title, chat, TaskEntity.State.RUNNING.name,
             createdAt = now, updatedAt = now).also {
             dao.insertTask(it)
-            source?.content?.let { words -> log(dao, it.id, TaskLogEntity.Kind.AUTHORIZED, words) }
+            source?.words?.let { words -> log(dao, it.id, TaskLogEntity.Kind.AUTHORIZED, words) }
             log(dao, it.id, TaskLogEntity.Kind.PASSED_ON, command.text)
         }
         log(dao, task.id, TaskLogEntity.Kind.COMMAND, command.json())

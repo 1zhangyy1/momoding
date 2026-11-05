@@ -1,5 +1,7 @@
 package com.openminis.app.scheduled
 
+import app.momoding.chat.InputContinuation
+
 import app.momoding.chat.FireIf
 import app.momoding.chat.NotifyDecision
 import app.momoding.chat.RoutineAttention
@@ -199,16 +201,7 @@ object ScheduledAgentRunner {
         return sessionId
     }
 
-    /**
-     * [T-android-scheduled-tasks-full] Branch on target mode, mirroring the iOS
-     * App Intent set:
-     *   NewSession / AppendToSession → HeadlessChatRunner.prompt (the prompt is
-     *     sent as a fresh user turn; for append it lands in the existing
-     *     session, for new it's the first turn of the freshly-created one).
-     *   RerunMessage → HeadlessChatRunner.retry from the chosen message id (the
-     *     message is replayed; task.prompt is ignored, matching iOS
-     *     RetryRunIntent which has no prompt param).
-     */
+    /** Every fire appends an identified routine input; saved-message schedules retain their source payload. */
     private suspend fun dispatch(
         app: MinisApp,
         task: ScheduledTask,
@@ -217,31 +210,48 @@ object ScheduledAgentRunner {
         firedAt: Long,
         scheduledFire: Boolean,
     ): HeadlessChatRunner.PromptResult = runCatching {
-        // [T-android-scheduled-task-card] Wrap the prompt so the transcript can
-        // tell it apart from something the user typed. Without this the fired
-        // message is an ordinary user bubble: the user sees text they never
-        // wrote, with nothing saying which task produced it. The prompt follows
-        // the tag verbatim, so a reader that does not know the tag still shows
-        // the text rather than an empty bubble.
-        //
-        // RerunMessage is deliberately NOT wrapped — it replays an existing
-        // message rather than sending a new one, so there is nothing to mark.
-        //
-        // [T-scheduled-tool-prefill] The prefilled call, if any, runs as the
-        // loop's first turn instead of a model request; the envelope names it
-        // so the model knows the scheduler made that call, not itself. A rerun
-        // ignores it along with the prompt — it sends nothing new.
-        val prefill = listOfNotNull(task.prefillToolCall?.takeIf { it.validationError() == null })
-        val marked = ScheduledTaskMarker(
+        val mode = task.targetMode
+        // RERUN is an existing stored target. Repeat its input, never rewind its conversation.
+        val saved = if (mode is ScheduledTargetMode.RerunMessage) {
+            val source = app.chatRepository.dao.loadMessages(sessionId).firstOrNull { it.id == mode.messageId }
+            require(source?.role == "user") { "The saved message is no longer available." }
+            require(InputContinuation.source(source.partsJson) == null) { "A continuation is not a saved input." }
+            org.json.JSONArray(source.partsJson).also { parts ->
+                require(parts.length() > 0 && (0 until parts.length()).all {
+                    parts.getJSONObject(it).getString("type") in listOf("text", "mediaRef")
+                }) { "Only a saved input can be repeated." }
+                val base = com.openminis.app.data.storage.MediaStore(app).mediaBaseDir.canonicalFile
+                for (i in 0 until parts.length()) {
+                    val part = parts.getJSONObject(i)
+                    if (part.getString("type") == "mediaRef") {
+                        val file = java.io.File(base, part.getJSONObject("value").getString("relativePath")).canonicalFile
+                        require(file.path.startsWith(base.path + java.io.File.separator) && file.isFile) { "A saved attachment is no longer available." }
+                    }
+                }
+            }
+        } else null
+        val prefill = if (saved == null) listOfNotNull(task.prefillToolCall?.takeIf { it.validationError() == null }) else emptyList()
+        val words = saved?.let { parts -> (0 until parts.length()).mapNotNull {
+            parts.getJSONObject(it).takeIf { part -> part.getString("type") == "text" }?.getString("value")
+        }.joinToString("") } ?: task.prompt
+        val marker = ScheduledTaskMarker(
             taskId = task.id,
             label = task.label,
             nextFireAtMs = task.nextTriggerMs(),
-            prompt = task.prompt,
+            prompt = words,
             prefilledTool = prefill.firstOrNull()?.toolName,
             firedAtMs = firedAt,
-        ).xml
-
-        val mode = task.targetMode
+        )
+        val marked = marker.xml
+        val partsJson = saved?.let { original ->
+            val parts = org.json.JSONArray().put(org.json.JSONObject().put("type", "text").put("value", marker.opening))
+            for (i in 0 until original.length()) {
+                val part = original.getJSONObject(i)
+                parts.put(if (part.getString("type") == "text") org.json.JSONObject().put("type", "text").put("value", part.getString("value")) else part)
+            }
+            parts.put(org.json.JSONObject().put("type", "text").put("value", "\n</${ScheduledTaskMarker.TAG}>"))
+            parts.toString()
+        }
         if (mode is ScheduledTargetMode.ChildOfCurrent) {
             val work = TaskEngine.open(app, mode.sessionId, task.label.ifBlank { task.prompt.take(40) }, sessionId,
                 marked, prefill = prefill, routine = RoutineFire(task.id, firedAt, scheduledFire))
@@ -254,14 +264,6 @@ object ScheduledAgentRunner {
                 HeadlessChatRunner.PromptResult(status = if (ended.outcome == TaskEntity.Outcome.DONE.name) "Completed" else "Error",
                     responseText = words, timedOut = false)
             }
-        } else if (mode is ScheduledTargetMode.RerunMessage) {
-            HeadlessChatRunner.retry(
-                context = app,
-                sessionId = sessionId,
-                messageId = mode.messageId,
-                wait = wait,
-                timeoutMs = RUN_TIMEOUT_MS,
-            )
         } else {
             // momoding: the row this sends is the routine's, not the person's: the chat draws it as
             // a quiet line and the model is told so for this one turn (RoutineWakes)
@@ -278,6 +280,7 @@ object ScheduledAgentRunner {
                 wait = wait,
                 timeoutMs = RUN_TIMEOUT_MS,
                 prefill = prefill,
+                partsJson = partsJson,
             )
         }
     }.getOrElse { t ->
