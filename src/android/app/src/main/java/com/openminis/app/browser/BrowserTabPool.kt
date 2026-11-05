@@ -270,14 +270,18 @@ class BrowserTabPool(private val context: Context) : BrowserTabPoolRegistry.Regi
      * Close every tab an agent owns and forget its bookkeeping, so the slots
      * return to the chat and to other agents. Idempotent.
      */
-    suspend fun releaseTabs(owner: String) {
-        val mine = tabIdsOwnedBy(owner)
+    suspend fun releaseTabs(owner: String) = withContext(Dispatchers.Main) {
+        // A helper whose parent VM was absent owns its private pool's otherwise unlabelled tabs.
+        val mine = if (owner == sessionId) _tabs.value.map { it.id } else tabIdsOwnedBy(owner)
         for (id in mine) closeTab(id)
         lastTabByOwner.remove(owner)
         if (mine.isNotEmpty()) {
             Log.i(TAG, "[agent] released ${mine.size} tab(s) of owner ${owner.take(8)}")
         }
     }
+
+    /** VM eviction has no suspending caller, and its viewModelScope is already cancelled. */
+    fun ownerCleared(owner: String) { evictionScope.launch(Dispatchers.Main.immediate) { releaseTabs(owner) } }
 
     /**
      * Global custom viewport. `0` means "use the UA profile default".

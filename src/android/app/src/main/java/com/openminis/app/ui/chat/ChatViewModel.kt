@@ -1961,6 +1961,9 @@ class ChatViewModel(
      *  released by the child (see the helperConfig guards). */
     internal fun adoptBrowserTabPool(pool: BrowserTabPool) { _browserTabPoolRef = pool }
 
+    /** Close only this helper's tabs in the pool it actually used, without creating a pool. */
+    internal suspend fun releaseBrowserTabs(owner: String) { _browserTabPoolRef?.releaseTabs(owner) }
+
     internal val _showBrowserSheet = MutableStateFlow(false)
     val showBrowserSheet: StateFlow<Boolean> = _showBrowserSheet.asStateFlow()
 
@@ -14044,6 +14047,7 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
 
     override fun onCleared() {
         super.onCleared()
+        if (helperConfig != null) _browserTabPoolRef?.ownerCleared(activeSessionId)
         // Tear down whichever shell was actually serving this VM. Terminate
         // both ids when the rename happened, since a draft shell may still
         // linger if the agent ran a tool before `ensureSession()`.

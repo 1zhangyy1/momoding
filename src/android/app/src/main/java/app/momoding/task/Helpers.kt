@@ -72,6 +72,7 @@ object Helpers {
 
     /** A helper's task ended: the browser tabs it had go back. */
     suspend fun ended(context: Context, session: String, conversation: String) {
-        ChatViewModelStore.existing(conversation)?.browserTabPool?.releaseTabs(session)
+        val vm = ChatViewModelStore.existing(session) ?: ChatViewModelStore.existing(conversation)
+        vm?.releaseBrowserTabs(session)
     }
 }

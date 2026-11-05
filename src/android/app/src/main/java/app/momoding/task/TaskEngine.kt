@@ -674,6 +674,7 @@ object TaskEngine {
             commands.forEach { command -> after += { ShellWork.stop(command.process) } }
             if (task.hand == TaskEntity.SCREEN) after += { ScreenWork.stop(task.id, reason) }
             else after += { kotlinx.coroutines.withContext(Dispatchers.Main) { ChatViewModelStore.existing(task.hand)?.cancelTaskIfRunning(task.id) } }
+            if (Helpers.isHelper(context, task.hand)) after += { Helpers.ended(context, task.hand, task.conversation) }
             after += { handIdle(context, task.hand) }
         }
     }
