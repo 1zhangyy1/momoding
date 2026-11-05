@@ -7521,8 +7521,9 @@ class ChatViewModel(
     /** Setup failures use the same bounded inbox retry as failures inside the model loop. */
     private suspend fun inboxSetupFailed(batch: List<QueuedPrompt>, error: Throwable): Boolean =
         withContext(kotlinx.coroutines.NonCancellable) {
-            val retrying = app.momoding.task.Inbox.failed(context, activeSessionId,
-                terminal = error is CancellationException, ids = batch.map { it.id })
+            val retrying = if (error !is CancellationException || error.cause != null)
+                app.momoding.task.Inbox.failed(context, activeSessionId, terminal = false, ids = batch.map { it.id })
+                else { app.momoding.task.Inbox.complete(context, activeSessionId); false }
             refreshInbox()
             val task = app.momoding.task.TaskEngine.modelTask(context, activeSessionId)
             app.momoding.task.TaskEngine.turnFinished(context, activeSessionId, task?.id,
@@ -8731,7 +8732,6 @@ class ChatViewModel(
         val previousTail = agentHistory.lastOrNull()
         var loopReturned = false
         var loopFailure: String? = null
-        var loopCancelled = false
         var historyCleared = false
         helperWrapUpRequested = false
         val runningJob = kotlinx.coroutines.currentCoroutineContext()[Job]
@@ -8749,7 +8749,6 @@ class ChatViewModel(
             loopReturned = true
         } catch (e: Throwable) {
             loopFailure = e.message ?: e.javaClass.simpleName
-            loopCancelled = e is CancellationException
             historyCleared = generateSequence(e) { it.cause }.any { it is HistoryCleared }
             throw e
         } finally {
@@ -8759,7 +8758,7 @@ class ChatViewModel(
                 else _messages.value.lastOrNull { it.role == "assistant" }?.error
             withContext(kotlinx.coroutines.NonCancellable) {
                 val retrying = if (historyCleared) false
-                    else if (error != null) app.momoding.task.Inbox.failed(context, activeSessionId, terminal = loopCancelled)
+                    else if (error != null && runningJob?.isCancelled != true) app.momoding.task.Inbox.failed(context, activeSessionId, terminal = false)
                     else { app.momoding.task.Inbox.complete(context, activeSessionId); false }
                 refreshInbox()
                 if (!historyCleared) runCatching {
