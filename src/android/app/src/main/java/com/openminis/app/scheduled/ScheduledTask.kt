@@ -16,20 +16,12 @@ data class ScheduledRun(
     val sessionId: String?,
     val preview: String?,
     val ok: Boolean,
-    val scheduled: Boolean? = null,
-    val workId: String? = null,
-    val resultMessageId: String? = null,
-    val dispatchId: String? = null,
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("firedAt", firedAt)
         if (sessionId != null) put("sessionId", sessionId)
         if (preview != null) put("preview", preview)
         put("ok", ok)
-        scheduled?.let { put("scheduled", it) }
-        workId?.let { put("work", it) }
-        resultMessageId?.let { put("resultMessage", it) }
-        dispatchId?.let { put("dispatch", it) }
     }
 
     companion object {
@@ -38,10 +30,6 @@ data class ScheduledRun(
             sessionId = if (o.has("sessionId")) o.optString("sessionId", null) else null,
             preview = if (o.has("preview")) o.optString("preview", null) else null,
             ok = o.optBoolean("ok", true),
-            scheduled = o.opt("scheduled") as? Boolean,
-            workId = o.optString("work").takeIf(String::isNotBlank),
-            resultMessageId = o.optString("resultMessage").takeIf(String::isNotBlank),
-            dispatchId = o.optString("dispatch").takeIf(String::isNotBlank),
         )
     }
 }
@@ -222,7 +210,6 @@ data class ScheduledTask(
      * last alarm fire (INTERVAL), or re-enabling. Absolute, so a reboot or a
      * killed process resumes the same schedule instead of restarting it.
      * ON_NOTIFICATION: the last fire, for its cooldown.
-     * CALENDAR: the last claimed slot or explicit (re)arming time.
      */
     val anchorMs: Long? = null,
     /**
@@ -233,7 +220,6 @@ data class ScheduledTask(
      * --count or finish its schedule early).
      */
     val triggeredCount: Int? = null,
-    val pendingDispatch: PendingScheduledFire? = null,
 ) {
 
     val isCalendar: Boolean get() = triggerKind == ScheduledTriggerKind.CALENDAR
@@ -294,8 +280,7 @@ data class ScheduledTask(
 
         // Earliest instant we may fire: max(now, start-of-startDate). This lets
         // a task created today with a future startDate wait until that day.
-        // A calendar fire claims its slot too, including a delivery a few seconds early.
-        val floor = maxOf(now, startDateMs ?: Long.MIN_VALUE, anchorMs?.plus(1) ?: Long.MIN_VALUE)
+        val floor = maxOf(now, startDateMs ?: Long.MIN_VALUE)
 
         val cal = Calendar.getInstance().apply {
             timeInMillis = floor
@@ -382,7 +367,6 @@ data class ScheduledTask(
         if (fireIf != null) put("fireIf", fireIf)
         if (anchorMs != null) put("anchorMs", anchorMs)
         if (triggeredCount != null) put("triggeredCount", triggeredCount)
-        pendingDispatch?.let { put("pendingDispatch", it.json()) }
     }
 
     companion object {
@@ -437,7 +421,6 @@ data class ScheduledTask(
             fireIf = if (o.has("fireIf")) o.optString("fireIf", null) else null,
             anchorMs = if (o.has("anchorMs")) o.optLong("anchorMs") else null,
             triggeredCount = if (o.has("triggeredCount")) o.optInt("triggeredCount") else null,
-            pendingDispatch = o.optJSONObject("pendingDispatch")?.let(PendingScheduledFire::parse),
         )
 
         /** `{{result}}` in an on-completion prompt, replaced by the upstream's result. */

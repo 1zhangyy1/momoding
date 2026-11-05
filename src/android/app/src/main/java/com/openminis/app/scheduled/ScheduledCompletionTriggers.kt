@@ -29,9 +29,8 @@ object ScheduledCompletionTriggers {
         // MinisApp calls again once the repositories are ready.
         if (!app.subsystemsReady() || !listening.compareAndSet(false, true)) return
         scope.launch {
-            combine(TaskEngine.dao(app).endedFlow(), ScheduledTaskStore(app).observe(), app.providerRepository.config) { ended, routines, _ -> ended to routines }
+            combine(TaskEngine.dao(app).endedFlow(), ScheduledTaskStore(app).observe()) { ended, routines -> ended to routines }
                 .collect { (ended, routines) ->
-                    routines.mapNotNull { it.pendingDispatch }.forEach { ScheduledAgentRunner.deliverPending(app, it) }
                     for (work in ended) runCatching {
                         ScheduledAgentRunner.recordChildCompletion(app, work)
                         if (dependents(routines, work.id).isNotEmpty()) {
@@ -39,27 +38,7 @@ object ScheduledCompletionTriggers {
                             onUpstreamFinished(app, work.id, text)
                         }
                     }.onFailure { AppLogger.warning(TAG, "completion ${work.id}: ${it.message}") }
-                    releaseRecordedSchedules(app)
                 }
-        }
-        scope.launch {
-            TaskEngine.dao(app).routineResultsFlow().collect { rows ->
-                for (row in rows) runCatching { ScheduledAgentRunner.recordMainCompletion(app, row) }
-                    .onFailure { AppLogger.warning(TAG, "routine input ${row.id}: ${it.message}") }
-                releaseRecordedSchedules(app)
-            }
-        }
-    }
-
-    /** Rebuild the result from its persisted task/message, including a restart after acknowledgement. */
-    private suspend fun releaseRecordedSchedules(context: Context) {
-        val dao = TaskEngine.dao(context)
-        for (task in ScheduledTaskManager(context).list()) {
-            val last = task.runHistory.firstOrNull { it.scheduled == true } ?: continue
-            if (dependents(ScheduledTaskManager(context).list(), task.id).isEmpty()) continue
-            val text = last.workId?.let { id -> dao.log(id).lastOrNull { it.kind == TaskLogEntity.Kind.END.name }?.body }
-                ?: last.resultMessageId?.let { dao.routineMessage(it)?.partsJson }?.let(app.momoding.task.RoutineReceipt::text)
-            onScheduledRunFinished(context, task.id, text)
         }
     }
 
@@ -81,15 +60,7 @@ object ScheduledCompletionTriggers {
      */
     suspend fun onScheduledRunFinished(context: Context, taskId: String, result: String?) {
         val task = ScheduledTaskManager(context).get(taskId)
-        if (!scheduleFinished(task, System.currentTimeMillis()) || task?.pendingDispatch != null) return
-        val dao = TaskEngine.dao(context)
-        val key = "\"routine\":" + org.json.JSONObject.quote(taskId)
-        for (work in dao.routineTasks(key)) {
-            val logs = dao.log(work.id)
-            val fire = logs.firstOrNull { it.kind == TaskLogEntity.Kind.ROUTINE.name }?.body?.let(app.momoding.task.RoutineFire::parse)
-            if (fire?.scheduled == true && (work.state != "ENDED" || logs.none { it.kind == "ROUTINE_RECORDED" })) return
-        }
-        if (dao.hasRoutineInput(key) || dao.hasRoutineResult(key)) return
+        if (!scheduleFinished(task, System.currentTimeMillis())) return
         onUpstreamFinished(context, taskId, result)
     }
 
@@ -105,12 +76,12 @@ object ScheduledCompletionTriggers {
     internal fun scheduleFinished(task: ScheduledTask?, now: Long): Boolean {
         if (task == null) return false
         return when (task.triggerKind) {
-            ScheduledTriggerKind.AFTER, ScheduledTriggerKind.ON_COMPLETION -> (task.triggeredCount ?: 0) >= 1
+            ScheduledTriggerKind.AFTER, ScheduledTriggerKind.ON_COMPLETION -> true
             ScheduledTriggerKind.INTERVAL -> task.remainingFires == 0
             // Watches until deleted, like a daily task.
             ScheduledTriggerKind.ON_NOTIFICATION -> false
             ScheduledTriggerKind.CALENDAR ->
-                (task.repeatMode == ScheduledRepeatMode.ONCE && !task.enabled) ||
+                task.repeatMode == ScheduledRepeatMode.ONCE ||
                     (task.endDateMs != null && task.copy(enabled = true).nextTriggerMs(now) == null)
         }
     }
@@ -130,9 +101,15 @@ object ScheduledCompletionTriggers {
         val waiting = dependents(manager.list(), upstreamId)
         if (waiting.isEmpty()) return
         for (dep in waiting) {
-            val pending = manager.claimCompletionFire(dep.id, result) ?: continue
-            AppLogger.info(TAG, "upstream ${upstreamId.take(8)} finished -> delivering ${dep.id.take(8)} \"${dep.label}\"")
-            ScheduledAgentRunner.deliverPending(context, pending)
+            if (!manager.claimOneShotFire(dep.id)) continue
+            AppLogger.info(TAG, "upstream ${upstreamId.take(8)} finished -> firing ${dep.id.take(8)} \"${dep.label}\"")
+            ScheduledAgentRunner.run(
+                context,
+                dep.copy(prompt = substitute(dep.prompt, result)),
+                waitForCompletion = false,
+                // Its own fire, so a task waiting on IT is released in turn.
+                scheduledFire = true,
+            )
         }
     }
 }

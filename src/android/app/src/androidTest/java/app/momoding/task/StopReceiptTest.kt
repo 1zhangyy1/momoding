@@ -77,14 +77,6 @@ class StopReceiptTest {
         val effects = snapshot(row.id).getJSONArray("outward_actions")
         assertEquals(1, effects.length()); assertEquals("new", effects.getJSONObject(0).getString("id"))
     }
-    @Test fun stopIsIdempotentAndItsStoredSnapshotDoesNotChangeWithLateFacts(): Unit = runBlocking {
-        val row = task(); val action = action(row); stop(row.id)
-        val original = dao.log(row.id).last { it.kind == "END" }.body
-        stop(row.id); receive(action)
-        assertEquals(1, dao.log(row.id).count { it.kind == "END" })
-        assertEquals(original, dao.log(row.id).last { it.kind == "END" }.body)
-        assertEquals(2, dao.inboxFor(owner).size)
-    }
     @Test fun stopStateSnapshotAndNotificationRollBackTogether(): Unit = runBlocking {
         val row = task(); Inbox.post(dao, owner, "not read", row.id)
         assertTrue(runCatching { db.withTransaction {
@@ -93,29 +85,6 @@ class StopReceiptTest {
         assertEquals("RUNNING", dao.task(row.id)!!.state)
         assertTrue(dao.log(row.id).none { it.kind == "END" }); assertEquals("not read", dao.unread(owner).single().text)
     }
-    @Test fun aKnownActionAfterUnknownIsReportedOnceWithoutChangingTheAsk(): Unit = runBlocking {
-        val row = task(); val action = action(row); receive(action, "unobserved", unknown = true)
-        val waiting = dao.task(row.id)!!; assertEquals("WAITING", waiting.state)
-        val output = "full receipt ".repeat(400)
-        assertEquals(owner, receive(action, output)); assertNull(receive(action, "duplicate"))
-        assertNull(receive(action, "later uncertainty", unknown = true))
-        assertEquals(waiting, dao.task(row.id)); assertEquals(1, late().size); assertTrue(late().single().text.endsWith(output))
-        assertEquals(2, dao.log(row.id).count { it.kind == "RESULT" })
-        assertEquals(1, dao.log(row.id).count { it.kind == "REPORT" && it.body.contains("late action") })
-    }
-    @Test fun aStoppedCommandCanReceiveAKnownReturnAfterUnknownOnlyOnce(): Unit = runBlocking {
-        val row = task(); val command = command(row); stop(row.id)
-        receive(row.id, command, unknown = true); receive(row.id, command); receive(row.id, command)
-        assertEquals("STOPPED", dao.task(row.id)!!.outcome); assertEquals(1, dao.log(row.id).count { it.kind == "END" })
-        assertEquals(2, dao.log(row.id).count { it.kind == "COMMAND_RESULT" }); assertEquals(1, late().size)
-    }
-    @Test fun anOldCommandReturnCannotCloseOrRewriteTheNewAttempt(): Unit = runBlocking {
-        val row = task(); val command = command(row); receive(row.id, command, unknown = true)
-        mark(row.id, "END", "old attempt ended"); mark(row.id, "STARTED", "explicit new attempt")
-        val newer = row.copy(state = "WAITING", ask = """{"kind":"action_outcome_unknown","question":"a different new operation"}""")
-        dao.updateTask(newer); receive(row.id, command)
-        assertEquals(newer, dao.task(row.id)); assertEquals(1, dao.log(row.id).count { it.kind == "END" }); assertEquals(1, late().size)
-    }
     @Test fun aLateFailureFromAnOldCommandDoesNotPoisonTheNewAttemptsCloseout(): Unit = runBlocking {
         val row = task(); val command = command(row)
         mark(row.id, "END", "old failed attempt"); mark(row.id, "STARTED", "explicit new attempt")
@@ -123,25 +92,6 @@ class StopReceiptTest {
         val closed = TaskEngine.closeoutIn(dao, row.id, TaskEntity.Outcome.DONE, "new work succeeded")
         assertEquals(TaskEntity.Outcome.DONE, closed.outcome)
         assertFalse(closed.words.contains("old late failure"))
-    }
-    @Test fun lateActionResultAndOwnerNotificationRollBackTogether(): Unit = runBlocking {
-        val row = task(); val action = action(row); stop(row.id)
-        assertTrue(runCatching { db.withTransaction {
-            TaskEngine.actionFinishedIn(dao, action, "observed", true); error("injected after late result")
-        } }.isFailure)
-        assertTrue(dao.log(row.id).none { it.kind == "RESULT" }); assertTrue(late().isEmpty())
-        assertEquals(owner, receive(action)); assertEquals(1, late().size)
-    }
-    @Test fun aLateScreenResultRoutesToTheOriginalOwnerAndDoesNotReopenItsHelper(): Unit = runBlocking {
-        val helper = repo.createSession("helper", parentSessionId = owner).id
-        val parent = task("parent", helper); val child = task("screen", TaskEntity.SCREEN).copy(conversation = helper)
-        dao.updateTask(child); mark(parent.id, "CHILD", child.id)
-        mark(child.id, "SCREEN", ScreenWork.Spec(HandsOperator.Options("fixture", sessionId = helper), parent.id).json())
-        stop(parent.id)
-        repeat(2) { db.withTransaction { TaskEngine.screenFinishedIn(context, dao, after, child.id, screen()) } }
-        assertEquals(1, late().size); assertEquals(parent.id, late().single().taskId); assertTrue(dao.inboxFor(helper).isEmpty())
-        assertEquals("STOPPED", dao.task(parent.id)!!.outcome); assertEquals("STOPPED", dao.task(child.id)!!.outcome)
-        assertEquals(1, dao.log(child.id).count { it.kind == "SCREEN_RESULT" })
     }
     @Test fun theExpectedScreenCancellationDoesNotCreateAnotherLateReport(): Unit = runBlocking {
         val row = task(hand = TaskEntity.SCREEN); stop(row.id)
@@ -154,17 +104,6 @@ class StopReceiptTest {
     @Test fun aDeletedTaskCannotPostALateActionReceipt(): Unit = runBlocking {
         val row = task(); val action = action(row); repo.deleteSession(owner)
         assertNull(receive(action)); assertTrue(dao.recentTasks(20).isEmpty())
-    }
-    @Test fun aLateReceiptFromAFailedTaskCannotAuthorizeNewOutwardWork(): Unit = runBlocking {
-        val failed = task("failed", "helper"); dao.updateTask(failed.copy(state = "ENDED", outcome = "FAILED"))
-        val running = task("running", "other-helper")
-        val message = repo.appendMessage(owner, "user", "[]")
-        dao.insertInbox(InboxEntity(message.id, owner, failed.id, "HAND", "[task failed · command · late_result] observed", arrivedAt = 1, readAt = 2))
-        val binding = TaskGuard.Binding(owner, null, repo.appendMessage(owner, "assistant", "[]").id)
-        assertNull(TaskGuard.checkIn(dao, binding))
-        assertNotNull(TaskGuard.checkIn(dao, binding, outward = true))
-        assertNotNull(TaskGuard.checkIn(dao, binding, outward = true, targetTaskId = failed.id))
-        assertNull(TaskGuard.checkIn(dao, binding, outward = true, targetTaskId = running.id))
     }
     @Test fun anAutomaticStoppedChildReportCannotAuthorizeAReplayButIndependentWorkCan(): Unit = runBlocking {
         val child = task("stopped", "helper"); dao.updateTask(child.copy(state = "ENDED", outcome = "STOPPED"))

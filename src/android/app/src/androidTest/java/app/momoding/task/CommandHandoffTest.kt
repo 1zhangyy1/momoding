@@ -42,7 +42,7 @@ class CommandHandoffTest {
     private fun use(id: String, input: String) = JSONObject().put("type", "toolUse").put("value", JSONObject()
         .put("toolUseId", id).put("name", "shell_execute").put("input", input))
     private suspend fun record(value: ShellWork.Command = command) = db.withTransaction { TaskEngine.recordCommandIn(dao, task, value) }
-    private suspend fun recover() = db.withTransaction { TaskTranscript.recoverIn(db.chatDao(), dao) }
+    private suspend fun recover() = db.withTransaction { TaskTranscript.recoverIn(db.chatDao()) }
     private suspend fun receipt() = JSONArray(requireNotNull(db.chatDao().nextMessage(hand,
         requireNotNull(db.chatDao().message(call.message)).sortOrder)).partsJson).getJSONObject(0).getJSONObject("value")
     private suspend fun result(success: Boolean, unknown: Boolean = false) {
@@ -58,30 +58,6 @@ class CommandHandoffTest {
         assertEquals(command, saved); assertEquals(args, saved.savedArgs(dao, hand))
         val handoff = JSONObject(log.last().body)
         assertEquals(hand, handoff.getString("session")); assertEquals(command.id, handoff.getString("command"))
-    }
-
-    @Test fun anInterruptedHelperCallRestoresItsExistingTaskInTheHelpersTranscriptOnce(): Unit = runBlocking {
-        record(); assertEquals(1, recover())
-        val value = receipt(); assertFalse(value.getBoolean("success"))
-        assertTrue(value.getString("output").contains(task.id)); assertTrue(value.getString("output").contains("Do not create duplicates"))
-        assertTrue(db.chatDao().loadMessages(owner).isEmpty())
-        assertEquals(0, recover()); assertEquals(1, dao.recentTasks(10).size)
-        assertEquals(1, dao.log(task.id).count { it.kind == "TRANSCRIBED" })
-    }
-
-    @Test fun anObservedCommandReturnIsRecoveredInsteadOfAnInterruptedPlaceholder(): Unit = runBlocking {
-        record(); result(true); recover()
-        assertTrue(receipt().getBoolean("success")); assertTrue(receipt().getString("output").contains("the actual observed bytes"))
-    }
-
-    @Test fun aRecordedFailureKeepsItsActualCause(): Unit = runBlocking {
-        record(); result(false); recover()
-        assertFalse(receipt().getBoolean("success")); assertTrue(receipt().getString("output").contains("the actual observed bytes"))
-    }
-
-    @Test fun anUnknownReturnNeverBecomesAClaimOfSuccess(): Unit = runBlocking {
-        record(); result(true, unknown = true); recover()
-        assertFalse(receipt().getBoolean("success")); assertTrue(receipt().getString("output").contains("outcome is unknown"))
     }
 
     @Test fun transactionFailureLeavesNeitherHalfOfTheHandoff(): Unit = runBlocking {
@@ -116,7 +92,7 @@ class CommandHandoffTest {
         record()
         val returned = JSONObject().put("type", "toolResult").put("value", JSONObject()
             .put("toolUseId", call.id).put("name", call.name).put("output", "normal return").put("success", true))
-        db.withTransaction { TaskTranscript.resultsIn(db.chatDao(), dao, call.message, JSONArray().put(returned)) }
+        db.withTransaction { TaskTranscript.resultsIn(db.chatDao(), call.message, JSONArray().put(returned)) }
         assertEquals(0, recover()); assertEquals("normal return", receipt().getString("output"))
     }
 }

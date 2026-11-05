@@ -73,10 +73,15 @@ object ScheduledNotificationTriggers {
             val now = System.currentTimeMillis()
             for (task in watching) {
                 if (!matches(task, posted, smsPackage)) continue
-                val pending = manager.claimNotificationFire(task.id, now, posted) ?: continue
+                if (!manager.claimNotificationFire(task.id, now)) continue
                 AppLogger.info(TAG, "${posted.pkg} -> firing ${task.id.take(8)} \"${task.label}\"")
                 fired++
-                ScheduledAgentRunner.deliverPending(app, pending)
+                ScheduledAgentRunner.run(
+                    app,
+                    task.copy(prompt = substitute(task.prompt, posted)),
+                    waitForCompletion = false,
+                    scheduledFire = true,
+                )
             }
         }.onFailure { AppLogger.warning(TAG, "on-notification failed: ${it.message}") }
         return fired

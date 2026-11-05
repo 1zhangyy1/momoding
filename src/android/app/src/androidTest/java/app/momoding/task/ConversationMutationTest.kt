@@ -145,19 +145,6 @@ class ConversationMutationTest {
         remove(source.id)
         assertNull(db.chatDao().getSession(owner)!!.lastMessage)
     }
-    @Test fun aCompoundCreateAndTellRecoversOneTaskPerIdentity(): Unit = runBlocking {
-        val use = JSONArray().put(JSONObject().put("type", "toolUse").put("value", JSONObject()
-            .put("toolUseId", "call").put("name", "shell_execute").put("input", "{}"))).toString()
-        val call = repo.appendMessage(owner, "assistant", use)
-        val work = task("work", null)
-        val record = JSONObject().put("tool", ToolCall(call.id, "call", "shell_execute").json()).put("session", owner).put("task", work.id).toString()
-        repeat(2) { mark(work.id, "HANDOFF", record) }
-        db.withTransaction { TaskTranscript.recoverIn(db.chatDao(), dao) }
-        val receipt = db.chatDao().loadMessages(owner).single { it.role == "user" }
-        val output = JSONArray(receipt.partsJson).getJSONObject(0).getJSONObject("value").getString("output")
-        assertEquals(1, JSONObject(output).getJSONArray("tasks").length())
-        assertEquals(1, dao.recentTasks(10).size)
-    }
     @Test fun correctionMetadataRoundTripsWhileProvidersStillSeeOrdinaryQuotedText(): Unit = runBlocking {
         val correction = MessageCorrection("source", "first line\nsecond line", "replacement")
         val result = JSONArray(correction.prepend(parts("Change to: replacement")))
