@@ -11,6 +11,7 @@ import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import app.momoding.guard.GateOutcome
 import app.momoding.guard.RiskGate
+import app.momoding.task.TaskGuard
 import com.openminis.app.data.model.LLMMessage
 import com.openminis.app.logging.AppLogger
 import com.openminis.app.provider.ProviderFactory
@@ -180,6 +181,13 @@ class AppBridge(private val context: Context, private val webView: WebView, priv
         val name = argv.firstOrNull() ?: throw IllegalArgumentException("momoding.run needs a command")
         if (!runnable(name)) throw IllegalArgumentException("$name is not a phone command an app can run (android-*, momoding-web, minis-scheduled)")
         require(name in NativeOffloadServer.registeredHandlers) { "$name is not available" }
+        // The agent's check changes nothing on the phone.
+        if (preview && !reads(argv)) {
+            MoApps.log(app, "log preview", "momoding.run(${JSONObject.quote(command)}) — not done in a check; on the phone it would be")
+            return JSONObject().put("code", 0).put("output", "").put("preview", true)
+        }
+        val gateSession = app.botSession ?: MainChat.resolve(context, (context.applicationContext as MinisApp).chatRepository)
+        val binding = TaskGuard.bind(context, gateSession)
         // what this app may use is the person's choice, asked on its screen (the agent's own checks are its work, not the app's)
         val allowed = when (mode) {
             Mode.SCREEN -> AppPermissions.check(app, name)
@@ -187,16 +195,10 @@ class AppBridge(private val context: Context, private val webView: WebView, priv
             Mode.PREVIEW -> true
         }
         if (!allowed) throw IllegalStateException("the person has not allowed this app to use $name")
-        // the agent's own check sees real answers, but changes nothing on the phone (an event, a text)
-        if (preview && !reads(argv)) {
-            MoApps.log(app, "log preview", "momoding.run(${JSONObject.quote(command)}) — not done in a check; on the phone it would be")
-            return JSONObject().put("code", 0).put("output", "").put("preview", true)
-        }
         // The UI keeps its original promise; an interrupted caller can resume from its saved recipe.
-        val gateSession = app.botSession ?: MainChat.resolve(context, (context.applicationContext as MinisApp).chatRepository)
         val recipe = JSONObject().put("command", command).put("tool_title", app.title + ": " + command).toString()
         val gate = RiskGate.checkShell(gateSession, command, summary = app.title + ": " + command,
-            shellArgs = recipe)
+            shellArgs = recipe, binding = binding)
         when (gate) {
             is GateOutcome.Denied -> throw IllegalStateException(gate.message)
             is GateOutcome.Waiting -> return JSONObject().put("code", 202).put("task", gate.taskId).put("output", "Waiting for approval.")
@@ -207,7 +209,7 @@ class AppBridge(private val context: Context, private val webView: WebView, priv
         val r = try {
             NativeOffloadServer.dispatch(NativeOffloadRequest(pid = 0, argv = argv,
                 env = action?.command?.let { mapOf("MINIS_EXECUTION_ID" to it.process) }.orEmpty(),
-                cwd = "/", sessionId = gateSession)).also { executed = it }
+                cwd = "/", sessionId = gateSession, binding = binding.copy(taskId = action?.taskId ?: binding.taskId))).also { executed = it }
         } finally {
             kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
                 RiskGate.finished(action, executed?.output ?: "The native command was interrupted; verify its outcome before repeating.",

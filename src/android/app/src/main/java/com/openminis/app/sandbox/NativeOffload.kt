@@ -41,6 +41,8 @@ data class NativeOffloadRequest(
      * to `OFFLOAD_GLOBAL_SESSION_ID` in that case.
      */
     val sessionId: String? = null,
+    /** Direct Android callers capture their invocation before waiting; shell IPC resolves its process. */
+    val binding: app.momoding.task.TaskGuard.Binding? = null,
 )
 
 data class NativeOffloadResult(

@@ -723,7 +723,8 @@ class MinisApp : Application(), ImageLoaderFactory {
 
         NativeOffloadServer.taskGuard = { request ->
             request.sessionId?.let { hand -> kotlinx.coroutines.runBlocking {
-                val binding = app.momoding.task.TaskGuard.bind(this@MinisApp, hand, process = request.env["MINIS_EXECUTION_ID"])
+                val binding = request.binding ?: app.momoding.task.TaskGuard.bind(this@MinisApp, hand, process = request.env["MINIS_EXECUTION_ID"])
+                if (binding.hand != hand) return@runBlocking "This invocation belongs to another conversation."
                 app.momoding.task.TaskGuard.check(this@MinisApp, binding)
             } }
         }

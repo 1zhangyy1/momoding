@@ -129,23 +129,26 @@ object RiskGate {
 
     suspend fun checkShell(sessionId: String, command: String, summary: String? = null, taskId: String? = null,
         shellArgs: String? = null, defer: Boolean = false,
+        binding: TaskGuard.Binding? = null,
     ): GateOutcome {
         val context = requireNotNull(appContext) { "The approval gate is not ready." }
         val ticket = shellArgs?.let { JSONObject(it).optString(Approval.TICKET_ARG).ifBlank { null } }
         if (ticket != null) return outcome(TaskEngine.claimApproval(context, sessionId, ticket, shellArgs))
         return check(sessionId, GuardKind.SHELL, ShellGuard.assess(command), command.trim(), summary = summary,
             taskId = taskId, shellArgs = shellArgs, defer = defer,
-            mode = if (defer) Approval.Mode.SHELL else Approval.Mode.NATIVE)
+            mode = if (defer) Approval.Mode.SHELL else Approval.Mode.NATIVE, invocation = binding)
     }
 
     suspend fun check(sessionId: String, kind: GuardKind, assessment: RiskAssessment, preview: String,
         pageUrl: String? = null, elementText: String? = null, summary: String? = null, taskId: String? = null,
         shellArgs: String? = null, defer: Boolean = false,
         mode: Approval.Mode = if (kind == GuardKind.SCREEN) Approval.Mode.SCREEN else Approval.Mode.NATIVE,
+        invocation: TaskGuard.Binding? = null,
     ): GateOutcome {
         val context = requireNotNull(appContext) { "The approval gate is not ready." }
         val hand = if (kind == GuardKind.SCREEN && taskId != null) TaskEntity.SCREEN else sessionId
-        val binding = TaskGuard.bind(context, hand, taskId)
+        val binding = invocation ?: TaskGuard.bind(context, hand, taskId)
+        require(binding.hand == hand) { "This invocation belongs to another conversation." }
         val outward = assessment.riskClass != RiskClass.SAFE || assessment.needsApproval
         TaskGuard.check(context, binding, outward, allowWaiting = true)?.let { return GateOutcome.Denied(it) }
         if (!outward) return GateOutcome.Allowed()
