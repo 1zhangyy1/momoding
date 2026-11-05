@@ -63,7 +63,7 @@ class ShellGuardTest {
     @Test fun `plain work is safe`() {
         for (cmd in listOf(
             "ls -la", "cat notes.md | head -20", "grep -rn TODO src/", "python3 report.py > out.csv",
-            "curl -s https://api.example.com/v1/items", "wget https://example.com/a.zip -O /tmp/a.zip",
+            "curl -s https://api.example.com/v1/items", "wget https://example.com/a.zip -O /tmp/a.zip", "wget -qO- -T 20 https://api.github.com/repos/o/r/releases/latest",
             "git status && git log --oneline -5", "git commit -am 'x'", "mkdir -p out && cp a.txt out/",
             "sed -i 's/a/b/' file.txt", "echo hi > /tmp/x", "lark-cli calendar +agenda --today",
             "lark-cli im +list-chats", "gh pr list", "gh api repos/o/r/issues", "rmdir empty",

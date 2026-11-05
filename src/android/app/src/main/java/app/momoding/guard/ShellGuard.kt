@@ -57,6 +57,7 @@ object ShellGuard {
     private val readOnlyVerbs = Regex("^\\+?(list|ls|get|search|read|show|status|help|download|fetch|export|whoami|agenda|consume|view|info|cat|describe|check|history|query|find|stat|watch|tail|log|logs|diff|open|print|version|doctor)(\\b|$)", RegexOption.IGNORE_CASE)
     private val moneyWords = Regex("(\\bpay\\b|payment|checkout|purchase|\\border\\b|transfer|alipay|wxpay|wechatpay|weixin.?pay|stripe|paypal|billing|subscribe|topup|top-up|recharge|refund|支付|付款|下单|转账|充值|购买|结算|退款)", RegexOption.IGNORE_CASE)
     private val dataFlags = setOf("-d", "--data", "--data-raw", "--data-binary", "--data-urlencode", "--data-ascii", "-F", "--form", "--form-string", "--json", "-T", "--upload-file", "--post-data", "--post-file", "--body", "--body-file", "-I")
+    private val wgetSends = setOf("--post-data", "--post-file", "--body-data", "--body-file")
     private val writeMethods = setOf("POST", "PUT", "PATCH", "DELETE")
     private val urlRegex = Regex("https?://([^/\\s:'\"]+)", RegexOption.IGNORE_CASE)
     private val hostArg = Regex("^(?:[\\w.-]+@)?([\\w.-]+\\.[a-z]{2,}|\\d{1,3}(?:\\.\\d{1,3}){3}|[\\w-]+)(?::|$)", RegexOption.IGNORE_CASE)
@@ -222,6 +223,9 @@ object ShellGuard {
             ?: args.firstOrNull { !it.startsWith("-") && Regex("^[\\w.-]+\\.[a-z]{2,}(/|$)", RegexOption.IGNORE_CASE).containsMatchIn(it) }?.substringBefore("/")
         var method: String? = null
         var sendsData = false
+        // wget's short flags mean other things (-T timeout, -d debug): only its long send flags count.
+        if (program == "wget") return if (args.any { it.substringBefore("=") in wgetSends } || args.any { it.startsWith("--method=") && it.substringAfter("=").uppercase() in writeMethods })
+            RiskAssessment(RiskClass.OUTBOUND, "POSTs to ${host ?: "a server"}", host) else RiskAssessment.SAFE
         args.forEachIndexed { i, a ->
             when {
                 a == "-X" || a == "--request" -> method = args.getOrNull(i + 1)?.uppercase()
