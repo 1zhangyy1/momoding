@@ -1,141 +1,56 @@
 package com.openminis.app.provider
 
 import com.openminis.app.data.model.AgentContentPart
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
+import com.openminis.app.data.model.LLMMessage
+import com.openminis.app.data.model.LLMModel
+import com.openminis.app.provider.openai.OpenAIProvider
+import org.json.JSONArray
+import org.json.JSONObject
+import org.junit.Assert.*
 import org.junit.Test
 
-/**
- * [T-android-parallel-toolresult-image-split] The `tool` replies answering one
- * assistant's tool_calls must reach the wire CONTIGUOUSLY, with image carriers
- * appended after the whole run.
- *
- * The reported bug: two parallel `read_image` calls made DeepSeek reject the
- * request with `[400] No tool output found for tool call call_…`. The provider
- * emitted, per result, a `tool` message immediately followed by that result's
- * image-carrier `user` message — so with two calls the carrier landed BETWEEN
- * the two `tool` replies and ended the run, leaving the second call unanswered.
- *
- * With a single image the carrier lands after the only `tool` message and
- * nothing is split, which is exactly why the bug needed TWO parallel calls to
- * appear and why single-image chats always worked.
- *
- * Strictness is the only thing that varied between providers — GLM accepted the
- * same malformed body, DeepSeek did not. The body was wrong in both cases, so
- * this pins the ordering rather than any one provider's tolerance.
- *
- * Mirrors the provider's emission order rather than calling into it: the real
- * loop needs an OkHttp stack and credentials, while the defect is entirely in
- * the sequence the loop produces.
- */
+/** Inspect the real request: adjacent user words merge; tool replies and media keep their order. */
 class ParallelToolResultImageOrderTest {
+    private fun user(text: String, structured: Boolean = false) = LLMMessage(LLMMessage.Role.USER, text,
+        contentParts = if (structured) listOf(AgentContentPart.Text(text)) else emptyList())
+    private fun body(messages: List<LLMMessage>): JSONArray = OpenAIProvider("k",
+        LLMModel("fixture", "fixture", "test", inputModalities = listOf("text", "image")),
+        basePath = "https://example.invalid/v1").buildRequestBody(messages, null, 1024, false, null, emptyList()).getJSONArray("messages")
+    private fun roles(body: JSONArray) = (0 until body.length()).map { body.getJSONObject(it).getString("role") }
 
-    private fun result(id: String, withImage: Boolean) = AgentContentPart.ToolResult(
-        id = id,
-        name = "read_image",
-        content = "ok",
-        imageData = if (withImage) byteArrayOf(1, 2, 3) else null,
-        imageMimeType = if (withImage) "image/png" else null,
-    )
-
-    /** The FIXED emission order: every `tool`, then every carrier. */
-    private fun emit(results: List<AgentContentPart.ToolResult>): List<String> {
-        val out = mutableListOf<String>()
-        val carriers = mutableListOf<String>()
-        for (tr in results) {
-            out.add("tool:${tr.id}")
-            if (tr.imageData != null) carriers.add("user-image:${tr.id}")
+    @Test fun consecutiveWordsBecomeOneUserTurnWithoutCrossingTheAssistant() {
+        for (structured in listOf(false, true)) {
+            val body = body(listOf(user("first", structured), user("second", structured), user("third", structured),
+                LLMMessage(LLMMessage.Role.ASSISTANT, "answer"), user("next", structured)))
+            assertEquals(listOf("user", "assistant", "user"), roles(body))
+            assertEquals("first\n\nsecond\n\nthird", body.getJSONObject(0).getString("content"))
+            assertEquals("next", body.getJSONObject(2).getString("content"))
         }
-        out.addAll(carriers)
-        return out
     }
 
-    /** The ORIGINAL order, kept so the regression is expressible. */
-    private fun emitInterleaved(results: List<AgentContentPart.ToolResult>): List<String> {
-        val out = mutableListOf<String>()
-        for (tr in results) {
-            out.add("tool:${tr.id}")
-            if (tr.imageData != null) out.add("user-image:${tr.id}")
-        }
-        return out
+    @Test fun mergedWordsKeepTheAudioBetweenItsCaptions() {
+        val body = body(listOf(user("before"), LLMMessage(LLMMessage.Role.USER, "audio caption",
+            audioParts = listOf(LLMMessage.AudioPart("wav", "YWJj"))), user("after", true)))
+        assertEquals(listOf("user"), roles(body))
+        val parts = body.getJSONObject(0).getJSONArray("content")
+        assertEquals(listOf("text", "input_audio", "text", "text"), (0 until parts.length()).map { parts.getJSONObject(it).getString("type") })
+        assertEquals("before", parts.getJSONObject(0).getString("text"))
+        assertEquals("YWJj", parts.getJSONObject(1).getJSONObject("input_audio").getString("data"))
+        assertEquals("audio caption", parts.getJSONObject(2).getString("text")); assertEquals("after", parts.getJSONObject(3).getString("text"))
     }
 
-    /** True when no non-tool message sits between the first and last `tool`. */
-    private fun toolRunIsContiguous(seq: List<String>): Boolean {
-        val first = seq.indexOfFirst { it.startsWith("tool:") }
-        val last = seq.indexOfLast { it.startsWith("tool:") }
-        if (first < 0) return true
-        return (first..last).all { seq[it].startsWith("tool:") }
-    }
-
-    @Test
-    fun `two parallel image results keep the tool run contiguous`() {
-        val seq = emit(listOf(result("call_01", true), result("call_02", true)))
-        assertEquals(
-            listOf("tool:call_01", "tool:call_02", "user-image:call_01", "user-image:call_02"),
-            seq,
-        )
-        assertTrue("both tool replies must be adjacent", toolRunIsContiguous(seq))
-    }
-
-    @Test
-    fun `the old interleaved order split the run - this is the reported 400`() {
-        // Proves the test is not vacuous: the pre-fix order fails the same
-        // predicate the fix satisfies, and fails it exactly at two calls.
-        val seq = emitInterleaved(listOf(result("call_01", true), result("call_02", true)))
-        assertEquals(
-            listOf("tool:call_01", "user-image:call_01", "tool:call_02", "user-image:call_02"),
-            seq,
-        )
-        assertTrue(
-            "the carrier between the two tool replies is what orphaned call_02",
-            !toolRunIsContiguous(seq),
-        )
-    }
-
-    @Test
-    fun `a single image result was never split - why the bug needed parallelism`() {
-        // Both orders agree here. This is the case that always worked, and the
-        // reason the defect survived: it is invisible until two calls run.
-        val one = listOf(result("call_01", true))
-        assertEquals(emit(one), emitInterleaved(one))
-        assertTrue(toolRunIsContiguous(emit(one)))
-    }
-
-    @Test
-    fun `results without images are unaffected`() {
-        val seq = emit(listOf(result("call_01", false), result("call_02", false)))
-        assertEquals(listOf("tool:call_01", "tool:call_02"), seq)
-        assertTrue(toolRunIsContiguous(seq))
-    }
-
-    @Test
-    fun `a mixed batch still emits every tool reply before any carrier`() {
-        // The image may be on the FIRST of several calls — the shape most
-        // likely to split a run, since every later tool reply follows the
-        // carrier under the old order.
-        val seq = emit(
-            listOf(result("call_01", true), result("call_02", false), result("call_03", true)),
-        )
-        assertEquals(
-            listOf(
-                "tool:call_01", "tool:call_02", "tool:call_03",
-                "user-image:call_01", "user-image:call_03",
-            ),
-            seq,
-        )
-        assertTrue(toolRunIsContiguous(seq))
-    }
-
-    @Test
-    fun `carriers stay in call order so captions match their images`() {
-        // Grouping the carriers is only safe if their order is preserved: the
-        // caption names the tool_call_id, and a reordered batch would attach
-        // the wrong id to the wrong pixels.
-        val seq = emit(listOf(result("call_A", true), result("call_B", true), result("call_C", true)))
-        assertEquals(
-            listOf("user-image:call_A", "user-image:call_B", "user-image:call_C"),
-            seq.filter { it.startsWith("user-image:") },
-        )
+    @Test fun parallelToolRepliesStayTogetherBeforeTheirMergedImagesAndFollowUp() {
+        val png = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0x0D, 0x49, 0x48, 0x44, 0x52)
+        val calls = listOf("call_A", "call_B")
+        val body = body(listOf(user("read both"), LLMMessage(LLMMessage.Role.ASSISTANT, "",
+            contentParts = calls.map { AgentContentPart.ToolUse(it, "read_image", JSONObject()) }),
+            LLMMessage(LLMMessage.Role.USER, "", contentParts = calls.map {
+                AgentContentPart.ToolResult(it, "read_image", "ok", imageData = png, imageMimeType = "image/png") }), user("follow up")))
+        assertEquals(listOf("user", "assistant", "tool", "tool", "user"), roles(body))
+        assertEquals(calls, listOf(2, 3).map { body.getJSONObject(it).getString("tool_call_id") })
+        val parts = body.getJSONObject(4).getJSONArray("content")
+        assertEquals(listOf("text", "image_url", "text", "image_url", "text"), (0 until parts.length()).map { parts.getJSONObject(it).getString("type") })
+        assertTrue(parts.getJSONObject(0).getString("text").contains("call_A")); assertTrue(parts.getJSONObject(2).getString("text").contains("call_B"))
+        assertEquals("follow up", parts.getJSONObject(4).getString("text"))
     }
 }

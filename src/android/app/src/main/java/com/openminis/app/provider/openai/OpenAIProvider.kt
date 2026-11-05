@@ -2255,6 +2255,22 @@ class OpenAIProvider private constructor(
             })
         }
 
+        fun appendUser(content: Any) {
+            val last = messagesArray.optJSONObject(messagesArray.length() - 1)
+            if (last?.optString("role") != "user") {
+                messagesArray.put(JSONObject().put("role", "user").put("content", content))
+                return
+            }
+            val previous = last.get("content")
+            val merged = if (previous is String && content is String) "$previous\n\n$content" else JSONArray().apply {
+                for (value in listOf(previous, content)) {
+                    if (value is JSONArray) for (i in 0 until value.length()) put(value.get(i))
+                    else put(JSONObject().put("type", "text").put("text", value))
+                }
+            }
+            last.put("content", merged)
+        }
+
         // Mirror iOS OpenAIAgentProvider.flattenChatCompletionsMessages —
         // echo reasoning_content on prior assistant turns when:
         //   - user requested thinking this turn, OR the model always reasons (forced); AND
@@ -2385,20 +2401,8 @@ class OpenAIProvider private constructor(
                                 put("tool_call_id", capChatToolCallId(tr.id))
                                 put("content", tr.content)
                             })
-                            // [T-android-toolresult-image-dropped] THE reported bug.
-                            // read_image hands its pixels back on the ToolResult
-                            // (ChatViewModel sets imageData on the part), but this
-                            // loop only ever emitted `content`, so on a native-vision
-                            // model the bytes were dropped at the provider boundary
-                            // and the model answered "I can't actually see pixels" —
-                            // with a green, successful-looking tool card above it.
-                            //
-                            // Chat Completions has no image block inside a `tool`
-                            // message (the schema takes a plain string), so the
-                            // pixels ride on a following USER message that references
-                            // the call. Anthropic can nest the image directly in its
-                            // tool_result and does (AnthropicProvider ~L600); this is
-                            // the same intent expressed in the shape this API allows.
+                            // Chat Completions carries tool-result images in a user message
+                            // after the complete tool run, retaining each call's identity.
                             val trBytes = tr.imageData
                             if (trBytes != null && trBytes.isNotEmpty() && supportsImages) {
                                 // [T-android-image-upload-format] Accepted format +
@@ -2439,14 +2443,7 @@ class OpenAIProvider private constructor(
                         }
                         // Carriers go here — after EVERY `tool` reply, so the run
                         // answering the assistant's tool_calls is contiguous.
-                        for (carrier in imageCarriers) messagesArray.put(carrier)
-                        // T132: emit text + image_url parts as a structured user
-                        // message. The previous structured-contentParts branch
-                        // dropped AgentContentPart.ImageData entirely — only the
-                        // legacy non-contentParts path knew how to encode images,
-                        // and that path is unreachable once contentParts is
-                        // populated (which is always now). Mirrors iOS
-                        // OpenAIAgentProvider.swift L732-738.
+                        for (carrier in imageCarriers) appendUser(carrier.get("content"))
                         val hasImages = imageParts.isNotEmpty()
                         if (hasImages || textParts.isNotEmpty()) {
                             if (hasImages) {
@@ -2498,15 +2495,9 @@ class OpenAIProvider private constructor(
                                         else -> Unit  // ToolUse/ToolResult never appear on user role here
                                     }
                                 }
-                                messagesArray.put(JSONObject().apply {
-                                    put("role", "user")
-                                    put("content", contentArray)
-                                })
+                                appendUser(contentArray)
                             } else {
-                                messagesArray.put(JSONObject().apply {
-                                    put("role", "user")
-                                    put("content", textParts.joinToString("") { it.text })
-                                })
+                                appendUser(textParts.joinToString("") { it.text })
                             }
                         }
                     }
@@ -2607,7 +2598,7 @@ class OpenAIProvider private constructor(
                     obj.put("content", msg.content)
                 }
 
-                messagesArray.put(obj)
+                if (msg.role == LLMMessage.Role.USER) appendUser(obj.get("content")) else messagesArray.put(obj)
             }
         }
         // [T-dedupe-toolcallid follow-up] Cross-message defense-in-depth:
