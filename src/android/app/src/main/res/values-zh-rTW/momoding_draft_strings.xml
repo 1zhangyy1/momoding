@@ -23,4 +23,5 @@
     <string name="mo_draft_failed_sms">可能沒訊號或沒插卡</string>
     <string name="mo_draft_ambiguous">這個名字下有 %1$s 個號碼，告訴我傳哪個。</string>
     <string name="mo_draft_attention">這次傳送需要你確認，請先在對話裡核實，再決定是否重傳。</string>
+    <string name="mo_draft_replied">草稿之後這段對話有了新訊息，先沒傳。</string>
 </resources>

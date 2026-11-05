@@ -72,6 +72,15 @@ object SmsSend {
         }.orEmpty().filter { it.first.length >= 5 }
     }.getOrDefault(emptyList())
 
+    /** Whether the SMS conversation with [number] has a message after [since] — either side. False when the phone's texts cannot be read. */
+    fun newSince(context: Context, number: String, since: Long): Boolean = runCatching {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED) return false
+        val tail = clean(number).takeLast(8)
+        context.contentResolver.query(android.provider.Telephony.Sms.CONTENT_URI, arrayOf(android.provider.Telephony.Sms._ID),
+            "${android.provider.Telephony.Sms.DATE} > ? AND ${android.provider.Telephony.Sms.ADDRESS} LIKE ?", arrayOf(since.toString(), "%$tail"), null,
+        )?.use { it.count > 0 } ?: false
+    }.getOrDefault(false)
+
     /** Sends [text] to [number]; true once every part is reported sent (30 s at most). */
     fun send(context: Context, number: String, text: String): Boolean {
         val sms = runCatching {

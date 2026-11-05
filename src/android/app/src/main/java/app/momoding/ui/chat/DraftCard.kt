@@ -84,7 +84,8 @@ fun DraftCard(code: String) {
                 if (!sending) PillButton(stringResource(R.string.mo_draft_discard), primary = false) {
                     Drafts.set(context, key, Drafts.State(Drafts.Status.DISCARDED, text))
                 }
-                PillButton(
+                // A draft the conversation has moved past is not sent again; a new card comes instead.
+                if (state.note != "replied") PillButton(
                     stringResource(
                         when (state.status) {
                             Drafts.Status.SENDING -> R.string.mo_draft_sending
@@ -113,6 +114,7 @@ private fun failedLine(note: String?): String = when {
     note == "hands_off" -> stringResource(R.string.mo_draft_failed, stringResource(R.string.mo_draft_failed_hands))
     note == "busy" -> stringResource(R.string.mo_draft_failed, stringResource(R.string.mo_draft_failed_busy))
     note == "stopped" -> stringResource(R.string.mo_draft_failed, stringResource(R.string.mo_draft_failed_stopped))
+    note == "replied" -> stringResource(R.string.mo_draft_replied)
     note == "sms_failed" -> stringResource(R.string.mo_draft_failed, stringResource(R.string.mo_draft_failed_sms))
     note.startsWith("ambiguous:") -> stringResource(R.string.mo_draft_ambiguous, note.removePrefix("ambiguous:"))
     else -> stringResource(R.string.mo_draft_failed, note.take(120))

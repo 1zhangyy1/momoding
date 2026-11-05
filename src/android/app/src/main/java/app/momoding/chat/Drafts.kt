@@ -157,6 +157,15 @@ object Drafts {
             is SmsSend.Resolved.Several -> return State(Status.FAILED, text, "ambiguous:" + r.count)
             SmsSend.Resolved.None -> null
         }
+        // The card was approved against the conversation as it was; a newer message there may change what to say.
+        val written = (context.applicationContext as com.openminis.app.MinisApp).database.chatDao().message(source.substringBefore('#'))?.createdAt
+        if (number != null && written != null && SmsSend.newSince(context, number, written)) {
+            app.momoding.task.Inbox.post(TaskEngine.dao(context), conversation, "${TaskEngine.REPORT_CUE}${d.id} · sms draft · not_sent] The person tapped Send on the SMS draft to ${d.to.ifBlank { number }}, " +
+                "but that conversation has new messages since the draft was written, so it was not sent. Read them and tell the person; offer a new draft if it should change.",
+                sender = app.momoding.task.InboxEntity.Sender.COMMAND)
+            app.momoding.task.Inbox.wake(context, conversation)
+            return State(Status.FAILED, text, "replied")
+        }
         if (number != null && SmsSend.canSend(context)) {
             return sendApprovedSms(context, d, number, text, conversation, source) { recipient, body -> SmsSend.send(context, recipient, body) }
         }

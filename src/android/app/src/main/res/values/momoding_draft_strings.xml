@@ -23,4 +23,5 @@
     <string name="mo_draft_failed_sms">maybe no signal or no SIM</string>
     <string name="mo_draft_ambiguous">There are %1$s numbers under that name; tell me which one.</string>
     <string name="mo_draft_attention">This send needs your attention. Reply in the chat before trying again.</string>
+    <string name="mo_draft_replied">The conversation has new messages since this draft, so it was not sent.</string>
 </resources>
