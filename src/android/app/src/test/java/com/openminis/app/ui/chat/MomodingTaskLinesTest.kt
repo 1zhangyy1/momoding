@@ -34,13 +34,15 @@ class MomodingTaskLinesTest {
         assertEquals(1, rows.count { it is FlatChatItem.UserBubble })
         assertEquals(listOf("a1b2c3"), rows.filterIsInstance<FlatChatItem.MomodingTask>().map { it.taskId })
     }
-    @Test fun `a failed visible receive has one retry on its bubble`() {
+    @Test fun `a failed visible receive says why and keeps its one retry on the bubble`() {
         val rows = buildFlatChatItems(listOf(
             ChatMessage(id = "receive", role = "user", content = "keep these words", inboxId = "receive", inboxFailed = true),
             ChatMessage(id = "failure", role = "assistant", content = "", error = "provider failed"),
         ), showSteps = false)
         assertEquals("receive", rows.filterIsInstance<FlatChatItem.UserBubble>().single().message.inboxId)
-        assertTrue(rows.none { it is FlatChatItem.AssistantError })
+        val error = rows.filterIsInstance<FlatChatItem.AssistantError>().single()
+        assertEquals("provider failed", error.error)
+        assertEquals(null, error.retryInboxId)
     }
 
     @Test fun `a hidden hand report retries the original receive from its error row`() {

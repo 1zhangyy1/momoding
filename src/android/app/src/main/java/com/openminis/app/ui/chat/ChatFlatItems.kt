@@ -1073,14 +1073,13 @@ internal fun buildFlatChatItems(
             )))
         }
 
-        // A failed receive owns its retry. A visible user bubble already has the
-        // control; a hidden hand/routine result needs the error row to offer it.
+        // A failed turn always says why. Its retry lives in one place: on the person's bubble when
+        // it shows one, otherwise (a hand's or a routine's hidden words) on this row.
         message.error?.let { error ->
             val received = messages.subList(0, idx).lastOrNull { it.role == "user" }
             val failed = received?.takeIf { it.inboxFailed }
-            if (failed == null || !failed.rendersAsUserBubble()) {
-                out.add(dedupe(FlatChatItem.AssistantError(message.id, error, retryInboxId = failed?.inboxId)))
-            }
+            val retry = failed?.takeIf { !it.rendersAsUserBubble() }?.inboxId
+            out.add(dedupe(FlatChatItem.AssistantError(message.id, error, retryInboxId = retry)))
         }
 
         // momoding: rule notice, always visible (it explains why nobody was asked)
