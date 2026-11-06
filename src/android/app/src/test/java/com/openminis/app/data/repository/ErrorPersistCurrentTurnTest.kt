@@ -240,10 +240,10 @@ class ErrorPersistCurrentTurnTest {
 
     @Test
     fun `every agentHistory rebuild from rows skips carriers`() {
+        // Rows rebuilt into the model's history; inbox inputs (`row.toLLMMessage()`) are the person's words, never carriers.
         val rebuilds = Regex("\\.add\\(entity\\.toLLMMessage\\(\\)\\)").findAll(vm).count()
-        val guards = Regex("if \\(ChatRepository\\.isEmptyAssistantCarrier\\(entity\\.role, entity\\.partsJson\\)\\) continue")
-            .findAll(vm).count()
-        assertTrue("expected rebuild sites", rebuilds >= 5)
+        val guards = Regex("ChatRepository\\.isEmptyAssistantCarrier\\(entity\\.role, entity\\.partsJson\\)").findAll(vm).count()
+        assertTrue("expected rebuild sites", rebuilds >= 1)
         assertEquals("each toLLMMessage rebuild needs its carrier guard", rebuilds, guards)
     }
 }
