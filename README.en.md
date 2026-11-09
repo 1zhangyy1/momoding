@@ -27,17 +27,21 @@ Add a home-screen shortcut, use it, and ask its own Bot for changes as you go.</
 
 <p align="center"><sub>Screenshots from an Android emulator with the English interface (DeepSeek V4.1 Flash); the train app and photo album screens are illustrations.</sub></p>
 
-> **Current version: 1.0.9, still moving fast.** You can create small apps in a chat and let several Bots work on them. Most polishing so far happened on an emulator and a few real phones; background reliability on heavily customised Android builds is still being tested. Please [open an issue](https://github.com/1zhangyy1/momoding/issues/new/choose) when something goes wrong.
+> **Current version: 1.0.10, still moving fast.** You can create small apps in a chat, let several Bots work on them, and follow each job you hand off as its own task. Most polishing so far happened on an emulator and a few real phones; background reliability on heavily customised Android builds is still being tested. Please [open an issue](https://github.com/1zhangyy1/momoding/issues/new/choose) when something goes wrong.
 
 ---
 
-## Recent update 1.0.9
+## Recent update 1.0.10: Every job you hand off is a task
 
-- Fixed scrolling in app chats and missing handoffs when several Bots receive work in one step.
-- Fixed false “send” approval prompts while editing app code. Actual sends, uploads and deletions still require checks.
-- Added an idle timeout for model streams without useful output and prompt cancellation of blocked network reads.
+- **One line per job.** Ask for several things at once and each gets its own line in the chat, showing in progress, done or stopped. Your message turns ✅ only when all of them are done.
+- **Keep chatting while it works.** Ask something else while a helper is busy and the main chat answers right away.
+- **Add to it or stop it.** Say “only Hainan and Fujian” and it goes to the helper doing that job; say “never mind” and that job stops.
+- **Hold before acting.** Say “don’t send yet, wait for me” and outside actions for that job pause until you approve.
+- **Survives the app being closed.** If the app is closed or the phone restarts mid-job, the work picks up and reports back when you return. If it can’t tell whether a text or message already went out, it asks you instead of sending it twice.
+- **Fixes.** Claude with an Anthropic API key failed on every request; OpenRouter could pick a retired model on first run; an old SMS draft could still go out after new messages arrived in that conversation; helpers stopped to ask approval for reading web pages with wget; jobs handed off by scheduled tasks were lost after a restart.
+- **Changed.** The “Sub-agent” page in Settings is gone. Helpers use the current chat’s model.
 
-[Full release notes](docs/releases/1.0.9.md) · [Download 1.0.9](https://github.com/1zhangyy1/momoding/releases/tag/v1.0.9)
+[Full release notes](docs/releases/1.0.10.md) · [Download 1.0.10](https://github.com/1zhangyy1/momoding/releases/tag/v1.0.10)
 
 ### 1.0.8: Small apps and multiple Bots
 
@@ -139,7 +143,7 @@ Here, improving an app means a Bot changing its own small app. The Momoding host
 3. Type your first request, or tap one of the examples on the empty chat.
 4. To let it operate other apps, go to Settings → Phone permissions → **Hands** and follow the prompts to turn on Accessibility and the overlay permission. Everything else works without it.
 
-> **Updating to 1.0.9:** Official versions 1.0.1–1.0.8 can be updated in place, keeping your data. Version 0.1.0-alpha and early test builds signed with a different key cannot be updated in place; back up the data you need before removing an incompatible build.
+> **Updating to 1.0.10:** Official versions 1.0.1–1.0.9 can be updated in place, keeping your data. Version 0.1.0-alpha and early test builds signed with a different key cannot be updated in place; back up the data you need before removing an incompatible build.
 
 ## Build from source
 
