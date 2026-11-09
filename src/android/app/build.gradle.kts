@@ -37,8 +37,8 @@ android {
         minSdk = 26
         targetSdk = 35
         // momoding: own numbering from 1.0.0 (1.0 preview); the update check compares x.y.z only
-        versionCode = 109
-        versionName = "1.0.9"
+        versionCode = 110
+        versionName = "1.0.10"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
