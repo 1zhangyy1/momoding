@@ -146,13 +146,14 @@ data class LLMModel(
 
         val allOpenAI = listOf(gpt55, gpt53Codex, gpt52Codex, gpt51CodexMax, gpt52, gpt4o, gpt4oMini, o3, o4Mini, codexMini)
 
-        // OpenRouter (matching iOS built-in set)
-        val orClaudeSonnet4 = LLMModel("anthropic/claude-sonnet-4", "Claude Sonnet 4", "OpenRouter")
-        val orGemini25Flash = LLMModel("google/gemini-2.5-flash", "Gemini 2.5 Flash", "OpenRouter")
-        val orGpt4o = LLMModel("openai/gpt-4o", "GPT-4o", "OpenRouter")
-        val orLlamaMaverick = LLMModel("meta-llama/llama-4-maverick", "Llama 4 Maverick", "OpenRouter")
-
-        val allOpenRouter = listOf(orClaudeSonnet4, orGemini25Flash, orGpt4o, orLlamaMaverick)
+        // OpenRouter: what a new account shows before its live list arrives, and what first run picks
+        // from if it gets there first, so only current models that call tools (AutoSetup's list)
+        val allOpenRouter = listOf(
+            LLMModel("z-ai/glm-5.3", "GLM 5.3", "OpenRouter"),
+            LLMModel("deepseek/deepseek-v4.1-flash", "DeepSeek V4.1 Flash", "OpenRouter"),
+            LLMModel("moonshotai/kimi-k3", "Kimi K3", "OpenRouter"),
+            LLMModel("google/gemini-3.8-flash", "Gemini 3.8 Flash", "OpenRouter"),
+        )
 
         // xAI (Grok) — OAuth-only path uses these as the built-in catalog.
         // Source of truth = XAIModelsAPI; this list is what surfaces in the

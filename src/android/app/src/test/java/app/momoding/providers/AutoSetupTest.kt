@@ -11,5 +11,7 @@ class AutoSetupTest {
         AutoSetup.pick(listOf("text-embedding-v4", "qwen3.8-27b", "qwen3.8-max", "deepseek-v4.1-flash")))
     @Test fun `dated variants collapse and the fallback is another family`() = assertEquals(listOf("deepseek/deepseek-v4.1-flash", "z-ai/glm-5.3"),
         AutoSetup.pick(listOf("deepseek/deepseek-v4.1-flash-1017", "deepseek/deepseek-v4.1-flash", "deepseek/deepseek-v4-flash", "z-ai/glm-5.3")))
+    @Test fun `first run before the live list still picks a tool-calling model`() = assertEquals(listOf("deepseek/deepseek-v4.1-flash", "z-ai/glm-5.3"),
+        AutoSetup.pick(com.openminis.app.data.model.LLMModel.allOpenRouter.map { it.id }))
     @Test fun unknownVendorTakesTheFirstUsable() = assertEquals(listOf("acme-chat"), AutoSetup.pick(listOf("acme-embed", "acme-chat")))
 }
