@@ -63,7 +63,7 @@ class MainThreadHotspotsTest {
         val src = ProductionSources.read("MinisApp.kt")
         val body = src.substringAfter("override fun onCreate() {")
         val off = body.indexOf("androidx.compose.ui.contentcapture.ContentCaptureManager.isEnabled = false")
-        assertTrue(off in 0 until body.indexOf("AgentToolSwitch.migrateLegacyIfNeeded"))
+        assertTrue(off in 0 until body.indexOf("T287-followup: ACRA spawns"))
         // Never flipped back on anywhere: Compose 1.9.1 cannot resume after a pause.
         val all = ProductionSources.mainRoot()!!.walkTopDown().filter { it.extension == "kt" }
             .map { it.readText() }.joinToString("\n")

@@ -727,21 +727,7 @@ internal fun ToolCallPill(
     val isCancelled = block.toolStatus == ToolBlockStatus.CANCELLED
 
     val toolAccent = toolAccentColor(block.toolName)
-    // [T-android-subagent-control-capsule] A status / steer / cancel / resume
-    // call is the model operating on its own sub agents — a tool call like any
-    // other, so it renders in this shared capsule rather than a bespoke row.
-    //
-    // Android's first cut (ported from iOS's) was a centred grey line: it read
-    // as a section divider rather than an action, said nothing about WHAT was
-    // sent, could not be opened, and its own padding made it taller than the
-    // capsules around it. The shared capsule fixes all four at once — the same
-    // 36dp metrics as every other tool, a tappable detail sheet, and the sub
-    // agent accent (toolAccentColor already maps subagent_task to the violet)
-    // so it still reads as agent work.
-    val controlSummary = helperControlSummary(block).takeIf {
-        com.openminis.app.agent.jobs.HelperRunner.isSubAgentToolName(block.toolName)
-    }
-    val toolIcon = if (controlSummary != null) Icons.Default.Tune else toolIconFor(block.toolName)
+    val toolIcon = toolIconFor(block.toolName)
 
     // Icon color: tool color when running/done, error/cancel colors on failure
     val iconTint = when {
@@ -836,7 +822,7 @@ internal fun ToolCallPill(
                     // names the RUN it acted on, so using it would label a
                     // status check, a steer and a resume on the same sub agent
                     // identically.
-                    text = controlSummary ?: block.toolTitle.ifEmpty { block.toolName },
+                    text = block.toolTitle.ifEmpty { block.toolName },
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface,

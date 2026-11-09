@@ -283,9 +283,6 @@ internal fun ToolDetailSheet(
     onDismiss: () -> Unit,
     onOpenTerminalWithCommand: (String) -> Unit = {},
     onOpenBrowserForUrl: (String) -> Unit = {},
-    /** [T-agent-detail-buttons] delegate_task block: the bar's chat-bubble
-     *  button opens the child's full-screen transcript. */
-    onOpenAgentTranscript: ((childSessionId: String) -> Unit)? = null,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var currentIdx by remember { mutableStateOf(initialIndex.coerceIn(0, toolBlocks.lastIndex.coerceAtLeast(0))) }
@@ -395,8 +392,6 @@ internal fun ToolDetailSheet(
                     }
                 }
                 val hasBrowserUrl = isBrowserTool && browserActionUrl.isNotEmpty()
-                val isAgentTool = com.openminis.app.agent.jobs.HelperRunner.isSubAgentToolName(block.toolName)
-                val agentChildId = if (isAgentTool) com.openminis.app.agent.jobs.HelperRunner.childSessionIdFrom(block.content) else null
                 Box(
                     modifier = Modifier
                         .size(32.dp)
@@ -404,11 +399,7 @@ internal fun ToolDetailSheet(
                         .border(0.5.dp, ChatColors.inputIconBorder, CircleShape)
                         .clip(CircleShape)
                         .clickable {
-                            if (isAgentTool) {
-                                // [T-agent-detail-buttons] The single entry to the
-                                // live / historical agent conversation.
-                                if (agentChildId != null) onOpenAgentTranscript?.invoke(agentChildId)
-                            } else if (isShellTool) {
+                            if (isShellTool) {
                                 val command = extractShellCommand(toolArgsForAction, block)
                                 if (command.isNotBlank() && command != "Shell command") {
                                     AppLogger.info(
@@ -442,13 +433,11 @@ internal fun ToolDetailSheet(
                     Icon(
                         when {
                             copyDone -> Icons.Default.Check
-                            isAgentTool -> Icons.AutoMirrored.Outlined.Chat
                             isShellTool -> Icons.Default.Terminal
                             isBrowserTool -> Icons.Outlined.Public
                             else -> Icons.Default.ContentCopy
                         },
                         contentDescription = when {
-                            isAgentTool -> "Open agent conversation"
                             isShellTool -> "Open in terminal"
                             isBrowserTool -> "Open in session browser"
                             else -> "Copy"
@@ -480,9 +469,6 @@ internal fun ToolDetailSheet(
                     .fillMaxWidth(),
             ) {
                 when (block.toolName) {
-                    // ── Agent: stacked cards (header · current tool · screenshot · result) ──
-                    com.openminis.app.agent.jobs.HelperRunner.TOOL_NAME -> HelperDetailContent(block)
-
                     // ── Shell: black rounded terminal card (mirrors iOS ToolLiveSheet) ──
                     "shell_execute" -> {
                         val command = extractShellCommand(toolArgsObj, block)
@@ -1225,13 +1211,7 @@ internal fun ToolDetailSheet(
                     // line right beneath it. This is where the user goes
                     // to inspect a single step, so the timestamp lives
                     // here instead of on every pill in the message list.
-                    // [T-agent-port-round3] A background delegate_task's tool
-                    // call returns in ~2 s; the run it stands for is measured
-                    // by the payload's elapsed_s. Show that for agent blocks.
-                    val shownDurationMs = if (com.openminis.app.agent.jobs.HelperRunner.isSubAgentToolName(block.toolName)) {
-                        runCatching { org.json.JSONObject(block.content).optLong("elapsed_s", -1L) }.getOrDefault(-1L)
-                            .takeIf { it >= 0 }?.let { it * 1000L } ?: block.durationMs
-                    } else block.durationMs
+                    val shownDurationMs = block.durationMs
                     if ((shownDurationMs > 0 && !isLive) || block.startTimeMs > 0L) {
                         Column(
                             horizontalAlignment = Alignment.End,

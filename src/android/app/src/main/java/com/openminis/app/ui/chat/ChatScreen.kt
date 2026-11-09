@@ -545,9 +545,6 @@ fun ChatScreen(
      *  (no trailing newline — the user reviews and presses Enter manually).
      *  Wired to the top-right Terminal button on a shell_execute ToolDetailSheet. */
     onOpenTerminalWithCommand: (command: String) -> Unit = {},
-    /** [T-p2-agent-series] Open the full-screen read-only transcript of an
-     *  agent's child session (from the tool sheet's chat-bubble button). */
-    onOpenAgentTranscript: (childSessionId: String) -> Unit = {},
     /** "Move to…" capsule (T51): called when the user picks a target session
      *  from MoveToSessionSheet after a share-injected turn. The caller is
      *  responsible for navigating; this screen has already stashed the
@@ -3586,10 +3583,6 @@ fun ChatScreen(
             // Messages + scroll-to-bottom button
             Box(modifier = Modifier.weight(1f)) {
                 var toolBarHeightPx by remember { mutableStateOf(0) }
-                // [T-p2-agent-callback] Synthetic delegate block behind a tapped
-                // callback card; hosted at this stable scope so the sheet survives
-                // LazyColumn item disposal.
-                var callbackDetailBlock by remember { mutableStateOf<AssistantBlock?>(null) }
                 val density = LocalDensity.current
                 val toolBarHeightDp = with(density) { toolBarHeightPx.toDp() }
                 // T166 / T170 / T173: bottomReserve must clear the visible
@@ -4056,7 +4049,6 @@ fun ChatScreen(
                     id.substringBefore('#')
                 fun FlatChatItem.isCompacted(): Boolean = when (this) {
                     is FlatChatItem.UserBubble -> grayedMap[originalMessageId(message.id)] == true
-                    is FlatChatItem.AgentCallbackCard -> grayedMap[originalMessageId(message.id)] == true
                     is FlatChatItem.ScheduledTaskCardItem -> grayedMap[originalMessageId(message.id)] == true
                     is FlatChatItem.AssistantHeader -> grayedMap[originalMessageId(messageId)] == true
                     is FlatChatItem.AssistantText -> grayedMap[originalMessageId(messageId)] == true
@@ -4624,13 +4616,6 @@ fun ChatScreen(
                                 marker = item.marker,
                                 hostSessionId = sessionId,
                             )
-                            // [T-p2-delegate-render] A helper block gets its
-                            // own card; everything else keeps the pill.
-                            // momoding: one quiet line, not the developer's card (调研/M19)
-                            is FlatChatItem.AgentCallbackCard -> app.momoding.ui.chat.LegacyAgentResultLine(
-                                callback = item.callback,
-                                onTap = { callbackDetailBlock = item.callback.syntheticBlock() },
-                            )
                             // [T-android-subagent-control-capsule] A control call
                             // (status/steer/cancel/resume) is the model managing
                             // agents it already started, so it does NOT get a
@@ -4641,16 +4626,7 @@ fun ChatScreen(
                             // above all) are readable in the detail sheet.
                             // Replaces the bespoke one-line row, which read as a
                             // section divider and could not be opened.
-                            is FlatChatItem.AssistantToolUse -> if (
-                                com.openminis.app.agent.jobs.HelperRunner.isSubAgentToolName(item.block.toolName) &&
-                                helperControlSummary(item.block) != null
-                            ) {
-                                ToolCallPill(
-                                    item.block,
-                                    allToolBlocks = item.allToolBlocks,
-                                    onOpenDetail = { viewModel.openToolDetail(it) },
-                                )
-                            } else if (!momodingShowSteps) /* momoding: a step in plain words */ app.momoding.ui.chat.StepLine(item.block) else ToolCallPill(
+                            is FlatChatItem.AssistantToolUse -> if (!momodingShowSteps) /* momoding: a step in plain words */ app.momoding.ui.chat.StepLine(item.block) else ToolCallPill(
                                 block = item.block,
                                 allToolBlocks = item.allToolBlocks,
                                 onOpenTerminalWithCommand = onOpenTerminalWithCommand,
@@ -5015,10 +4991,6 @@ fun ChatScreen(
                 val selectedToolBlock = selectedToolDetailId?.let { id ->
                     lastToolBlocks.firstOrNull { it.id == id }
                 }
-                // [T-agent-tool-sheet-unified] The agent block is a tool like
-                // any other: every entry point opens the same ToolDetailSheet
-                // (HelperDetailContent inside); the child transcript is reached
-                // from the sheet's chat-bubble button.
                 if (selectedToolBlock != null) {
                     val initialIdx = lastToolBlocks
                         .indexOfFirst { it.id == selectedToolBlock.id }
@@ -5031,23 +5003,6 @@ fun ChatScreen(
                         onOpenBrowserForUrl = { url ->
                             viewModel.closeToolDetail()
                             viewModel.openBrowserSheetForUrl(url)
-                        },
-                        onOpenAgentTranscript = { childId ->
-                            viewModel.closeToolDetail()
-                            onOpenAgentTranscript(childId)
-                        },
-                    )
-                }
-                // [T-p2-agent-callback] A tapped callback card opens the same
-                // sheet over a synthetic delegate block carrying its payload.
-                callbackDetailBlock?.let { block ->
-                    ToolDetailSheet(
-                        toolBlocks = listOf(block),
-                        initialIndex = 0,
-                        onDismiss = { callbackDetailBlock = null },
-                        onOpenAgentTranscript = { childId ->
-                            callbackDetailBlock = null
-                            onOpenAgentTranscript(childId)
                         },
                     )
                 }

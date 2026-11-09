@@ -308,7 +308,6 @@ class GroupResolveCredentialFilterTest {
         // `memberEntryIds` walk would reintroduce #34 itself.
         val sites = mapOf(
             "ui/chat/ChatViewModel.kt" to "availableMemberEntries(group)",
-            "agent/jobs/ModelTierResolver.kt" to "availableMemberEntries(",
             "speech/correction/CorrectionStrategy.kt" to "availableMemberEntries(",
             "scheduled/ScheduledAgentRunner.kt" to "availableMemberEntries(",
         )

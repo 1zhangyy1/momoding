@@ -191,7 +191,6 @@
     <string name="mo_adv_skills_sub">教會它的做事方法</string>
     <string name="mo_adv_tools_sub">它能用哪些工具，可以關掉</string>
     <string name="mo_adv_services_sub">接入郵箱、筆記等外部服務</string>
-    <string name="mo_adv_helpers_sub">它可以派出去辦子任務的助手</string>
     <string name="mo_adv_memory_sub">它每天記下的事</string>
     <string name="mo_adv_linux_sub">它電腦裡的 Linux，佔多少空間</string>
     <string name="mo_adv_terminal">終端機</string>

@@ -336,16 +336,6 @@ internal sealed class FlatChatItem {
         override fun hashCode(): Int = message.hashCode()
     }
 
-    class AgentCallbackCard(
-        val message: ChatMessage,
-        val callback: com.openminis.app.agent.jobs.LegacyAgentCallback,
-    ) : FlatChatItem() {
-        override val key = "callback:${message.id}"
-        override val contentType = "callback"
-        override fun equals(other: Any?): Boolean =
-            this === other || (other is AgentCallbackCard && message == other.message)
-        override fun hashCode(): Int = message.hashCode()
-    }
 
     /**
      * Equality on this class previously compared every field including
@@ -638,18 +628,21 @@ internal fun streamingOverlaySubset(
  * bubble — something the user actually typed and can navigate back to.
  *
  * `role == "user"` is NOT that test. Two kinds of system-written message also
- * carry the user role and are rendered as their own cards instead of a bubble:
- * a scheduled task's prompt ([ScheduledTaskCardItem]) and a sub agent callback
- * ([AgentCallbackCard]). Anything walking "the user's turns" has to agree with
+ * carry the user role and are rendered as their own card instead of a bubble:
+ * a scheduled task's prompt ([ScheduledTaskCardItem]); a hand's report and an
+ * old sub agent's report carry it too and are not shown. Anything walking "the user's turns" has to agree with
  * what [buildFlatChatItems] actually emitted, or it will aim at a turn that has
  * no `user:` row to land on.
  *
  * Kept beside the branch it mirrors so the two cannot drift apart.
  */
+/** How the sub agents of 1.0.x reported back into the chat; such rows stay in old histories, unshown. */
+private const val OLD_AGENT_REPORT = "<agent_callback"
+
 internal fun ChatMessage.rendersAsUserBubble(): Boolean {
     if (role != "user") return false
     if (com.openminis.app.scheduled.ScheduledTaskMarker.parse(content) != null) return false
-    if (com.openminis.app.agent.jobs.LegacyAgentCallback.isCallbackText(content)) return false
+    if (content.startsWith(OLD_AGENT_REPORT)) return false
     if (content.startsWith(app.momoding.task.TaskEngine.REPORT_CUE)) return false // momoding: a hand's report
     return true
 }
@@ -715,7 +708,6 @@ internal fun buildFlatChatItems(
         while (!usedKeys.add("${item.key}#$n")) n++
         return when (item) {
             is FlatChatItem.UserBubble -> FlatChatItem.UserBubble(item.message.copy(id = "${item.message.id}#$n"), item.precededByUser)
-            is FlatChatItem.AgentCallbackCard -> FlatChatItem.AgentCallbackCard(item.message.copy(id = "${item.message.id}#$n"), item.callback)
             is FlatChatItem.ScheduledTaskCardItem -> FlatChatItem.ScheduledTaskCardItem(item.message.copy(id = "${item.message.id}#$n"), item.marker)
             is FlatChatItem.AssistantHeader -> item.copy(messageId = "${item.messageId}#$n")
             is FlatChatItem.AssistantText -> FlatChatItem.AssistantText(
@@ -797,12 +789,7 @@ internal fun buildFlatChatItems(
             // 8417eb68f (progress) and 7985d161e (final); this is the port.
             // The child-id scan that fed the dedup walked every message and
             // block on each flatten and nothing reads it now, so it goes too.
-            val callback = if (com.openminis.app.agent.jobs.LegacyAgentCallback.isCallbackText(message.content))
-                com.openminis.app.agent.jobs.LegacyAgentCallback.parse(message.content) else null
-            if (callback != null) {
-                out.add(dedupe(FlatChatItem.AgentCallbackCard(message, callback)))
-                continue
-            }
+            if (message.content.startsWith(OLD_AGENT_REPORT)) continue // a report from the sub agents of 1.0.x
             // momoding: a hand's report is for the chat's Momoding; the person sees it on the task's line
             if (message.content.startsWith(app.momoding.task.TaskEngine.REPORT_CUE)) continue
             // [T-android-candidate-bubble-gap] Flag when the previous message
@@ -866,7 +853,7 @@ internal fun buildFlatChatItems(
         // or the callback card without a second avatar header.
         val prevNonSystem = (idx - 1 downTo 0).asSequence()
             .map { messages[it] }
-            .firstOrNull { it.role != "system" && !com.openminis.app.agent.jobs.LegacyAgentCallback.isCallbackText(it.content) && (showSteps || !stepsOnlyTurn(it)) } // momoding: hidden turns do not count
+            .firstOrNull { it.role != "system" && !it.content.startsWith(OLD_AGENT_REPORT) && (showSteps || !stepsOnlyTurn(it)) } // momoding: hidden turns do not count
         val isResumeContinuation = prevNonSystem?.role == "assistant"
         // momoding: one Bot, one voice — no "✨ Momoding" over each reply unless steps are shown
         if (!isSystem && !isResumeContinuation && showStepsAll) {

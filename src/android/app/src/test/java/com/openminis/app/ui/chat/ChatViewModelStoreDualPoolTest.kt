@@ -102,20 +102,10 @@ class ChatViewModelStoreDualPoolTest {
     }
 
     @Test
-    fun `every sub agent creation site claims the CHILD pool`() {
-        val vm = File("src/main/java/com/openminis/app/ui/chat/ChatViewModel.kt").readText()
-        val sched = File("src/main/java/com/openminis/app/scheduled/ScheduledAgentRunner.kt").readText()
-        val tag = "ChatViewModelStore.PoolKind.CHILD"
-        assertEquals(
-            "both createChildViewModel and the delegate_task site must tag CHILD",
-            2, Regex(Regex.escape(tag)).findAll(vm).count(),
-        )
-        assertTrue("the scheduled child must tag CHILD", sched.contains(tag))
-        // The parent session acquired right above it must NOT be tagged.
-        assertTrue(
-            "ScheduledAgentRunner's parent VM stays NORMAL",
-            sched.contains("viewModelFor(app, parentSid)"),
-        )
+    fun `a helper's view model is acquired in the CHILD pool`() {
+        // Helpers.ready is the one place a helper's chat gets its view model, for a new task and after a restart.
+        val helpers = File("src/main/java/app/momoding/task/Helpers.kt").readText()
+        assertTrue(helpers.contains("viewModelFor(context, session, ChatViewModelStore.PoolKind.CHILD)"))
     }
 
     @Test

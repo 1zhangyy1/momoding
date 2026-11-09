@@ -191,7 +191,6 @@
     <string name="mo_adv_skills_sub">Ways of working you taught it</string>
     <string name="mo_adv_tools_sub">Which tools it may use</string>
     <string name="mo_adv_services_sub">Mail, notes and other outside services</string>
-    <string name="mo_adv_helpers_sub">Assistants it can send on side tasks</string>
     <string name="mo_adv_memory_sub">What it notes each day</string>
     <string name="mo_adv_linux_sub">The Linux on its computer, and the space it takes</string>
     <string name="mo_adv_terminal">Terminal</string>

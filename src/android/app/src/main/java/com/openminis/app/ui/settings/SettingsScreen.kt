@@ -40,7 +40,6 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Palette
-import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Handyman
 import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.automirrored.outlined.Send
@@ -97,7 +96,6 @@ fun SettingsScreen(
     onTerminalClick: () -> Unit = {},
     onMemoryClick: () -> Unit = {},
     /** [T-p2-agent-settings] Settings › Agents (delegation on/off), below Memory. */
-    onAgentsClick: () -> Unit = {},
     onAgentToolsClick: () -> Unit = {},
     // [T-mcp-integration-android] MCP Integrations page, listed directly below
     // Memory. Default no-op for callers that haven't wired the route yet.
@@ -218,8 +216,6 @@ fun SettingsScreen(
                     subtitle = stringResource(R.string.mo_adv_tools_sub), onClick = onAgentToolsClick)
                 SettingsItem(icon = Icons.Outlined.Dashboard, iconColor = Color(0xFF5AC8FA), title = stringResource(R.string.mcp_title),
                     subtitle = stringResource(R.string.mo_adv_services_sub), onClick = onMcpClick)
-                SettingsItem(icon = Icons.Outlined.Groups, iconColor = Color(0xFFAF52DE), title = stringResource(R.string.sub_agents_title),
-                    subtitle = stringResource(R.string.mo_adv_helpers_sub), onClick = onAgentsClick)
                 SettingsItem(icon = Icons.Outlined.Psychology, iconColor = Color(0xFFFF2D55), title = stringResource(R.string.memory_title),
                     subtitle = stringResource(R.string.mo_adv_memory_sub), onClick = onMemoryClick, showDivider = false)
             }

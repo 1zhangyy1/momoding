@@ -1080,11 +1080,6 @@ class ChatRepository(internal val dao: ChatDao) {
                     if (type == "text") {
                         val text = obj.optString("value", "")
                         if (text.isNotBlank()) {
-                            // [T-p2-agent-callback] An agent's report reads as
-                            // "Agent result · title · status", never as raw XML.
-                            com.openminis.app.agent.jobs.LegacyAgentCallback.parse(text)?.let { cb ->
-                                return com.openminis.app.agent.jobs.LegacyAgentCallbackLabels.previewLine(cb)
-                            }
                             return cleanPreview(text)
                         }
                     } else if (type == "mediaRef") {

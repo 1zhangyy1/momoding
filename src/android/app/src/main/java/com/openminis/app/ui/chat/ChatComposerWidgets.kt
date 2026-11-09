@@ -164,7 +164,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -181,11 +180,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.boundsInWindow
@@ -482,59 +476,6 @@ internal fun MicButton(
 
 // ─── Tool Preview Thumbnail (iOS: ToolPreviewThumbnail — tool-specific preview) ──
 
-/**
- * [T-android-agent-inner-tool-front] The tool a SUB AGENT is running right now,
- * observed from the parent's preview.
- *
- * Android port of iOS `liveChildToolBlock` (ToolLiveSheet.swift:696). The child
- * runs its own ChatViewModel in the shared process store, so the parent can read
- * its transcript directly rather than waiting for the once-a-second mirror —
- * which only ever carried the tool's NAME (HelperRunner.progressJson), never its
- * content. That is why the preview showed "Agent · Shell" instead of the shell
- * output the child was actually producing.
- *
- * Two details are load-bearing:
- *  - `existing()` never CONSTRUCTS a view model. Building one here would both
- *    race the child's own construction and resurrect a finished session.
- *  - the streaming side-channel must be merged in. While the child's turn is in
- *    flight its tool blocks live ONLY in `streamingById`; reading `messages`
- *    alone shows nothing until the turn ends (the same trap documented on
- *    ChatViewModel.childLiveMessages).
- *
- * Returns null when there is no child, no live view model, or the child is
- * between tools — the caller then falls back to the agent card, exactly as iOS
- * does.
- */
-@Composable
-internal fun rememberChildLiveToolBlock(childSessionId: String?): AssistantBlock? {
-    if (childSessionId.isNullOrEmpty()) return null
-    val vm = remember(childSessionId) {
-        runCatching { ChatViewModelStore.existing(childSessionId) }.getOrNull()
-    } ?: return null
-    // Plain collectAsState, not the lifecycle-aware variant: this tile only
-    // exists while the floating bar is composed, and the module does not
-    // already depend on lifecycle-runtime-compose — not worth a new dependency
-    // for a subscription whose own composition is the lifetime bound.
-    val msgs by vm.messages.collectAsState()
-    val streaming by vm.streamingById.collectAsState()
-    return remember(msgs, streaming) {
-        // [T-android-stream-overlay-subset] The child tile only wants the live
-        // tool on the newest assistant turn; the subset carries exactly that
-        // without copying the child's whole history each token.
-        val merged = if (streaming.isEmpty()) msgs else streamingOverlaySubset(msgs, streaming)
-        (merged.lastOrNull { it.role == "assistant" }
-            ?: msgs.lastOrNull { it.role == "assistant" })
-            ?.toolBlocks
-            ?.lastOrNull {
-                it.kind == "tool_use" && (
-                    it.toolStatus == ToolBlockStatus.RUNNING ||
-                        it.toolStatus == ToolBlockStatus.STREAMING ||
-                        it.toolStatus == ToolBlockStatus.PENDING
-                    )
-            }
-    }
-}
-
 @Composable
 private fun ToolPreviewThumbnail(
     block: AssistantBlock,
@@ -546,14 +487,6 @@ private fun ToolPreviewThumbnail(
     // semantics the expanded detail sheet uses. Resolved at the call site
     // because toolBlocks isn't in scope here.
     fallbackImagePath: String? = null,
-    /**
-     * [T-android-agent-inner-tool-front] How many sub-agent levels this tile has
-     * already punched through. A sub agent can itself delegate, so without a cap
-     * the substitution below would recurse for as long as the chain is deep.
-     * iOS is bounded structurally — `liveChildToolBlock` resolves only the
-     * DIRECT child — so one level is the behaviour to match.
-     */
-    punchThroughDepth: Int = 0,
 ) {
     val args = remember(block.toolArgs) {
         try { org.json.JSONObject(block.toolArgs) } catch (_: Exception) { org.json.JSONObject() }
@@ -570,25 +503,6 @@ private fun ToolPreviewThumbnail(
     val resourceMonitor = rememberSystemResourceMonitor(active = isShellTool && isLive)
 
     val thumbnailShape = RoundedCornerShape(8.dp)
-    // [T-android-agent-thumbnail-accent] A sub agent's tile is marked while
-    // the child is inside a tool — the tap goes to work happening one level
-    // down, not to the parent's own tool. Same predicate iOS
-    // ToolPreviewThumbnail.isSubAgentTool uses ("is this agent inside a tool
-    // right now"), read here from the block's live progress payload; an agent
-    // that is starting up or has finished needs no marking.
-    //
-    // [T-android-agent-inner-tool-front] Two ways to be a sub agent's tile now.
-    // Once the punch-through above substitutes the CHILD's block, `block` is the
-    // child's shell_execute / browser_use — its toolName is no longer the agent
-    // tool, so the original predicate would go false exactly when the glow is
-    // most warranted. `punchThroughDepth > 0` says "this tile is already showing
-    // work one level down", which is the same question the ring is asking.
-    val subAgentLive = punchThroughDepth > 0 ||
-        (
-            block.toolName == com.openminis.app.agent.jobs.HelperRunner.TOOL_NAME &&
-                (remember(block.content, block.toolStatus, block.toolTitle) { parseHelperBlock(block) }.phase as? HelperPhase.Running)?.tool != null
-            )
-    val subAgentGlow = helperAccent()
     Box(
         modifier = Modifier
             .size(width = 100.dp, height = 65.dp)
@@ -602,82 +516,6 @@ private fun ToolPreviewThumbnail(
                 }
             )
             .border(0.5.dp, ChatColors.thumbnailBorder, thumbnailShape)
-            .drawWithContent {
-                drawContent()
-                if (!subAgentLive) return@drawWithContent
-                // An INNER glow: concentric strokes walking inward from the
-                // edge, drawn after the content and inside the clip so the
-                // preview stays legible and the rounded corners are not
-                // smeared square. Hand-drawn because Modifier.blur needs API
-                // 31 and minSdk here is lower.
-                //
-                // [T-android-agent-glow-soften] Reworked from the original
-                // port of iOS's 6pt/0.55-alpha inset stroke, which on a 100x65
-                // tile read as a hard bright ring hugging the rim rather than
-                // a glow. Three changes, all pulling the same direction:
-                //
-                //   band  10dp -> 22dp   reaches a third of the way into the
-                //                        tile's short side, so the colour
-                //                        diffuses instead of outlining.
-                //   alpha 0.55  -> 0.22  the peak sits at the very edge, where
-                //                        it also overlaps the hairline border,
-                //                        so it was the most saturated part of
-                //                        the whole tile.
-                //   falloff (1-t)^2 -> (1-t)^3
-                //                        a cubic curve spends less of its
-                //                        opacity near the edge and carries a
-                //                        faint tail further in, which is what
-                //                        makes a wide band read as diffuse
-                //                        rather than as a thicker ring.
-                //
-                // Strokes overlap: each is drawn 2x the spacing. Ring n and
-                // ring n+1 sit `step` apart on the axes but `step * sqrt(2)`
-                // apart along the diagonals, so equal-width strokes leave a
-                // ~0.2dp gap at every corner and the glow bands there. The 10dp
-                // band was opaque enough to hide it; a 22dp one is not.
-                //
-                // Overlapping doubles how much colour each pixel receives, so
-                // the peak alpha is halved to 0.11 to pay for it — the tuning
-                // target is the INTEGRAL over the band, not the per-stroke
-                // value.
-                //
-                // The corner radius stays `radius - inset`, floored at zero.
-                // That is not an approximation to fix: a rounded rect inset by
-                // more than its own radius genuinely has square corners, and
-                // every ring is concentric with the tile because the offset
-                // from each edge is constant. (Scaling the radius
-                // proportionally instead was tried and is wrong — it bulges the
-                // corners outward by up to 5dp mid-band and draws visible arcs.)
-                // [T-android-agent-glow-32dp] Band widened 22dp -> 32dp on
-                // request: the visible tint now reaches ~15dp in instead of
-                // ~11dp. On the 65dp tile the top and bottom bands meet in the
-                // middle (2 x 32 = 64dp), so the tint covers the whole height
-                // and fades to near zero at the centre line. Peak alpha and the
-                // cubic falloff are unchanged, so the edge is no brighter.
-                val band = 32.dp.toPx()
-                val step = 0.5.dp.toPx()
-                val radius = 8.dp.toPx()
-                var inset = 0f
-                while (inset < band) {
-                    val t = inset / band
-                    val fade = (1f - t)
-                    val alpha = 0.11f * fade * fade * fade
-                    val w = size.width - inset * 2
-                    val h = size.height - inset * 2
-                    // Stop before the rect degenerates. A 32dp band just clears
-                    // the 65dp tile this draws on today, but the size comes from
-                    // the layout and is not this draw's to assume.
-                    if (w <= 0f || h <= 0f) break
-                    drawRoundRect(
-                        color = subAgentGlow.copy(alpha = alpha),
-                        topLeft = Offset(inset, inset),
-                        size = Size(w, h),
-                        cornerRadius = CornerRadius((radius - inset).coerceAtLeast(0f)),
-                        style = Stroke(width = step * 2f),
-                    )
-                    inset += step
-                }
-            }
             .clickable(onClick = onClick),
     ) {
         when (block.toolName) {
@@ -921,36 +759,6 @@ private fun ToolPreviewThumbnail(
                             modifier = Modifier.size(24.dp),
                         )
                     }
-                }
-            }
-
-            // [T-p2-delegate-render] Helper: title + phase, never the raw JSON.
-            // [T-android-agent-inner-tool-front] …except while the child is
-            // inside a tool, when the tile shows THAT tool exactly as the
-            // parent's own tools are shown — the shell output, the diff, the
-            // browser page. Port of iOS ToolLiveSheet.swift:2720.
-            //
-            // Recursing into ToolPreviewThumbnail is what makes every existing
-            // renderer apply to the child for free; the depth cap stops a chain
-            // of delegations from nesting without bound.
-            com.openminis.app.agent.jobs.HelperRunner.TOOL_NAME -> {
-                val childId = remember(block.content, block.toolStatus, block.toolTitle) {
-                    parseHelperBlock(block).childSessionId
-                }
-                val inner = if (punchThroughDepth < 1) {
-                    rememberChildLiveToolBlock(childId)
-                } else {
-                    null
-                }
-                if (inner != null) {
-                    ToolPreviewThumbnail(
-                        block = inner,
-                        toolAccent = toolAccentColor(inner.toolName),
-                        onClick = onClick,
-                        punchThroughDepth = punchThroughDepth + 1,
-                    )
-                } else {
-                    HelperThumbContent(block)
                 }
             }
 

@@ -19,30 +19,10 @@ import org.junit.Test
 class AgentToolSwitchTest {
 
     @Test
-    fun `each optional tool is governed by the expected switch`() {
-        assertEquals(AgentToolSwitch.BROWSER, AgentToolSwitch.governing("browser_use"))
-        assertEquals(AgentToolSwitch.AGENTS, AgentToolSwitch.governing("delegate_task"))
-        // agent_status must ride with delegate_task: inspecting agents you can
-        // no longer create is a dead tool in the schema.
-        assertEquals(AgentToolSwitch.AGENTS, AgentToolSwitch.governing("agent_status"))
-    }
-
-    @Test
-    fun `core tools are ungoverned and therefore always available`() {
-        // A null here means "always on". If a future edit accidentally routed
-        // one of these through a switch, the agent could lose shell or file
-        // access from a settings toggle that never claimed to do that.
-        for (core in listOf("shell_execute", "file_read", "file_write", "file_edit", "memory_get")) {
-            assertNull("$core must not be gated by a tool switch", AgentToolSwitch.governing(core))
-        }
-    }
-
-    @Test
     fun `browser defaults on and keys match the iOS contract`() {
         // Byte-identical keys are what let a future settings sync carry the
         // user's choice across platforms; a typo here would silently split them.
         assertEquals("agent.tools.browser.enabled", AgentToolSwitch.BROWSER.key)
-        assertEquals("agent.tools.agents.enabled", AgentToolSwitch.AGENTS.key)
         assertTrue("browser_use is mature and ships on", AgentToolSwitch.BROWSER.defaultValue)
     }
 

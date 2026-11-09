@@ -77,10 +77,8 @@ object ChatViewModelStore {
      * Stickiness is what makes the classification trustworthy, because on
      * Android the same entry point serves two very different callers.
      * `HeadlessChatRunner.viewModelFor` both CREATES a child's view model
-     * (ChatViewModel.createChildViewModel) and re-acquires it for READ-ONLY
-     * display (AgentTranscriptScreen). Without stickiness, opening a finished
-     * sub agent's transcript would re-register it, and any later change to how
-     * that screen asks for the VM could silently reclassify a live child as a
+     * and re-acquires it later (a task picked up again, a restart). Without
+     * stickiness a later acquire could silently reclassify a live child as a
      * normal session — putting it back in the pool this change exists to keep
      * it out of.
      *
@@ -88,11 +86,10 @@ object ChatViewModelStore {
      * [release], but a CHILD tag deliberately OUTLIVES eviction (see
      * [dropStoreKeepingChildTag]). Stickiness used to last only as long as the
      * store: LRU trim / memory pressure removed the tag with it, and every
-     * read-only re-acquire of a finished sub agent (AgentTranscriptScreen, the
-     * delegate sheet's image poll, the Stop glyph) then re-created it in the
+     * re-acquire of a finished helper then re-created it in the
      * NORMAL pool and evicted one of the user's own warm chats. Only CHILD
      * tags are retained (NORMAL is the default anyway), so the map is bounded
-     * by the number of sub agents run in this process — a few bytes each.
+     * by the number of helpers run in this process — a few bytes each.
      */
     private val poolKinds = mutableMapOf<String, PoolKind>()
 

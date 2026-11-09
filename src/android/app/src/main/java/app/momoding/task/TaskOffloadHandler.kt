@@ -45,7 +45,6 @@ class TaskOffloadHandler(private val context: Context) : NativeOffloadHandler {
         val title = args.get("title")?.trim().orEmpty().ifEmpty { brief.lineSequence().first().take(30) }
         val task = when {
             to == "helper" -> {
-                check(com.openminis.app.tools.AgentToolSwitch.AGENTS.isEnabled(context)) { "helpers are turned off in settings" }
                 runBlocking { TaskEngine.openHelper(context, sid, title, brief, call) }
             }
             to.startsWith("bot:") -> {

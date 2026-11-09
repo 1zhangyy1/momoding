@@ -1,7 +1,6 @@
 package com.openminis.app.ui.chat
 
 import com.openminis.app.ProductionSources
-import com.openminis.app.agent.jobs.LegacyAgentCallback
 import com.openminis.app.data.model.AgentContentPart
 import com.openminis.app.data.model.LLMMessage
 import org.json.JSONObject
@@ -55,8 +54,6 @@ class EmptyTurnRecoveryTest {
 
     @Test
     fun `a finished-callback tail is nudged, not given up on`() {
-        // Sanity: the fixture really is a callback the app recognises.
-        assertTrue(LegacyAgentCallback.isCallbackText(REAL_CALLBACK))
 
         val history = listOf(
             userText("请派一个子代理…"),

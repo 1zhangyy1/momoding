@@ -238,33 +238,6 @@ object DebugMethodRegistry {
             example = JSONObject().put("name", "SlowDavTest"),
         ),
         MethodSpec(
-            name = "debug.subAgents.list",
-            description = "List the sub agent roster (built-in + custom).",
-            params = emptyList(),
-            returns = "{subAgents:[{id, name, description, instructions, modelGroupId, thinkingLevelOverride, isBuiltIn, sortOrder, updatedAt}]}",
-            example = JSONObject(),
-        ),
-        MethodSpec(
-            name = "debug.subAgents.upsert",
-            description = "Create or update a custom sub agent.",
-            params = listOf(
-                ParamSpec("name", "string", required = true, description = "Wire name."),
-                ParamSpec("description", "string", required = false, description = "What the main model reads."),
-                ParamSpec("instructions", "string", required = false, description = "Appended to the child brief."),
-                ParamSpec("thinkingLevelOverride", "string", required = false, description = "off|low|medium|high|xhigh|max|ultra."),
-                ParamSpec("id", "string", required = false, description = "Update this definition instead of creating one."),
-            ),
-            returns = "{id, subAgents:[...]}",
-            example = JSONObject().put("name", "demo-agent").put("description", "demo"),
-        ),
-        MethodSpec(
-            name = "debug.subAgents.delete",
-            description = "Delete a custom sub agent (the built-in cannot be deleted).",
-            params = listOf(ParamSpec("id", "string", required = true, description = "Definition id.")),
-            returns = "{deleted, remaining}",
-            example = JSONObject().put("id", "..."),
-        ),
-        MethodSpec(
             name = "debug.logs.list",
             description = "List AppLogger log files on disk.",
             params = emptyList(),

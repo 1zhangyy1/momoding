@@ -444,13 +444,6 @@ class BackupExporter(
         if (ruleCount > 0) {
             bytes += File(dataDir, "thinking_rules.jsonl").length()
         }
-        // [T-android-backup-subagents] Custom sub agents ALSO go to
-        // data/sub_agents.jsonl, the only place iOS reads them from (they left
-        // its ProviderConfig). They stay in provider_config.json too, which is
-        // what older Android builds restore from.
-        if (exportSubAgents(dataDir, config.subAgents) > 0) {
-            bytes += File(dataDir, "${BackupSubAgentMapping.FILE_BASE}.jsonl").length()
-        }
         // `entries` is PROVIDERS only. Custom thinking rules ride in this
         // category (they have no category of their own, and giving them one
         // would change the cross-platform category set), but adding them to
@@ -474,27 +467,6 @@ class BackupExporter(
      * columns so they are synthesized as epoch-0 on export and ignored on
      * import. Returns the count written.
      */
-    /** [T-android-backup-subagents] Custom sub agents -> `data/sub_agents.jsonl`. */
-    private fun exportSubAgents(
-        dataDir: File,
-        roster: List<com.openminis.app.data.model.SubAgentDefinition>,
-    ): Int {
-        val custom = BackupSubAgentMapping.exportable(roster)
-        if (custom.isEmpty()) return 0
-        BackupJsonlWriter(dataDir, BackupSubAgentMapping.FILE_BASE).use { writer ->
-            for (def in custom) {
-                writer.write(
-                    BackupSubAgentMapping.RECORD_TYPE, 1,
-                    BackupFormat.json.encodeToJsonElement(
-                        BackupSubAgentRecord.serializer(), BackupSubAgentMapping.toRecord(def),
-                    ),
-                )
-            }
-        }
-        AppLogger.info(TAG, "[Backup] exported ${custom.size} custom sub agent(s)")
-        return custom.size
-    }
-
     private suspend fun exportThinkingRules(dataDir: File): Int {
         val dao = com.openminis.app.data.db.ProviderDatabase
             .getInstance(context).providerConfigDao()

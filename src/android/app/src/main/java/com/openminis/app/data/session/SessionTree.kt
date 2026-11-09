@@ -3,7 +3,7 @@ package com.openminis.app.data.session
 /**
  * [T-android-child-session-delete-storage] Parent/child session tree helpers.
  *
- * Helper (delegate_task) sessions are hidden children of the session that
+ * Helper sessions are hidden children of the session that
  * spawned them (`ChatSessionEntity.parentSessionId`). Every operation that
  * treats a session as a unit — delete, storage accounting, cache release —
  * has to cover the whole subtree, not one level: a child can itself have

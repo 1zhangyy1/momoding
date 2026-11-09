@@ -72,7 +72,7 @@ object ShellWork {
         val budgetExpired = AtomicBoolean(false)
         val remaining = if (taskAtStart != null && Helpers.isHelper(context, chat)) {
             app.momoding.prompt.MomodingHelper.MAX_MINUTES * 60_000L +
-                com.openminis.app.agent.jobs.HelperRunner.WRAP_UP_GRACE_MS - TaskEngine.elapsed(context, taskAtStart)
+                Helpers.WRAP_UP_GRACE_MS - TaskEngine.elapsed(context, taskAtStart)
         } else null
         val execution = scope.async(start = CoroutineStart.LAZY) {
             if (registered != null) {

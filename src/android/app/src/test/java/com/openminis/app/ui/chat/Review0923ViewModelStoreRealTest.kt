@@ -159,14 +159,6 @@ class Review0923ViewModelStoreRealTest {
     private fun read(path: String): String =
         File(path).also { assertTrue("missing ${it.absolutePath}", it.exists()) }.readText()
 
-    @Test
-    fun `sub agent creation sites still claim the CHILD pool`() {
-        val vm = read("src/main/java/com/openminis/app/ui/chat/ChatViewModel.kt")
-        val claims = Regex("""viewModelFor\(\s*context,\s*[\w.]+,\s*com\.openminis\.app\.ui\.chat\.ChatViewModelStore\.PoolKind\.CHILD""")
-            .findAll(vm).count()
-        assertTrue("createChildViewModel + delegate_task tag CHILD (found $claims)", claims >= 2)
-    }
-
     /**
      * [RISK] `ChatScreen`'s onDispose clears the on-screen id unconditionally.
      * On a CHAT -> CHAT navigation (notification / deep link while a chat is

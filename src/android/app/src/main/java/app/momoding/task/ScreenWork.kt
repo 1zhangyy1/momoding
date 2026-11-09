@@ -142,7 +142,7 @@ object ScreenWork {
                 continue
             }
             val remaining = app.momoding.prompt.MomodingHelper.MAX_MINUTES * 60_000L +
-                com.openminis.app.agent.jobs.HelperRunner.WRAP_UP_GRACE_MS - TaskEngine.elapsed(context, parent.id)
+                Helpers.WRAP_UP_GRACE_MS - TaskEngine.elapsed(context, parent.id)
             val changed = if (remaining <= 0) null else withTimeoutOrNull(remaining) {
                 dao.taskFlow(parent.id).first { it == null || it.state == TaskEntity.State.ENDED.name || paused(it) }
             }

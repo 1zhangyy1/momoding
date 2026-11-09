@@ -766,27 +766,6 @@ class BackupImporter(
             report.skipped += skipped
         }
 
-        // [T-android-backup-subagents] Custom sub agents from
-        // data/sub_agents.jsonl: the only place an iOS package carries them.
-        // After the instance merge, like iOS, because a definition's
-        // modelGroupId may point at a group that merge just restored. Absent
-        // in older packages; that is not an error. An Android package carries
-        // them in provider_config.json as well; those merged above, so the
-        // same ids come back here as "not newer" and are skipped, not doubled.
-        val agents = readJsonlList(File(root, "data"), BackupSubAgentMapping.FILE_BASE).mapNotNull { env ->
-            env.obj?.let {
-                runCatching {
-                    BackupFormat.json.decodeFromJsonElement(BackupSubAgentRecord.serializer(), it)
-                }.getOrNull()?.let { r -> BackupSubAgentMapping.fromRecord(r) }
-            }
-        }
-        if (agents.isNotEmpty()) {
-            val (written, skipped) = repo.restoreBackupSubAgents(agents)
-            report.imported += written
-            report.skipped += skipped
-            AppLogger.info(TAG, "[Restore] sub agents: $written applied, $skipped skipped (local newer, unchanged or same name)")
-        }
-
         // Credentials (secrets.json lives at the work root, already decrypted).
         val secrets = readSecrets(root)
         if (secrets != null) {

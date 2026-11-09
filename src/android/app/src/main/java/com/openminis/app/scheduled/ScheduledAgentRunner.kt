@@ -365,10 +365,6 @@ object ScheduledAgentRunner {
 
     /** A routine's helper is an ordinary persisted task hand, with the same model and slots. */
     private suspend fun dispatchChild(app: MinisApp, task: ScheduledTask, parentSid: String, firedAt: Long, scheduled: Boolean): TaskEntity? {
-        if (!com.openminis.app.tools.AgentToolSwitch.AGENTS.isEnabled(app)) {
-            AppLogger.warning(TAG, "task ${task.id}: agents are turned off — abort child-of-current")
-            return null
-        }
         val parent = app.chatRepository.getSession(parentSid) ?: return null
         if (parent.isChild || MoApps.ofSession(app, parentSid) != null) {
             AppLogger.warning(TAG, "task ${task.id}: only the main chat can start helpers")

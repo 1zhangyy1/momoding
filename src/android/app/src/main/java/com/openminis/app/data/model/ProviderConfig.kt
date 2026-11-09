@@ -187,7 +187,7 @@ enum class ThinkingLevel {
  * agent override in an iOS backup restored on Android as "no level".
  *
  * Read side only, on purpose. The same serializer writes the Room blobs
- * (ModelOverrides, SubAgentDefinition) and the ProviderConfig JSON mirror, so
+ * (ModelOverrides) and the ProviderConfig JSON mirror, so
  * changing what is written would make an older build misread them after a
  * downgrade. An unrecognized value (a level from a newer build) becomes XHIGH,
  * the clamp [ThinkingLevel.decoded] and iOS `ThinkingLevel.decoded` already
@@ -588,13 +588,6 @@ data class ProviderConfig(
     // voiceInputGroupId (meta KV row, not synced CRDT member maps). Absent in
     // old persisted JSON → deserializes to null (ignoreUnknownKeys + default).
     var visionGroupId: String? = null,
-    // [T-sub-agents-v1] The named sub agents the main model can delegate to.
-    // Mirrors iOS ProviderConfig.subAgents — deliberately carried on the
-    // existing provider-config blob rather than as a new synced type, so it
-    // rides the same path the groups above already do. Absent in old persisted
-    // JSON → deserializes to an empty list (ignoreUnknownKeys + default), which
-    // SubAgentRoster.normalize turns into "built-in only".
-    val subAgents: MutableList<SubAgentDefinition> = mutableListOf(),
     // Models and groups exposed to the agent loop (minis-model-use terminal
     // command) — mirrors iOS agentLoopModelEntryIds / agentLoopGroupIds.
     val agentLoopModelEntryIds: MutableList<String> = mutableListOf(),

@@ -7,9 +7,6 @@ import com.openminis.app.backup.BackupExporter
 import com.openminis.app.backup.BackupImporter
 import com.openminis.app.backup.BackupZip
 import com.openminis.app.data.db.AppDatabase
-import com.openminis.app.data.model.SubAgentDefinition
-import com.openminis.app.data.model.ThinkingLevel
-import com.openminis.app.data.repository.ProviderRepository
 import java.io.File
 import org.json.JSONArray
 import org.json.JSONObject
@@ -31,12 +28,6 @@ internal object BackupDebugMethods {
     private fun app(context: Context): MinisApp =
         context.applicationContext as? MinisApp ?: throw RPCException(-32000, "MinisApp not initialized")
 
-    private fun repo(context: Context): ProviderRepository {
-        val r = app(context).providerRepositoryOrNull ?: throw RPCException(-32000, "provider repository unavailable")
-        r.ensureConfigLoaded()
-        return r
-    }
-
     private fun categories(params: JSONObject, default: Set<BackupCategory>?): Set<BackupCategory>? {
         val arr = params.optJSONArray("categories") ?: return default
         return (0 until arr.length()).map { i ->
@@ -44,44 +35,6 @@ internal object BackupDebugMethods {
             BackupCategory.entries.firstOrNull { it.key == key }
                 ?: throw RPCException(-32602, "unknown category '$key' (known: ${BackupCategory.entries.joinToString { it.key }})")
         }.toSet()
-    }
-
-    private fun SubAgentDefinition.toJson() = JSONObject().apply {
-        put("id", id)
-        put("name", name)
-        put("description", description)
-        put("instructions", instructions)
-        put("modelGroupId", modelGroupId ?: JSONObject.NULL)
-        put("thinkingLevelOverride", thinkingLevelOverride?.name ?: JSONObject.NULL)
-        put("isBuiltIn", isBuiltIn)
-        put("sortOrder", sortOrder)
-        put("updatedAt", updatedAt)
-    }
-
-    fun subAgentsList(context: Context): JSONObject =
-        JSONObject().put("subAgents", JSONArray(repo(context).subAgents.map { it.toJson() }))
-
-    fun subAgentsUpsert(context: Context, params: JSONObject): JSONObject {
-        val r = repo(context)
-        val name = params.optString("name").ifBlank { throw RPCException(-32602, "Missing 'name'") }
-        val existing = params.optString("id").takeIf { it.isNotBlank() }?.let { id -> r.subAgents.firstOrNull { it.id == id } }
-        val level = params.optString("thinkingLevelOverride").takeIf { it.isNotBlank() }
-            ?.let { ThinkingLevel.parseOrNull(it) ?: throw RPCException(-32602, "bad thinkingLevelOverride '$it'") }
-        val def = (existing ?: SubAgentDefinition(name = name, description = "")).copy(
-            name = name,
-            description = params.optString("description", existing?.description ?: ""),
-            instructions = params.optString("instructions", existing?.instructions ?: ""),
-            thinkingLevelOverride = level ?: existing?.thinkingLevelOverride,
-        )
-        r.upsertSubAgent(def)
-        return JSONObject().put("id", def.id).put("subAgents", JSONArray(r.subAgents.map { it.toJson() }))
-    }
-
-    fun subAgentsDelete(context: Context, params: JSONObject): JSONObject {
-        val r = repo(context)
-        val id = params.optString("id").ifBlank { throw RPCException(-32602, "Missing 'id'") }
-        r.deleteSubAgent(id)
-        return JSONObject().put("deleted", id).put("remaining", r.subAgents.size)
     }
 
     /** Export into the app's files dir; no destination, no credentials by default. */

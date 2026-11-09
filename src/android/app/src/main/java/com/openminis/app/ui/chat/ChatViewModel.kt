@@ -1256,11 +1256,10 @@ class ChatViewModel(
     private val _activeEntryId = MutableStateFlow<String?>(null)
     val activeEntryId: StateFlow<String?> = _activeEntryId.asStateFlow()
 
-    // [T-p1-delegate-task] Set by the parent's executeDelegateTask on a CHILD
-    // vm before its first turn. Its presence is what every helper-specific
-    // branch keys off: tool set (no delegate_task / memory_write), identity
-    // preamble, turn cap, and the SessionConcurrencyManager bypass.
-    internal var helperConfig: com.openminis.app.agent.jobs.HelperConfig? = null
+    // momoding: set by Helpers.ready on a helper's vm before its first turn. Its presence is what
+    // every helper-specific branch keys off: tool set, identity preamble, turn cap, and the
+    // SessionConcurrencyManager bypass.
+    internal var helperConfig: app.momoding.task.HelperConfig? = null
     internal val isHelper: Boolean get() = helperConfig != null
 
     /**
@@ -1908,21 +1907,6 @@ class ChatViewModel(
             browserEnabled = com.openminis.app.tools.AgentToolSwitch.BROWSER.isEnabled(context),
         )
 
-    /**
-     * [T-sub-agents-v1] The roster block for the system prompt, or "" when the
-     * tool is not offered.
-     *
-     * Empty for a helper (depth 1: a sub agent cannot delegate, so naming the
-     * roster to it is pure cost) and when the Agents switch is off.
-     */
-    private fun subAgentRosterPromptSection(): String {
-        if (isHelper) return ""
-        if (!com.openminis.app.tools.AgentToolSwitch.AGENTS.isEnabled(context)) return ""
-        return com.openminis.app.agent.jobs.HelperRunner.subAgentRosterSection(
-            roster = providerRepository.subAgents,
-            groupName = { id -> providerRepository.group(id)?.name },
-        )
-    }
 
     /**
      * Per-session loop detector. Reset alongside [agentHistory] whenever the
@@ -9115,8 +9099,8 @@ class ChatViewModel(
             // the deliverable, the way a person would say "time's up".
             if (helperConfig != null && !helperWrapUpInjected && (helperWrapUpRequested || turn == turnCap - 1)) {
                 helperWrapUpInjected = true
-                val reason = if (helperWrapUpRequested) com.openminis.app.agent.jobs.HelperWrapUpReason.BUDGET else com.openminis.app.agent.jobs.HelperWrapUpReason.TURNS
-                val note = com.openminis.app.agent.jobs.HelperRunner.wrapUpPrompt(reason)
+                val reason = if (helperWrapUpRequested) "budget" else "turns"
+                val note = app.momoding.prompt.MomodingHelper.wrapUp(outOfTurns = !helperWrapUpRequested)
                 val lastIdx = agentHistory.lastIndex
                 if (lastIdx >= 0 && agentHistory[lastIdx].role == LLMMessage.Role.USER) {
                     val last = agentHistory[lastIdx]
@@ -9125,7 +9109,7 @@ class ChatViewModel(
                 } else {
                     agentHistory.add(LLMMessage(role = LLMMessage.Role.USER, content = note))
                 }
-                AppLogger.info(TAG, "[delegate_task] wrap-up turn injected reason=$reason turn=${turn + 1}/$turnCap")
+                AppLogger.info(TAG, "[helper] wrap-up turn injected reason=$reason turn=${turn + 1}/$turnCap")
             }
             // [T-subagent-turn-countdown] Warn BEFORE the tools are gone.
             //
@@ -9143,9 +9127,9 @@ class ChatViewModel(
             // count is zero and the wrap-up says so more forcefully.
             if (helperConfig != null && !helperWrapUpInjected && !helperTurnWarningInjected) {
                 val remaining = turnCap - 1 - turn
-                if (remaining in 1..com.openminis.app.agent.jobs.HelperRunner.TURN_WARNING_LEAD) {
+                if (remaining in 1..app.momoding.prompt.MomodingHelper.TURN_WARNING_LEAD) {
                     helperTurnWarningInjected = true
-                    val note = com.openminis.app.agent.jobs.HelperRunner.turnBudgetWarning(remaining)
+                    val note = app.momoding.prompt.MomodingHelper.turnWarning(remaining)
                     val lastIdx = agentHistory.lastIndex
                     if (lastIdx >= 0 && agentHistory[lastIdx].role == LLMMessage.Role.USER) {
                         val last = agentHistory[lastIdx]
@@ -9154,7 +9138,7 @@ class ChatViewModel(
                     } else {
                         agentHistory.add(LLMMessage(role = LLMMessage.Role.USER, content = note))
                     }
-                    AppLogger.info(TAG, "[subagent_task] turn budget warning injected remaining=$remaining turn=${turn + 1}/$turnCap")
+                    AppLogger.info(TAG, "[helper] turn budget warning injected remaining=$remaining turn=${turn + 1}/$turnCap")
                 }
             }
 
@@ -10923,11 +10907,6 @@ class ChatViewModel(
                             // silence is the reported bug. Show it with the same weight
                             // as the blocked path. Mirrors iOS ConcurrentTools.
                             val finalStatus = when {
-                                // [T-p2-background-helper] A background delegation returned
-                                // `status: running`: the block stays RUNNING so the tool bar
-                                // treats it as active; the completion hook flips it later.
-                                name == com.openminis.app.agent.jobs.HelperRunner.TOOL_NAME &&
-                                    com.openminis.app.agent.jobs.HelperRunner.isRunningPayload(result.output) -> ToolBlockStatus.RUNNING
                                 result.success && truncationRepairTag != null -> ToolBlockStatus.FAILED
                                 result.success -> ToolBlockStatus.SUCCESS
                                 result.timedOut -> ToolBlockStatus.TIMEOUT
@@ -12310,7 +12289,7 @@ class ChatViewModel(
         // drift rule as the parent's browser bullet below).
         val browserToolEnabled = com.openminis.app.tools.AgentToolSwitch.BROWSER.isEnabled(context)
         val identitySection = helperConfig?.let {
-            com.openminis.app.agent.jobs.HelperRunner.identitySection(it, browserEnabled = browserToolEnabled)
+            app.momoding.prompt.MomodingHelper.identity(it, browserEnabled = browserToolEnabled)
         }
             ?: com.openminis.app.agent.SystemPromptBuilder.identitySection(context)
         // [T-memory-toggle-gates-injection-and-tools-android] Mirror the iOS
@@ -12324,7 +12303,7 @@ class ChatViewModel(
         val memoryOn = _memoryEnabled.value
         val toolListMemoryBullets = if (memoryOn) {
             """
-${com.openminis.app.agent.jobs.HelperRunner.systemPromptBullet(!isHelper && com.openminis.app.agent.jobs.AgentSettings.isEnabled(context))}${subAgentRosterPromptSection()}- memory_write: Save a memory entry to today's daily log (YYYY-MM-DD.md). Use proactively to note user preferences, project patterns, and important context.
+- memory_write: Save a memory entry to today's daily log (YYYY-MM-DD.md). Use proactively to note user preferences, project patterns, and important context.
 - memory_get: Recall memories with keyword search. Check memory at the start of new topics to leverage past knowledge."""
         } else {
             // Empty — no memory_write / memory_get bullets when disabled.
@@ -12360,26 +12339,6 @@ Memory system (currently DISABLED):
         // prompt/schema drift the iOS gating was designed to prevent. Both the
         // tool bullet and the browser-preview guidance are dropped together;
         // the minis:// warning stays, without naming browser_use.
-        // [T-android-subagent-prompt-parity] The two conditional sub agent
-        // pointers iOS carries (AIChatViewModel.swift:2102 and :2105), gated by
-        // exactly the same condition as the subagent_task bullet above:
-        // delegation is offered (Settings > Agents on) AND this is not itself a
-        // helper, since depth is 1 and a child never sees the tool.
-        //
-        // They are not decoration. Both sit on the description of a NEIGHBOURING
-        // tool that the model would otherwise reach for instead — minis-scheduled
-        // (schedule it for later) and minis-model-use (ask another model) both
-        // look like plausible ways to hand work off, and neither runs a tool
-        // loop. Pointing at subagent_task from the place the wrong choice is
-        // being made is what makes the redirect land.
-        val delegationOffered = !isHelper &&
-            com.openminis.app.agent.jobs.AgentSettings.isEnabled(context)
-        val scheduledDelegateNote = if (delegationOffered) {
-            " (Do NOT run minis-scheduled to delegate work you could hand to subagent_task.)"
-        } else ""
-        val modelUseDelegateNote = if (delegationOffered) {
-            " For delegating a whole task that needs tools and multiple rounds, use the subagent_task tool instead."
-        } else ""
         val browserPromptBullet = if (browserToolEnabled) """- browser_use: Web browsing (navigate, screenshot, click, type, get_text, scroll, scroll_and_collect, get_readable, get_backbone, fetch, etc.). Starts with a desktop Chrome user agent. Use screenshot to see the page.
   当 browser_use 触达 Google 登录 / OAuth 页（accounts.google.com、signin.google.com、myaccount.google.com、oauth2.googleapis.com 等）或网页返回 "disallowed_useragent" / 403 包含 "browser is not secure" 字样时，**不要重试或尝试登录** — Google 永久禁止 in-app WebView 完成登录，重试只会浪费 turn。改为告诉用户："此页面需要在系统 Chrome 完成登录" 并给出可点击的 Markdown link [在 Chrome 中打开](https://accounts.google.com/...)。点该 link 时 app 会跳出 Custom Tab；用户在 Chrome 完成操作后，请他**把所需结果（邮件正文 / 文档摘要 / 表格数据）粘贴回 chat**，你再继续帮他处理。这是 Android 平台限制，不是 bug。${toolListMemoryBullets}""" else ""
         val minisUrlNote = if (browserToolEnabled) """IMPORTANT: minis:// URLs are app-internal — they are NOT web URLs. Do NOT pass minis:// action URLs (open_terminal, views, settings) to browser_use — those are app deep links, use Markdown links in chat instead. However, minis:// resource URLs CAN be opened in browser_use with navigate. All directories under /var/minis/ are accessible: workspace, attachments, offloads, shared, etc. The built-in browser fully supports minis:// — HTML pages and all sub-resources (JS, CSS, images, fonts, etc.) referenced via minis:// absolute URLs or relative paths resolve correctly within the current session. When building multi-file web projects, use file_write to create files in the same directory (e.g. /var/minis/workspace/myapp/), then reference sub-resources with relative paths in HTML (e.g. <link href="style.css">, <script src="app.js">, <img src="logo.png">). The browser resolves relative paths against the minis:// base URL automatically. Cross-directory references also work with absolute minis:// URLs (e.g. <img src="minis://attachments/photo.png"> from a workspace HTML page). Navigate to the entry HTML to preview, e.g. minis://workspace/myapp/index.html.""" else """IMPORTANT: minis:// URLs are app-internal — they are NOT web URLs. Do NOT treat minis:// action URLs (open_terminal, views, settings) as web links — those are app deep links, use Markdown links in chat instead."""
@@ -12397,8 +12356,7 @@ Memory system (currently DISABLED):
                 app.momoding.prompt.MomodingPrompt.Inputs(
                     identity = identitySection,
                     browserEnabled = browserToolEnabled,
-                    helpersEnabled = com.openminis.app.tools.AgentToolSwitch.AGENTS.isEnabled(context) &&
-                        app.momoding.apps.MoApps.ofSession(context, realSessionId.ifEmpty { sessionId }) == null,
+                    helpersEnabled = app.momoding.apps.MoApps.ofSession(context, realSessionId.ifEmpty { sessionId }) == null,
                     memoryOn = memoryOn,
                     skills = skillRepository?.skillPromptFragment(activeSessionId),
                     mcp = mcpRepository?.mcpPromptFragment(activeSessionId),
@@ -12495,9 +12453,9 @@ CLI tools at /usr/local/bin with the `android-` prefix give you access to Androi
 - android-a11y-cli — drive system UI (read screen, tap, type, swipe, scroll) via the Android AccessibilityService when enabled. Run with no args (or --help) for the subcommand list.
 - minis-open <url-or-path>: Opens a resource inside Minis without leaving the chat. Accepts http/https URLs (→ built-in WebKit preview) and chat-resource file paths under /var/minis/** (→ built-in file preview, routed by extension: images to the image viewer, .md to markdown preview, .html to HTML preview, .pdf/office docs to QuickLook, audio/video to the media player, else share sheet). Examples: minis-open https://example.com, minis-open /var/minis/workspace/report.md, minis-open /var/minis/attachments/chart.png. Prefer this over android-open for anything that can be previewed in-app so the user doesn't lose conversation context. Run android-open via shell_execute for non-web schemes (tel:, mailto:, geo:, intent:, etc.) or when the user explicitly wants the system handler.
 - minis-sessions-cli: Read chat history. `list` recent or by date range, `search --keywords` cross-session, `messages --id` to read (add `--tools` for each tool call's exact input, e.g. the shell command, and its output). Run --help for full options.
-- minis-model-use: Invoke other LLM models pre-configured by the user. Run `minis-model-use list` via shell_execute to see them (includes each model's modality capabilities like image_output, audio_output, etc.), `minis-model-use search <query>` to filter by name/provider. `minis-model-use run --model <id_or_name>` sends an OpenAI-compatible messages request; pass input via --input <json_file> or stdin, output goes to stdout or --output <path>. The OpenAI shape is the PRIMARY input for every model and modality; standard params are auto-converted to the underlying provider, so do not hand-write provider-native bodies as the primary input. For provider-specific extras the standard schema doesn't model (web-search plugins, image-to-image fields, TTS/video or other custom endpoints), escape hatches exist for OpenAI-compatible providers (they error or are ignored on Anthropic/Gemini models): `extra_body` (object merged verbatim into the request body), a custom `endpoint` path, and a top-level `passthrough` envelope for fully verbatim requests with RAW (unparsed) responses. Results may carry `warnings` (fields that were ignored/downgraded and why) and `applied_extras` (which extras actually took effect) — read them to self-correct. Run --help for the full contract before using these. Models may support multimodal output (image generation, TTS/audio, video) — check the modalities field in list output. For image_output models, pass generation params in the input JSON: top-level `n`/`size`/`quality`/`prompt` (OpenAI /images/generations style) or `generation_config.{aspect_ratio,image_size,number_of_images,person_generation}` (Gemini). Run with --help for full usage.${modelUseDelegateNote}
+- minis-model-use: Invoke other LLM models pre-configured by the user. Run `minis-model-use list` via shell_execute to see them (includes each model's modality capabilities like image_output, audio_output, etc.), `minis-model-use search <query>` to filter by name/provider. `minis-model-use run --model <id_or_name>` sends an OpenAI-compatible messages request; pass input via --input <json_file> or stdin, output goes to stdout or --output <path>. The OpenAI shape is the PRIMARY input for every model and modality; standard params are auto-converted to the underlying provider, so do not hand-write provider-native bodies as the primary input. For provider-specific extras the standard schema doesn't model (web-search plugins, image-to-image fields, TTS/video or other custom endpoints), escape hatches exist for OpenAI-compatible providers (they error or are ignored on Anthropic/Gemini models): `extra_body` (object merged verbatim into the request body), a custom `endpoint` path, and a top-level `passthrough` envelope for fully verbatim requests with RAW (unparsed) responses. Results may carry `warnings` (fields that were ignored/downgraded and why) and `applied_extras` (which extras actually took effect) — read them to self-correct. Run --help for the full contract before using these. Models may support multimodal output (image generation, TTS/audio, video) — check the modalities field in list output. For image_output models, pass generation params in the input JSON: top-level `n`/`size`/`quality`/`prompt` (OpenAI /images/generations style) or `generation_config.{aspect_ratio,image_size,number_of_images,person_generation}` (Gemini). Run with --help for full usage.
 - minis-config: Read or change Minis settings programmatically. Run `minis-config --help` for subcommands and `minis-config topic-help <topic>` for details on a specific area. For array-valued fields (e.g. `models`, `groups`, `envvars`, `defaults.agentLoopEntries`) the `get` subcommand accepts `--filter <keywords>` (whitespace-AND, case-insensitive substring match against each element's JSON) and `--page <N> --page-size <N>` (default 20, max 100) — use these instead of dumping the full list when you only need a subset, and check the response's `pagination` / `agent_hint` fields for the next-page command. Every write triggers an in-app confirmation sheet and is logged to a revertable audit (1000-entry rolling log). After a successful change the response includes a `user_message` field — relay it (or paraphrase) so the user knows how to review or revert via Settings → Logs → Config Changes. If the call returns `permission_denied`, the user has disabled minis-config in [Settings → Permissions](minis://settings/permissions); relay that message and don't retry. You CAN add new providers and write their `apiKey` (literal string OR a `${'$'}${'$'}ENV_VAR` reference to copy from an env var at write time), but `get` never echoes API keys / OAuth tokens / env var values back — those reads return `permission_denied` by design. OAuth tokens and env var values are not settable via this tool; for an env var, point the user at [Set ENV_NAME](minis://settings/environments?create_key=ENV_NAME&create_value=) so they enter the value themselves.
-- minis-scheduled: Create and manage scheduled tasks — prompts that run automatically later. `minis-scheduled create --prompt "..." [--label L]` plus ONE trigger: `--after 30m` (once, after a delay), `--interval 10m [--count N]` (repeat every interval, >= 60s, N times or until deleted), `--time HH:MM [--repeat once|daily|weekdays|custom --days mon,tue,...] [--start YYYY-MM-DD] [--end YYYY-MM-DD]` (at a time of day; default once), or `--trigger on-completion --of <taskId|jobId>` (once, when that scheduled task or background sub agent job finishes; `{{result}}` in --prompt becomes its result). Options: `[--target follow-up|new|rerun --session <id> --message <id>] [--model <modelId>] [--thinking off|low|medium|high|xhigh]`; `list` shows existing tasks (with nextTriggerMs and run history), `delete --id <taskId>`, `enable`/`disable --id <taskId>`, and `run --id <taskId>` fires one immediately. Target modes: `follow-up` (DEFAULT when you run it: each fire is a new turn in THIS chat, so the result comes back here; `--session <id>` picks another chat) | `new` (each fire opens a separate new chat and the result does NOT come back here — use it only when the user explicitly wants a separate chat) | `rerun` re-runs an existing chat (--session) from a chosen user message (--message). `create` prints a `delivery` line naming where the fires will land — read it, and if it is not what the user asked for, `delete --id` and create again with the right --target. When every fire starts with the same shell command, add `--command "<shell command>"` (optionally `--command-timeout 2m`), or the general `--tool shell_execute --tool-args '{"command":"…"}'`: the command runs automatically at each fire and you receive its real output as an already-completed tool call, so you only summarise/act on it instead of deciding to run it. Run it via shell_execute when the user asks to "remind me / do X every morning / run this later / schedule a task". Run --help for full usage.${scheduledDelegateNote}
+- minis-scheduled: Create and manage scheduled tasks — prompts that run automatically later. `minis-scheduled create --prompt "..." [--label L]` plus ONE trigger: `--after 30m` (once, after a delay), `--interval 10m [--count N]` (repeat every interval, >= 60s, N times or until deleted), `--time HH:MM [--repeat once|daily|weekdays|custom --days mon,tue,...] [--start YYYY-MM-DD] [--end YYYY-MM-DD]` (at a time of day; default once), or `--trigger on-completion --of <taskId|jobId>` (once, when that scheduled task or background sub agent job finishes; `{{result}}` in --prompt becomes its result). Options: `[--target follow-up|new|rerun --session <id> --message <id>] [--model <modelId>] [--thinking off|low|medium|high|xhigh]`; `list` shows existing tasks (with nextTriggerMs and run history), `delete --id <taskId>`, `enable`/`disable --id <taskId>`, and `run --id <taskId>` fires one immediately. Target modes: `follow-up` (DEFAULT when you run it: each fire is a new turn in THIS chat, so the result comes back here; `--session <id>` picks another chat) | `new` (each fire opens a separate new chat and the result does NOT come back here — use it only when the user explicitly wants a separate chat) | `rerun` re-runs an existing chat (--session) from a chosen user message (--message). `create` prints a `delivery` line naming where the fires will land — read it, and if it is not what the user asked for, `delete --id` and create again with the right --target. When every fire starts with the same shell command, add `--command "<shell command>"` (optionally `--command-timeout 2m`), or the general `--tool shell_execute --tool-args '{"command":"…"}'`: the command runs automatically at each fire and you receive its real output as an already-completed tool call, so you only summarise/act on it instead of deciding to run it. Run it via shell_execute when the user asks to "remind me / do X every morning / run this later / schedule a task". Run --help for full usage.
 Interactive terminal: minis://open_terminal opens a terminal for tasks that require interactive stdin (passwords, ssh, TUI apps like htop/vi). Write it as a Markdown link in your response — the app opens it when tapped. The optional init_command parameter pre-fills (NOT executes) a command; it MUST be fully percent-encoded (spaces → %20, & → %26, | → %7C, etc.). Only use this for genuinely interactive sessions — for everything else, use shell_execute. Examples: [Open Terminal](minis://open_terminal), [Login to SSH](minis://open_terminal?init_command=ssh%20user%40host).
 
 Environment variables:

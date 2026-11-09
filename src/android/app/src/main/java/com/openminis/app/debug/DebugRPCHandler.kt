@@ -79,15 +79,12 @@ class DebugRPCHandler(private val context: Context) {
             "debug.rawLs" -> handleRawLS(params)
             "debug.readFile" -> handleReadFile(params)
             "debug.logs.list" -> handleLogsList()
-            // [T-android-backup-subagents] Backup round-trip + sub agent roster drivers.
+            // Backup round-trip drivers.
             "debug.backup.export" -> BackupDebugMethods.backupExport(context, params)
             "debug.backup.restore" -> BackupDebugMethods.backupRestore(context, params)
             "debug.backup.upload" -> kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { BackupDebugMethods.backupUpload(context, params) }
             "debug.backup.remotes.addWebdav" -> BackupDebugMethods.remotesAddWebdav(context, params)
             "debug.backup.remotes.remove" -> BackupDebugMethods.remotesRemove(context, params)
-            "debug.subAgents.list" -> BackupDebugMethods.subAgentsList(context)
-            "debug.subAgents.upsert" -> BackupDebugMethods.subAgentsUpsert(context, params)
-            "debug.subAgents.delete" -> BackupDebugMethods.subAgentsDelete(context, params)
             "debug.logs.read" -> handleLogsRead(params)
             "debug.logs.setEnabled" -> handleLogsSetEnabled(params)
             "debug.crash.list" -> handleCrashList(params)

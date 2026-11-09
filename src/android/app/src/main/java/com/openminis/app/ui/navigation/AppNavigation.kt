@@ -164,15 +164,9 @@ object Routes {
     /** [path]: optional Linux folder to open at (a tapped minis:// folder link). */
     fun chatFiles(sessionId: String, path: String? = null) =
         if (path == null) "chat_files/$sessionId" else "chat_files/$sessionId?path=${android.net.Uri.encode(path)}"
-    /** [T-agent-transcript-page] Full-screen read-only agent (child) transcript. */
-    const val AGENT_TRANSCRIPT = "agent_transcript/{sessionId}"
-    fun agentTranscript(sessionId: String) = "agent_transcript/$sessionId"
     const val MEMORY = "memory"
-    /** [T-p2-agent-settings] Settings › Agents. */
+    /** The old Settings › Agents link; opens the tools page. */
     const val AGENTS = "agents"
-    // [T-sub-agents-v1] The roster the main model delegates to by name.
-    const val SUB_AGENTS = "sub_agents"
-    const val SUB_AGENT_DETAIL = "sub_agent/{agentId}"
     /** [T-tools-granular-switches] Settings > Agent Runtime > Tools. */
     const val AGENT_TOOLS = "agent_tools"
     /** [T-mcp-integration-android] MCP Integrations management screen. */
@@ -636,7 +630,6 @@ fun AppNavigation(
                 onModelsClick = { navController.safeNavigate(app.momoding.ui.settings.ROUTE_MODELS) }, // momoding
                 onTerminalClick = { navController.safeNavigate(Routes.terminal()) },
                 onMemoryClick = { navController.safeNavigate(Routes.MEMORY) },
-                onAgentsClick = { navController.safeNavigate(Routes.AGENTS) },
                 onAgentToolsClick = { navController.safeNavigate(Routes.AGENT_TOOLS) },
                 onMcpClick = { navController.safeNavigate(Routes.MCP) },
                 onSoulClick = { navController.safeNavigate(Routes.SOUL) },
@@ -1481,54 +1474,15 @@ fun AppNavigation(
             )
         }
 
-        // [T-android-subagent-page-parity] AGENTS resolves to the roster page
-        // itself, not to a wrapper around it.
-        //
-        // The old AgentSettingsScreen held a link to this page plus a READ-ONLY
-        // mirror of the sub-model group — a setting iOS configures under
-        // Providers > Model Groups, not here. Once the switch moved onto the
-        // roster page (e905140cb), the wrapper carried nothing of its own and
-        // was purely an extra tap between the user and the thing they picked.
-        //
-        // Kept as a route rather than deleted: `minis://settings/agents` is a
-        // published deep link, so it must keep resolving.
+        // `minis://settings/agents` is a published deep link: it opens the tools page.
         composable(Routes.AGENTS) {
-            com.openminis.app.ui.settings.SubAgentsScreen(
-                onBack = { navController.safePopBackStack() },
-                onOpen = { id -> navController.navigate("sub_agent/$id") },
-            )
-        }
-
-        composable(Routes.SUB_AGENTS) {
-            com.openminis.app.ui.settings.SubAgentsScreen(
-                onBack = { navController.safePopBackStack() },
-                onOpen = { id -> navController.navigate("sub_agent/$id") },
-            )
-        }
-
-        composable(
-            Routes.SUB_AGENT_DETAIL,
-            arguments = listOf(navArgument("agentId") { type = NavType.StringType }),
-        ) { entry ->
-            com.openminis.app.ui.settings.SubAgentDetailScreen(
-                agentId = entry.arguments?.getString("agentId").orEmpty(),
+            com.openminis.app.ui.settings.AgentToolsSettingsScreen(
                 onBack = { navController.safePopBackStack() },
             )
         }
 
         composable(Routes.AGENT_TOOLS) {
             com.openminis.app.ui.settings.AgentToolsSettingsScreen(
-                onBack = { navController.safePopBackStack() },
-            )
-        }
-
-        composable(
-            route = Routes.AGENT_TRANSCRIPT,
-            arguments = listOf(navArgument("sessionId") { type = NavType.StringType }),
-        ) { backStackEntry ->
-            val sessionId = backStackEntry.arguments?.getString("sessionId") ?: return@composable
-            com.openminis.app.ui.chat.AgentTranscriptScreen(
-                sessionId = sessionId,
                 onBack = { navController.safePopBackStack() },
             )
         }

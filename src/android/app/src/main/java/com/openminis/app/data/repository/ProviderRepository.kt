@@ -25,8 +25,6 @@ import com.openminis.app.data.model.ProviderCredential
 import com.openminis.app.data.model.ProviderInstance
 import com.openminis.app.data.model.ProviderType
 import com.openminis.app.data.model.RoutingStrategy
-import com.openminis.app.data.model.SubAgentDefinition
-import com.openminis.app.data.model.SubAgentRoster
 import com.openminis.app.logging.AppLogger
 import com.openminis.app.data.model.SystemVoiceIds
 import com.openminis.app.data.model.ThinkingLevel
@@ -117,7 +115,6 @@ class ProviderRepository(private val context: Context) {
 
     companion object {
         /** [T-sub-agents-v1] Log category for roster repairs. */
-        private const val SUB_AGENT_LOG = "SubAgents"
 
         /**
          * Per-instance model-cache TTL. Matches iOS's daily calendar-day
@@ -722,13 +719,6 @@ class ProviderRepository(private val context: Context) {
                 .toMutableList(),
             agentLoopModelEntryIds = live.agentLoopModelEntryIds.toMutableList(),
             agentLoopGroupIds = live.agentLoopGroupIds.toMutableList(),
-            // [T-android-subagents-working-copy] The roster too. It was the one
-            // MutableList left shared with the published config, and
-            // upsert/delete/reorderSubAgents edit it in place (clear() then
-            // addAll()). The lock-free `subAgents` getter could read it between
-            // the two — an empty roster, so delegate_task reported an unknown
-            // sub agent — or throw ConcurrentModificationException mid-iteration.
-            subAgents = live.subAgents.toMutableList(),
         )
     }
 
@@ -1546,16 +1536,6 @@ class ProviderRepository(private val context: Context) {
             config.visionGroupId = null
         }
         config.agentLoopGroupIds.removeAll { it == groupId }
-        // [T-sub-agents-v1] A sub agent pinned to this group reverts to Auto.
-        // Leaving the dangling id would make the definition resolve to
-        // "pinned, but unroutable" on every delegation — the child would
-        // silently run on the parent's model while the settings screen still
-        // claimed a group the user had deleted.
-        config.subAgents.forEachIndexed { i, def ->
-            if (def.modelGroupId == groupId) {
-                config.subAgents[i] = def.copy(modelGroupId = null)
-            }
-        }
         saveConfig(config)
     }
 
@@ -1786,70 +1766,6 @@ class ProviderRepository(private val context: Context) {
         _config.value.modelGroups.find { it.id == id }
 
     // ---------------------------------------------------------------- sub agents
-
-    /**
-     * [T-sub-agents-v1] The sub agent roster, always normalized.
-     *
-     * Normalizing on READ rather than only on write is what makes the built-in
-     * unconditional: the stored list can arrive from a newer build, from
-     * another platform, or from a device set to a different language, and every
-     * consumer (the tool schema's `agent` enum, the system-prompt roster, the
-     * settings list) has to see the same repaired view. Cheap enough to do per
-     * read — the list is bounded at 10.
-     */
-    val subAgents: List<SubAgentDefinition>
-        get() = SubAgentRoster.normalize(_config.value.subAgents) { msg ->
-            AppLogger.info(SUB_AGENT_LOG, msg)
-        }
-
-    /** One definition by id, from the normalized roster. */
-    fun subAgent(id: String): SubAgentDefinition? = subAgents.find { it.id == id }
-
-    /**
-     * Insert or replace a definition, then persist the normalized roster.
-     *
-     * Writing the normalized form back (rather than the caller's list) keeps
-     * the stored blob and the in-memory view identical, so a later read cannot
-     * produce a different order or a different count than the write did.
-     */
-    fun upsertSubAgent(def: SubAgentDefinition): Unit = synchronized(configLock) {
-        ensureConfigLoaded()
-        val config = workingCopy()
-        val stamped = def.copy(updatedAt = System.currentTimeMillis())
-        val idx = config.subAgents.indexOfFirst { it.id == stamped.id }
-        if (idx >= 0) config.subAgents[idx] = stamped else config.subAgents.add(stamped)
-        val normalized = SubAgentRoster.normalize(config.subAgents) { AppLogger.info(SUB_AGENT_LOG, it) }
-        config.subAgents.clear()
-        config.subAgents.addAll(normalized)
-        saveConfig(config)
-    }
-
-    /** Delete a custom definition. The built-in cannot be deleted. */
-    fun deleteSubAgent(id: String): Unit = synchronized(configLock) {
-        if (id == SubAgentDefinition.BUILT_IN_ID) return
-        ensureConfigLoaded()
-        val config = workingCopy()
-        config.subAgents.removeAll { it.id == id }
-        val normalized = SubAgentRoster.normalize(config.subAgents) { AppLogger.info(SUB_AGENT_LOG, it) }
-        config.subAgents.clear()
-        config.subAgents.addAll(normalized)
-        saveConfig(config)
-    }
-
-    /** Apply a new order, by id. Unknown ids are ignored; missing ones keep their place. */
-    fun reorderSubAgents(orderedIds: List<String>): Unit = synchronized(configLock) {
-        ensureConfigLoaded()
-        val config = workingCopy()
-        val byId = config.subAgents.associateBy { it.id }
-        val reordered = mutableListOf<SubAgentDefinition>()
-        orderedIds.forEach { id -> byId[id]?.let { reordered.add(it) } }
-        config.subAgents.forEach { if (it.id !in orderedIds) reordered.add(it) }
-        reordered.forEachIndexed { i, def -> reordered[i] = def.copy(sortOrder = i) }
-        val normalized = SubAgentRoster.normalize(reordered) { AppLogger.info(SUB_AGENT_LOG, it) }
-        config.subAgents.clear()
-        config.subAgents.addAll(normalized)
-        saveConfig(config)
-    }
 
     var defaultPrimaryGroupId: String?
         get() = _config.value.defaultPrimaryGroupId
@@ -3496,32 +3412,10 @@ class ProviderRepository(private val context: Context) {
             val mergedAgentGroups =
                 (local.agentLoopGroupIds + remote.agentLoopGroupIds).distinct()
 
-            // [T-subagent-sync-dedupe] Merge the sub agent roster too. Without
-            // this the local roster was kept wholesale and the package's
-            // discarded, so an agent created on another device never arrived —
-            // silent non-propagation rather than data loss, but equally wrong.
-            //
-            // Deduping is by NAME, not id: the model emits a name and
-            // SubAgentRoster.resolve matches on it, so two rows that differ
-            // only by id (the same agent created independently on two devices)
-            // would cost a roster slot each, be paid for on every turn, and
-            // leave the second permanently unreachable.
-            val mergedSubAgents = local.subAgents.toMutableList()
-            for (r in remote.subAgents) {
-                val clash = mergedSubAgents.any {
-                    it.id == r.id || SubAgentRoster.nameKey(it.name) == SubAgentRoster.nameKey(r.name)
-                }
-                if (!clash) mergedSubAgents.add(r)
-            }
-            val normalizedSubAgents = SubAgentRoster.normalize(mergedSubAgents) {
-                AppLogger.info(SUB_AGENT_LOG, it)
-            }
-
             val merged = local.copy(
                 instances = orderedInstances,
                 modelEntries = mergedEntries,
                 modelGroups = orderedGroups,
-                subAgents = normalizedSubAgents.toMutableList(),
                 agentLoopModelEntryIds = mergedAgentEntries.toMutableList(),
                 agentLoopGroupIds = mergedAgentGroups.toMutableList(),
             )
@@ -3564,24 +3458,6 @@ class ProviderRepository(private val context: Context) {
      * closest faithful behaviour the local schema allows; the record's carried
      * createdAt/updatedAt are ignored on import.
      */
-    /**
-     * [T-android-backup-subagents] Merge the custom sub agents a backup package
-     * carried in `data/sub_agents.jsonl` (iOS writes them only there). Rules in
-     * [SubAgentRoster.mergeBackup]. Returns (written, skipped).
-     */
-    fun restoreBackupSubAgents(incoming: List<SubAgentDefinition>): Pair<Int, Int> = synchronized(configLock) {
-        if (incoming.isEmpty()) return@synchronized 0 to 0
-        ensureConfigLoaded()
-        val config = workingCopy()
-        val merged = SubAgentRoster.mergeBackup(config.subAgents, incoming) { AppLogger.info(SUB_AGENT_LOG, it) }
-        if (merged.written > 0) {
-            config.subAgents.clear()
-            config.subAgents.addAll(merged.roster)
-            saveConfig(config)
-        }
-        merged.written to merged.skipped
-    }
-
     fun restoreBackupThinkingRules(
         rules: List<com.openminis.app.backup.BackupThinkingRuleRecord>,
     ): Pair<Int, Int> = runBlocking {

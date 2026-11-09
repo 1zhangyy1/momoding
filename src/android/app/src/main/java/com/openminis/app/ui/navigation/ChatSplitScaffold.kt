@@ -936,11 +936,6 @@ fun ChatSplitScaffoldRoute(
                         Routes.terminal(initCommand = command, sessionId = sessionId),
                     )
                 },
-                // [T-agent-transcript-page] Full-screen push on the OUTER host,
-                // like the terminal — it must not swap the detail pane.
-                onOpenAgentTranscript = { childId ->
-                    navController.safeNavigate(Routes.agentTranscript(childId))
-                },
                 // Move-to targets another chat, which is still inside the
                 // list/detail pair — so it swaps the detail pane rather than
                 // pushing. (The old popUpTo(SESSION_LIST) existed to avoid

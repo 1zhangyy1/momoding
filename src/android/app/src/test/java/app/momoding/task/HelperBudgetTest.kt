@@ -1,7 +1,7 @@
 package app.momoding.task
 
 import app.momoding.prompt.MomodingHelper
-import com.openminis.app.agent.jobs.HelperRunner
+
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -21,7 +21,7 @@ class HelperBudgetTest {
         advanceTimeBy(1)
         runCurrent()
         assertEquals(listOf("wrap up"), events)
-        advanceTimeBy(HelperRunner.WRAP_UP_GRACE_MS)
+        advanceTimeBy(Helpers.WRAP_UP_GRACE_MS)
         runCurrent()
         assertEquals(listOf("wrap up", "expired"), events)
     }
@@ -31,7 +31,7 @@ class HelperBudgetTest {
         val budget = Helpers.watchBudget(this, { events += "wrap up" }, { events += "expired" })
         runCurrent()
         budget.cancel()
-        advanceTimeBy(MomodingHelper.MAX_MINUTES * 60_000L + HelperRunner.WRAP_UP_GRACE_MS + 1)
+        advanceTimeBy(MomodingHelper.MAX_MINUTES * 60_000L + Helpers.WRAP_UP_GRACE_MS + 1)
         runCurrent()
         assertEquals(emptyList<String>(), events)
     }
@@ -44,7 +44,7 @@ class HelperBudgetTest {
         advanceTimeBy(remaining)
         runCurrent()
         assertEquals(listOf("wrap up"), events)
-        advanceTimeBy(HelperRunner.WRAP_UP_GRACE_MS)
+        advanceTimeBy(Helpers.WRAP_UP_GRACE_MS)
         runCurrent()
         assertEquals(listOf("wrap up", "expired"), events)
     }
@@ -53,7 +53,7 @@ class HelperBudgetTest {
         val events = mutableListOf<String>()
         val remaining = 500L
         Helpers.watchBudget(this, { events += "wrap up" }, { events += "expired" },
-            elapsedMs = MomodingHelper.MAX_MINUTES * 60_000L + HelperRunner.WRAP_UP_GRACE_MS - remaining)
+            elapsedMs = MomodingHelper.MAX_MINUTES * 60_000L + Helpers.WRAP_UP_GRACE_MS - remaining)
         runCurrent()
         assertEquals(listOf("wrap up"), events)
         advanceTimeBy(remaining)

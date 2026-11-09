@@ -38,10 +38,6 @@ class BackupThinkingLevelRestoreTest {
             "id": "g1", "name": "Group", "memberEntryIds": ["e1"],
             "strategy": "fallback", "fallbackStrategy": "default",
             "defaultThinkingLevel": "high"
-          }],
-          "subAgents": [{
-            "id": "a1", "name": "researcher", "description": "d",
-            "thinkingLevelOverride": "low"
           }]
         }
     """.trimIndent()
@@ -51,7 +47,6 @@ class BackupThinkingLevelRestoreTest {
         val config = BackupImporter.parseProviderConfigLeniently(iosProviderConfig).config
         assertEquals(ThinkingLevel.HIGH, config.modelGroups.single().defaultThinkingLevel)
         assertEquals(ThinkingLevel.MAX, config.modelEntries.single().overrides.maxThinkingLevel)
-        assertEquals(ThinkingLevel.LOW, config.subAgents.single().thinkingLevelOverride)
     }
 
     @Test
@@ -66,8 +61,8 @@ class BackupThinkingLevelRestoreTest {
 
     @Test
     fun androidEncoding_isUnchanged() {
-        // The level is also persisted in Room blobs (ModelOverrides,
-        // SubAgentDefinition) and the ProviderConfig JSON mirror. Changing what
+        // The level is also persisted in Room blobs (ModelOverrides)
+        // and the ProviderConfig JSON mirror. Changing what
         // is WRITTEN would make an older build (a downgrade) misread them, so
         // the fix is read-side only: the written form stays the enum name.
         val text = BackupFormat.json.encodeToString(

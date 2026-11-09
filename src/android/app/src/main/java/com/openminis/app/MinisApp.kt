@@ -262,10 +262,6 @@ class MinisApp : Application(), ImageLoaderFactory {
         // its pending flag, so nothing schedules another check even after the
         // switch is turned back on. Only a switch that never flips is safe.
         androidx.compose.ui.contentcapture.ContentCaptureManager.isEnabled = false
-        // [T-tools-granular-switches] Carry a pre-split delegation choice onto
-        // the per-tool key, once, before anything reads it. Mirrors iOS
-        // MinisApp.swift's AgentToolSwitch.migrateLegacyIfNeeded().
-        com.openminis.app.tools.AgentToolSwitch.migrateLegacyIfNeeded(this)
 
         // T287-followup: ACRA spawns a separate reporter process named
         // "<package>:acra" (declared by the library's manifest) to send
@@ -493,7 +489,6 @@ class MinisApp : Application(), ImageLoaderFactory {
         }
         database = AppDatabase.getInstance(this)
         chatRepository = ChatRepository(database.chatDao())
-        com.openminis.app.agent.jobs.LegacyAgentCallbackLabels.install(this)
         providerRepository = ProviderRepository(this)
         envVarRepository = EnvVarRepository(this)
         // [T-android-safemode-lateinit-crash-147] SkillRepository parses
