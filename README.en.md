@@ -4,10 +4,9 @@
 
 <h1 align="center">Momoding</h1>
 
-<p align="center"><strong>Turn your phone into an AI phone.</strong><br/>
-A personal agent that lives on your phone.<br/>
-Tell it what you saw or thought of, and it uses what's on your phone to handle it, remembers how you like things, and keeps an eye on what comes next.<br/>
-Simple, smooth, and quiet.</p>
+<p align="center"><strong>Describe a small app. Make it your own.</strong><br/>
+A personal agent on your Android phone that handles tasks and builds little apps for you.<br/>
+Add a home-screen shortcut, use it, and ask its own Bot for changes as you go.</p>
 
 <p align="center">
   <a href="https://github.com/1zhangyy1/momoding/releases/latest"><strong>Download the APK</strong></a>
@@ -28,47 +27,65 @@ Simple, smooth, and quiet.</p>
 
 <p align="center"><sub>Screenshots from an Android emulator with the English interface (DeepSeek V4.1 Flash); the train app and photo album screens are illustrations.</sub></p>
 
-> **1.0 preview.** Good for everyday trial use, but it is moving fast. Most polishing so far happened on an emulator and a few real phones, and background reliability on heavily customised Android builds is still being tested. Please [open an issue](https://github.com/1zhangyy1/momoding/issues/new/choose) when something goes wrong.
+> **Current version: 1.0.9, still moving fast.** You can create small apps in a chat and let several Bots work on them. Most polishing so far happened on an emulator and a few real phones; background reliability on heavily customised Android builds is still being tested. Please [open an issue](https://github.com/1zhangyy1/momoding/issues/new/choose) when something goes wrong.
 
 ---
 
-## Why
+## Recent update 1.0.9
 
-**An AI phone shouldn't require a new phone.**
+- Fixed scrolling in app chats and missing handoffs when several Bots receive work in one step.
+- Fixed false “send” approval prompts while editing app code. Actual sends, uploads and deletions still require checks.
+- Added an idle timeout for model streams without useful output and prompt cancellation of blocked network reads.
 
-Codex, Grok Bot and Instinct have shown that AI can do real work, not just chat. But they live in the cloud or on your computer, out of reach of the calendar, alarms, contacts, messages and apps on your phone. Phone makers' AI phones, meanwhile, ask you to buy new hardware and use their model.
+[Full release notes](docs/releases/1.0.9.md) · [Download 1.0.9](https://github.com/1zhangyy1/momoding/releases/tag/v1.0.9)
 
-Momoding puts an agent that gets things done on the Android phone you **already have**. It uses what's on your phone to handle things, remembers you, and keeps watch. Install one app, bring your own model key, and your phone is an AI phone.
+### 1.0.8: Small apps and multiple Bots
 
-The small chores on your phone still fall to you: you **re-type** things, **remember** them, and **keep checking** on them.
+- **Create a small app in a chat.** Each app has its own Bot, which brings back a card to open it. Ask for changes in the main chat or tap the pencil inside the app.
+- **Hand off several jobs.** Bots work and report back separately. Tap the name at the top to switch between or manage Bots; each Bot can also have its own app.
+- **Open from your home screen.** Add a shortcut with your confirmation. Widgets depend on the phone and launcher.
+- **Use phone capabilities.** Apps can pick photos, use the camera or location, and read texts or notifications with permission. Access can be revoked in Settings.
+- **Check apps without taking over your screen.** Bots open and check their apps on a background stage. File choices and permission requests wait for you to take over.
+- **Fixes and compatibility.** Fixed some missing completion reports; approval notifications follow the app language. ColorOS widgets are unsupported. Some phones pause background work, which resumes when you return.
 
-- The school emails a trip notice, and you copy the date into your calendar by hand, then set a reminder.
-- You tell a chatbot to "remember this", and next time it has forgotten.
-- You want to know when tickets become available or a price drops, so you check again every few hours.
+[Full release notes](docs/releases/1.0.8.md) · [Download 1.0.8](https://github.com/1zhangyy1/momoding/releases/tag/v1.0.8)
 
-Momoding takes those three jobs off your hands:
+## From an idea to an app on your home screen
 
-| | What it does for you |
-| - | - |
-| **Less re-typing** | Hand it a screenshot, a notification or a file, and the event, reminder, alarm or draft gets created. You get a one-line result plus a "See in Calendar" button. |
-| **Less remembering** | Say "no meetings before 10am, I do school drop-off" once and it applies that from then on. If it got something wrong, one sentence fixes it. |
-| **Less watching** | "Every weekday at 7:30am, give me a quick brief." "Watch this page and tell me when it changes." It only reaches out when something actually changed. |
+**Describe it → a Bot builds it → open it from your home screen → ask for changes.**
 
-## How it's different
+Try an idea like “make a 3D landmark gallery I can rotate,” “build a poster tool using my photos,” or an expense tracker that fits your habits. Momoding hands the request to a dedicated Bot, which reports back in the original conversation with a card to open the app.
 
-| | AI chat apps | Built-in phone assistants | Cloud agents (Grok Bot etc.) | **Momoding** |
-| - | :-: | :-: | :-: | :-: |
-| Uses what's on your phone (calendar, alarms, contacts, photos, notifications, the screen) | ✗ | ✓ | ✗ | **✓** |
-| Remembers you, and you can see and edit what it remembers | weak | weak | ✓ | **✓** |
-| Takes on a task and follows up | ✗ | ✗ | ✓ | **✓** |
-| Where your data lives | vendor cloud | vendor cloud | vendor cloud | **your phone** |
-| Open source, bring your own model key | ✗ | ✗ | ✗ | **✓** |
+Small apps run inside Momoding and can have a home-screen shortcut. Tap the icon next time to keep using it. They are not standalone APKs.
+
+**Small apps and multiple Bots · 32 seconds, with audio · Chinese interface**
+
+https://github.com/user-attachments/assets/23a38fc7-352b-4260-b561-b34490856553
+
+<p align="center"><img src="docs/assets/multi-bot-en.jpg" alt="Momoding: separate Bot reports and a small app you can open" width="960" /></p>
+
+## Each app has its own Bot
+
+The app is the interface you use. Its Bot takes care of building and changing it. App data, the Bot's conversation and its project memory are kept so you can pick up where you left off.
+
+- **Ask for changes inside the app.** Tap the pencil and say “make it nighttime, with warmer lights” or “make the title bigger and leave more space.” You can also ask in the main chat.
+- **Hand off several jobs.** The main Momoding sends work to the relevant Bots. Each works on its own and reports back. You can go straight to a particular Bot's chat too.
+- **Use phone capabilities.** With permission, apps can use photos, the camera and location, and receive texts or notifications when relevant to their purpose.
+- **Keep your screen free while it checks.** A Bot checks its app on a background stage. File choices and permission requests wait for you to take over.
+
+<p align="center"><sub>Android emulator screenshots; the interface shown is Chinese. These are model-generated examples, and results vary by model and task. Widgets are available on supported phones; Momoding widgets are currently unavailable on OPPO / OnePlus ColorOS.</sub></p>
+
+## Everyday tasks start in the same chat
+
+Ask Momoding to create a calendar event, set a reminder, look something up, remember a preference or set up a routine.
+
+We want a useful personal agent on the phone you already have. Hand it a one-off task; turn a recurring need into an app of your own. Start with something useful, try it, and keep changing it to fit you.
 
 ## Why it feels good to use
 
 What we care about most is not the number of features. It is how light it feels to hand something off:
 
-- **One conversation.** No chat list, no modes. Open it and it's there, like texting someone reliable.
+- **Start in one main chat.** Hand the job to Momoding. When you need a particular Bot, tap the name at the top to switch, or talk to it inside its app.
 - **Results first.** When it's done, you get the result in a sentence plus a button to check it ("See in Calendar"). The steps fold into "Did N steps" for when you want them.
 - **At most one question.** If something is missing, it asks only the one thing that matters and offers choices. No guessing, no interrogation.
 - **It asks before acting.** Deleting, sending and paying show an approval card. Tap "Always allow" once and it just does it next time, leaving one line in the chat.
@@ -78,7 +95,14 @@ What we care about most is not the number of features. It is how light it feels 
 
 ## Who we learned from
 
-How it talks, how cards appear, when to stop and ask you: we studied **Grok Bot** and **Instinct**, two of the best agent products out there, and brought that experience to the phone.
+**OpenMinis is the code foundation**, providing the on-device agent, Linux environment and phone capabilities. We build on that to turn personal needs into small apps with Bots that keep looking after them.
+
+- **[Fibona](https://github.com/FibonaAI/fibona-agent)** inspired making tools on the phone, changing them in place and keeping them for later use.
+- **Grok Bot** informed having several Bots, each responsible for something with its own conversation and memory. In Momoding, each Bot can also have its own small app.
+- **Instinct and Grok Bot** informed the result, handoff and approval cards in the conversation.
+- **[DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness)** is a research reference for ongoing improvements to task execution and recovery.
+
+Here, improving an app means a Bot changing its own small app. The Momoding host updates by checking for and downloading published releases.
 
 ## What it can do today
 
@@ -102,7 +126,7 @@ How it talks, how cards appear, when to stop and ask you: we studied **Grok Bot*
 
 ## Privacy, in plain terms
 
-- **There's no Momoding account and no Momoding server.** Chats, memory, rules and routines are stored on your phone.
+- **There's no Momoding account and no Momoding server.** Chats, memory, small-app data, rules and routines are stored on your phone.
 - **Your model API key is stored encrypted on the phone** and is only used to call the provider you picked.
 - **It is not offline, though.** For the model to understand a request, the conversation and whatever Momoding reads while working on it (a calendar entry, a web page) are sent to **the model provider you chose**. Which provider gets that data is up to you.
 - **When it looks something up on the web**, the search words go to Exa, a free search service; pages it reads are fetched by the phone directly from the site.
@@ -115,7 +139,7 @@ How it talks, how cards appear, when to stop and ask you: we studied **Grok Bot*
 3. Type your first request, or tap one of the examples on the empty chat.
 4. To let it operate other apps, go to Settings → Phone permissions → **Hands** and follow the prompts to turn on Accessibility and the overlay permission. Everything else works without it.
 
-> If you installed any earlier Momoding build (including 0.1.0-alpha and test builds), uninstall it first. Version 1.0 is a new codebase with a new signing key, so it can't update the old app in place. From 1.0 on the key stays the same, so later versions update in place.
+> **Updating to 1.0.9:** Official versions 1.0.1–1.0.8 can be updated in place, keeping your data. Version 0.1.0-alpha and early test builds signed with a different key cannot be updated in place; back up the data you need before removing an incompatible build.
 
 ## Build from source
 

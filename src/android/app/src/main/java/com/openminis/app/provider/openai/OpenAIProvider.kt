@@ -19,13 +19,16 @@ import com.openminis.app.provider.applyUserAgentOverride
 import com.openminis.app.provider.safeOptString
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.flowOn
+import com.openminis.app.provider.withIdleTimeout
 import kotlinx.coroutines.withContext
 import okhttp3.Call
 import okhttp3.Connection
@@ -274,6 +277,9 @@ class OpenAIProvider private constructor(
          * genuinely dead connection.
          */
         private const val STREAM_TTFB_TIMEOUT_MS = 120_000L
+        // Same silence budget as readTimeout: normal Codex reasoning can be
+        // quiet for over three minutes. SSE keepalives must not extend it.
+        private const val STREAM_IDLE_TIMEOUT_MS = 600_000L
 
         /**
          * [T-android-ttfb-upload-split / #188] Overall ceiling for the UPLOAD
@@ -902,6 +908,12 @@ class OpenAIProvider private constructor(
         // (b) evict THIS ONE connection on timeout.
         val watchState = CallWatchState()
         val call = client.newCall(request.newBuilder().tag(CallWatchState::class.java, watchState).build())
+        // A blocking read must be released when its coroutine is cancelled,
+        // before that coroutine can finish and close its channel.
+        val cancelCall = launch(Dispatchers.IO, start = CoroutineStart.UNDISPATCHED) {
+            try { awaitCancellation() } finally { call.cancel() }
+        }
+        channel.invokeOnClose { cancelCall.cancel() }
         // [T-android-stale-conn-retry-hang] Time-to-first-byte watchdog. A
         // request written into a dead pooled h2 tunnel (local proxy socket
         // survives a network flap) produces NO further events — no headers,
@@ -1042,10 +1054,6 @@ class OpenAIProvider private constructor(
                 response.close()
             }
             channel.close()
-            awaitClose {
-                try { call.cancel() } catch (_: Exception) {}
-                try { response.close() } catch (_: Exception) {}
-            }
             return@callbackFlow
         }
 
@@ -1747,14 +1755,13 @@ class OpenAIProvider private constructor(
             response.close()
         }
         channel.close()
-        // T171: when the coroutine is cancelled (user tapped stop), the
-        // reader loop above is suspended inside the OkHttp source — only
-        // call.cancel() will tear the socket down promptly. response.close()
-        // is also explicit so connection-pool leaks are impossible if cancel
-        // races with the finally block.
-        awaitClose {
-            try { call.cancel() } catch (_: Exception) {}
-            try { response.close() } catch (_: Exception) {}
+    }.flowOn(Dispatchers.IO).let { stream ->
+        // SSE keepalive lines are not model output. Once Started arrives,
+        // a stream that produces no chunks must fail into the existing retry
+        // path, while continuous reasoning/text/tool arguments can run as long
+        // as needed. Image generation has a different latency budget.
+        if (isCodexImageModel) stream else stream.withIdleTimeout(STREAM_IDLE_TIMEOUT_MS, startAfterFirst = true) {
+            throw LLMError.TransientError("No model output for ${it / 1000}s — stream stalled")
         }
     }
 

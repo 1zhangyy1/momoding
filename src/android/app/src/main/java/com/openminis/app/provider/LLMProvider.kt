@@ -175,6 +175,9 @@ fun Flow<LLMStreamChunk>.failOnSilentEmptyCompletion(providerName: String): Flow
  * resets the clock thousands of times, a stuck one never resets it once — so a
  * limit can be strict about hangs without being a limit on length.
  *
+ * [startAfterFirst] leaves connection/upload timing to the provider and arms the idle
+ * clock only once that provider has emitted its first event.
+ *
  * [onTimeout] runs on the collecting coroutine and is expected to throw; it
  * takes the elapsed idle milliseconds so the caller can word its own error.
  *
@@ -187,16 +190,19 @@ fun Flow<LLMStreamChunk>.failOnSilentEmptyCompletion(providerName: String): Flow
 @OptIn(ExperimentalCoroutinesApi::class)
 fun <T> Flow<T>.withIdleTimeout(
     idleMs: Long,
+    startAfterFirst: Boolean = false,
     onTimeout: (Long) -> Unit,
 ): Flow<T> = flow {
     coroutineScope {
         val channel = produceIn(this)
+        var receivedAny = false
         while (true) {
             // receiveCatching, not receive(): a normally-closed channel means
             // the stream ended, which is success, while a close CAUSED by an
             // upstream error carries that error and must be re-thrown so the
             // caller sees the provider's failure rather than a silent stop.
-            val result = withTimeoutOrNull(idleMs) { channel.receiveCatching() }
+            val result = if (startAfterFirst && !receivedAny) channel.receiveCatching()
+                else withTimeoutOrNull(idleMs) { channel.receiveCatching() }
             if (result == null) {
                 onTimeout(idleMs)
                 // Defensive: a caller whose onTimeout returns instead of
@@ -212,6 +218,7 @@ fun <T> Flow<T>.withIdleTimeout(
                 result.exceptionOrNull()?.let { throw it }
                 return@coroutineScope
             }
+            receivedAny = true
             emit(result.getOrThrow())
         }
     }

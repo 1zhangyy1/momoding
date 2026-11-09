@@ -3,6 +3,7 @@ package com.openminis.app.ui.chat
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.json.JSONObject
 
 /** momoding: with steps hidden the chat keeps what was said and drops how it was done. */
 class MomodingShowStepsTest {
@@ -59,5 +60,16 @@ class MomodingShowStepsTest {
         assertEquals(2, open.count { it is FlatChatItem.AssistantToolUse }) // the steps-only message a1 belongs to the same turn
         assertTrue(open.filterIsInstance<FlatChatItem.MomodingStepsToggle>().single().expanded)
         assertTrue(buildFlatChatItems(transcript, showSteps = true).none { it is FlatChatItem.MomodingStepsToggle })
+    }
+
+    @Test fun `one step handing work to two Bots shows both tasks with steps hidden`() {
+        val step = AssistantBlock(id = "handoffs", kind = "tool_use", toolStatus = ToolBlockStatus.SUCCESS,
+            toolArgs = JSONObject().put("command", "momoding-app new ledger --what '管记账'\nmomoding-app new water --what '管喝水'").toString(),
+            content = """{"task":"a1b2c3","app":"ledger"}\n{"task":"d4e5f6","app":"water"}""")
+        val rows = buildFlatChatItems(listOf(user("u", "做两个小 App"), assistant("a", step)), showSteps = false)
+        val tasks = rows.filterIsInstance<FlatChatItem.MomodingTask>()
+        assertEquals(listOf("a1b2c3", "d4e5f6"), tasks.map { it.taskId })
+        assertEquals(2, tasks.map { it.key }.toSet().size)
+        assertTrue(rows.none { it is FlatChatItem.AssistantToolUse })
     }
 }
