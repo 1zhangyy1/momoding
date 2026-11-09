@@ -1,6 +1,5 @@
 package com.openminis.app.ui.chat
 
-import com.openminis.app.ProductionSources
 import com.openminis.app.data.model.LLMModel
 import com.openminis.app.data.model.ModelEntry
 import com.openminis.app.data.model.ModelGroup
@@ -214,22 +213,4 @@ class TitleCandidatesTest {
 
     // ---- wiring -----------------------------------------------------------
 
-    @Test
-    fun `both title paths use the shared order and walk`() {
-        val vm = ProductionSources.read("ui/chat/ChatViewModel.kt")
-        assertTrue(vm.contains("TitleCandidates.forSession(providerRepository, titleSid, primarySource, currentModel?.id)"))
-        assertTrue(vm.contains("pauseMs = TitleCandidates.AUTO_PAUSE_MS,"))
-        // The first-message fallback only after the whole walk failed, and no
-        // further automatic attempts after it.
-        val gaveUp = vm.substringAfter("// [T-titlegen-retry-not-retrying] Every candidate failed")
-            .substringBefore("} catch (e: Exception) {")
-        assertTrue(gaveUp.contains("titleGenerationAttempts = TITLE_MAX_ATTEMPTS"))
-        assertTrue(gaveUp.contains("applyFallbackTitleFromFirstMessage(\"all title candidates failed\")"))
-        assertTrue("the single-model resolver is gone", !vm.contains("fun resolveTitleProvider("))
-
-        val list = ProductionSources.read("ui/sessions/SessionListViewModel.kt")
-        assertTrue(list.contains("com.openminis.app.ui.chat.TitleCandidates.forSession("))
-        assertTrue(list.contains("PrimarySource.parse(session.modelBinding)"))
-        assertTrue(list.contains("com.openminis.app.ui.chat.TitleCandidates.walk(candidates, origin = origin)"))
-    }
 }

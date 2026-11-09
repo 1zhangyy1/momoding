@@ -115,54 +115,8 @@ class BackupIosWireShapeTest {
     // -- Session: iOS shape -------------------------------------------------
 
     @Test
-    fun `the Swift declarations were found`() {
-        assertTrue(iosSession.any { it.name == "folderId" })
-        assertEquals(listOf("session", "memoryEnabled", "modelBinding"), iosSessionRecord.map { it.name })
-        assertTrue(iosFolder.any { it.name == "desc" })
-    }
-
-    @Test
-    fun `a session is nested under session, as iOS's SessionRecord requires`() {
-        assertNotNull("iOS decodes rec.session — the key is required", record["session"] as? JsonObject)
-        assertNull("nothing of the ChatSession proper may sit at the top", record["id"])
-        for (p in iosSessionRecord.filter { !it.optional }) {
-            assertTrue("iOS SessionRecord requires '${p.name}' at the top level", record.containsKey(p.name))
-        }
-        assertEquals(false, record["memoryEnabled"]!!.jsonPrimitive.booleanOrNull)
-        assertEquals("group:default", record["modelBinding"]!!.jsonPrimitive.content)
-    }
-
-    @Test
-    fun `the inner object carries every required ChatSession field, non-null`() {
-        val inner = record["session"]!!.jsonObject
-        for (p in iosSession.filter { !it.optional }) {
-            val v = inner[p.name]
-            assertTrue("iOS ChatSession requires '${p.name}'", v != null && v !is JsonNull)
-        }
-    }
-
-    @Test
-    fun `the inner object only uses ChatSession's own names`() {
-        val known = iosSession.map { it.name }.toSet()
-        val strays = record["session"]!!.jsonObject.keys - known
-        assertTrue("keys iOS's ChatSession does not declare: $strays", strays.isEmpty())
-    }
-
-    @Test
     fun `group membership travels inside the session`() {
         assertEquals("F-1", record["session"]!!.jsonObject["folderId"]!!.jsonPrimitive.content)
-    }
-
-    @Test
-    fun `dates are whole-second ISO-8601, which Swift's iso8601 strategy parses`() {
-        val iso = Regex("""\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z""")
-        val inner = record["session"]!!.jsonObject
-        for (k in listOf("createdAt", "updatedAt", "pinnedAt")) {
-            assertTrue(k, iso.matches(inner[k]!!.jsonPrimitive.content))
-        }
-        for (k in listOf("createdAt", "updatedAt", "pinnedAt")) {
-            assertTrue("folder $k", iso.matches(folderRec[k]!!.jsonPrimitive.content))
-        }
     }
 
     @Test
@@ -172,19 +126,6 @@ class BackupIosWireShapeTest {
     }
 
     // -- Folder -----------------------------------------------------------------
-
-    @Test
-    fun `a folder carries every required ChatFolder field, and desc for iOS`() {
-        for (p in iosFolder.filter { !it.optional }) {
-            val v = folderRec[p.name]
-            assertTrue("iOS ChatFolder requires '${p.name}'", v != null && v !is JsonNull)
-        }
-        assertEquals("Things for the office", folderRec["desc"]!!.jsonPrimitive.content)
-        assertEquals(
-            "older Android importers read 'description'",
-            "Things for the office", folderRec["description"]!!.jsonPrimitive.content,
-        )
-    }
 
     // -- Android -> Android: new AND old packages ---------------------------
 

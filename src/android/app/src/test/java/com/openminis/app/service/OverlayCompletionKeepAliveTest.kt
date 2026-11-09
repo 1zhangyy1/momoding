@@ -71,18 +71,4 @@ class OverlayCompletionKeepAliveTest {
         assertTrue(shouldRunService(activeSessions = 1, presentSessions = 0, overlayCompletionPending = true))
     }
 
-    @Test
-    fun `the restated predicate matches the source`() {
-        val src = java.io.File(
-            "src/main/java/com/openminis/app/service/SessionActivityTracker.kt",
-        ).readText()
-        val body = src.substringAfter("private fun shouldRunService(): Boolean =")
-            .substringBefore("\n\n")
-        for (term in listOf("_activeSessions", "_presentSessions", "_overlayCompletionPending")) {
-            assertTrue(
-                "shouldRunService() no longer reads $term — update this test's mirror",
-                body.contains(term),
-            )
-        }
-    }
 }

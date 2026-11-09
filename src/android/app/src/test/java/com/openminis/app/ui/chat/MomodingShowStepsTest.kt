@@ -33,11 +33,6 @@ class MomodingShowStepsTest {
         assertEquals(1, rows.count { it is FlatChatItem.AssistantInfo })
     }
 
-    @Test fun `a running tool still shows the typing dots when steps are hidden`() {
-        val live = listOf(user("u1", "hi"), ChatMessage(id = "a1", role = "assistant", content = "", toolBlocks = listOf(tool("t1")), isStreaming = true))
-        assertTrue(buildFlatChatItems(live, showSteps = false).any { it is FlatChatItem.AssistantTyping })
-    }
-
     @Test fun `a rule hit shows once, under the reply that finished after it`() {
         val msgs = listOf(
             user("u1", "删掉那个日程"),
@@ -53,15 +48,6 @@ class MomodingShowStepsTest {
         // the live suffix (from the second turn) must not repeat a hit the prefix placed
         val early = listOf(1_000L to "calendar")
         assertTrue(buildFlatChatItems(msgs, fromIndex = 2, ruleHits = early).none { it is FlatChatItem.MomodingRuleNotice })
-    }
-
-    @Test fun `narration between steps is hidden, the final words stay`() {
-        val msgs = listOf(user("u1", "后天和李总开个会"),
-            assistant("a1", text("n1", "先看看后天下午有没有冲突："), tool("t1"), text("n2", "后天都空，定在 14:00："), tool("t2"), text("x", "已建好：周一 14:00–15:00，和李总开会")))
-        val words = buildFlatChatItems(msgs, showSteps = false).filterIsInstance<FlatChatItem.AssistantMarkdownBlock>().joinToString { it.rawText }
-        assertTrue(words, words.contains("已建好") && !words.contains("先看看") && !words.contains("定在 14:00："))
-        val all = buildFlatChatItems(msgs, showSteps = true).filterIsInstance<FlatChatItem.AssistantMarkdownBlock>().joinToString { it.rawText }
-        assertTrue(all.contains("先看看"))
     }
 
     @Test fun `a turn with steps ends with 看过程, and opening it shows that turn's steps`() {

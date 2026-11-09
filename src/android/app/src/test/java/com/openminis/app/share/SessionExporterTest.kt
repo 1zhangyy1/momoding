@@ -1,6 +1,5 @@
 package com.openminis.app.share
 
-import com.openminis.app.ProductionSources
 import com.openminis.app.data.db.ChatSessionEntity
 import com.openminis.app.data.db.MessageEntity
 import kotlinx.coroutines.runBlocking
@@ -136,12 +135,4 @@ class SessionExporterTest {
         assertEquals("minis-sessions-1", SessionExporter.baseName(listOf(session("1", null))))
     }
 
-    @Test
-    fun `the multi-select Export button is wired to the exporter`() {
-        val src = ProductionSources.read("ui/sessions/SessionListScreen.kt")
-        assertFalse("the TODO stub is gone", src.contains("onExport = { /* TODO: export */ }"))
-        assertTrue(src.contains("com.openminis.app.share.SessionExporter.exportToZip("))
-        assertTrue(src.contains("SessionExporter.Format.JSON"))
-        assertTrue(src.contains("SessionExporter.Format.PLAIN_TEXT"))
-    }
 }

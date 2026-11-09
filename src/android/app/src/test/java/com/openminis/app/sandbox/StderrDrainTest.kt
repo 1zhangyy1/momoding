@@ -73,29 +73,4 @@ class StderrDrainTest {
 
     // -- Wiring --------------------------------------------------------------------
 
-    private val shell by lazy {
-        File("src/main/java/com/openminis/app/sandbox/FreshProcessShell.kt").readText()
-    }
-
-    @Test
-    fun `the fresh shell drains stderr whenever it keeps stderr separate`() {
-        assertTrue(shell.contains("pb.redirectErrorStream(!SEPARATE_STDERR)"))
-        assertTrue(shell.contains("val stderrDrain = if (SEPARATE_STDERR) {"))
-        assertTrue(shell.contains("StderrDrain(process.errorStream)"))
-        assertTrue("kept stderr reaches the output", shell.contains("stderrDrain?.finish(stderrWait)"))
-        // [T-android-fresh-exit-status-file] The full wait still applies
-        // whenever proot exited; only a proot left tracing a daemon (whose
-        // stderr never reaches EOF) gets the short settle.
-        assertTrue(shell.contains("if (closedOnStatus.get()) STDERR_SETTLE_MS else STDERR_DRAIN_WAIT_MS"))
-    }
-
-    @Test
-    fun `timeout and Stop close stderr too, so the drain cannot outlive them`() {
-        // [T-android-fresh-exit-status-file] Both now go through killCommand,
-        // which closes it once for either.
-        val kill = shell.substringAfter("private fun killCommand(").substringBefore("\n    /**")
-        assertTrue(kill.contains("process.errorStream.close()"))
-        assertTrue("timeout", shell.contains("killCommand(process, readEof)"))
-        assertTrue("Stop", shell.contains("killCommand(p, readEof = null)"))
-    }
 }

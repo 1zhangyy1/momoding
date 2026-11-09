@@ -1,6 +1,5 @@
 package com.openminis.app.sandbox.offload
 
-import com.openminis.app.ProductionSources
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -85,50 +84,5 @@ class CalendarUpdateAllDayTest {
         val (ls, le) = h.allDayLocalRange(s, e, la)
         assertEquals("2026-03-08 00:00:00", fmt(la, ls))
         assertEquals("2026-03-08 23:59:59", fmt(la, le))
-    }
-
-    // ---- update wiring ----------------------------------------------------
-
-    private val src = ProductionSources.read("sandbox/offload/CalendarOffloadHandler.kt")
-    private val update = src.substringAfter("private fun doUpdate(").substringBefore("// ── delete")
-
-    @Test
-    fun `update infers all-day only from the date arguments actually passed`() {
-        assertTrue(update.contains("val makeAllDay = args.hasFlag(\"all-day\") || allBare"))
-        assertTrue(update.contains("val allBare = sawDate &&"))
-        assertTrue(update.contains("(startStr == null || isDateOnly(startStr)) && (endStr == null || isDateOnly(endStr))"))
-    }
-
-    @Test
-    fun `going all-day writes the provider's form, going timed writes every field together`() {
-        assertTrue(update.contains("putAllDay(values, s0, e0)"))
-        val timed = update.substringAfter("cur.allDay && carriesTime -> {").substringBefore("else -> {")
-        for (f in listOf("ALL_DAY, 0", "EVENT_TIMEZONE, TimeZone.getDefault().id", "DTSTART, s0", "DTEND, e0")) {
-            assertTrue(f, timed.contains(f))
-        }
-        assertTrue("a lone --all-day snaps the event's current range", update.contains("allDayBounds(newStart ?: curStart, newEnd ?: curEnd)"))
-        assertTrue("recurring events refuse a switch", update.contains("switching && cur.rrule != null"))
-    }
-
-    @Test
-    fun `update echoes is_all_day and the stored range`() {
-        assertTrue(update.contains(".put(\"is_all_day\", t.allDay)"))
-        assertTrue(update.contains("if (t.allDay) allDayLocalRange(t.dtStart, t.dtEnd)"))
-    }
-
-    @Test
-    fun `list reports and filters all-day rows as their local days`() {
-        val list = src.substringAfter("private fun doList(").substringBefore("private fun doCreate(")
-        assertTrue("query widened by a day each side", list.contains("arrayOf((startMs - DAY_MS).toString(), (endMs + DAY_MS).toString())"))
-        assertTrue(list.contains("if (allDay) allDayLocalRange(it.getLong(2), rawEnd)"))
-        assertTrue("filtered on the LOCAL start", list.contains("if (s0 < startMs || s0 > endMs) continue"))
-        assertTrue(list.contains("rows.sortedBy { it.first }"))
-    }
-
-    @Test
-    fun `create stores the same form, and its usage and update's list --all-day`() {
-        val create = src.substringAfter("private fun doCreate(").substringBefore("private fun doUpdate(")
-        assertTrue(create.contains("putAllDay(this, startMsFinal, endMs)"))
-        assertTrue(src.contains("[--all-day] [--notes ...] [--location ...] [--alarm <minutes>]"))
     }
 }

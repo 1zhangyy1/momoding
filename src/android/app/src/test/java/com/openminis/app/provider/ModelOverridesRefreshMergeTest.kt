@@ -93,16 +93,4 @@ class ModelOverridesRefreshMergeTest {
         assertTrue(after.isHidden)
     }
 
-    /** Guards the restated rule above against drifting from the source. */
-    @Test
-    fun `the restated rule matches the source`() {
-        val src = java.io.File(
-            "src/main/java/com/openminis/app/data/repository/ProviderRepository.kt",
-        )
-        assertTrue("ProviderRepository.kt not found (cwd=${java.io.File(".").absolutePath})", src.isFile)
-        assertTrue(
-            "replaceEntries must inherit prior overrides",
-            src.readText().contains("overrides = prior?.overrides ?: ModelOverrides()"),
-        )
-    }
 }

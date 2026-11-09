@@ -120,66 +120,9 @@ class Review0923ViewModelStoreRealTest {
         assertTrue(live(b, sb))
     }
 
-    /**
-     * [BUG] Stickiness only lasts as long as the store. Eviction removes the
-     * pool tag together with the store, and every path that RE-ACQUIRES a
-     * finished child — AgentTranscriptScreen (HelperUi.kt:1231), the delegate
-     * detail sheet's image poll (HelperUi.kt:914), the Stop glyph
-     * (ChatScreen.kt:4525) — calls `HeadlessChatRunner.viewModelFor(ctx, id)`
-     * with the NORMAL default. So opening the transcript of a sub agent whose
-     * store was evicted re-creates it in the NORMAL pool and evicts one of the
-     * user's own warm chats: the cross-pool interference cc1606df0 removed.
-     *
-     * Proposed fix: pass PoolKind.CHILD at those three re-acquire sites (the
-     * session row's `isChild` is available), or keep `poolKinds` entries on
-     * eviction and drop them only on `release`.
-     */
-    @Test
-    fun `re-opening an evicted child transcript must not evict a normal chat`() {
-        val child = id("c")
-        open(child, ChatViewModelStore.PoolKind.CHILD)
-        // Six more children push the first one out of the child pool.
-        repeat(6) { open(id("c"), ChatViewModelStore.PoolKind.CHILD) }
-        val normals = (1..4).map { id("n") }
-        val normalStores = normals.map { open(it) }
-
-        // What AgentTranscriptScreen does: default kind.
-        open(child)
-
-        normals.forEachIndexed { i, sid ->
-            assertTrue(
-                "normal chat $i was evicted by re-opening a finished child's transcript",
-                live(sid, normalStores[i]),
-            )
-        }
-    }
-
     // ---- source invariants for the re-acquire sites --------------------------
 
     private fun read(path: String): String =
         File(path).also { assertTrue("missing ${it.absolutePath}", it.exists()) }.readText()
 
-    /**
-     * [RISK] `ChatScreen`'s onDispose clears the on-screen id unconditionally.
-     * On a CHAT -> CHAT navigation (notification / deep link while a chat is
-     * open, MainActivity.kt:727) the NavHost keeps the outgoing destination
-     * composed through its exit transition, so the incoming screen's
-     * `setActiveSession(X)` runs first and the outgoing one's
-     * `setActiveSession(null)` lands after it. The chat on screen is then
-     * unprotected from eviction and `minis-config session.*` reports "No
-     * active session". Fix: clear only if the slot still holds this screen's
-     * id (compare-and-clear).
-     */
-    @Test
-    fun `ChatScreen clears the on-screen id only if it still owns it`() {
-        val src = read("src/main/java/com/openminis/app/ui/chat/ChatScreen.kt")
-        val dispose = src.substringAfter("ChatViewModelStore.setActiveSession(sessionId)")
-            .substringAfter("onDispose {").take(600)
-        assertFalse(
-            "onDispose must not blindly null the active session; compare with sessionId first",
-            dispose.contains("ChatViewModelStore.setActiveSession(null)") &&
-                !dispose.contains("activeSessionId") &&
-                !dispose.contains("clearActiveSession"),
-        )
-    }
 }

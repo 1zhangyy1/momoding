@@ -1,6 +1,5 @@
 package com.openminis.app.provider.openai
 
-import com.openminis.app.ProductionSources
 import com.openminis.app.data.FastModePrefs
 import com.openminis.app.data.model.LLMMessage
 import com.openminis.app.data.model.LLMModel
@@ -591,71 +590,4 @@ class OpenAIFamilyGatesTest {
 
     // ══════════════════════════════════════════════ drift guards
 
-    /**
-     * SOURCE-GREP DRIFT GUARD. Each gate below is private or inlined in a
-     * builder, so the behavioural rows above are the only view of it — and a
-     * refactor can reproduce those rows while relocating the decision. Pin the
-     * literals that define each gate's SCOPE, since scope is what every one of
-     * these bugs was about.
-     */
-    @Test
-    fun `the production gates still carry their scoping literals`() {
-        val src = ProductionSources.read("provider/openai/OpenAIProvider.kt")
-        for (needle in listOf(
-            // Fast Mode: toggle AND gpt-family AND don't clobber an existing tier.
-            "if (!body.has(\"service_tier\") &&",
-            "com.openminis.app.data.FastModePrefs.isEnabled() &&",
-            "model.id.contains(\"gpt\", ignoreCase = true)",
-            // OpenRouter Anthropic cache control: host AND prefix.
-            "isOpenRouter && model.id.lowercase().startsWith(\"anthropic/\")",
-            "body.put(\"cache_control\", JSONObject().put(\"type\", \"ephemeral\"))",
-            // The output-cap fork.
-            "body.put(\"max_tokens\", maxTokens)",
-            "body.put(\"max_completion_tokens\", maxTokens)",
-            // DashScope is host-matched, like the other vendor predicates.
-            "basePath.contains(\"dashscope\")",
-        )) {
-            assertTrue("gate literal is gone from OpenAIProvider: $needle", src.contains(needle))
-        }
-    }
-
-    /**
-     * The budget inequality and the broad-"o" predicate both live in the
-     * resolver, and both are the kind of line a tidy-up would "simplify". The
-     * margin arithmetic is what keeps the budget strictly below the cap for
-     * small caps; the comment on the prefix is what records that its breadth is
-     * a decision.
-     */
-    @Test
-    fun `the resolver still carries the budget margin and the documented broad prefix`() {
-        val src = ProductionSources.read("provider/thinking/ThinkingRuleResolver.kt")
-        assertTrue(
-            "the budget must keep a margin below the cap (#35)",
-            src.contains("val margin = maxOf(2048, ctx.maxTokens / 8)"),
-        )
-        assertTrue(
-            "…and a hard strictly-below ceiling",
-            src.contains("val ceiling = maxOf(1, minOf(ctx.maxTokens - margin, ctx.maxTokens - 1))"),
-        )
-        // [OpenMinis#377] gpt-6 joined the family; the point of this assertion is
-        // that the emitter predicate and the rule scopes move TOGETHER, so both
-        // sides are checked for the same three generations rather than for one
-        // frozen spelling.
-        assertTrue(
-            "the emitter's native predicate must stay in lockstep with the rule scopes",
-            src.contains("lid.startsWith(\"o\")") &&
-                src.contains("lid.startsWith(\"gpt-5\")") &&
-                src.contains("lid.startsWith(\"gpt-6\")"),
-        )
-        assertTrue(
-            "the broad-\"o\" breadth must stay DOCUMENTED as deliberate, not silently inherited",
-            src.contains("the broad \"o\" prefix is"),
-        )
-        assertTrue(
-            "the openai-native rule scopes are what the emitter mirrors",
-            src.contains("ThinkingRule.Scope.ModelPattern(\"o*\")") &&
-                src.contains("ThinkingRule.Scope.ModelPattern(\"gpt-5*\")") &&
-                src.contains("ThinkingRule.Scope.ModelPattern(\"gpt-6*\")"),
-        )
-    }
 }

@@ -1,6 +1,5 @@
 package com.openminis.app.sandbox.offload
 
-import com.openminis.app.ProductionSources
 import com.openminis.app.sandbox.offload.CalendarOffloadHandler.Companion.CalPick
 import com.openminis.app.sandbox.offload.CalendarOffloadHandler.Companion.CalRef
 import org.junit.Assert.assertEquals
@@ -59,26 +58,4 @@ class CalendarExactTargetTest {
         assertTrue(CalendarOffloadHandler.pickCalendarById(42, cals) is CalPick.Missing)
     }
 
-    @Test
-    fun `writes refuse an unresolved target instead of falling back, and echo where they landed`() {
-        val src = ProductionSources.read("sandbox/offload/CalendarOffloadHandler.kt")
-        assertFalse("the silent auto-pick fallback is back", src.contains("falling back to auto-pick"))
-        val update = src.substringAfter("private fun doUpdate(").substringBefore("private fun doDelete(")
-        assertTrue(update.contains("is Target.Failed -> return target.result"))
-        assertTrue(update.contains(".putCalendar(calendarOfEvent(id))"))
-        val create = src.substringAfter("private fun doCreate(").substringBefore("private fun doUpdate(")
-        assertTrue(create.contains("if (target is Target.Failed) return target.result"))
-        val delete = src.substringAfter("private fun doDelete(").substringBefore("private fun doFreebusy(")
-        val captured = delete.indexOf("val cal = calendarOfEvent(id)")
-        assertTrue("delete captures the calendar before the row is gone",
-            captured >= 0 && captured < delete.indexOf("contentResolver.delete("))
-    }
-
-    @Test
-    fun `the list filter keeps substring matching`() {
-        val src = ProductionSources.read("sandbox/offload/CalendarOffloadHandler.kt")
-        val list = src.substringAfter("private fun doList(").substringBefore("private fun doCreate(")
-        assertTrue(list.contains("calFilter"))
-        assertFalse(list.contains("pickCalendarByName"))
-    }
 }

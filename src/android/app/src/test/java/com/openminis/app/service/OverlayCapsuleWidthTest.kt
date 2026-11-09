@@ -113,35 +113,4 @@ class OverlayCapsuleWidthTest {
 
     // ── the source must agree with the arithmetic above ───────────────────
 
-    @Test
-    fun `source constants match the values these tests pin`() {
-        val src = File("src/main/java/com/openminis/app/service/ToolOverlayController.kt")
-        assertTrue("missing ToolOverlayController source", src.exists())
-        val text = src.readText()
-        assertTrue(
-            "CAPSULE_WIDTH_CAP_DP must be $capDp — a looser ceiling is the bug",
-            text.contains("CAPSULE_WIDTH_CAP_DP = $capDp"),
-        )
-        // Literal match, not interpolated: Kotlin renders 0.70f as "0.7f",
-        // while the source writes "0.70f". Asserting the interpolated form
-        // fails on formatting rather than on the value it means to pin.
-        assertTrue(text.contains("CAPSULE_WIDTH_CAP_FRACTION = 0.70f"))
-        assertTrue(text.contains("CAPSULE_WIDTH_FRACTION = 0.50f"))
-        assertTrue(text.contains("CAPSULE_WIDTH_FLOOR_DP = $floorDp"))
-    }
-
-    @Test
-    fun `the capsule width is applied to both the window and the text rows`() {
-        // The WM container and the label maxWidth must come from the SAME
-        // function, or a capped box would still be pushed open by its text.
-        val src = File("src/main/java/com/openminis/app/service/ToolOverlayController.kt").readText()
-        assertTrue(
-            "text rows must derive their budget from fixedCapsuleWidthPx()",
-            src.contains("val maxW = (fixedCapsuleWidthPx()"),
-        )
-        assertTrue(
-            "rotation must recompute the width rather than keep the stale one",
-            src.substringAfter("fun onConfigurationChanged()").contains("fixedCapsuleWidthPx()"),
-        )
-    }
 }

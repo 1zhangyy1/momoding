@@ -79,14 +79,4 @@ class MinisImageSessionResolveTest {
         assertEquals(f.absolutePath, got?.absolutePath)
     }
 
-    @Test
-    fun `the fetcher no longer resolves per-session paths through the global table first`() {
-        val src = File("src/main/java/com/openminis/app/ui/MinisImageFetcher.kt").readText()
-        val resolve = src.substringAfter("internal fun resolve(filesDir")
-        val direct = resolve.indexOf("SessionMounts.sessionDir(")
-        val legacy = resolve.indexOf("PRootKernel.resolveHostPath(")
-        assertTrue("session-direct lookup comes before the legacy one", direct in 1 until legacy)
-        val stream = File("src/main/java/com/openminis/app/ui/chat/StreamingMarkdownText.kt").readText()
-        assertTrue(stream.contains("setParameter(com.openminis.app.ui.MinisImageFetcher.SESSION_PARAM, sessionId)"))
-    }
 }

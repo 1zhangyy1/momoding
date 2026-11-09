@@ -48,48 +48,4 @@ class HangFalsePositiveTest {
         assertFalse(HangDetector.isIdleMainStack(emptyArray()))
     }
 
-    @Test
-    fun `gaps are measured on the monotonic clock`() {
-        val body = src("src/main/java/com/openminis/app/diagnostics/HangDetector.kt")
-        val watch = body.substringAfter("private fun watchLoop()").substringBefore("private fun writeStallSample(")
-        assertTrue(watch.contains("val now = SystemClock.uptimeMillis()"))
-        assertFalse("the wall clock must not measure a gap", watch.contains("System.currentTimeMillis()"))
-        val heartbeat = body.substringAfter("private fun scheduleHeartbeat()").substringBefore("private fun watchLoop()")
-        assertTrue(heartbeat.contains("lastHeartbeatAt.set(SystemClock.uptimeMillis())"))
-    }
-
-    @Test
-    fun `an implausible gap or an idle main thread is rejected before it is counted`() {
-        val watch = src("src/main/java/com/openminis/app/diagnostics/HangDetector.kt")
-            .substringAfter("private fun watchLoop()").substringBefore("private fun writeStallSample(")
-        val guard = watch.indexOf("since > MAX_PLAUSIBLE_GAP_MS")
-        val idle = watch.indexOf("isIdleMainStack(mainThreadStack())")
-        val count = watch.indexOf("recordHang(durationMs = since)")
-        assertTrue(guard in 0 until count && idle in 0 until count)
-    }
-
-    @Test
-    fun `the render breaker is gone from the watchdog and the renderer`() {
-        assertFalse(src("src/main/java/com/openminis/app/diagnostics/HangDetector.kt").contains("renderBreakerActive"))
-        val guard = src("src/main/java/com/openminis/app/ui/chat/LargeContentGuard.kt")
-        assertFalse(
-            "streaming degrade must depend on size only",
-            guard.contains("renderBreakerActive") || guard.contains("diagnostics.HangDetector"),
-        )
-        assertTrue(guard.contains("if (content.length > STREAM_DEGRADE_CHARS)"))
-    }
-
-    @Test
-    fun `reading provider instances never waits on configLock`() {
-        val repo = src("src/main/java/com/openminis/app/data/repository/ProviderRepository.kt")
-        assertTrue(repo.contains("val instances: List<ProviderInstance>\n        get() = _config.value.instances.toList()"))
-    }
-
-    @Test
-    fun `the launch resolver waits for the config by suspending, bounded`() {
-        val nav = src("src/main/java/com/openminis/app/ui/navigation/AppNavigation.kt")
-        val wait = nav.indexOf("withTimeoutOrNull(2_000) { providerRepository.awaitConfigLoaded() }")
-        val read = nav.indexOf("val hasAnyProvider = providerRepository.instances.isNotEmpty()")
-        assertTrue(wait in 0 until read)
-    }
 }

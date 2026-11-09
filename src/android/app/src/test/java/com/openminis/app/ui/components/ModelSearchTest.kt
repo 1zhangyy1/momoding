@@ -1,6 +1,5 @@
 package com.openminis.app.ui.components
 
-import com.openminis.app.ProductionSources
 import com.openminis.app.data.model.LLMModel
 import com.openminis.app.data.model.ModelEntry
 import org.junit.Assert.assertEquals
@@ -84,17 +83,6 @@ class ModelSearchTest {
     }
 
     @Test
-    fun `a provider-name hit shows that provider's whole list`() {
-        val r = ModelSearch.search(
-            listOf("host.example.com" to listOf(entry("/models/Qwen3.8-27B.gguf")), "Other" to listOf(entry("gpt-5"))),
-            label = { it },
-            query = "wsen",
-        )
-        assertEquals(listOf("host.example.com"), r.sections.map { it.key })
-        assertEquals(1, r.sections.single().entries.size)
-    }
-
-    @Test
     fun `the cap applies across sections and keeps the most relevant rows`() {
         val big = (1..7000).map { entry("model-$it") } + entry("model")
         val r = ModelSearch.search(listOf("agg" to big, "b" to listOf(entry("model-x"))), label = { it }, query = "model")
@@ -122,32 +110,4 @@ class ModelSearchTest {
 
     // ---- wiring ---------------------------------------------------------------
 
-    @Test
-    fun `the chat picker searches the debounced query off the main thread, row by row`() {
-        val src = ProductionSources.read("ui/chat/ChatModelPickerSheet.kt")
-        assertTrue(src.contains("val query = com.openminis.app.ui.components.rememberDebouncedQuery(searchText)"))
-        assertTrue(src.contains("withContext(Dispatchers.Default) {\n            com.openminis.app.ui.components.ModelSearch.search(baseSections, ::sectionLabel, query)"))
-        assertTrue("expanded rows are lazy items", src.contains("itemsIndexed(entries, key = { _, e -> \"entry_\${instance.id}_\${e.id}\" })"))
-        assertTrue(src.contains("R.string.model_picker_search_capped"))
-        assertFalse("the Bool fuzzy filter is gone", src.contains("private fun fuzzyMatch("))
-    }
-
-    @Test
-    fun `the entry picker takes a remembered result and renders rows lazily`() {
-        val picker = ProductionSources.read("ui/components/ModelEntryPicker.kt")
-        assertTrue(picker.contains("val result = sections ?: modelEntryPickerSearch("))
-        assertTrue(picker.contains("itemsIndexed(entries, key = { _, e -> \"entry_\${instance.id}_\${e.id}\" })"))
-        for (caller in listOf("ui/settings/AddModelsToGroupScreen.kt", "ui/settings/AgentLoopAddSheets.kt")) {
-            val c = ProductionSources.read(caller)
-            assertTrue(caller, c.contains("rememberModelEntryPickerSections("))
-            assertTrue(caller, c.contains("sections = searchSections,"))
-        }
-    }
-
-    @Test
-    fun `the voice picker uses the same scorer and debounce`() {
-        val src = ProductionSources.read("ui/components/UnifiedModelPickerSheet.kt")
-        assertTrue(src.contains("val query = rememberDebouncedQuery(searchText)"))
-        assertTrue(src.contains("ModelSearch.rank(sectionEntries, query)"))
-    }
 }

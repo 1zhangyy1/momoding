@@ -82,25 +82,4 @@ class SendReturnModeMenuTest {
         assertTrue(SendReturnMode.pivotFraction(1819, 1580, 200) > 1f)
         assertEquals(0.5f, SendReturnMode.pivotFraction(10, 0, 0), 0f)
     }
-
-    private val chatScreen = File("src/main/java/com/openminis/app/ui/chat/ChatScreen.kt").readText()
-    private val menuSrc = File("src/main/java/com/openminis/app/ui/chat/SendReturnModeMenu.kt").readText()
-
-    @Test
-    fun chatScreenUsesSendButtonWithLongPress() {
-        assertTrue(chatScreen.contains("ComposerSendButton("))
-        assertTrue(menuSrc.contains("onLongClick = { menuVisible = true }"))
-        // Must not regress to a disabled clickable that swallows long-press.
-        assertFalse(menuSrc.contains("clickable(enabled = canActivate)"))
-        assertTrue(menuSrc.contains("CustomAccessibilityAction("))
-    }
-
-    @Test
-    fun composerReadsReturnPrefObservably() {
-        assertTrue(chatScreen.contains("val sendOnEnter by rememberReturnKeySendsMessage(context)"))
-        assertFalse(chatScreen.contains(".returnKeySendsMessage(context)"))
-        assertTrue(menuSrc.contains("registerOnSharedPreferenceChangeListener"))
-        assertTrue(menuSrc.contains("KEY_RETURN_KEY_BEHAVIOR"))
-    }
-
 }

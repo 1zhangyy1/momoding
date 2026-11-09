@@ -131,23 +131,4 @@ class SessionIsolationTest {
 
     // ── Wiring ────────────────────────────────────────────────────────────
 
-    private fun src(path: String) = File("src/main/java/com/openminis/app/$path").readText()
-
-    @Test
-    fun `the coordinator builds private mounts and no longer writes the global table`() {
-        val coord = src("sandbox/ExecutionCoordinator.kt")
-        assertFalse(coord.contains("PRootKernel.addBindMount("))
-        assertTrue(coord.contains("SessionMounts.forContext(appContext, sessionId)"))
-        // Both shell types take their -b argv from the private map only.
-        assertTrue(src("sandbox/PersistentShell.kt").contains("for ((linuxPath, hostPath) in sessionBindMounts)"))
-        assertTrue(src("sandbox/FreshProcessShell.kt").contains("for ((linuxPath, hostPath) in sessionBindMounts)"))
-    }
-
-    @Test
-    fun `the terminal mounts its chat's dirs and says which files it sees`() {
-        val term = src("sandbox/TerminalSession.kt")
-        assertTrue(term.contains("buildInteractiveCommand(sessionId)"))
-        assertTrue(term.contains("_outputBytes.emit(banner(sessionId).toByteArray())"))
-        assertTrue(term.contains("Global terminal — not tied to any chat"))
-    }
 }

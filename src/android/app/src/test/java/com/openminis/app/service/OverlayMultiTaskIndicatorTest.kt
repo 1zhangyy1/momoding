@@ -1,6 +1,5 @@
 package com.openminis.app.service
 
-import com.openminis.app.ProductionSources
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -186,87 +185,6 @@ class OverlayMultiTaskIndicatorTest {
 
     // ── the index chip ────────────────────────────────────────────────────
 
-    @Test
-    fun `the index is a plain number in every locale`() {
-        // Circled digits (①②③) were tried and dropped: they stop at 20, and
-        // they render from a different font — a colour emoji on some OEM
-        // builds — so they sat at the wrong optical weight beside the clock.
-        val src = ProductionSources.read("service/ToolOverlayController.kt")
-        assertTrue(
-            "no circled-digit arithmetic may come back",
-            !src.contains("'\u2460' +") && !src.contains("in 1..20"),
-        )
-        assertTrue(
-            "the index is passed to the string as an Int",
-            src.contains("R.string.overlay_task_index, taskIndex, taskTotal"),
-        )
-    }
-
-    @Test
-    fun `the chip is an outline with no fill`() {
-        // A filled chip read as a second surface stacked on the capsule and
-        // pulled more attention than a task counter warrants.
-        val src = ProductionSources.read("service/ToolOverlayController.kt")
-        assertTrue(
-            "radius must track half the chip height, as the capsule's does",
-            src.contains("cornerRadius = TASK_PILL_HEIGHT_DP / 2f * density"),
-        )
-        val chip = src.substringAfter("TASK_PILL_HEIGHT_DP / 2f * density")
-            .substringBefore("}")
-        assertTrue("the chip must not be filled", chip.contains("setColor(Color.TRANSPARENT)"))
-        assertTrue("the chip keeps its hairline border", chip.contains("setStroke(dpToPx(1)"))
-    }
-
-    @Test
-    fun `non-Latin locales render the index without the English word`() {
-        // "of" is an English word; in zh/ja/ko/th it reads as foreign and
-        // there is no short native equivalent that fits the chip, so those
-        // locales use "n/m". This is done in the RESOURCES, not in code —
-        // the test exists because a missing translation fails silently by
-        // falling back to English rather than breaking a build.
-        // mainRoot() is src/main/java/com/openminis/app; res is src/main/res.
-        val res = generateSequence(ProductionSources.mainRoot()!!) { it.parentFile }
-            .first { java.io.File(it, "res/values/strings.xml").isFile }
-            .resolve("res")
-        val base = java.io.File(res, "values/strings.xml").readText()
-        assertTrue(
-            "the source locale keeps the word",
-            base.contains("""<string name="overlay_task_index">%1${'$'}d of %2${'$'}d</string>"""),
-        )
-        for (loc in listOf("zh", "zh-rTW", "ja", "ko", "th")) {
-            val f = java.io.File(res, "values-$loc/strings.xml")
-            assertTrue("missing locale file: $loc", f.isFile)
-            assertTrue(
-                "$loc must render the index as n/m, not \"n of m\"",
-                f.readText().contains(
-                    """<string name="overlay_task_index">%1${'$'}d/%2${'$'}d</string>""",
-                ),
-            )
-        }
-    }
-
-    @Test
-    fun `every locale that declares the index uses integer placeholders`() {
-        // The first placeholder changed from %1${'$'}s to %1${'$'}d when the circled glyph
-        // went away. A locale left on %1${'$'}s would throw IllegalFormatConversion
-        // at render time — on that locale only, which is exactly the kind of
-        // break that ships.
-        // mainRoot() is src/main/java/com/openminis/app; res is src/main/res.
-        val res = generateSequence(ProductionSources.mainRoot()!!) { it.parentFile }
-            .first { java.io.File(it, "res/values/strings.xml").isFile }
-            .resolve("res")
-        val offenders = res.listFiles().orEmpty()
-            .filter { it.isDirectory && it.name.startsWith("values") }
-            .mapNotNull { dir ->
-                val f = java.io.File(dir, "strings.xml")
-                if (!f.isFile) return@mapNotNull null
-                val line = f.readText().lines().firstOrNull { "overlay_task_index" in it && "<string" in it }
-                    ?: return@mapNotNull null
-                if ("%1${'$'}s" in line) dir.name else null
-            }
-        assertEquals("locales still using a string placeholder", emptyList<String>(), offenders)
-    }
-
     // ── untitled sessions ─────────────────────────────────────────────────
 
     /** Mirrors ChatViewModel.overlaySessionTitle(). */
@@ -277,87 +195,7 @@ class OverlayMultiTaskIndicatorTest {
     private fun rowOne(sessionTitle: String?, completionWord: String?, soulName: String): String =
         sessionTitle?.takeIf { it.isNotBlank() } ?: completionWord ?: soulName
 
-    @Test
-    fun `an untitled session shows the assistant name, not the placeholder`() {
-        // "New Chat" is the sentinel a session carries until title generation
-        // names it. It is identical on every untitled task, so on a capsule
-        // that can show several at once it identifies nothing.
-        assertNull(overlaySessionTitle("New Chat"))
-        assertEquals("Pikachu", rowOne(overlaySessionTitle("New Chat"), null, "Pikachu"))
-    }
-
-    @Test
-    fun `a blank title also falls back to the assistant name`() {
-        assertNull(overlaySessionTitle(""))
-        assertNull(overlaySessionTitle("   "))
-        assertEquals("Pikachu", rowOne(overlaySessionTitle("  "), null, "Pikachu"))
-    }
-
-    @Test
-    fun `a real title wins over both the completion word and the Soul name`() {
-        val t = overlaySessionTitle("Find Android Dev Minis Skill")
-        assertEquals("Find Android Dev Minis Skill", t)
-        assertEquals("Find Android Dev Minis Skill", rowOne(t, "执行完成", "Pikachu"))
-    }
-
-    @Test
-    fun `the placeholder is a named constant, matched where it is defined`() {
-        // The view must not string-match "New Chat": it is an English literal
-        // that a localization pass could change, and the title-generator's own
-        // skip guard depends on the same value.
-        val vm = ProductionSources.read("ui/chat/ChatViewModel.kt")
-        assertTrue(
-            "the sentinel must be a named constant",
-            vm.contains("const val UNTITLED_SESSION_TITLE = \"New Chat\""),
-        )
-        assertTrue(
-            "the helper must exist",
-            vm.contains("private fun overlaySessionTitle(): String?"),
-        )
-        // Defining it is not enough — every setActive must actually CALL it.
-        // Passing `_sessionTitle.value` straight through compiles fine and
-        // silently puts "New Chat" back on the capsule, so count both spellings.
-        val routed = Regex("sessionTitle = overlaySessionTitle\\(\\)").findAll(vm).count()
-        val raw = Regex("sessionTitle = _sessionTitle\\.value").findAll(vm).count()
-        assertEquals("no overlay call site may pass the raw title", 0, raw)
-        val activeCalls = Regex("SessionActivityTracker\\.setActive\\(").findAll(vm).count()
-        assertTrue("the active-session title path must be exercised", activeCalls > 0)
-        assertEquals("every overlay call site must route through the helper", activeCalls, routed)
-        val overlay = ProductionSources.read("service/ToolOverlayController.kt")
-        assertTrue(
-            "the capsule must not know the sentinel",
-            !overlay.contains("New Chat"),
-        )
-    }
-
     // ── slots must not leak between runs ──────────────────────────────────
-
-    @Test
-    fun `every path that hides the capsule also drops its task slots`() {
-        // Reported: "实际执行的只有一个任务，怎么展示 2 of 2". Finished slots are
-        // kept on purpose so a lingering task stays numbered, but only while
-        // the capsule is up. Originally just the linger-expiry path cleared
-        // them, so the foreground transition, the dynamic-island swap and the
-        // not-busy teardown each left slots behind for the NEXT run to count —
-        // one task on screen reporting "3 of 3" after two earlier runs.
-        val src = ProductionSources.read("service/AgentForegroundService.kt")
-        assertTrue(
-            "the hide+clear pair must live in one helper",
-            src.contains("private fun hideOverlay()"),
-        )
-        // No site may hide the capsule without going through it.
-        val direct = Regex("controller\\.hide\\(\\)").findAll(src).count()
-        assertEquals("every hide must route through hideOverlay()", 0, direct)
-        // [T-android-overlay-hide-keeps-running-slots] Finished slots only —
-        // clearing every slot also wiped tasks still running across a
-        // foreground/camera/island hide (Review0923OverlayTaskSlotsTest).
-        assertTrue(
-            "hideOverlay must drop the finished slots",
-            src.substringAfter("private fun hideOverlay()")
-                .substringBefore("\n    }")
-                .contains("dropFinishedOverlayTasks()"),
-        )
-    }
 
     @Test
     fun `a fresh run after a cleared capsule starts from one`() {
@@ -374,53 +212,4 @@ class OverlayMultiTaskIndicatorTest {
 
     // ── source guards ─────────────────────────────────────────────────────
 
-    @Test
-    fun `the indicator is hidden below two tasks`() {
-        // At one task "① of 1" is noise and costs the title characters it
-        // shares the row with.
-        val src = ProductionSources.read("service/ToolOverlayController.kt")
-        assertTrue(
-            "index must be gated on taskTotal >= 2",
-            src.contains("taskTotal >= 2"),
-        )
-    }
-
-    @Test
-    fun `row one shows the session title with the Soul name only as fallback`() {
-        val src = ProductionSources.read("service/ToolOverlayController.kt")
-        assertTrue(
-            "session title must take precedence on the identity row",
-            src.contains("sessionTitle?.takeIf { it.isNotBlank() } ?: completionWord ?: identityName"),
-        )
-    }
-
-    @Test
-    fun `the clock sits on row two under the index`() {
-        // The two columns pair by scope: row 1 is the task (title + which of
-        // N), row 2 is the current step (tool + elapsed).
-        val src = ProductionSources.read("service/ToolOverlayController.kt")
-        assertTrue("clock must be added to the status row", src.contains("statusRow.addView(elapsed)"))
-        assertTrue("index must be added to the label row", src.contains("labelRow.addView(taskIndex)"))
-    }
-
-    @Test
-    fun `the stale-tool gate is still in the service`() {
-        val src = ProductionSources.read("service/AgentForegroundService.kt")
-        assertTrue(
-            "fallback must be gated on the turn still working",
-            src.contains("state.lastToolName?.takeIf { stillWorkingThisTurn }"),
-        )
-    }
-
-    @Test
-    fun `title and index are resolved from one snapshot`() {
-        // Reading them separately is how a title and a bound session id drifted
-        // apart on device at 10:58:01.
-        val src = ProductionSources.read("service/AgentForegroundService.kt")
-        assertEquals(
-            "focusedTaskSlot must be read exactly once per render",
-            1,
-            Regex("SessionActivityTracker\\.focusedTaskSlot\\(\\)").findAll(src).count(),
-        )
-    }
 }

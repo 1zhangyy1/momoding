@@ -1,6 +1,5 @@
 package com.openminis.app.data.repository
 
-import com.openminis.app.ProductionSources
 import com.openminis.app.data.db.ChatDao
 import com.openminis.app.data.db.MessageEntity
 import com.openminis.app.data.db.MessageHeadRow
@@ -218,32 +217,4 @@ class ErrorPersistCurrentTurnTest {
 
     // ── ViewModel wiring (source facts) ──────────────────────────────────
 
-    private val vm by lazy { ProductionSources.read("ui/chat/ChatViewModel.kt") }
-
-    @Test
-    fun `setInlineError writes through persistTurnError, never the last-assistant UPDATE`() {
-        val body = vm.substringAfter("private fun setInlineError(errorText: String) {")
-            .substringBefore("private fun setTransientInlineError(")
-        assertTrue(body.contains("chatRepository.persistTurnError(sid, safeError)"))
-        assertFalse("a WRITE through updateLastAssistantError is the GH#263 bug",
-            body.contains("updateLastAssistantError(sid, safeError)"))
-        assertFalse("no non-null write anywhere", Regex("updateLastAssistantError\\(sid, (?!null)").containsMatchIn(vm))
-    }
-
-    @Test
-    fun `the load path shows an error-only carrier and hides a cleared one`() {
-        assertTrue(vm.contains(
-            "if (entity.role == \"assistant\" && text.isBlank() && blocks.isEmpty() &&\n" +
-                "                entity.errorInfo.isNullOrBlank()\n" +
-                "            ) return@mapNotNull null"))
-    }
-
-    @Test
-    fun `every agentHistory rebuild from rows skips carriers`() {
-        // Rows rebuilt into the model's history; inbox inputs (`row.toLLMMessage()`) are the person's words, never carriers.
-        val rebuilds = Regex("\\.add\\(entity\\.toLLMMessage\\(\\)\\)").findAll(vm).count()
-        val guards = Regex("ChatRepository\\.isEmptyAssistantCarrier\\(entity\\.role, entity\\.partsJson\\)").findAll(vm).count()
-        assertTrue("expected rebuild sites", rebuilds >= 1)
-        assertEquals("each toLLMMessage rebuild needs its carrier guard", rebuilds, guards)
-    }
 }

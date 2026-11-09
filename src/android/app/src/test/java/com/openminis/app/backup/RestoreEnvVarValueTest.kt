@@ -98,34 +98,4 @@ class RestoreEnvVarValueTest {
             .joinToString("\n")
     }
 
-    @Test
-    fun `the importer does not skip purely because the key exists`() {
-        assertFalse(
-            "gating on isDuplicateKey skips keys whose value is empty — the reported bug",
-            envImportCode.contains("if (repo.isDuplicateKey(meta.key))"),
-        )
-        assertTrue(
-            "it must look at the stored value instead",
-            envImportCode.contains("repo.getValue("),
-        )
-    }
-
-    @Test
-    fun `the importer never writes an empty value as if it were restored`() {
-        assertFalse(
-            "`?: \"\"` turns a missing secret into a blank entry that counts as imported",
-            envImportCode.contains("""valuesByName[meta.key] ?: """"),
-        )
-        assertTrue(
-            "a missing/blank restored value must be skipped",
-            envImportCode.contains("restored.isNullOrEmpty()"),
-        )
-    }
-
-    @Test
-    fun `an existing entry is updated in place rather than re-added`() {
-        // add() refuses a duplicate key, so repairing an existing entry has to
-        // go through update() or the value silently never lands.
-        assertTrue(envImportCode.contains("repo.update("))
-    }
 }

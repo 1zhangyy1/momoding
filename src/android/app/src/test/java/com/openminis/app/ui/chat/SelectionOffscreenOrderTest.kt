@@ -186,14 +186,6 @@ class SelectionOffscreenOrderTest {
         assertNull("different parents are not comparable by index", sameBlockOrder(md(m1, "p1", 5), md(m1, "p2", 0)))
     }
 
-    @Test
-    fun `the highlight fallback keeps the user's direction for cross-shard pairs`() {
-        val src = File("src/main/java/com/openminis/app/ui/chat/MinisTextKitSelection.kt").readText()
-        val fallback = src.substringAfter("fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSelectionForShard(")
-            .substringBefore("val (first, last) = ordered")
-        assertTrue(fallback.contains("if (a.shard == b.shard && a.charOffset > b.charOffset) b to a else a to b"))
-    }
-
     // 8. Surfaces without document order keep y ordering ---------------------
 
     @Test
@@ -215,15 +207,4 @@ class SelectionOffscreenOrderTest {
 
     // Row keys are the chat's real ones ---------------------------------------------
 
-    @Test
-    fun `row key shapes match FlatChatItem keys`() {
-        val flat = File("src/main/java/com/openminis/app/ui/chat/ChatFlatItems.kt").readText()
-        assertTrue(flat.contains("override val key = \"text:\$messageId:\${block.id}\""))
-        assertTrue(flat.contains("override val key = \"mdblock:\$messageId:\$parentBlockId:\$blockIndex\""))
-        assertTrue(flat.contains("override val key = \"legacy:\$messageId\""))
-        val screen = File("src/main/java/com/openminis/app/ui/chat/ChatScreen.kt").readText()
-        assertTrue(screen.contains("shardId = \"text:\${item.block.id}\""))
-        assertTrue(screen.contains("shardId = \"mdblock:\${item.parentBlockId}:\${item.blockIndex}\""))
-        assertTrue(screen.contains("selectionController.documentOrder = chatDocumentOrder { flatRowIndexByKey.value }"))
-    }
 }

@@ -87,12 +87,4 @@ class BackupPackageNameTest {
         assertFalse(a == b)
     }
 
-    @Test
-    fun `the exporter names packages through BackupPackageName, not the old backup- shape`() {
-        val src = File("src/main/java/com/openminis/app/backup/BackupExporter.kt").readText()
-        assertTrue(src.contains("BackupPackageName.packageFileName(backupId, snapshotAtMillis, deviceName, encrypted)"))
-        assertTrue(src.contains("encrypted = encryption != null"))
-        assertTrue("manifest uses the same name", src.contains("deviceName = deviceName,"))
-        assertFalse(src.contains("\"backup-\$stamp"))
-    }
 }

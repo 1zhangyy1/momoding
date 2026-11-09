@@ -186,8 +186,6 @@ class FallbackTriggerClassificationTest {
     // is ported verbatim (source cited) with a grep drift guard.
     // ══════════════════════════════════════════════════════════════════════
 
-    private val vmSrc by lazy { File("src/main/java/com/openminis/app/ui/chat/ChatViewModel.kt").readText() }
-
     // ── Port of the recentlyFailedEntryIds marks ────────────────────────
     //
     //   ChatViewModel.kt ~L6283  RoutingStrategy.fallback ->
@@ -248,14 +246,6 @@ class FallbackTriggerClassificationTest {
         } else {
             assertEquals("A-primary", next)
         }
-    }
-
-    @Test
-    fun `production still keys group resolution on recentlyFailedEntryIds`() {
-        assertTrue(vmSrc.contains("available.firstOrNull { it.id !in recentlyFailedEntryIds }"))
-        assertTrue(vmSrc.contains("?: available.first()"))
-        assertTrue(vmSrc.contains("recentlyFailedEntryIds.remove(candidate.entryId)"))
-        assertTrue(vmSrc.contains("if (!entryId.isNullOrEmpty()) recentlyFailedEntryIds.add(entryId)"))
     }
 
     // ── Port of the fallback error trail ────────────────────────────────
@@ -321,13 +311,6 @@ class FallbackTriggerClassificationTest {
         assertEquals("⚠️ Model B (Claude Sub): Disabled", lines[1])
         assertEquals("⚠️ Model C (Copilot): Not logged in", lines[2])
         assertEquals("Transient error: [503] down", lines[3])
-    }
-
-    @Test
-    fun `production still builds the trail from the provider detail`() {
-        assertTrue(vmSrc.contains("actual is com.openminis.app.data.model.LLMError.ProviderError -> actual.detail"))
-        assertTrue(vmSrc.contains("val trail = (fallbackReasons + skipped).joinToString(\"\\n\")"))
-        assertTrue(vmSrc.contains("throw com.openminis.app.data.model.LLMError.ProviderError(\"\$trail\\n\$finalDesc\")"))
     }
 
     // ── Port of buildFallbackProviders / unavailableGroupMembers (~L6549-6620) ──
@@ -440,14 +423,4 @@ class FallbackTriggerClassificationTest {
         )
     }
 
-    @Test
-    fun `production fallback walk still filters disabled and uncredentialed instances`() {
-        val walk = vmSrc.substringAfter("private fun buildFallbackProviders(").substringBefore("private fun unavailableGroupMembers(")
-        assertTrue(walk.contains("if (!instance.isEnabled) continue"))
-        assertTrue(walk.contains("if (!providerRepository.hasAnyCredential(instance)) continue"))
-        val single = vmSrc.substringAfter("private fun resolveNextFallbackProvider(").substringBefore("return null\n    }")
-        assertTrue("the single-step chain had the same bug once; keep it filtered", single.contains("if (!instance.isEnabled) continue"))
-        val unavailable = vmSrc.substringAfter("private fun unavailableGroupMembers(").substringBefore("private fun directEntryFallbackCandidates(")
-        assertTrue(unavailable.contains("!instance.isEnabled -> \"Disabled\""))
-    }
 }

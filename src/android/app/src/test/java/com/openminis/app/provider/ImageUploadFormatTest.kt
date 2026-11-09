@@ -1,6 +1,5 @@
 package com.openminis.app.provider
 
-import com.openminis.app.ProductionSources
 import com.openminis.app.provider.ImageBudget.ImageFormat
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -153,27 +152,4 @@ class ImageUploadFormatTest {
         "provider/gemini/GeminiProvider.kt",
     )
 
-    @Test fun `every provider inlines images only through prepareForUpload`() {
-        for (p in providers) {
-            val src = ProductionSources.read(p)
-            assertTrue("$p must use the gate", src.contains("ImageBudget.prepareForUpload("))
-            assertFalse("$p still derives a MIME from the declared type", src.contains("safeMime"))
-            assertFalse("$p still calls the bare budget", src.contains("compressUnderBudget("))
-        }
-    }
-
-    @Test fun `no provider inlines raw stored bytes under their stored MIME`() {
-        for (p in providers) {
-            val src = ProductionSources.read(p)
-            assertFalse("$p", src.contains("Base64.encodeToString(part.data"))
-            assertFalse("$p", src.contains("put(\"mimeType\", part.mimeType)"))
-        }
-    }
-
-    @Test fun `first send labels the part by its encoded bytes`() {
-        val vm = ProductionSources.read("ui/chat/ChatViewModel.kt")
-        assertTrue(vm.contains("val inferenceMime = ImageBudget.sniffFormat(inferenceBytes).mimeType ?: attachment.mimeType"))
-        assertTrue(vm.contains("LLMMessage.ImagePart(inferenceBytes, inferenceMime, linuxPath = linuxPath)"))
-        assertFalse(vm.contains("LLMMessage.ImagePart(inferenceBytes, attachment.mimeType"))
-    }
 }

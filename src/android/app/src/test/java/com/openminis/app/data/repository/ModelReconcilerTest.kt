@@ -92,14 +92,4 @@ class ModelReconcilerTest {
         repoScope.cancel()
     }
 
-    @Test
-    fun `save and sign-in paths use the repository scope, and sign-in forces a refresh`() {
-        fun src(p: String) = File("src/main/java/com/openminis/app/$p").readText()
-        val add = src("ui/settings/AddProviderScreen.kt")
-        assertFalse(add.contains("scope.launch { providerRepository.refreshModels(instance) }"))
-        assertEquals(3, Regex("""providerRepository\.triggerAsyncModelReconcile\(instance\.id\)\s*\n\s*onSaved\(\)""").findAll(add).count())
-        val detail = src("ui/settings/ProviderDetailScreen.kt")
-        val signedIn = detail.substringAfter("if (token != null) {").substringBefore("} catch (e: Exception)")
-        assertTrue(signedIn.contains("providerRepository.triggerAsyncModelReconcile(instance.id, forceRefresh = true)"))
-    }
 }

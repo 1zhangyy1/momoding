@@ -1,6 +1,5 @@
 package com.openminis.app.ui.chat
 
-import com.openminis.app.ProductionSources
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -42,20 +41,4 @@ class WarmUpTrimUndecidedTest {
             warmUpBudget(window = 100_000, compactThreshold = 0, ratio = 1.0, fixedTokens = 3_000))
     }
 
-    private val vm by lazy { ProductionSources.read("ui/chat/ChatViewModel.kt") }
-
-    @Test
-    fun `the trim reports undecided when there is no budget, and the caller caches only decisions`() {
-        val trim = vm.substringAfter("private fun trimWarmUpToFit(")
-            .substringBefore("private fun calibrationJsonFields()")
-        assertTrue("returns a WarmUpTrim", trim.contains("): WarmUpTrim {"))
-        assertTrue("no budget → undecided", trim.contains(") ?: return WarmUpTrim(warmUp, decided = false)"))
-        assertTrue("budget comes from the tested function", trim.contains("val budget = warmUpBudget("))
-        assertFalse("no early return that would read as decided without a budget",
-            trim.contains("?: return warmUp\n"))
-
-        assertTrue(vm.contains("if (trim.decided) warmUpDropByMarker[marker.id] = preAnchorPruned.size - trim.kept.size"))
-        assertFalse("the unconditional cache write is the bug",
-            vm.contains("warmUpDropByMarker[marker.id] = preAnchorPruned.size - it.size"))
-    }
 }

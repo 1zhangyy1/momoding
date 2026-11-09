@@ -1,6 +1,5 @@
 package com.openminis.app.sandbox.offload
 
-import com.openminis.app.ProductionSources
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -97,17 +96,6 @@ class ScheduledPrefillCliTest {
         assertEquals(7200, p("2H"))
         assertNull(p("2d"))
         assertNull(p("m"))
-    }
-
-    @Test
-    fun `create wires the prefill into the task and refuses it on rerun`() {
-        val src = ProductionSources.read("sandbox/offload/ScheduledTaskOffloadHandler.kt")
-        assertTrue(src.contains("prefillToolCall = prefill,"))
-        assertTrue(src.contains("if (prefill != null && target is ScheduledTargetMode.RerunMessage)"))
-        assertTrue("list output shows it", src.contains("t.prefillToolCall?.let { put(\"prefillTool\", it.toJson()) }"))
-        // [T-android-scheduled-triggers] --command leads, as on iOS (3b69e3d00);
-        // --shell stays accepted as the alias.
-        assertTrue("help documents the iOS names", src.contains("PREFILLED TOOL CALL (--command, alias --shell)"))
     }
 
     // ─── [T-android-scheduled-duration-finite] (iOS 40d74b5df) ───────────

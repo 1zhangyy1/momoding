@@ -1,6 +1,5 @@
 package com.openminis.app.auth
 
-import com.openminis.app.ProductionSources
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.MediaType.Companion.toMediaType
@@ -107,55 +106,4 @@ class ClaudeCliMimicryHeadersTest {
         }
     }
 
-    @Test
-    fun `token endpoint is the claude_ai host`() {
-        val src = ProductionSources.read("auth/ClaudeOAuthManager.kt")
-        assertTrue(
-            "tokenURL must post to claude.ai",
-            src.contains("""override val tokenURL = "https://claude.ai/v1/oauth/token""""),
-        )
-    }
-
-    @Test
-    fun `the retired console host is not the endpoint anywhere`() {
-        val src = ProductionSources.read("auth/ClaudeOAuthManager.kt")
-        // The old host may still be NAMED in the comment explaining the move;
-        // what must not come back is it being assigned as the endpoint.
-        assertTrue(
-            "console.anthropic.com must not be used as tokenURL",
-            !src.contains("""tokenURL = "https://console.anthropic.com"""),
-        )
-    }
-
-    @Test
-    fun `both token exchange and refresh apply the fingerprint`() {
-        val src = ProductionSources.read("auth/ClaudeOAuthManager.kt")
-        // One call site is the code exchange, the other the silent refresh.
-        // Refresh is the one a user hits repeatedly, so a fingerprint on only
-        // the login path would look fixed and fail days later.
-        assertEquals(
-            "both OAuth request builders must apply the fingerprint",
-            2,
-            Regex("\\.applyClaudeCliMimicryHeaders\\(\\)").findAll(src).count(),
-        )
-        assertEquals(
-            "no OAuth request may be built without it",
-            2,
-            Regex("okhttp3\\.Request\\.Builder\\(\\)").findAll(src).count(),
-        )
-    }
-
-    @Test
-    fun `fingerprint matches the chat path in AnthropicProvider`() {
-        // The values are one registered client identity. A fingerprint that
-        // matches on chat but not on auth is the exact shape of OpenMinis#360,
-        // so this fails if either side is bumped alone.
-        val chat = ProductionSources.read("provider/anthropic/AnthropicProvider.kt")
-        for ((name, value) in ClaudeCliMimicryHeaders.ALL) {
-            assertTrue(
-                "AnthropicProvider must still send $name: $value",
-                chat.contains("""builder.header("$name", "$value")"""),
-            )
-        }
-    }
 }

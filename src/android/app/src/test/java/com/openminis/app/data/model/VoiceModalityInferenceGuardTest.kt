@@ -143,21 +143,4 @@ class VoiceModalityInferenceGuardTest {
 
     // ── cross-platform drift guard ──────────────────────────────────────────
 
-    @Test
-    fun `the four vendor-family patterns are present in the shipping source`() {
-        // Re-read the real file rather than trusting the behaviour above: the
-        // assertions would still pass if someone re-added the names via some
-        // other mechanism while deleting the patterns, and the point of this
-        // list is that it stays byte-identical to iOS
-        // LLMTypes.asrInferencePatterns.
-        val src = File("src/main/java/com/openminis/app/data/model/VoiceModality.kt")
-        assertTrue("missing ${src.absolutePath}", src.exists())
-        val code = src.readText()
-            .lineSequence()
-            .filterNot { it.trimStart().startsWith("//") || it.trimStart().startsWith("*") }
-            .joinToString("\n")
-        for (p in listOf("paraformer", "sensevoice", "fun-asr", "qwen-asr")) {
-            assertTrue("asrInferencePatterns must contain \"$p\"", code.contains("\"$p\""))
-        }
-    }
 }

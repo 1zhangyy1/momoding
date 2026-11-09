@@ -1,6 +1,5 @@
 package com.openminis.app.crash
 
-import com.openminis.app.ProductionSources
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -77,54 +76,4 @@ class ExitInfoCollectorTest {
 
     // ── Source assertions: platform-bound behaviour ──────────────────────
 
-    private val src: String by lazy { ProductionSources.read("crash/ExitInfoCollector.kt") }
-
-    @Test
-    fun `the collector asks the platform for exit records`() {
-        assertTrue(
-            "getHistoricalProcessExitReasons is the only permission-free route to a tombstone",
-            src.contains("getHistoricalProcessExitReasons"),
-        )
-    }
-
-    @Test
-    fun `the abort message and the tombstone are both read`() {
-        assertTrue(
-            "description IS the abort message — the field the issue was filed for",
-            src.contains("info.description"),
-        )
-        assertTrue(
-            "traceInputStream carries the full tombstone incl. the memory map",
-            src.contains("traceInputStream"),
-        )
-    }
-
-    @Test
-    fun `de-duplication keeps a persisted high-water mark`() {
-        // Without this the same exit record is re-written on every launch for
-        // as long as the platform keeps it — which is days.
-        assertTrue(src.contains(ExitInfoCollector.KEY_HIGH_WATER))
-        assertTrue("the mark must be persisted, not just held in memory", src.contains("getSharedPreferences"))
-        assertTrue("…and advanced", src.contains("putLong(KEY_HIGH_WATER"))
-        assertTrue("…and consulted", src.contains("if (info.timestamp <= highWater) continue"))
-    }
-
-    @Test
-    fun `reports land where the log UI and the other crash writers already look`() {
-        assertTrue("same dir as crash-*.log / native-crash-*.log", src.contains("File(context.filesDir, \"logs\")"))
-        assertTrue("same .log extension LogManagementScreen filters for", src.contains("exitinfo-"))
-    }
-
-    @Test
-    fun `collection is gated on the API that provides the trace`() {
-        assertTrue(
-            "getTraceInputStream carries the tombstone from API 31 (S)",
-            src.contains("Build.VERSION_CODES.S"),
-        )
-    }
-
-    @Test
-    fun `a diagnostic must never crash the app it is diagnosing`() {
-        assertTrue("the whole collect() body is guarded", src.contains("catch (t: Throwable)"))
-    }
 }

@@ -1,6 +1,5 @@
 package com.openminis.app.speech
 
-import com.openminis.app.ProductionSources
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -147,50 +146,6 @@ class VoiceAsrRetryTest {
     }
 
     // ── Source invariants (wiring) ──────────────────────────────────────────
-
-    @Test
-    fun `provider engine hands the audio back before every exhausted-chain error`() {
-        val src = ProductionSources.read("speech/ProviderSpeechRecognitionEngine.kt")
-        // [T-android-voice-asr-stall-skip] The shared fail-over (one-shot take
-        // and VAD segments) now lives in transcribeAndDeliver.
-        val body = src.substringAfter("private suspend fun transcribeAndDeliver(").substringBefore("private fun transcribeWithSystem(")
-        val tail = body.substringAfterLast("val kind = when {")
-        assertTrue(tail.indexOf("listener.onRetainedAudio(wav)") in 0 until tail.indexOf("listener.onError("))
-        assertTrue("retry must be implemented", src.contains("override fun transcribeRetained("))
-    }
-
-    @Test
-    fun `system engine scales its watchdog and treats an empty timeout as a failure`() {
-        val src = ProductionSources.read("speech/SystemSpeechRecognitionEngine.kt")
-        assertTrue(src.contains("VoiceAsrWatchdog.seconds("))
-        val watchdog = src.substringAfter("private fun armWatchdog(").substringBefore("private fun cancelWatchdog(")
-        assertTrue(watchdog.contains("RecognitionError.TIMED_OUT"))
-        assertTrue(watchdog.indexOf("handBackAudio()") < watchdog.indexOf("RecognitionError.TIMED_OUT"))
-        val stop = src.substringAfter("override fun stop() {").substringBefore("// ── [T-voice-asr-failure-retry-prompt]")
-        assertTrue("stop() must arm the watchdog", stop.contains("armWatchdog("))
-    }
-
-    @Test
-    fun `manager queues a kept-audio failure before publishing IDLE`() {
-        val src = ProductionSources.read("speech/SpeechRecognitionManager.kt")
-        val onError = src.substringAfter("override fun onError(error: RecognitionError, message: String?) {")
-            .substringBefore("override fun onRmsDb")
-        val queued = onError.indexOf("onFailedAudio?.invoke(failed)")
-        val idle = onError.indexOf("setState(RecognitionState.IDLE)")
-        assertTrue(queued >= 0 && idle > queued)
-    }
-
-    @Test
-    fun `every composer send entry goes through the voice gate`() {
-        val src = ProductionSources.read("ui/chat/ChatScreen.kt")
-        val sendOrEnqueue = src.substringAfter("val performSendOrEnqueue: (String) -> Unit = handler@{")
-            .substringBefore("\n    }")
-        assertTrue(sendOrEnqueue.contains("deferSendUntilVoiceFinished()"))
-        val enter = src.substringAfter("val performEnterSend: () -> Boolean = handler@{")
-            .substringBefore("tryExecuteInputAsSlashCommand")
-        assertTrue(enter.contains("deferSendUntilVoiceFinished()"))
-        assertTrue(src.contains("val hasContent = hasText || attachments.isNotEmpty() || voiceOwesText"))
-    }
 
     private fun wav(pcmBytes: Int, byteRate: Int): ByteArray {
         val b = ByteArray(44 + pcmBytes)

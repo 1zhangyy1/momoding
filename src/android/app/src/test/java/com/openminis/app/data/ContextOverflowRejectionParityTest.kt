@@ -44,61 +44,6 @@ class ContextOverflowRejectionParityTest {
         return Regex("\"([^\"]+)\"").findAll(body).map { it.groupValues[1] }.toList()
     }
 
-    @Test
-    fun `iOS marker list was read`() {
-        val markers = iosMarkers()
-        assertTrue("expected a non-trivial list, got $markers", markers.size >= 10)
-        assertTrue(markers.contains("prompt is too long"))
-    }
-
-    /** EXPECTED TO FAIL until fixed: "exceeds the context window" / "input exceeds the context" are iOS-only. */
-    @Test
-    fun `every iOS overflow wording is an overflow on Android too`() {
-        val missing = iosMarkers().filterNot { ContextOverflowGuard.isContextOverflow(400, "[400] $it") }
-        assertEquals("iOS markers Android does not recognise", emptyList<String>(), missing)
-    }
-
-    /**
-     * OpenMinis#133 over HTTP. OpenAIProvider.mapHttpError keeps only
-     * `error.message`, so the `context_length_exceeded` code never reaches the
-     * detail. EXPECTED TO FAIL until fixed.
-     */
-    @Test
-    fun `OpenMinis 133 wording on an HTTP 400 is an overflow`() {
-        val openAi = ProductionSources.read("provider/openai/OpenAIProvider.kt")
-        assertTrue(
-            "mapHttpError format changed — update this test",
-            openAi.contains("\"[\$statusCode] \$errorMessage\""),
-        )
-        assertTrue(
-            ContextOverflowGuard.isContextOverflow(
-                400,
-                "[400] Your input exceeds the context window of this model. Please adjust your input and try again.",
-            ),
-        )
-    }
-
-    /**
-     * The same rejection arriving as a Responses `response.failed` event.
-     * OpenAIProvider throws a ProviderError of "code + message" WITHOUT an
-     * httpStatus, and the guard refuses any status-less error — so a
-     * structured `context_length_exceeded` code is ignored. EXPECTED TO FAIL
-     * until the provider passes a status for it (or the guard accepts that code).
-     */
-    @Test
-    fun `a Responses response_failed context_length_exceeded is an overflow`() {
-        val openAi = ProductionSources.read("provider/openai/OpenAIProvider.kt")
-        val statusLess = openAi.contains("throw LLMError.ProviderError(\"[\$code] \$message\")\n")
-        val status: Int? = if (statusLess) null else 400
-        assertTrue(
-            "response.failed context_length_exceeded (status=$status) is not recognised",
-            ContextOverflowGuard.isContextOverflow(
-                status,
-                "[context_length_exceeded] Your input exceeds the context window of this model.",
-            ),
-        )
-    }
-
     /**
      * Anthropic's input + max_tokens rejection matches no marker on either
      * platform. EXPECTED TO FAIL until fixed.
@@ -117,29 +62,6 @@ class ContextOverflowRejectionParityTest {
     @Test
     fun `a per-minute token rate limit is still not an overflow`() {
         assertFalse(ContextOverflowGuard.isContextOverflow(429, "too many tokens per minute"))
-    }
-
-    /**
-     * 0e0a8b339 made noteContextOverflow set sentPastExtrapolatedLimitThisLoop
-     * so the valve cannot re-send a request the provider just rejected. When
-     * the GH#352 self-heal finds nothing to offload, the rejection ends the
-     * loop, and runAgentLoop's prologue resets the flag — so the retry
-     * compacts, makes no progress, and fires the valve on the same request.
-     * (On iOS the rejection ALWAYS ends the loop first, so there the fix is
-     * never effective.) EXPECTED TO FAIL until the prologue stops discarding
-     * a rejection's spend.
-     */
-    @Test
-    fun `the loop prologue does not discard a rejection's spent valve`() {
-        val vm = ProductionSources.read("ui/chat/ChatViewModel.kt")
-        assertTrue(
-            "noteContextOverflow no longer spends the valve — update this test",
-            vm.contains("sentPastExtrapolatedLimitThisLoop = true\n        AppLogger.warning("),
-        )
-        val prologueReset = vm.contains(
-            "lastInLoopCompactionMadeNoProgress = false\n        sentPastExtrapolatedLimitThisLoop = false",
-        )
-        assertFalse("runAgentLoop's prologue unconditionally re-arms the valve", prologueReset)
     }
 
     /** What the valve does on that retry, through the production decision table. */

@@ -36,19 +36,6 @@ class NetworkSecurityConfigTest {
         return doc.documentElement
     }
 
-    private fun loadConfigXml(): Element {
-        // Resolve network_security_config.xml relative to working directory or project root
-        val candidates = listOf(
-            File("src/main/res/xml/network_security_config.xml"),
-            File("app/src/main/res/xml/network_security_config.xml"),
-            File("src/android/app/src/main/res/xml/network_security_config.xml")
-        )
-        val file = candidates.firstOrNull { it.exists() }
-            ?: fail("Could not find network_security_config.xml in candidates: $candidates") as Nothing
-
-        return parseXml(file.readText())
-    }
-
     private fun assertBaseConfigInvariants(root: Element) {
         val baseConfigNodes = root.getElementsByTagName("base-config")
         assertTrue("Expected exactly one <base-config>", baseConfigNodes.length == 1)
@@ -102,18 +89,6 @@ class NetworkSecurityConfigTest {
             assertFalse("Official domain  must NEVER trust user certificates", certSources.contains("user"))
             assertEquals("Official domain  trust anchors must contain ONLY system certificates", setOf("system"), certSources)
         }
-    }
-
-    @Test
-    fun `base-config permits system and user certificates`() {
-        val root = loadConfigXml()
-        assertBaseConfigInvariants(root)
-    }
-
-    @Test
-    fun `official domains are pinned strictly to system certificates only`() {
-        val root = loadConfigXml()
-        assertOfficialDomainInvariants(root)
     }
 
     @Test

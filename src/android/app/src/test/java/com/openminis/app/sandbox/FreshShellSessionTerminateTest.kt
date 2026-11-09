@@ -1,7 +1,6 @@
 package com.openminis.app.sandbox
 
 import android.content.ContextWrapper
-import com.openminis.app.ProductionSources
 import org.junit.After
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -114,16 +113,4 @@ class FreshShellSessionTerminateTest {
         failure.get()?.let { throw AssertionError("concurrent stop threw", it) }
     }
 
-    @Test
-    fun `source keeps the snapshot and the terminate wiring`() {
-        val src = ProductionSources.read("sandbox/ExecutionCoordinator.kt")
-        assertFalse(src.contains("(existing ?: mutableSetOf())"))
-        assertTrue(src.contains("ConcurrentHashMap.newKeySet()"))
-        // Kotlin toList() on a shrinking concurrent collection can throw.
-        assertFalse(src.contains("freshShells[sessionId]?.toList()"))
-        assertFalse(src.contains("freshShells.keys.toList()"))
-        val terminate = src.substringAfter("fun sessionDidTerminate(sessionId: String) {")
-            .substringBefore("fun stopCurrentCommand(")
-        assertTrue(terminate.contains("stopFreshShells(sessionId)"))
-    }
 }

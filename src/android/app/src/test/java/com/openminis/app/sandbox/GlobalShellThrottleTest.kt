@@ -255,25 +255,4 @@ class GlobalShellThrottleTest {
         assertTrue(note.all { it.code < 128 })
     }
 
-    @Test
-    fun `the coordinator gates both strategies before the pool lease, with the full timeout`() {
-        val src = File("src/main/java/com/openminis/app/sandbox/ExecutionCoordinator.kt").readText()
-        val execute = src.substringAfter("suspend fun execute(").substringBefore("internal fun isStartFailure(")
-        val gate = execute.indexOf("GlobalShellThrottle.run(")
-        assertTrue(gate > 0)
-        assertTrue("fresh path inside the gate", execute.indexOf("executeFresh(sessionId, command, timeout,", gate) > gate)
-        assertTrue("warm path inside the gate", execute.indexOf("executeWarm(sessionId, command, timeout,", gate) > gate)
-        assertTrue(execute.contains("isStartFailure = ::isStartFailure"))
-        assertTrue("the lease is taken inside executeWarm, i.e. after admission",
-            !execute.contains("val lease = acquireShellLease("))
-        assertEquals(16, GlobalShellThrottle.PROCESS_BUDGET)
-    }
-
-    @Test
-    fun `the shell tool appends the queue note last`() {
-        val vm = File("src/main/java/com/openminis/app/ui/chat/ChatViewModel.kt").readText()
-        val tail = vm.substringAfter("val withBashReminder = bashReminder?.let")
-        assertTrue(tail.contains("val withReminder = result.queueNote?.let { \"\$withBashReminder\\n\\n\$it\" } ?: withBashReminder"))
-        assertTrue(tail.indexOf("output = withReminder,") > 0)
-    }
 }

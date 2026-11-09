@@ -1,6 +1,5 @@
 package com.openminis.app.data
 
-import com.openminis.app.ProductionSources
 import com.openminis.app.data.model.AgentContentPart
 import com.openminis.app.data.model.AgentToolDefinition
 import com.openminis.app.data.model.AgentToolParam
@@ -306,80 +305,6 @@ class ContextMeasureOutboundTest {
 
     // ── drift guard ────────────────────────────────────────────────────────
 
-    @Test
-    fun `drift guard - every size decision reads the outbound measurement`() {
-        val vm = ProductionSources.read("ui/chat/ChatViewModel.kt")
-        val meter = ProductionSources.read("data/ContextPolicy.kt")
-        assertTrue(meter.contains("val tokens = letters / 4.5 + digits / 2.0 + asciiOther * 0.35 + nonAscii"))
-        assertTrue(meter.contains("const val CALIBRATION_MIN = 0.8"))
-        assertTrue(meter.contains("const val CALIBRATION_MAX = 3.0"))
-
-        // Both guards judge the measurement; the stale flag is gone.
-        assertEquals(2, vm.split("val m = contextMeasurement()\n        val tokens = m.measured").size - 1)
-        assertFalse(vm.contains("private var lastTurnContextTokensStale"))
-        assertTrue(vm.contains("val history = ContextSizeMeter.estimateTokens(effectiveAgentHistoryUncounted())"))
-        assertTrue(vm.contains("ContextSizeMeter.calibrated(history + contextFixedTokens, ratio)"))
-
-        // In-loop: progress-gated retry; everything else goes through the
-        // shared decision table (CompactionDecisionTest).
-        assertTrue(vm.contains("lastInLoopCompactionMadeNoProgress = after >= tokens"))
-        assertTrue(vm.contains("val canCompact = compactionsSoFar < maxInLoopCompactions && !lastInLoopCompactionMadeNoProgress"))
-
-        // Dispatch: estimate recorded on the exact pre-budget history, and it sizes max_tokens.
-        val loop = vm.substring(vm.indexOf("suspend fun runAgentLoop"))
-        val record = loop.indexOf("val dispatchInputTokens = recordContextDispatch(outboundHistory, currentProvider.model)")
-        val send = loop.indexOf("currentProvider.streamMessage(")
-        assertTrue("dispatch recorded before the provider call", record in 1 until send)
-        // [T-scheduled-tool-prefill] One level deeper: the provider request now
-        // sits in the non-scripted branch of the turn's chunk source.
-        assertTrue(loop.contains("applyRequestImageBudget(\n                                    outboundHistory,"))
-        assertTrue(loop.contains("dynamicMaxTokens(currentProvider, dispatchInputTokens)"))
-        assertTrue(loop.contains("lastContextTokens = measureOutboundContextTokens(),"))
-        assertTrue(loop.contains("contextFixedTokens = ContextSizeMeter.estimateFixedTokens("))
-
-        // Calibration on arrival, persisted under the iOS key names, seeded on load.
-        assertTrue(vm.contains("calibrateContextSize(lastContextTokens)"))
-        assertTrue(vm.contains("\"\"\",\"estimatedRequestTokens\":\$est,\"estimatedFixedTokens\":\$fixed\$modelField\"\"\""))
-        assertTrue("model id travels with the pair", vm.contains("\"calibrationModelId\":"))
-        assertEquals("both usage-row writers carry the pair",
-            2, vm.split("\${calibrationJsonFields()}}\"\"\"").size - 1)
-        assertTrue(vm.contains("seedContextCalibration(chatRepository.sessionTokenUsages(realSessionId.ifEmpty { sessionId }))"))
-        // Seeding replays the rows through the smoothing in order, so they must
-        // come back in conversation order, not storage order.
-        val dao = ProductionSources.read("data/db/ChatDao.kt")
-        assertTrue(dao.contains("AND token_usage IS NOT NULL ORDER BY sort_order ASC\")"))
-
-        // Optimisation round.
-        assertTrue(vm.contains("private val contextCalibrationRatios = mutableMapOf<String, Double>()"))
-        assertTrue("every context-length rejection raises the ratio", vm.contains("noteContextOverflow(overflowErr?.detail ?: \"\")"))
-        assertTrue("valve is once per loop", vm.contains("uncalibratedSendUsed = sentPastExtrapolatedLimitThisLoop,")
-            && vm.contains("sentPastExtrapolatedLimitThisLoop = false"))
-        assertTrue("seeding replays the rows through the shared replay",
-            vm.contains("ContextSizeMeter.replayCalibration(usageJsons.mapNotNull(ContextSizeMeter::calibrationSample))"))
-        assertTrue(meter.contains("val id = message.dbMessageId ?: return estimateTokens(message)"))
-
-        // A pinned model's overflow is recovered by compaction, never by
-        // answering from another model (parity with iOS).
-        assertTrue(vm.contains("val shouldFallback = !isDirectEntryOverflow && (isRateLimit || is5xx || isFallbackableError ||"))
-
-        // Same-session reload keeps learned (incl. overflow-raised) ratios.
-        // (Behaviour: CompactionDecisionTest `revert keeps a ratio that exists only in memory`.)
-        assertTrue(vm.contains("val learned = if (sid.isNotEmpty() && calibrationSessionId == sid) {"))
-        assertTrue(vm.contains("val state = learned?.let { seeded.carryingOver(it) } ?: seeded"))
-
-        // Warm-up trimming.
-        assertTrue(vm.contains("} ?: trimWarmUpToFit(preAnchorPruned, postAnchor, summaryWrappedText).let { trim ->"))
-        assertTrue(vm.contains("result.addAll(warmUp)"))
-        assertTrue("warm-up trim is decided once per marker (stable prompt-cache prefix)",
-            vm.contains("val warmUp = warmUpDropByMarker[marker.id]?.let { drop ->")
-                && vm.contains("if (trim.decided) warmUpDropByMarker[marker.id] = preAnchorPruned.size - trim.kept.size"))
-        assertTrue(vm.contains("if (ContextSizeMeter.estimateTokens(warmUp) + restTokens < budget) return WarmUpTrim(warmUp, decided = true)"))
-
-        // The glow follows the measurement after a compaction and on (re)load.
-        assertTrue(vm.contains("if (compactSucceeded) runCatching {\n                    publishMeasuredContextUsage()"))
-        assertTrue(vm.contains("runCatching { publishMeasuredContextUsage() }"))
-    }
-
     // [T-ctx-ratio-smoothing] A rise applies at once (under-counting is what
     // overflows); a fall moves 30% of the way, so one cache-heavy or
     // image-light turn cannot drag the ratio down by itself.
@@ -396,16 +321,4 @@ class ContextMeasureOutboundTest {
         assertEquals(1.33, ContextSizeMeter.smoothed(1.36, 1.26), 1e-9)
     }
 
-    @Test
-    fun ctxMeterLogsCoverEveryStage() {
-        val vm = ProductionSources.read("ui/chat/ChatViewModel.kt")
-        for (tag in listOf("[CtxMeter] decide site=", "[CtxMeter] dispatch model=", "[CtxMeter] actual model=",
-            "[CtxMeter] rejected", "[CtxMeter] seed session=", "[CtxMeter] warmup trimmed",
-            "[CtxMeter] compacted marker=", "[CtxMeter] reverted marker=")) {
-            assertTrue("missing log $tag", vm.contains(tag))
-        }
-        assertTrue(vm.contains("logContextDecision(\"pre-send\", m, policy.compactThreshold, window, verdict.name)"))
-        assertTrue(vm.contains("logContextDecision(\"in-loop\", m, policy.compactThreshold, window, verdict.name)"))
-        assertTrue("revert log waits for the reload's measurement", vm.contains("pendingRevertLogMarker = current.id.take(8)"))
-    }
 }

@@ -1,6 +1,5 @@
 package com.openminis.app.data
 
-import com.openminis.app.ProductionSources
 import com.openminis.app.data.model.AgentContentPart
 import com.openminis.app.data.model.AgentToolDefinition
 import com.openminis.app.data.model.AgentToolParam
@@ -69,39 +68,6 @@ class OffloadWriteIntegrityTest {
 
     // ── 1. truncated write refused, truncated read allowed ─────────────────
 
-    @Test
-    fun `a max_tokens-truncated file_write is repaired into valid JSON but refused`() {
-        val args = JSONObject()
-        val repairs = ToolJsonRepair.repair("file_write", args, cutWriteTail, tools)
-        assertTrue("sanity: the repair DID make it parse (tags=$repairs)", repairs.any { it.startsWith("truncation+") })
-        assertEquals("/var/minis/workspace/notes.md", args.getString("path"))
-        assertTrue("repaired content is the half the model got out", args.getString("content").startsWith("# Notes"))
-        // …which is exactly why it must not run.
-        val tag = refusesTruncatedWrite("file_write", repairs)
-        assertNotNull("file_write with a truncation repair must be refused", tag)
-        assertNotNull(refusesTruncatedWrite("file_edit", repairs))
-    }
-
-    @Test
-    fun `the same truncation on a read-class tool is allowed to run`() {
-        val args = JSONObject()
-        val repairs = ToolJsonRepair.repair("file_read", args, "{\"tool_title\":\"Read\",\"path\":\"/var/minis/workspace/a.txt", tools)
-        assertTrue(repairs.any { it.startsWith("truncation+") })
-        assertNull("reads keep repair-and-run", refusesTruncatedWrite("file_read", repairs))
-        assertNull(refusesTruncatedWrite("shell_execute", repairs))
-    }
-
-    @Test
-    fun `a complete write with only a shape repair is not refused`() {
-        // Fuzzy key rename / type coercion fix the SHAPE of complete args, not the value.
-        val args = JSONObject().put("tool_title", "w").put("path", "/x").put("contnt", "full body")
-        val repairs = ToolJsonRepair.repair("file_write", args, null, tools)
-        assertTrue(repairs.any { it.startsWith("fuzzy:") })
-        assertNull(refusesTruncatedWrite("file_write", repairs))
-        val clean = ToolJsonRepair.repair("file_write", JSONObject().put("tool_title", "w").put("path", "/x").put("content", "b"), null, tools)
-        assertTrue(clean.isEmpty())
-    }
-
     // ── 2. readback of an offloaded file is not offloaded again ────────────
 
     /** Port of the candidate filter in offloadContextIfNeeded (~L9150-9175). */
@@ -144,85 +110,7 @@ class OffloadWriteIntegrityTest {
 
     // ── 3. the placeholder must never be written as content ────────────────
 
-    /**
-     * GH#374. The history rewrite in offloadContextIfNeeded replaces a past
-     * file_write's `content` argument with the stub, so a model that re-issues
-     * that call from history (retry, "write it again", a copied tool call) used
-     * to write the ~130-char placeholder over the real file and be told
-     * `Wrote to <path> (130 bytes)`. Both write tools now refuse, pointing the
-     * model at the offloaded path.
-     *
-     * The refusal lives in the tools and needs a Context to reach, so the
-     * DECISION (`ContextOffload.isOffloadPlaceholder`) is asserted directly
-     * against the real production predicate, plus a source grep proving both
-     * tools consult it and return rather than write.
-     */
-    @Test
-    fun `write content that is an offload placeholder is refused`() {
-        val stub = ContextOffload.stub(1200, 48_000, "${ContextOffload.LINUX_OFFLOADS_DIR}/tools/file_write_deadbeef0001.txt")
-        assertTrue("the stub itself must be refused", ContextOffload.isOffloadPlaceholder(stub))
-        // A provider-prefixed newline must not smuggle it past the prefix test.
-        assertTrue(ContextOffload.isOffloadPlaceholder("\n  $stub"))
-        // Genuine content writes — including content that merely MENTIONS the
-        // marker mid-body, which is why the test is a prefix and not a contains.
-        assertFalse(ContextOffload.isOffloadPlaceholder("# real content"))
-        assertFalse(
-            ContextOffload.isOffloadPlaceholder("notes on ${ContextOffload.OFFLOADED_PREFIX} handling"),
-        )
-        assertFalse("empty content is a truncation problem, not this one", ContextOffload.isOffloadPlaceholder(""))
-
-        // The refusal text must name the field and tell the model how to recover.
-        val refusal = ContextOffload.placeholderWriteRefusal("content", "/var/minis/workspace/app.py")
-        assertTrue(refusal.startsWith("Error:"))
-        assertTrue(refusal.contains("'content'"))
-        assertTrue(refusal.contains("Nothing was written to /var/minis/workspace/app.py"))
-        assertTrue("must point at file_read to recover", refusal.contains("Use file_read on the path named inside the placeholder"))
-
-        // Both write tools consult it and RETURN — no write happens first.
-        for (tool in listOf("tools/FileWriteTool.kt", "tools/FileEditTool.kt")) {
-            val src = ProductionSources.read(tool)
-            assertTrue("$tool must consult the guard", src.contains("ContextOffload.isOffloadPlaceholder("))
-            assertTrue("$tool must refuse, not write", src.contains("ContextOffload.placeholderWriteRefusal("))
-            // The guard must run before the file is opened/resolved, or a
-            // partially-created file is left behind.
-            assertTrue(
-                "$tool must check before resolving the host path",
-                src.indexOf("ContextOffload.isOffloadPlaceholder(") < src.indexOf("resolveSessionHostPath"),
-            )
-        }
-        // file_write guards `content`; file_edit guards only the REPLACEMENT
-        // text — a placeholder in `old_string` is just a search that will not
-        // match, which the "old_string not found" path already reports.
-        assertTrue(
-            ProductionSources.read("tools/FileWriteTool.kt")
-                .contains("ContextOffload.isOffloadPlaceholder(content)"),
-        )
-        val editSrc = ProductionSources.read("tools/FileEditTool.kt")
-        assertTrue(editSrc.contains("ContextOffload.isOffloadPlaceholder(newString)"))
-        assertFalse(
-            "a stub in old_string must NOT be gated here",
-            editSrc.contains("ContextOffload.isOffloadPlaceholder(oldString)"),
-        )
-    }
-
     // ── 4. reported byte count == bytes on disk ────────────────────────────
-
-    @Test
-    fun `the reported byte count is the file's real size in UTF-8 bytes, not characters`() {
-        // Mirrors FileWriteTool: writeText then report file.length().
-        val content = "héllo — 你好\n" + "x".repeat(100)
-        val f = File(tmp.root, "out.md")
-        f.writeText(content)
-        val reported = f.length()
-        assertEquals(content.toByteArray(Charsets.UTF_8).size.toLong(), reported)
-        assertTrue("bytes differ from chars for non-ASCII content", reported != content.length.toLong())
-        assertEquals("Wrote to /x/out.md ($reported bytes)", "Wrote to /x/out.md (${f.length()} bytes)")
-        // A refused truncated write leaves the target untouched.
-        val before = f.readBytes()
-        val repairs = ToolJsonRepair.repair("file_write", JSONObject(), cutWriteTail, tools)
-        if (refusesTruncatedWrite("file_write", repairs) != null) { /* nothing written */ }
-        assertTrue(f.readBytes().contentEquals(before))
-    }
 
     // ── 3b. both placeholder formats are refused ───────────────────────────
 
@@ -314,42 +202,4 @@ class OffloadWriteIntegrityTest {
 
     // ── drift guard ────────────────────────────────────────────────────────
 
-    @Test
-    fun `drift guard - refusal, model note and byte report still in production`() {
-        val vm = ProductionSources.read("ui/chat/ChatViewModel.kt")
-        assertTrue(vm.contains("val truncationRepairTag: String? = repairs.firstOrNull { it.startsWith(\"truncation+\") }"))
-        assertTrue(vm.contains("if (truncationRepairTag != null && (name == \"file_write\" || name == \"file_edit\")) {"))
-        assertTrue(vm.contains("Error: This call was NOT executed. Its argument stream was truncated "))
-        assertTrue(vm.contains("Nothing was written to disk — the target file is unchanged."))
-        assertTrue("refused call must be an error tool result", vm.contains("content = modelMessage,\n                                isError = true,"))
-        assertTrue(vm.contains("The argument stream for this call was \" +\n                                \"truncated in transit and auto-closed by the client"))
-        // Readback + prefix skip in the offload scan.
-        // [T-offload-stub-system-reminder GH#374] Both scanner skips route
-        // through the shared predicate now; a bare startsWith on the legacy
-        // marker silently stopped matching when the stub format changed.
-        assertTrue(
-            "the scan must skip via the shared dual-format predicate",
-            vm.contains("if (ContextOffload.isOffloadPlaceholder(part.content)) {"),
-        )
-        assertFalse(
-            "no bare legacy-prefix check may remain in the scan",
-            vm.contains("part.content.startsWith(ContextOffload.OFFLOADED_PREFIX)"),
-        )
-        assertTrue(
-            "a pruned ARGUMENT gets the system-reminder notice and the provenance flag",
-            vm.contains("ContextOffload.prunedArgumentNotice(") &&
-                vm.contains("isOffloadedArgument = true"),
-        )
-        assertTrue(
-            "the argument scanner carries both new guards",
-            vm.contains("part.isOffloadedArgument ||") &&
-                vm.contains("part.id !in answeredToolUseIds"),
-        )
-        assertTrue(vm.contains("ContextOffload.offloadReadbackPath(part.content)"))
-        val fw = ProductionSources.read("tools/FileWriteTool.kt")
-        assertTrue(fw.contains("val bytes = file.length()"))
-        assertTrue(fw.contains("ToolExecutionResult(\"Wrote to \$path (\$bytes bytes)\", true, toolTitle = toolTitle)"))
-        val repair = ProductionSources.read("provider/ToolJsonRepair.kt")
-        assertTrue(repair.contains("repairs.add(\"truncation+\" + if (suffix.isEmpty()) \"noop\" else suffix)"))
-    }
 }

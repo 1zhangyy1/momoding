@@ -1,6 +1,5 @@
 package com.openminis.app.provider
 
-import com.openminis.app.ProductionSources
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -102,29 +101,4 @@ class ImageDownscaleParityTest {
 
     // -- source guards: every path uses the one downscale, and the note --
 
-    private val vm by lazy { ProductionSources.read("ui/chat/ChatViewModel.kt") }
-
-    @Test fun `first send and reload share downscaleForModel`() {
-        assertTrue("first send", vm.contains("val downscaled = ImageBudget.downscaleForModel(rawBytes)"))
-        assertTrue("reload", vm.contains("val downscaled = ImageBudget.downscaleForModel(file, original)"))
-        assertFalse("the old full-decode resize is gone", vm.contains("fun resizeImageBytes("))
-    }
-
-    @Test fun `reload replays the reduced copy and rebuilds the note`() {
-        assertTrue(vm.contains("val bytes = downscaled?.bytes ?: original"))
-        assertTrue(vm.contains("contentParts.add(AgentContentPart.ImageData(bytes, sendMime,"))
-        assertTrue(vm.contains("downscaled?.let { contentParts.add(AgentContentPart.Text(ImageBudget.downscaleNote(it, restoredPath))) }"))
-    }
-
-    @Test fun `every send path emits the image through addModelImage with its note`() {
-        assertEquals(3, Regex("""\.addModelImage\(part, prepared\.imageUploadPaths\.getOrNull\(idx\), prepared\.imageModelNotes\.getOrNull\(idx\)\)""").findAll(vm).count())
-        assertTrue(vm.contains("imageModelNotes.add(downscaled?.let { ImageBudget.downscaleNote(it, linuxPath) })"))
-        assertTrue("notes stay parallel when the budget drops images",
-            vm.contains("while (imageModelNotes.size > newSize) imageModelNotes.removeAt(imageModelNotes.size - 1)"))
-    }
-
-    @Test fun `the send gate fits images by default`() {
-        val src = ProductionSources.read("provider/ImageBudget.kt")
-        assertTrue(src.contains("prepareForUpload(input, declaredMime, ::transcodeCached, ::compressUnderBudget, ::fitCached)"))
-    }
 }

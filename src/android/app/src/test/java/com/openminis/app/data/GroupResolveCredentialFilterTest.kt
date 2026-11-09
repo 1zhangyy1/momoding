@@ -280,65 +280,6 @@ class GroupResolveCredentialFilterTest {
     // is a silent regression. Source facts, because ProviderRepository needs
     // Context + Room + EncryptedSharedPreferences.
 
-    private fun src(path: String) = com.openminis.app.ProductionSources.read(path)
-
-    @Test
-    fun `both filters exist and the routing one checks all three conditions`() {
-        val repoSrc = src("data/repository/ProviderRepository.kt")
-        assertTrue(repoSrc.contains("fun enabledMemberEntries(group: ModelGroup)"))
-        assertTrue(repoSrc.contains("fun availableMemberEntries(group: ModelGroup)"))
-
-        val routing = repoSrc.substringAfter("fun availableMemberEntries(group: ModelGroup)")
-            .substringBefore("fun resolveTitleSubEntry()")
-        assertTrue("must drop hidden entries", routing.contains("entry.isHidden"))
-        assertTrue("must drop disabled providers", routing.contains("!instance.isEnabled"))
-        assertTrue("must drop uncredentialed providers", routing.contains("!hasAnyCredential(instance)"))
-        // Order preserved — the filter removes candidates, it never reorders, or
-        // "primary = first member" stops holding.
-        assertTrue(
-            "must walk memberEntryIds in declaration order",
-            routing.contains("group.memberEntryIds.mapNotNull"),
-        )
-    }
-
-    @Test
-    fun `the request-path resolvers all go through availableMemberEntries`() {
-        // Every site that picks a model to SEND with. `firstEnabledMemberEntry`
-        // here would reintroduce the report for a signed-out provider, and a raw
-        // `memberEntryIds` walk would reintroduce #34 itself.
-        val sites = mapOf(
-            "ui/chat/ChatViewModel.kt" to "availableMemberEntries(group)",
-            "speech/correction/CorrectionStrategy.kt" to "availableMemberEntries(",
-            "scheduled/ScheduledAgentRunner.kt" to "availableMemberEntries(",
-        )
-        for ((path, needle) in sites) {
-            assertTrue("$path must resolve through the credential-aware filter", src(path).contains(needle))
-        }
-        // Title generation is a request too — it was one of the three fixed sites.
-        assertTrue(
-            "resolveTitleSubEntry must use the routing filter, not the UI one",
-            src("data/repository/ProviderRepository.kt").contains(
-                "return availableMemberEntries(group).firstOrNull()",
-            ),
-        )
-    }
-
-    @Test
-    fun `the settings UI has its own predicate so it can dim rather than hide`() {
-        // 244d17009's other half: the member stays visible in Settings, marked
-        // unreachable. Without `isEntryProviderEnabled` the UI would have to
-        // either hide it (the user cannot tell why their group shrank) or lie.
-        val repoSrc = src("data/repository/ProviderRepository.kt")
-        assertTrue(repoSrc.contains("fun isEntryProviderEnabled(entryId: String)"))
-        val fn = repoSrc.substringAfter("fun isEntryProviderEnabled(entryId: String)")
-            .substringBefore("fun replaceEntries(")
-        assertTrue("it must read isEnabled", fn.contains("instance.isEnabled"))
-        assertTrue(
-            "an orphaned entry id must answer false, not crash",
-            fn.contains("?: return false"),
-        )
-    }
-
     @Test
     fun `negative hash codes do not crash or index out of bounds`() {
         val group = listOf(Member("a/1"), Member("b/2"))

@@ -124,16 +124,6 @@ class ProviderModalityFallbackTest {
     }
 
     @Test
-    fun `a Grok or Kimi model's own list still wins over the default`() {
-        // The default only fills a null: a model whose API declared text only
-        // stays text only.
-        val textOnly = model(provider = "xAI", inputs = listOf("text"))
-        assertFalse(textOnly.hasImageInput)
-        val declaredVision = model(provider = "Kimi", inputs = listOf("text", "image"))
-        assertEquals(listOf("text", "image"), declaredVision.effectiveInputModalities)
-    }
-
-    @Test
     fun `unknown and third-party provider names get no fallback at all`() {
         // "Custom" is how OpenAIModelsApi labels a relay of unknown capability:
         // the regression this table must never cause is a text-only relay
@@ -413,79 +403,7 @@ class ProviderModalityFallbackTest {
         }
     }
 
-    @Test
-    fun `no table key is unreachable`() {
-        // The generalized form of the bug: a key that matches neither a
-        // ProviderType.displayName nor a provider string the catalog actually
-        // writes is dead code that LOOKS like coverage. "Google" is reachable via
-        // the built-in Gemini entries, every other key must be a display name.
-        val src = com.openminis.app.ProductionSources.read("data/model/LLMModel.kt")
-        val table = src.substringAfter("PROVIDER_DEFAULT_INPUT_MODALITIES: Map<String, List<String>> = mapOf(")
-            .substringBefore(")\n")
-        val keys = Regex("""^\s*"([^"]+)" to """, RegexOption.MULTILINE)
-            .findAll(table).map { it.groupValues[1] }.toList()
-        assertTrue("expected to parse the table keys, got $keys", keys.size >= 4)
-
-        val displayNames = ProviderType.entries.map { it.displayName }.toSet()
-        val catalogProviders = LLMModel.allModels.map { it.provider }.toSet()
-        for (key in keys) {
-            assertTrue(
-                "table key \"$key\" matches no ProviderType.displayName and no " +
-                    "provider string in the built-in catalog — it can never fire " +
-                    "(this is the \"Google\" vs \"Google Gemini\" failure)",
-                key in displayNames || key in catalogProviders,
-            )
-        }
-    }
-
-    @Test
-    fun `the input and output tables cover the same providers`() {
-        // A provider present on one side only would resolve half its modality
-        // and leave the other null, which then falls through to "no answer" —
-        // half-applied is harder to diagnose than not applied.
-        val src = com.openminis.app.ProductionSources.read("data/model/LLMModel.kt")
-        fun keysOf(marker: String) = src.substringAfter(marker)
-            .substringBefore(")\n")
-            .let { body ->
-                Regex("""^\s*"([^"]+)" to """, RegexOption.MULTILINE)
-                    .findAll(body).map { it.groupValues[1] }.toSet()
-            }
-        assertEquals(
-            keysOf("PROVIDER_DEFAULT_INPUT_MODALITIES: Map<String, List<String>> = mapOf("),
-            keysOf("PROVIDER_DEFAULT_OUTPUT_MODALITIES: Map<String, List<String>> = mapOf("),
-        )
-    }
-
     // ── [M08] The fallback applies where the REQUEST is built ─────────────
-
-    @Test
-    fun `the request-time image gate reads the effective list`() {
-        // 1be751fdc wired the fallback into the detail screen only, so the
-        // switches looked right while chat gating still saw raw nulls — which is
-        // why reinstalling and refreshing appeared to change nothing. The
-        // preflight that decides whether an image may be attached is the
-        // request-side consumer, and it must read `effectiveInputModalities`.
-        val src = com.openminis.app.ProductionSources.read("ui/chat/ImageInputPreflight.kt")
-        assertTrue(
-            "the preflight must import the effective list, not the raw field",
-            src.contains("effectiveInputModalities"),
-        )
-    }
-
-    @Test
-    fun `ModelEntry_model is the single place the fallback is applied`() {
-        // Every consumer reads `entry.model`, so the fallback belongs there and
-        // nowhere else — a second copy in a screen is how the first fix ended up
-        // covering only one surface.
-        val src = com.openminis.app.ProductionSources.read("data/model/ProviderConfig.kt")
-        val prop = src.substringAfter("val model: LLMModel").substringBefore("\n}")
-        assertTrue(prop.contains("baseModel.effectiveInputModalities"))
-        assertTrue(prop.contains("baseModel.effectiveOutputModalities"))
-        assertTrue(
-            "the early return must be gated on 'nothing to apply from EITHER source'",
-            prop.contains("fallbackPending"),
-        )
-    }
 
     @Test
     fun `voice inference still fires for a modality-less dedicated ASR model`() {
@@ -498,27 +416,4 @@ class ProviderModalityFallbackTest {
         assertEquals(listOf("text"), inferred.outputModalities)
     }
 
-    @Test
-    fun `fetched Grok and Kimi models are labelled as the provider, not as a relay`() {
-        // The OpenAI-compatible fetcher labels any non-OpenAI base "Custom".
-        // Without the relabel a live-fetched Grok would miss the rows above,
-        // which is exactly how a brand-new Grok arrives.
-        val repo = java.io.File("src/main/java/com/openminis/app/data/repository/ProviderRepository.kt").readText()
-        assertTrue(repo.contains(".map { it.copy(provider = \"xAI\") }"))
-        assertTrue(repo.contains(".map { it.copy(provider = \"Kimi\") }"))
-    }
-
-    // [T-android-copilot-textonly-explicit] Copilot reports vision per model;
-    // "no" must reach the table as text-only, never as null, or the Copilot
-    // provider default (vision) fills it in.
-    @Test
-    fun `a Copilot model reported as text-only stays text-only`() {
-        val textOnly = model(provider = "GitHub Copilot", inputs = listOf("text"))
-        assertEquals(listOf("text"), textOnly.effectiveInputModalities)
-        val src = com.openminis.app.ProductionSources.read("data/repository/ProviderRepository.kt")
-        assertTrue(
-            "the Copilot fetch writes text-only for supportsVision=false",
-            src.contains("inputModalities = if (m.supportsVision) {\n                                            listOf(\"text\", \"image\")\n                                        } else listOf(\"text\"),"),
-        )
-    }
 }

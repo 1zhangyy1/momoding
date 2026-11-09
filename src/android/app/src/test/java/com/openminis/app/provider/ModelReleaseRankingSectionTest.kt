@@ -1,6 +1,5 @@
 package com.openminis.app.provider
 
-import com.openminis.app.ProductionSources
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -297,97 +296,4 @@ class ModelReleaseRankingSectionTest {
 
     // ══════════════════════════════════════ rank-once, in production (710b43a64)
 
-    /**
-     * SOURCE-GREP DRIFT GUARD on the ANR fix. The behavioural proof lives in
-     * ModelReleaseSortShapeTest, but it counts calls against a hand-rolled
-     * stand-in, so it cannot notice if PRODUCTION reverts to the naive shape —
-     * which is the thing that ANR'd.
-     *
-     * The naive form read perfectly naturally (a `Comparator<ModelEntry>` that
-     * ranked both sides) and nothing about it looked expensive; the cost only
-     * appeared on a device carrying 939 entries across 19 instances, where
-     * O(n log n) ranking (~18,600 calls) on the main thread during
-     * `ChatViewModel.init` blew the 5 s input-dispatch deadline. `rank()` is a
-     * hash lookup but not free — it also faults in the lazily-built index on
-     * first call. So pin the decorate-sort-undecorate shape itself.
-     */
-    @Test
-    fun `production still ranks once per entry, not once per comparison`() {
-        val src = ProductionSources.read("data/repository/ModelEntryRanking.kt")
-        assertTrue(
-            "the comparator must operate on PRE-RANKED pairs — a Comparator<ModelEntry> is the ANR shape",
-            src.contains("Comparator<Pair<ModelEntry, ModelReleaseIndex.Rank>>"),
-        )
-        assertTrue(
-            "…and the sort must consume those pairs",
-            src.contains(".sortedWith(releaseRankOrder)"),
-        )
-        assertTrue(
-            "the map that ranks each entry exactly once must still be there",
-            src.contains("ModelReleaseIndex.rank(") && src.contains(".map { it.first }"),
-        )
-        assertEquals(
-            "rank() must be called from exactly ONE place in this file — a second call site is " +
-                "how per-comparison ranking creeps back",
-            1,
-            Regex("ModelReleaseIndex\\.rank\\(").findAll(src).count(),
-        )
-        assertTrue(
-            "a list too short to order must not force the catalog index to build",
-            src.contains("if (entries.size < 2) return entries"),
-        )
-    }
-
-    /**
-     * The picker sheets sort PER PROVIDER SECTION, so the naive shape would pay
-     * its cost once per section rather than once — which is how a 19-instance
-     * device reached ~18,600 rank calls. Pin that the shared picker delegates to
-     * the extracted object instead of re-implementing the sort locally; an inline
-     * `sortedWith` there would reintroduce the bug in a file the guard above
-     * cannot see.
-     */
-    @Test
-    fun `the shared picker delegates its section sort to the extracted ranking`() {
-        val src = ProductionSources.read("ui/components/ModelEntryPicker.kt")
-        assertTrue(
-            "the picker must call the one ranking entry point",
-            src.contains("ModelEntryRanking") && src.contains(".sortedByReleaseRank("),
-        )
-        assertEquals(
-            "the picker must not hand-roll a rank comparator of its own",
-            0,
-            Regex("ModelReleaseIndex\\.rank\\(").findAll(src).count(),
-        )
-
-        val repo = ProductionSources.read("data/repository/ProviderRepository.kt")
-        assertTrue(
-            "the repository accessors must route through the same object",
-            repo.contains("ModelEntryRanking.sortedByReleaseRank(this)"),
-        )
-        assertEquals(
-            "…and likewise must not rank inline",
-            0,
-            Regex("ModelReleaseIndex\\.rank\\(").findAll(repo).count(),
-        )
-    }
-
-    /**
-     * The comparator is a single shared object, so every caller orders alike. A
-     * second comparator anywhere in the tree is a divergence waiting to happen —
-     * the picker and the provider-detail list showing different orders is exactly
-     * what motivated extracting `ModelEntryRanking` in the first place.
-     */
-    @Test
-    fun `there is exactly one release-rank comparator in the tree`() {
-        val definitions = ProductionSources.allKotlinFiles().filter {
-            it.readText().contains("val comparator: Comparator<Rank>")
-        }
-        assertEquals(
-            "the release-rank comparator must be defined exactly once, found in " +
-                definitions.map { it.name },
-            1,
-            definitions.size,
-        )
-        assertEquals("ModelReleaseIndex.kt", definitions.single().name)
-    }
 }

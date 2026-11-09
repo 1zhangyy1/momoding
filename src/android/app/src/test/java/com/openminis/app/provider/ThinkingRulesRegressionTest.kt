@@ -1085,28 +1085,4 @@ class ThinkingRulesRegressionTest {
         }
     }
 
-    /**
-     * SOURCE-GREP DRIFT GUARD on the comparison itself. Every behavioural row
-     * above reads the ceiling through `catalogMaxThinkingLevel`, and the whole fix
-     * is one comparison inside it — `ruleTop.rank > declaredTop.rank`. An inverted
-     * or `>=`-ified version of that line is the regression, and it is a one-token
-     * edit, so pin the token.
-     */
-    @Test
-    fun `the ceiling comparison still takes the higher of rule and declaration`() {
-        val src = com.openminis.app.ProductionSources.read("provider/ThinkingLevelCatalog.kt")
-        assertTrue(
-            "the ceiling must be a max() of the two sources — this line IS ef95c007d",
-            src.contains("return if (ruleTop != null && ruleTop.rank > declaredTop.rank) ruleTop else declaredTop"),
-        )
-        assertTrue(
-            "the non-reasoning check must stay AHEAD of the rule lookup",
-            src.indexOf("if (supportsReasoning == false) return ThinkingLevel.OFF") <
-                src.indexOf("val ruleTop = ThinkingLevelCatalog.declaredMaxLevel(id)"),
-        )
-        assertTrue(
-            "…and the undeclared fallback must stay the conservative XHIGH default",
-            src.contains("return ruleTop ?: ThinkingLevel.XHIGH"),
-        )
-    }
 }

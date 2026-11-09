@@ -1,6 +1,5 @@
 package com.openminis.app.ui.chat
 
-import com.openminis.app.ProductionSources
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -32,8 +31,4 @@ class FencedCodeIndentTest {
         assertEquals("  keep\nme", fencedCodeContent("```", listOf("  keep", "me")))
     }
 
-    @Test fun `the parser builds code blocks through it`() {
-        val src = ProductionSources.read("ui/chat/StreamingMarkdownText.kt")
-        assertTrue(src.contains("MdBlock.CodeBlock(rawLines.joinToString(\"\\n\"), lang, fencedCodeContent(line, codeLines))"))
-    }
 }

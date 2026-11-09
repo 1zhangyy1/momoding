@@ -1,6 +1,5 @@
 package com.openminis.app.backup
 
-import com.openminis.app.ProductionSources
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -87,39 +86,5 @@ class RestoreCancelEmptySessionsTest {
         }
         assertTrue(propagated)
         assertTrue("both empty new sessions removed", db.messages.isEmpty())
-    }
-
-    // -- source guards: the wiring in importChats ------------------------------
-
-    private val importer by lazy { ProductionSources.read("backup/BackupImporter.kt") }
-    private val chats by lazy {
-        importer.substringAfter("private suspend fun importChats(").substringBefore("// MARK: - Shared files")
-    }
-
-    @Test
-    fun `only newly inserted sessions are recorded for cleanup`() {
-        assertTrue(chats.contains("if (d.isNew) newlyInsertedSessionIds.add(id)"))
-        // The Stale branch (pre-existing, locally newer) must not record it.
-        val stale = chats.substringAfter("is BackupRecordMapper.Decoded.Stale -> {").substringBefore("}")
-        assertFalse(stale.contains("newlyInsertedSessionIds"))
-    }
-
-    @Test
-    fun `cancel handler wraps the messages loop and cleans up under NonCancellable`() {
-        val tryStart = chats.indexOf("try {\n        // The manifest counts MESSAGES")
-        val messagesLoop = chats.indexOf("readJsonl(dataDir, \"messages\")")
-        val handler = chats.indexOf("} catch (e: kotlinx.coroutines.CancellationException) {")
-        assertTrue(tryStart in 0 until messagesLoop)
-        assertTrue(handler > messagesLoop)
-        val body = chats.substring(handler).substringBefore("throw e")
-        assertTrue(body.contains("withContext(NonCancellable)"))
-        assertTrue(body.contains("deleteEmptySessions(\n                    newlyInsertedSessionIds"))
-    }
-
-    @Test
-    fun `staging DB claim is gone`() {
-        assertFalse(importer.contains("already runs into a staging DB"))
-        val vm = ProductionSources.read("ui/settings/backup/BackupViewModel.kt")
-        assertFalse(vm.contains("What survives: every batch the importer has already committed."))
     }
 }

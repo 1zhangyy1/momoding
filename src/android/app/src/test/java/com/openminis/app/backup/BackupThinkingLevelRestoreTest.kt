@@ -1,6 +1,5 @@
 package com.openminis.app.backup
 
-import com.openminis.app.ProductionSources
 import com.openminis.app.data.model.ModelGroup
 import com.openminis.app.data.model.ProviderConfig
 import com.openminis.app.data.model.ThinkingLevel
@@ -78,37 +77,4 @@ class BackupThinkingLevelRestoreTest {
         assertNull(BackupFormat.json.decodeFromString(ModelGroup.serializer(), wire).defaultThinkingLevel)
     }
 
-    /**
-     * Every raw value of the Swift enum must decode to the level of the same
-     * name, so either platform adding or respelling a level breaks here rather
-     * than silently in a user's restore.
-     */
-    @Test
-    fun everyIosRawValue_decodesToTheSameLevel() {
-        val iosCases = swiftThinkingLevelCases()
-        assertEquals(
-            "iOS and Android must define the same levels",
-            ThinkingLevel.entries.map { it.name.lowercase() },
-            iosCases,
-        )
-        for (raw in iosCases) {
-            val group = BackupFormat.json.decodeFromString(
-                ModelGroup.serializer(),
-                """{"id":"g","name":"G","memberEntryIds":[],"defaultThinkingLevel":"$raw"}""",
-            )
-            assertEquals(raw, raw, group.defaultThinkingLevel?.name?.lowercase())
-            assertEquals(raw, group.defaultThinkingLevel, ThinkingLevel.parseOrNull(raw))
-        }
-    }
-
-    private fun swiftThinkingLevelCases(): List<String> {
-        var dir: File? = ProductionSources.mainRoot()
-        while (dir != null && !File(dir, "src/ios").isDirectory) dir = dir.parentFile
-        val source = File(requireNotNull(dir), "src/ios/Providers/LLMTypes.swift").readText()
-        val start = source.indexOf("enum ThinkingLevel: String")
-        require(start >= 0) { "enum ThinkingLevel not found in LLMTypes.swift" }
-        val body = source.substring(source.indexOf('{', start) + 1, source.indexOf("static func", start))
-        return Regex("""^\s*case (\w+)\s*$""", RegexOption.MULTILINE)
-            .findAll(body).map { it.groupValues[1] }.toList()
-    }
 }

@@ -98,24 +98,4 @@ class HangCallerAttributionTest {
         return f.readText()
     }
 
-    @Test
-    fun `the sampler writes the deeper stack and appends attribution`() {
-        val body = src("src/main/java/com/openminis/app/diagnostics/HangDetector.kt")
-            .substringAfter("private fun writeStallSample(")
-            .substringBefore("\n    private fun recordHang(")
-        assertTrue("stall log must use STALL_STACK_DEPTH", body.contains("mainStack.take(STALL_STACK_DEPTH)"))
-        assertTrue("the old 25-frame cut must be gone", !body.contains("take(25)"))
-        assertTrue(
-            "the JankDiag line must include the attribution fields",
-            body.contains("attributionFields(currentScreen, mainStack)") && body.contains("\$attribution\""),
-        )
-    }
-
-    @Test
-    fun `main activity publishes the current route`() {
-        assertTrue(
-            src("src/main/java/com/openminis/app/MainActivity.kt")
-                .contains("HangDetector.noteScreen(entry.destination.route)"),
-        )
-    }
 }

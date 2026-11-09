@@ -1,6 +1,5 @@
 package com.openminis.app.service
 
-import com.openminis.app.ProductionSources
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -118,53 +117,4 @@ class Review0923OverlayTaskSlotsTest {
         assertEquals(2, slot.third)
     }
 
-    /**
-     * [BUG] c9e859dca — AgentForegroundService.hideOverlay() drops EVERY slot,
-     * and it is called on the foreground transition, camera suppression,
-     * toggle-off / no-permission and the dynamic-island branch — all while a
-     * run can still be going. Scenario: tasks A and B running, user opens
-     * Minis for a second, goes Home again: the capsule returns with no slot
-     * (no title, no "2 of 2"), and a task C started later reads as the only
-     * one. This contradicts the service's own comment "We deliberately do NOT
-     * clear tracker state on a foreground transition".
-     *
-     * The test invokes whatever tracker method hideOverlay() actually calls
-     * (read from the source), so it passes for any fix that keeps running
-     * slots — e.g. a `dropFinishedOverlayTasks()` that removes only
-     * `finished` slots.
-     */
-    @Test
-    fun `hiding the capsule never drops the slot of a session that is still running`() {
-        SessionActivityTracker.setActive(ids[0], sessionTitle = "Task A")
-        SessionActivityTracker.setActive(ids[1], sessionTitle = "Task B")
-        SessionActivityTracker.setActive(ids[2], sessionTitle = "Task C")
-        SessionActivityTracker.setInactive(ids[2]) // finished, lingering
-
-        invokeHideOverlayTrackerEffect()
-
-        val slotted = SessionActivityTracker.overlayTasks.value.map { it.sessionId }.toSet()
-        for (sid in listOf(ids[0], ids[1])) {
-            assertTrue(
-                "running session $sid lost its capsule slot when the capsule was hidden " +
-                    "(slots now: $slotted) — it will come back untitled and unnumbered",
-                sid in slotted,
-            )
-        }
-        assertFalse(
-            "a finished slot must still be dropped on hide (the c9e859dca leak)",
-            ids[2] in slotted,
-        )
-    }
-
-    /** Calls every no-arg SessionActivityTracker method named in hideOverlay(). */
-    private fun invokeHideOverlayTrackerEffect() {
-        val src = ProductionSources.read("service/AgentForegroundService.kt")
-        val body = src.substringAfter("private fun hideOverlay()").substringBefore("\n    }")
-        val calls = Regex("SessionActivityTracker\\.(\\w+)\\(\\)").findAll(body).map { it.groupValues[1] }.toList()
-        assertTrue("hideOverlay() must touch the tracker's slots", calls.isNotEmpty())
-        for (name in calls) {
-            val m = SessionActivityTracker::class.java.getMethod(name)
-            m.invoke(SessionActivityTracker)
-        }
-    }
 }

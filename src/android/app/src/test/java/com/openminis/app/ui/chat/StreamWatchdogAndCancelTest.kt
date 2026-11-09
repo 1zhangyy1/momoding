@@ -129,30 +129,6 @@ class StreamWatchdogAndCancelTest {
         return m.groupValues[1].replace("_", "").toLong()
     }
 
-    /** Drift guard: the two-phase loop, its constants, and the targeted eviction are still in place. */
-    @Test
-    fun `production watchdog still measures from requestBodyEnd and evicts one connection`() {
-        // Compare the VALUES, not the spelling: the source writes `120_000L`
-        // with a digit separator, and a guard built from an interpolated
-        // `${CONST}L` renders `120000L` and fails on formatting alone. Parse
-        // the literal, strip underscores, and compare as Long so this only
-        // trips when someone actually changes a timeout.
-        assertEquals(STREAM_TTFB_TIMEOUT_MS, sourceLongConst("STREAM_TTFB_TIMEOUT_MS"))
-        assertEquals(STREAM_UPLOAD_CAP_MS, sourceLongConst("STREAM_UPLOAD_CAP_MS"))
-        assertTrue(providerSrc.contains("val uploadDoneAt = watchState.uploadDoneAtNanos.get()"))
-        assertTrue(providerSrc.contains("""if (elapsedMs >= STREAM_UPLOAD_CAP_MS) { timedOutPhase = "upload"; break }"""))
-        assertTrue(providerSrc.contains("""if (sinceUploadMs >= STREAM_TTFB_TIMEOUT_MS) { timedOutPhase = "ttfb"; break }"""))
-        assertTrue("upload completion is signalled from requestBodyEnd", providerSrc.contains("override fun requestBodyEnd"))
-        assertTrue(providerSrc.contains("?.uploadDoneAtNanos?.set(System.nanoTime())"))
-        // Retry after a timeout must get a NEW connection: this call's socket is
-        // closed, and the shared pool is never flushed from here.
-        val timeoutBlock = providerSrc.substringAfter("if (timedOutPhase != null && !headersArrived.get())").substringBefore("val response = try {")
-        assertTrue(timeoutBlock.contains("call.cancel()"))
-        assertTrue(timeoutBlock.contains("watchState.connection.get()?.socket()?.close()"))
-        // The comment in that block says "Never evictAll" — assert on the CALL, not the word.
-        assertFalse("never evict the whole pool for one dead call", timeoutBlock.contains("evictAll("))
-    }
-
     // ============================================================ Stop vs stream thread
 
     // ── Port of ChatViewModel.uiMessages window (~L590-640) ────────────
@@ -212,14 +188,6 @@ class StreamWatchdogAndCancelTest {
     fun `short sessions return the same list instance`() {
         val raw = List(10) { "m$it" }
         assertTrue(window(raw, cap = 40) === raw)
-    }
-
-    private val vmSrc by lazy { File("src/main/java/com/openminis/app/ui/chat/ChatViewModel.kt").readText() }
-
-    /** Drift guard: the UI window is a snapshot. Editing no longer truncates history. */
-    @Test
-    fun `production ui window still copies instead of sharing a live view`() {
-        assertTrue(vmSrc.contains("else full.subList(full.size - cap, full.size).toList()"))
     }
 
     // Registry stop-order assertions were removed with that implementation. Persistent

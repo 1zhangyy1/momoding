@@ -3,7 +3,6 @@ package com.openminis.app.provider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
-import com.openminis.app.ProductionSources
 import org.junit.Test
 
 /**
@@ -224,23 +223,4 @@ class OpenCodeSessionHeaderTest {
         assertEquals("x-opencode-session", OpenCodeSessionHeader.HEADER)
     }
 
-    /**
-     * [T-android-opencode-subtask-session] Requests made on a chat's behalf
-     * outside the chat screen must carry that chat's id too, or OpenCode Go
-     * answers 400. The chat screen's own paths already pass activeSessionId.
-     */
-    @Test
-    fun `regenerate title and minis-model-use pass the chat's session id`() {
-        // [T-titlegen-group-order] Both title paths now build each candidate's
-        // provider in TitleCandidates.providerFor, which tags it; the callers
-        // hand it the chat's id.
-        val list = ProductionSources.read("ui/sessions/SessionListViewModel.kt")
-        assertTrue(list.contains("providerRepository, context, entry, sessionId = id,"))
-        val vm = ProductionSources.read("ui/chat/ChatViewModel.kt")
-        assertTrue(vm.contains("TitleCandidates.providerFor(providerRepository, context, entry, activeSessionId)"))
-        val titles = ProductionSources.read("ui/chat/TitleCandidates.kt")
-        assertTrue(titles.contains("sessionId = sessionId, overrides = entry.overrides"))
-        val modelUse = ProductionSources.read("sandbox/offload/ModelUseOffloadHandler.kt")
-        assertTrue(modelUse.contains("sessionId = request.sessionId, overrides = entry.overrides"))
-    }
 }

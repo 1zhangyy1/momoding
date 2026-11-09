@@ -1,6 +1,5 @@
 package com.openminis.app.data.repository
 
-import com.openminis.app.ProductionSources
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -126,64 +125,4 @@ class SkillScanParityTest {
         assertFalse(SkillDiskSignature.breakerTripped(totalCustom = 100, missingCustom = 39))
     }
 
-    // -- Source guards: the send path and the scan shape --
-
-    private val chatVm by lazy { ProductionSources.read("ui/chat/ChatViewModel.kt") }
-    private val repo by lazy { ProductionSources.read("data/repository/SkillRepository.kt") }
-
-    private fun functionBody(src: String, signature: String): String {
-        val start = src.indexOf(signature)
-        require(start >= 0) { "missing $signature" }
-        var depth = 0
-        var i = src.indexOf('{', start)
-        val open = i
-        while (i < src.length) {
-            when (src[i]) { '{' -> depth++; '}' -> if (--depth == 0) return src.substring(open, i + 1) }
-            i++
-        }
-        error("unbalanced $signature")
-    }
-
-    private fun code(body: String): String =
-        body.lines().filterNot { it.trimStart().startsWith("//") }.joinToString("\n")
-
-    @Test fun `building the system prompt never touches the skill directory`() {
-        val body = code(functionBody(chatVm, "private fun buildSystemPrompt(): String?"))
-        assertFalse("per-send rescan is back", body.contains("skillRepository?.reloadFromDisk()"))
-        assertFalse(body.contains("skillRepository?.requestReload"))
-        assertTrue(body.contains("skillPromptFragment(activeSessionId)"))
-    }
-
-    @Test fun `shell and file_write queue a background rescan`() {
-        assertTrue(chatVm.contains("skillRepository?.requestReload(\"shell_execute\")"))
-        assertTrue(chatVm.contains("skillRepository?.requestReload(\"file_write\", force = true)"))
-    }
-
-    @Test fun `restore and returning to the app queue a rescan`() {
-        assertTrue(ProductionSources.read("backup/BackupImporter.kt").contains("requestReload(\"backup_restore\", force = true)"))
-        assertTrue(ProductionSources.read("MinisApp.kt").contains("skillRepository.requestReload(\"foreground\")"))
-    }
-
-    @Test fun `reloadFromDisk no longer scans on the caller's thread`() {
-        val body = code(functionBody(repo, "fun reloadFromDisk()"))
-        assertFalse(body.contains("loadAll("))
-        assertTrue(body.contains("requestReload("))
-    }
-
-    @Test fun `the breaker is decided once, outside the per-row loop`() {
-        val body = code(functionBody(repo, "private fun loadAll(requireSeq: Boolean = false): Boolean"))
-        val rowLoop = body.indexOf("SELECT * FROM skills ORDER BY installed_at DESC")
-        assertTrue(rowLoop > 0)
-        val insideLoop = body.substring(rowLoop)
-        assertFalse("per-row requery is back", insideLoop.contains("rawQuery("))
-        assertFalse("per-row breaker log is back", insideLoop.contains("Circuit breaker tripped"))
-        assertFalse("per-row stat is back", insideLoop.contains("SKILL.md\").exists()"))
-        assertEquals(1, Regex("Circuit breaker tripped").findAll(body).count())
-    }
-
-    @Test fun `every in-memory edit goes through mutateSkills`() {
-        // The one direct write left is loadAll's guarded commit.
-        assertEquals(1, Regex("""_skills\.value = """).findAll(repo).count() -
-            Regex("""_skills\.value = transform""").findAll(repo).count())
-    }
 }

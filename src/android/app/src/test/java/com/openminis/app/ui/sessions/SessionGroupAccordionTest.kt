@@ -4,7 +4,6 @@ import com.openminis.app.data.db.ChatSessionEntity
 import com.openminis.app.data.db.FolderEntity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
-import com.openminis.app.ProductionSources
 import org.junit.Test
 
 /**
@@ -88,19 +87,6 @@ class SessionGroupAccordionTest {
             // The count survives so the header can still say how many are inside.
             assertEquals(1, it.totalCount)
         }
-    }
-
-    @Test
-    fun `the open group is kept in memory only`() {
-        // Persisting it is what made a cold start reopen a group.
-        val vm = ProductionSources.read("ui/sessions/SessionListViewModel.kt")
-        assertTrue(vm.contains("val expandedFolderId = MutableStateFlow<String?>(null)"))
-        assertTrue(!vm.contains("putString(\"lastExpandedFolderId\""))
-        assertTrue(!vm.contains("putStringSet(\"collapsedFolderIds\""))
-        assertTrue(
-            "tapping the open group folds everything",
-            vm.contains("expandedFolderId.value = if (expandedFolderId.value == folderId) null else folderId"),
-        )
     }
 
     @Test

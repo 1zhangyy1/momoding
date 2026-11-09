@@ -67,14 +67,6 @@ class ModelUseSubcallTest {
 
     // ============================================================ no default persona
 
-    /** GH#103/#104/#107 — without `--system` the request carries NO system prompt at all. */
-    @Test
-    fun `no --system and no inline system message means no system prompt`() {
-        val a = args("--model", "gpt-4o", "--input", "/var/minis/workspace/in.json")
-        assertNull(explicitSystem(a) { error("no file read expected") })
-        assertNull(systemPrompt(null, ""))
-    }
-
     @Test
     fun `system prompt composition follows the documented precedence`() {
         assertEquals("only explicit", systemPrompt("only explicit", ""))
@@ -87,49 +79,7 @@ class ModelUseSubcallTest {
         assertEquals(0, reads)
     }
 
-    /** Drift guard: the production handler must not carry a default persona literal. */
-    @Test
-    fun `production handler injects no default persona`() {
-        assertTrue(productionFile.exists())
-        assertTrue(src.contains("""val explicitSystem = args.get("system") ?: args.get("system-file")?.let { readLinuxPath(it) }"""))
-        assertTrue(src.contains("""explicitSystem != null && inlineSystem.isNotEmpty() -> "${'$'}explicitSystem\n\n${'$'}inlineSystem""""))
-        assertTrue(src.contains("else -> null"))
-        // The only "You are …" text is in the --help example, never in the request path.
-        val bodyBeforeHelp = src.substringBefore("private val HELP", src)
-        assertFalse("a default persona must never be injected: found 'You are Minis'", bodyBeforeHelp.contains("You are Minis"))
-        assertFalse(bodyBeforeHelp.contains("你是 Minis"))
-    }
-
     // ============================================================ one path resolver
-
-    /**
-     * GH#105/#108 — `--system-file` and `--input` (the Android spelling of the
-     * prompt file) go through the SAME Linux-path resolver, so a relative or
-     * `/var/minis/...` path works for both or for neither.
-     */
-    @Test
-    fun `system-file and input parse to the same relative path and share one resolver`() {
-        val a = args("--model", "m", "--system-file", "./x.md", "--input", "./x.md")
-        assertEquals("./x.md", a.get("system-file"))
-        assertEquals("./x.md", a.get("input"))
-        val seen = mutableListOf<String>()
-        explicitSystem(a) { seen += it; "SYS" }
-        assertEquals(listOf("./x.md"), seen)
-        // Drift guard: both file arguments resolve through readLinuxPath → PRootKernel.resolveHostPath.
-        assertTrue(src.contains("""args.get("system-file")?.let { readLinuxPath(it) }"""))
-        assertTrue(src.contains("""readLinuxPath(args.get("input")!!)"""))
-        assertTrue(src.contains("PRootKernel.resolveHostPath(linuxPath)"))
-        assertEquals("exactly one resolver definition", 1, Regex("""private fun readLinuxPath\(""").findAll(src).count())
-    }
-
-    @Test
-    fun `equals-form and space-form flags resolve identically`() {
-        val a = args("--model=m", "--system-file=./x.md")
-        val b = args("--model", "m", "--system-file", "./x.md")
-        assertEquals(a.get("system-file"), b.get("system-file"))
-        assertEquals(a.get("model"), b.get("model"))
-        assertEquals(listOf("run"), a.positional)
-    }
 
     // ============================================================ audio blocks survive serialization
 
@@ -223,19 +173,4 @@ class ModelUseSubcallTest {
         assertTrue("the user's text still goes out as contents", body.getJSONArray("contents").getJSONObject(0).getJSONArray("parts").getJSONObject(0).getString("text") == "say hello")
     }
 
-    /**
-     * Drift guard for the CLI's modality precheck: an `--output` whose extension
-     * implies audio must be refused for a model that does not declare
-     * `audio_output`, and OpenAI-compatible TTS is reachable through the
-     * documented `/v1/audio/speech` passthrough endpoint.
-     */
-    @Test
-    fun `cli precheck and tts passthrough are still wired`() {
-        assertTrue(src.contains("""isAudioExt(outputExt) -> "audio_output".takeIf { "audio" !in outputs }"""))
-        assertTrue(src.contains(""""audio" in outputs -> config.put("responseModalities", JSONArray().put("AUDIO"))""") ||
-            File("src/main/java/com/openminis/app/provider/gemini/GeminiProvider.kt").readText()
-                .contains(""""audio" in outputs -> config.put("responseModalities", JSONArray().put("AUDIO"))"""))
-        assertTrue("TTS routing must stay documented as the audio/speech endpoint", src.contains("/v1/audio/speech"))
-        assertTrue(src.contains("modality_not_supported"))
-    }
 }

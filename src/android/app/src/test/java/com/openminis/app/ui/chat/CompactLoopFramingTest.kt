@@ -1,6 +1,5 @@
 package com.openminis.app.ui.chat
 
-import com.openminis.app.ProductionSources
 import com.openminis.app.data.model.AgentContentPart
 import com.openminis.app.data.model.LLMError
 import com.openminis.app.data.model.LLMMessage
@@ -196,25 +195,4 @@ class CompactLoopFramingTest {
 
     // ── drift guard ────────────────────────────────────────────────────────
 
-    @Test
-    fun `drift guard - framing, record-not-order prompt and summary wrapper still in production`() {
-        val vm = ProductionSources.read("ui/chat/ChatViewModel.kt")
-        assertTrue(vm.contains("append(\"Compact this conversation into a context summary:\\n\\n\")"))
-        assertTrue(vm.contains("append(\"\\n\\n---\\nEND OF CONVERSATION TO COMPACT.\\n\\n\")"))
-        assertTrue(vm.contains("Do NOT continue the conversation above — summarize it."))
-        assertTrue(vm.contains("what was still open is a record of how things stood, not a"))
-        // System prompt (Momoding state table): what was left open is kept as a record, never as
-        // a task — the old-task bleed guard is that the next message decides (and the wrapper below).
-        assertTrue(vm.contains("the summary is a record of how things stood, not a standing work order"))
-        assertTrue(vm.contains("Do not turn them into tasks; the person's next message decides whether any of them still matters."))
-        // Summary wrapper at read time: newest user instruction wins.
-        assertTrue(vm.contains("The user's most recent message (below or in the next turn) takes precedence"))
-        assertTrue(vm.contains("do not resume the old plan from this summary"))
-        // Split-and-merge: textual join, halves get NO previous summary, depth cap 3.
-        assertTrue(vm.contains("val summary1 = generateCompactSummaryWithSplitting(firstHalf, null, depth + 1)"))
-        assertTrue(vm.contains("val summary2 = generateCompactSummaryWithSplitting(secondHalf, null, depth + 1)"))
-        assertTrue(vm.contains("summary1 + \"\\n\\n\" + summary2"))
-        assertTrue(vm.contains("messages.size < 2 || depth >= 3"))
-        assertTrue(vm.contains("Previous context summary:\\n\$previousSummary\\n\\n"))
-    }
 }

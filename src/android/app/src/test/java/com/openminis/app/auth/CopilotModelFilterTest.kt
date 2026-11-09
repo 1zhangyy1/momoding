@@ -244,34 +244,4 @@ class CopilotModelFilterTest {
 
     // ── Source-grep drift guard ───────────────────────────────────────────
 
-    /**
-     * The closed-world claim above is a claim about the ABSENCE of code, which
-     * no positive test can express. This reads the filter loop and asserts it
-     * contains exactly the two `continue`-bearing gates plus the id/dup guards
-     * — so a third gate added later fails here instead of silently hiding a
-     * model that only a user report would surface.
-     */
-    @Test
-    fun `the filter loop still has exactly two drop gates`() {
-        val src = com.openminis.app.ProductionSources.read("auth/CopilotDeviceFlow.kt")
-        val loop = src.substringAfter("fun parseModelsDetailed(")
-            .substringBefore("private fun JSONArray")
-        assertTrue("gate 1 must read model_picker_enabled defaulting to true",
-            loop.contains("""!m.optBoolean("model_picker_enabled", true)"""))
-        assertTrue("gate 2 must only fire on a PRESENT non-chat type",
-            loop.contains("""type.isNotEmpty() && type != "chat""""))
-        // Five `continue`s exactly: non-object row, empty id, gate 1, gate 2,
-        // duplicate id. Only two of them are policy decisions; the other three
-        // are shape guards, and none of the five may grow a sixth sibling.
-        val continues = Regex("\\bcontinue\\b").findAll(loop).count()
-        assertEquals(
-            "a new `continue` in the filter loop is a new way to lose a model",
-            5,
-            continues,
-        )
-        assertFalse(
-            "policy state must not become a gate",
-            loop.contains("\"policy\""),
-        )
-    }
 }

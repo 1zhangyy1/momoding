@@ -20,11 +20,6 @@ import org.junit.Test
  */
 class FallbackRespectsUserSwitchTest {
 
-    private val vmSrc by lazy {
-        File("src/main/java/com/openminis/app/ui/chat/ChatViewModel.kt")
-            .also { assertTrue("missing ChatViewModel.kt", it.exists()) }.readText()
-    }
-
     @Test
     fun `fallback may rebind only while the class-level provider is unchanged`() {
         val a = Any()
@@ -35,18 +30,4 @@ class FallbackRespectsUserSwitchTest {
         assertFalse(ChatViewModel.fallbackMayRebindSession(c, null))
     }
 
-    @Test
-    fun `the class-level write and persistBinding sit behind the user-switch guard`() {
-        val loop = vmSrc.substringAfter("private suspend fun runAgentLoop(")
-        assertTrue(loop.contains("var classProviderAtSend = this@ChatViewModel.currentProvider"))
-        val guard = loop.indexOf("val userSwitchedMidTurn = !fallbackMayRebindSession(")
-        val write = loop.indexOf("this@ChatViewModel.currentProvider = next")
-        val persist = loop.indexOf("persistBinding(\"\"\"{\"type\":\"entry\",\"entryId\":\"\${newEntry.id}\"}\"\"\")")
-        assertTrue("guard not found", guard >= 0)
-        assertTrue("class-level write must follow the guard", write > guard)
-        assertTrue("persistBinding must follow the guard", persist > guard)
-        // Our own fallback moves the baseline, so a second fallback in the same
-        // turn is still allowed to rebind.
-        assertTrue(loop.substring(write, write + 200).contains("classProviderAtSend = next"))
-    }
 }

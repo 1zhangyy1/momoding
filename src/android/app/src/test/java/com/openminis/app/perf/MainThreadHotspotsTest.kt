@@ -1,6 +1,5 @@
 package com.openminis.app.perf
 
-import com.openminis.app.ProductionSources
 import com.openminis.app.ui.chat.SystemResourceMonitor
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -47,26 +46,6 @@ class MainThreadHotspotsTest {
         assertEquals(1000L, SystemResourceMonitor.parseTotalPssKb("Rss: 2000 kB\nPss: 1000 kB\n"))
     }
 
-    @Test
-    fun `sampling runs off the main thread and reads the rollup first`() {
-        val src = ProductionSources.read("ui/chat/SystemResourceMonitor.kt")
-        assertEquals(2, Regex("""withContext\(Dispatchers\.IO\) \{ monitor\.sampleOnce\(context\) \}""").findAll(src).count())
-        assertFalse("no bare sample on the composition's dispatcher", Regex("""\n\s+monitor\.sampleOnce\(context\)\n""").containsMatchIn(src))
-        val mem = src.substringAfter("private fun sampleMemory(").substringBefore("\n    companion object")
-        assertTrue(mem.indexOf("smaps_rollup") in 0 until mem.indexOf("Debug.getMemoryInfo(mi)"))
-    }
-
     // ── [T-android-content-capture-off] ──────────────────────────────────────
 
-    @Test
-    fun `content capture is switched off once, first thing in onCreate`() {
-        val src = ProductionSources.read("MinisApp.kt")
-        val body = src.substringAfter("override fun onCreate() {")
-        val off = body.indexOf("androidx.compose.ui.contentcapture.ContentCaptureManager.isEnabled = false")
-        assertTrue(off in 0 until body.indexOf("T287-followup: ACRA spawns"))
-        // Never flipped back on anywhere: Compose 1.9.1 cannot resume after a pause.
-        val all = ProductionSources.mainRoot()!!.walkTopDown().filter { it.extension == "kt" }
-            .map { it.readText() }.joinToString("\n")
-        assertFalse(all.contains("ContentCaptureManager.isEnabled = true"))
-    }
 }

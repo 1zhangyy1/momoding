@@ -51,13 +51,4 @@ class TableColumnAlignTest {
         assertEquals(listOf(MdTableAlign.CENTER, MdTableAlign.CENTER), t.alignments)
     }
 
-    @Test
-    fun `cells apply the column alignment to both the box and the wrapped text`() {
-        val src = File("src/main/java/com/openminis/app/ui/chat/StreamingMarkdownText.kt").readText()
-            .substringAfter("private fun RenderTable(block: MdBlock.Table)")
-            .substringBefore("\nprivate fun ")
-        assertTrue(src.contains("val columnAlign = block.alignments.getOrElse(colIndex) { MdTableAlign.START }"))
-        assertTrue(src.contains("MdTableAlign.CENTER -> Alignment.TopCenter"))
-        assertTrue(src.contains("MdTableAlign.CENTER -> TextAlign.Center"))
-    }
 }

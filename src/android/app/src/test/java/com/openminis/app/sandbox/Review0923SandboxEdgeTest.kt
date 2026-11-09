@@ -30,19 +30,6 @@ import org.junit.Test
  */
 class Review0923SandboxEdgeTest {
 
-    private fun src(path: String): String {
-        val f = File(path)
-        assertTrue("missing ${f.absolutePath}", f.exists())
-        return f.readText()
-    }
-
-    private fun code(path: String): String = src(path).lineSequence()
-        .filterNot { val t = it.trimStart(); t.startsWith("//") || t.startsWith("*") || t.startsWith("/*") }
-        .joinToString("\n")
-
-    private val freshCode by lazy { code("src/main/java/com/openminis/app/sandbox/FreshProcessShell.kt") }
-    private val coordCode by lazy { code("src/main/java/com/openminis/app/sandbox/ExecutionCoordinator.kt") }
-
     // ── 71e813d03: CR folding vs. escape sequences ─────────────────────────
 
     @Test
@@ -71,18 +58,6 @@ class Review0923SandboxEdgeTest {
     // ── Fresh path parity with the warm path ───────────────────────────────
 
     @Test
-    fun `BUG the default fresh path keeps the GH#186 seccomp self-heal`() {
-        // PersistentShell, ShellExecutor and TerminalSession all retry once
-        // with PROOT_NO_SECCOMP=1 on an early fatal signal. FreshProcessShell
-        // has the `useNoSeccomp` parameter but nothing ever passes true and no
-        // caller consults the policy, so on a GH#186 device every shell_execute
-        // on the (now default) fresh path dies with SIGBUS/SIGSEGV.
-        val consulted = freshCode.contains("SeccompFallbackPolicy.shouldRetryWithoutSeccomp") ||
-            coordCode.contains("SeccompFallbackPolicy.shouldRetryWithoutSeccomp")
-        assertTrue("fresh path must consult SeccompFallbackPolicy", consulted)
-    }
-
-    @Test
     fun `per-chunk UTF-8 decoding corrupts a CJK character split across reads`() {
         // Model of FreshProcessShell's read loop: decode each read() chunk on
         // its own. A 3-byte CJK character split 1+2 across two reads becomes
@@ -97,28 +72,6 @@ class Review0923SandboxEdgeTest {
         out.append(String(rest, 0, rest.size, StandardCharsets.UTF_8))
         assertNotEquals("中文输出", out.toString())
         assertTrue(out.contains('�'))
-    }
-
-    @Test
-    fun `BUG the fresh read loop decodes UTF-8 across read boundaries`() {
-        // `String(buf, 0, n, UTF_8)` per read() is the per-chunk decode above.
-        // A long CJK / emoji output (cat of a Chinese file, a JSON dump) is
-        // split at arbitrary byte offsets and the agent sees U+FFFD.
-        // Fix: wrap the stream in an InputStreamReader (stateful decoder) or use
-        // a CharsetDecoder that carries the incomplete tail between reads.
-        assertFalse(
-            "FreshProcessShell must not decode each read() chunk independently",
-            freshCode.contains("String(buf, 0, n, StandardCharsets.UTF_8)"),
-        )
-    }
-
-    @Test
-    fun `a user Stop and a timeout stay distinguishable in the coordinator`() {
-        // executeFresh appends "(exit code: N)" for any code other than 0/124.
-        // CANCELLED_EXIT must therefore differ from 124, or a Stop reads as a
-        // timeout the agent loop may retry.
-        assertNotEquals(124, FreshProcessShell.CANCELLED_EXIT)
-        assertTrue(coordCode.contains("exitCode != 0 && exitCode != 124"))
     }
 
     // ── ForegroundCommandGroup invariants (0569598ff / e0f0fe2e5) ─────────

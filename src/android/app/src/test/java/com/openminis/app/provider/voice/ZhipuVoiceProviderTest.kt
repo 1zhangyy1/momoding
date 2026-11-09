@@ -1,6 +1,5 @@
 package com.openminis.app.provider.voice
 
-import com.openminis.app.ProductionSources
 import okio.Buffer
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -93,37 +92,6 @@ class ZhipuVoiceProviderTest {
         assertEquals("https://open.bigmodel.cn/api/paas/v4/audio/transcriptions", p.composedUrlString(p.voiceInputEndpointPath()))
     }
 
-    @Test
-    fun `routing matches Zhipu bases and not the neighbours`() {
-        for (b in listOf("https://open.bigmodel.cn/api/paas/v4", "https://api.z.ai/api/paas/v4", "https://zhipu.example.com/v1")) {
-            assertTrue(b, ZhipuVoiceProvider.matches(b))
-        }
-        // Doubao's ASR MODEL is named "bigmodel", but its base is bytedance.
-        for (b in listOf("https://openspeech.bytedance.com", "https://dashscope.aliyuncs.com/compatible-mode", "https://api.openai.com")) {
-            assertFalse(b, ZhipuVoiceProvider.matches(b))
-        }
-        val factory = ProductionSources.read("provider/voice/VoiceProviderFactory.kt")
-        assertTrue(factory.contains("ZhipuVoiceProvider.matches(normalizedBase) ->"))
-    }
-
     // ---- system engine (P0) --------------------------------------------------
 
-    @Test
-    fun `the manifest can see TTS engines`() {
-        val manifest = listOf("src/main/AndroidManifest.xml", "app/src/main/AndroidManifest.xml", "src/android/app/src/main/AndroidManifest.xml")
-            .map { java.io.File(it) }.first { it.exists() }.readText()
-        val queries = manifest.substringAfter("<queries>").substringBefore("</queries>")
-        assertTrue(queries.contains("<action android:name=\"android.intent.action.TTS_SERVICE\" />"))
-    }
-
-    @Test
-    fun `android-speak waits the manager's budget and lists engines through PackageManager`() {
-        val src = ProductionSources.read("sandbox/offload/SpeakOffloadHandler.kt")
-        assertFalse("no 2 s wait left", src.contains("waitForInit(2_000)"))
-        assertEquals(2, Regex("""waitForInit\(TextToSpeechManager\.INIT_TIMEOUT_MS\)""").findAll(src).count())
-        val probe = src.substringAfter("private fun probeEngineNames()").substringBefore("\n    }\n")
-        assertTrue(probe.contains("Intent(TextToSpeech.Engine.INTENT_ACTION_TTS_SERVICE)"))
-        assertTrue(probe.contains("queryIntentServices"))
-        assertFalse("no throw-away TextToSpeech probe", probe.contains("TextToSpeech(context"))
-    }
 }

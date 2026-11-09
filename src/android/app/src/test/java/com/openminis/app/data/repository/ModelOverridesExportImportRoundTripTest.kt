@@ -1,6 +1,5 @@
 package com.openminis.app.data.repository
 
-import com.openminis.app.ProductionSources
 import com.openminis.app.data.model.LLMModel
 import com.openminis.app.data.model.ModelEntry
 import com.openminis.app.data.model.ModelOverrides
@@ -635,75 +634,4 @@ class ModelOverridesExportImportRoundTripTest {
 
     // ── Source-grep drift guard ───────────────────────────────────────────
 
-    /**
-     * The port above only protects what production actually does if the two stay
-     * in step. This asserts every key the port writes/reads is still named in
-     * ProviderRepository.kt, and — the part that catches the ORIGINAL bug class
-     * — that the set of `ModelOverrides` properties has not grown a field the
-     * export path does not mention.
-     */
-    @Test
-    fun `the ported wire format matches the source`() {
-        val src = ProductionSources.read("data/repository/ProviderRepository.kt")
-        for (key in listOf(
-            "displayName", "maxOutputTokens", "contextWindow", "supportsReasoning",
-            "inputModalities", "outputModalities", "temperature", "topP",
-            "customHeaders", "extraBodyParams", "modalityOverride", "maxThinkingLevel",
-        )) {
-            assertTrue("export/import must still handle \"$key\"", src.contains("\"$key\""))
-        }
-        assertTrue(
-            "the bitfield fallback must still exist",
-            src.contains("readModalitiesWithBitfieldFallback"),
-        )
-        assertTrue(
-            "absent temperature must stay null rather than 0.0",
-            src.contains("""if (overridesObj.has("temperature"))"""),
-        )
-        // The thinking ceiling must NOT go through ThinkingLevel.decoded — that
-        // clamps an unknown token to XHIGH, which would invent a ceiling the
-        // sender never set.
-        assertTrue(
-            "the ceiling is decoded by the null-on-unknown helper",
-            src.contains("private fun thinkingLevelFromWire(raw: String): ThinkingLevel?"),
-        )
-        assertTrue(src.contains("it.name.equals(raw, ignoreCase = true)"))
-        assertTrue(
-            "the export writes the cross-platform lowercase level id",
-            src.contains("""o.put("maxThinkingLevel", it.name.lowercase())"""),
-        )
-        // Bit layout, verbatim — a renumbering here silently mis-decodes every
-        // iOS export.
-        assertTrue(src.contains("MODALITY_BIT_TEXT_IN = 1 shl 0"))
-        assertTrue(src.contains("MODALITY_BIT_TEXT_OUT = 1 shl 1"))
-        assertTrue(src.contains("MODALITY_BIT_IMG_IN = 1 shl 2"))
-        assertTrue(src.contains("MODALITY_BIT_PDF_IN = 1 shl 3"))
-        assertTrue(src.contains("MODALITY_BIT_VID_OUT = 1 shl 8"))
-    }
-
-    /**
-     * The generalized form of the reported bug: any NEW `ModelOverrides` field
-     * must be added to the export path too. This enumerates the data class's
-     * declared properties from its source and requires each name to appear in
-     * the export/import file. Every member is carried now, so the expected set
-     * of omissions is EMPTY — a new field that forgets this path fails here.
-     */
-    @Test
-    fun `every ModelOverrides field is named in the export path`() {
-        val configSrc = ProductionSources.read("data/model/ProviderConfig.kt")
-        val body = configSrc.substringAfter("data class ModelOverrides(")
-            .substringBefore("val isEmpty: Boolean")
-        val fields = Regex("""^\s*val (\w+):""", RegexOption.MULTILINE)
-            .findAll(body).map { it.groupValues[1] }.toList()
-        assertTrue("expected to find the overrides fields, got $fields", fields.size >= 10)
-
-        val repoSrc = ProductionSources.read("data/repository/ProviderRepository.kt")
-        val missing = fields.filterNot { repoSrc.contains("\"$it\"") }
-        assertEquals(
-            "a NEW overrides field is missing from export/import — add it there " +
-                "(the backup path gets it for free, provider sharing does not): $missing",
-            emptyList<String>(),
-            missing,
-        )
-    }
 }

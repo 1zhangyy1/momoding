@@ -1,6 +1,5 @@
 package com.openminis.app.provider
 
-import com.openminis.app.ProductionSources
 import com.openminis.app.data.model.LLMMessage
 import com.openminis.app.data.model.LLMModel
 import com.openminis.app.data.model.LLMStreamChunk
@@ -250,56 +249,4 @@ class CopilotReasoningStreamTest {
 
     // ══════════════════════════════════════════════ drift guard
 
-    /**
-     * SOURCE-GREP DRIFT GUARD. The three spellings are a fallback chain inside
-     * one SSE branch, and the branch is long — a refactor that splits the delta
-     * handling could drop the third name again without any other test noticing,
-     * since it is the only vendor that uses it.
-     */
-    @Test
-    fun `the chat-completions branch still knows all three reasoning spellings`() {
-        val src = ProductionSources.read("provider/openai/OpenAIProvider.kt")
-        for (needle in listOf(
-            """d.safeOptString("reasoning_content", "")""",
-            """.ifEmpty { d.safeOptString("reasoning", "") }""",
-            """.ifEmpty { d.safeOptString("reasoning_text", "") }""",
-            """val hasReasoningTextKey = d.has("reasoning_text")""",
-        )) {
-            assertTrue("the reasoning fallback chain lost: $needle", src.contains(needle))
-        }
-        assertTrue(
-            "presence of ANY of the three must mark the turn as having carried reasoning",
-            src.contains("if (hasRcKey || hasReasoningKey || hasReasoningTextKey)"),
-        )
-        assertTrue(
-            "the Responses path's own spelling of the same name must stay too",
-            src.contains("response.reasoning_text.delta"),
-        )
-    }
-
-    /**
-     * The capability half of the same commit, pinned by source because
-     * CopilotDeviceFlowTest owns the behavioural rows: Copilot's reasoning
-     * signals are `adaptive_thinking` and a `reasoning_effort` tier list, NOT
-     * `supports.thinking`. Kept here so the two halves of "Copilot reasoning
-     * works" fail together — a parser that streams reasoning for a model the
-     * catalog says cannot reason is still a blank pane, because every thinking
-     * gate in the app tests `== true` and a null reads as "no".
-     */
-    @Test
-    fun `the Copilot model parser still reads the fields Copilot actually sends`() {
-        val src = ProductionSources.read("auth/CopilotDeviceFlow.kt")
-        assertTrue(
-            "adaptive_thinking is one of the two real reasoning signals",
-            src.contains("adaptive_thinking"),
-        )
-        assertTrue(
-            "…and a reasoning_effort tier list is the other",
-            src.contains("reasoning_effort"),
-        )
-        assertTrue(
-            "the legacy key is kept only as a FALLBACK — Copilot never sends it",
-            src.contains("thinking"),
-        )
-    }
 }

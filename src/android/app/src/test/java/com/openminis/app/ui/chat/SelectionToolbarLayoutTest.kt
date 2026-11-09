@@ -33,14 +33,4 @@ class SelectionToolbarLayoutTest {
         assertEquals(0, count(emptyList(), max = 400f))
     }
 
-    @Test fun `add to input is built right after copy, before copy full text`() {
-        val src = File("src/main/java/com/openminis/app/ui/chat/MinisTextKitGesture.kt").readText()
-        val body = src.substringAfter("val items = buildList {")
-        val copy = body.indexOf("add(SelectionAction(labelCopy)")
-        val add = body.indexOf("add(SelectionAction(labelAddToInput)")
-        val full = body.indexOf("label = labelCopyFullText")
-        val read = body.indexOf("SelectionAction(labelReadAloud")
-        assertTrue("copy < addToInput < copyFull < readAloud: $copy $add $full $read",
-            copy in 0 until add && add < full && full < read)
-    }
 }

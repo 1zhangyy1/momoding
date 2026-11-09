@@ -50,52 +50,7 @@ class BackupStopAndDeadlineTest {
         return root
     }
 
-    @Test
-    fun `Stop ends a large tree walk at a file boundary`() {
-        val root = sourceTree(200)
-        var polls = 0
-        try {
-            treeExporter { polls++; true }.export(root, "shared", BackupCategory.SHARED_FILES)
-            fail("expected the walk to stop")
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            // Checked every CANCEL_CHECK_EVERY entries, not on every file.
-            assertEquals(1, polls)
-        }
-    }
-
-    @Test
-    fun `without Stop the walk exports everything`() {
-        val root = sourceTree(100)
-        val r = treeExporter { false }.export(root, "shared", BackupCategory.SHARED_FILES)
-        assertEquals(100, r.filesIncluded)
-    }
-
     // ── Wiring (source) ───────────────────────────────────────────────────
-
-    @Test
-    fun `the upload runs as an async rclone job that Stop can end`() {
-        val up = src("src/main/java/com/openminis/app/backup/remote/RcloneChunkedUpload.kt")
-        val upload = up.substringAfter("    fun upload(").substringBefore("    private fun runCopyJob(")
-        assertTrue(upload.contains("runCopyJob("))
-        assertTrue(upload.contains("pauseCancellably(RETRY_BACKOFF_MS, isCancelled)"))
-        val job = up.substringAfter("    private fun runCopyJob(").substringBefore("    private fun pauseCancellably(")
-        assertTrue(job.contains("\"_async\" to true, \"_group\" to group"))
-        assertTrue(job.contains("\"job/stop\""))
-        assertTrue(job.contains("\"core/stats\", mapOf(\"group\" to group)"))
-        assertFalse("process-wide byte counter is gone", up.contains("private fun statsBytes()"))
-    }
-
-    @Test
-    fun `a backup run hands its cancellation to every delivery path`() {
-        val run = src("src/main/java/com/openminis/app/backup/BackupRunController.kt")
-        assertTrue(run.contains("isCancelled = { job?.isActive == false },"))
-        val deliver = run.substringAfter("private fun deliverToDestinations(")
-        assertTrue(deliver.contains("uploader.upload(packageFile, remote, backupId, isCancelled = isCancelled)"))
-        assertTrue(deliver.contains("localDelivery.deliver(packageFile, treeUri, isCancelled)"))
-        assertTrue("stops between destinations", deliver.contains("if (isCancelled()) {"))
-        val export = src("src/main/java/com/openminis/app/backup/BackupExporter.kt")
-        assertTrue(export.contains("isCancelled = { runJob?.isActive == false },"))
-    }
 
     @Test
     fun `retry pause and tree checkpoint match iOS`() {

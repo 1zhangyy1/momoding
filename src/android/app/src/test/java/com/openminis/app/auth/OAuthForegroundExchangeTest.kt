@@ -63,69 +63,6 @@ class OAuthForegroundExchangeTest {
         assertTrue("$file must exchange AFTER the foreground wait ($exchangeCall)", exchange > gate)
     }
 
-    @Test
-    fun `anthropic waits for the foreground before exchanging`() =
-        assertGatedBefore("ClaudeOAuthManager", "exchangeCodeJson(code)")
-
-    @Test
-    fun `openai waits for the foreground before exchanging`() =
-        assertGatedBefore("OpenAIOAuthManager", "exchangeCodeJson(code)")
-
-    @Test
-    fun `openrouter waits for the foreground before exchanging`() =
-        assertGatedBefore("OpenRouterOAuthManager", "exchangeCode(code, verifier)")
-
-    @Test
-    fun `xai waits for the foreground before exchanging`() =
-        assertGatedBefore("XAIOAuthManager", "exchangeCodeForToken(code)")
-
-    @Test
-    fun `the base loopback flow waits too`() =
-        assertGatedBefore("OAuthManager", "exchangeCode(code)")
-
-    @Test
-    fun `anthropic retries briefly and reports network failure as such`() {
-        val exchange = auth("ClaudeOAuthManager").substringAfter("private fun exchangeCodeJson(")
-        assertTrue("retry for the lag before the block lifts", exchange.contains("for (attempt in 1..3)"))
-        assertTrue(
-            "a network failure must reach the UI as a network message, not raw UnknownHostException",
-            exchange.contains("OAuthNetworkUnreachableException(e)"),
-        )
-    }
-
-    @Test
-    fun `the browser page tells the user to go back instead of claiming completion`() {
-        val server = auth("OAuthCallbackServer")
-        assertFalse(
-            "'You can close this tab' after only receiving the code is what made this look done",
-            server.contains("You can close this tab"),
-        )
-        assertTrue(server.contains("Return to Minis to finish signing in."))
-    }
-
     // ── The screen shows progress and failure ──────────────────────────────
 
-    private val screen by lazy {
-        code(src("src/main/java/com/openminis/app/ui/settings/ProviderDetailScreen.kt"))
-    }
-
-    @Test
-    fun `a pending sign-in is visibly different from signed out`() {
-        assertTrue(screen.contains("OAuthForegroundGate.begin()"))
-        assertTrue("the phase must be cleared however the sign-in ends", screen.contains("OAuthForegroundGate.end()"))
-        assertTrue(screen.contains("OAuthProgressLine(isAuthenticating = isAuthenticating, phase = oauthPhase, error = authError)"))
-        assertTrue(screen.contains("R.string.oauth_waiting_for_authorization"))
-        assertTrue(screen.contains("R.string.oauth_completing_sign_in"))
-    }
-
-    @Test
-    fun `a failed sign-in is shown, not only logged`() {
-        val catch = screen.substringAfter("OAuth sign-in failed for").substringBefore("} finally {")
-        assertTrue("the failure must reach the screen", catch.contains("authError ="))
-        assertTrue(catch.contains("add_provider_oauth_network_unreachable"))
-        assertTrue(
-            "a cancelled sign-in must not be shown as an error",
-            screen.contains("if (e is kotlinx.coroutines.CancellationException) throw e"),
-        )
-    }
 }

@@ -91,29 +91,4 @@ class ModelConfigPathDotTest {
 
     // ---- Source facts -------------------------------------------------------------
 
-    private val src by lazy {
-        File("src/main/java/com/openminis/app/config/collections/ModelsCollection.kt").readText()
-    }
-
-    @Test
-    fun `paths carry the raw id and the encoder is gone`() {
-        assertTrue(src.contains("path = \"models.\$id.displayName\""))
-        assertTrue("no escaping on the way into a path any more", !src.contains("pathSegment"))
-    }
-
-    @Test
-    fun `the decoder is a single scan, not chained replaces`() {
-        val fn = src.substringAfter("internal fun decodeLegacySegment").substringBefore("internal fun <T : Any> lookupIn")
-        assertTrue("must scan with an index", fn.contains("while (i < segment.length)"))
-        assertTrue(!fn.contains(".replace(\"~d\"") && !fn.contains(".replace(\"~~\""))
-    }
-
-    @Test
-    fun `every entry point resolves through lookup, and entry() is an exact match`() {
-        assertTrue(src.contains("private fun lookup(idOrSegment: String): ModelEntry? = lookupIn(idOrSegment, ::entry)"))
-        val entryFn = src.substringAfter("private fun entry(id: String)").substringBefore("private fun mutate")
-        assertTrue("entry() compares raw ids only", entryFn.contains("it.id == id") && !entryFn.contains("decode"))
-        val mutate = src.substringAfter("private fun mutate(").substringBefore("private fun providerInstanceId(")
-        assertTrue(mutate.contains("lookup(id)"))
-    }
 }

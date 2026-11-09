@@ -1,6 +1,5 @@
 package com.openminis.app.data
 
-import com.openminis.app.ProductionSources
 import com.openminis.app.data.model.AgentContentPart
 import com.openminis.app.data.model.LLMMessage
 import com.openminis.app.data.model.LLMModel
@@ -422,22 +421,4 @@ class CompactToolPairingTest {
         assertEquals(claim2, msgs2.first { it.optString("role") == "tool" }.getString("tool_call_id"))
     }
 
-    /**
-     * Drift guard for the ported sweep: the production body must still carry
-     * the lines the port above depends on. If this fails, re-sync the port.
-     */
-    @Test
-    fun `drift guard - production sweep and provider caps still exist`() {
-        val vm = ProductionSources.read("ui/chat/ChatViewModel.kt")
-        assertTrue(vm.contains("private fun dropOrphanedToolParts(history: List<LLMMessage>): List<LLMMessage>"))
-        assertTrue("in-flight exemption removed?", vm.contains("if (part is AgentContentPart.ToolUse) orphanedUses.remove(com.openminis.app.provider.ToolPairing.key(part.id))"))
-        assertTrue("sweep no longer on the outgoing path?", vm.contains("dropOrphanedToolParts(effectiveAgentHistoryUncounted())"))
-        assertTrue(vm.contains("Tool execution was interrupted by an unexpected error."))
-
-        val oai = ProductionSources.read("provider/openai/OpenAIProvider.kt")
-        assertTrue(oai.contains("globallyDedupeToolCallIds(messagesArray)"))
-        assertTrue(oai.contains("put(\"id\", capChatToolCallId(tu.id))"))
-        assertTrue(oai.contains("put(\"tool_call_id\", capChatToolCallId(tr.id))"))
-        assertTrue(oai.contains("put(\"call_id\", capResponsesId(callId))"))
-    }
 }

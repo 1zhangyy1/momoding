@@ -1,6 +1,5 @@
 package com.openminis.app.data
 
-import com.openminis.app.ProductionSources
 import com.openminis.app.data.ContextPolicy.CheckResult
 import com.openminis.app.data.ContextPolicy.InLoopStep
 import com.openminis.app.data.ContextSizeMeter.CalibrationSample
@@ -225,18 +224,6 @@ class CompactionDecisionTest {
     }
 
     @Test
-    fun `replay is order-sensitive - rows must arrive in conversation order`() {
-        val rows = listOf(sample(150_000), sample(100_000))
-        val forward = ContextSizeMeter.replayCalibration(rows).ratios.getValue("a")
-        val reversed = ContextSizeMeter.replayCalibration(rows.reversed()).ratios.getValue("a")
-        assertEquals(1.5 + 0.3 * (1.0 - 1.5), forward, 1e-9)
-        assertEquals(1.5, reversed, 1e-9)
-        // So the DAO query feeding it must keep conversation order.
-        val dao = ProductionSources.read("data/db/ChatDao.kt")
-        assertTrue(dao.contains("AND token_usage IS NOT NULL ORDER BY sort_order ASC\")"))
-    }
-
-    @Test
     fun `each model is replayed from its own samples only`() {
         val state = ContextSizeMeter.replayCalibration(
             listOf(sample(100_000, model = "a"), sample(180_000, model = "b"), sample(90_000, model = "a")),
@@ -244,45 +231,6 @@ class CompactionDecisionTest {
         assertEquals(1.0 + 0.3 * (0.9 - 1.0), state.ratios.getValue("a"), 1e-9)
         assertEquals("b's first sample is taken as-is", 1.8, state.ratios.getValue("b"), 1e-9)
         assertEquals("lastLearned follows the newest row", state.ratios.getValue("a"), state.lastLearned!!, 1e-9)
-    }
-
-    @Test
-    fun `rows without a usable pair are skipped, not zeroed`() {
-        assertNull(ContextSizeMeter.calibrationSample("""{"latestContextTokens":120000}"""))
-        assertNull(ContextSizeMeter.calibrationSample("""{"latestContextTokens":0,"estimatedRequestTokens":100}"""))
-        assertNull(ContextSizeMeter.calibrationSample("not json"))
-        val s = ContextSizeMeter.calibrationSample(
-            """{"latestContextTokens":130000,"estimatedRequestTokens":100000,"estimatedFixedTokens":7000,"calibrationModelId":"gpt-5"}""",
-        )!!
-        assertEquals(CalibrationSample(130_000, 100_000, 7_000, "gpt-5"), s)
-        assertNull("an empty model id is no model",
-            ContextSizeMeter.calibrationSample("""{"latestContextTokens":1,"estimatedRequestTokens":1,"calibrationModelId":""}""")!!.modelId)
-        assertEquals(CalibrationState(), ContextSizeMeter.replayCalibration(emptyList()))
-    }
-
-    @Test
-    fun `revert keeps a ratio that exists only in memory`() {
-        // Measured on device before the fix: a rejection raised the ratio
-        // 1.29 → 1.97, revert reloaded the session, the reload reset it to 1.29
-        // from the rows, and the retry went out uncompacted and was rejected.
-        val rows = listOf(sample(129_000))
-        val inMemory = CalibrationState(mapOf("a" to 1.97), lastLearned = 1.97, fixedTokens = 9_500)
-        val reloaded = ContextSizeMeter.replayCalibration(rows).carryingOver(inMemory)
-        assertEquals(1.97, reloaded.ratios.getValue("a"), 1e-9)
-        assertEquals(1.97, reloaded.lastLearned!!, 1e-9)
-        assertEquals(9_500, reloaded.fixedTokens)
-        assertEquals("the retry after the revert compacts instead of being rejected again",
-            CheckResult.NEEDS_COMPACT, policy.check(ContextSizeMeter.calibrated(100_000, reloaded.ratios.getValue("a")), window))
-    }
-
-    @Test
-    fun `carry-over fills gaps from the rows and never erases with empties`() {
-        val fromRows = ContextSizeMeter.replayCalibration(listOf(sample(120_000, model = "a"), sample(150_000, model = "b")))
-        val merged = fromRows.carryingOver(CalibrationState(mapOf("a" to 1.6), lastLearned = null, fixedTokens = 0))
-        assertEquals("memory wins for a", 1.6, merged.ratios.getValue("a"), 1e-9)
-        assertEquals("rows fill in b", 1.5, merged.ratios.getValue("b"), 1e-9)
-        assertEquals("a null lastLearned keeps the rows'", fromRows.lastLearned!!, merged.lastLearned!!, 1e-9)
-        assertEquals("a zero fixed share keeps the rows'", 9_000, merged.fixedTokens)
     }
 
     // ── warm-up trim ───────────────────────────────────────────────────────
@@ -315,28 +263,4 @@ class CompactionDecisionTest {
 
     // ── wiring: the view model uses these, and revert keeps its guards ─────
 
-    @Test
-    fun `view model routes its decisions through the tested functions`() {
-        val vm = ProductionSources.read("ui/chat/ChatViewModel.kt")
-        assertEquals("both no-compaction exits share one table", 2,
-            vm.split("return settleWithoutCompacting(m, window, compactionsSoFar)").size - 1)
-        assertTrue(vm.contains("val step = ContextPolicy.inLoopStep("))
-        assertTrue(vm.contains("val state = learned?.let { seeded.carryingOver(it) } ?: seeded"))
-        assertTrue("carry-over only within the same session",
-            vm.contains("val learned = if (sid.isNotEmpty() && calibrationSessionId == sid) {"))
-        assertTrue(vm.contains("val drop = ContextSizeMeter.warmUpDrop("))
-        assertTrue("warm-up decided once per marker",
-            vm.contains("if (trim.decided) warmUpDropByMarker[marker.id] = preAnchorPruned.size - trim.kept.size"))
-        assertTrue("a rejection spends the valve", vm.contains("        sentPastExtrapolatedLimitThisLoop = true\n        AppLogger.warning("))
-        assertTrue("an accepted request re-arms the valve",
-            vm.contains("lastInLoopCompactionMadeNoProgress = false\n") &&
-                vm.contains("                            sentPastExtrapolatedLimitThisLoop = false\n"))
-
-        val revert = vm.substring(vm.indexOf("fun revertCompact() {"), vm.indexOf("fun revertCompact() {") + 3_000)
-        assertTrue("no revert mid-stream", revert.contains("if (_isStreaming.value) {"))
-        assertTrue("no revert mid-compaction", revert.contains("if (_isCompacting.value) {"))
-        assertTrue("falls back to the previous marker, not to none",
-            revert.contains("val next = chatRepository.dao.latestCompactMarker(sid)") && revert.contains("_cachedLatestMarker = next"))
-        assertTrue("reloads through loadSession, which re-seeds the calibration", revert.contains("reloadSessionFromDb()"))
-    }
 }

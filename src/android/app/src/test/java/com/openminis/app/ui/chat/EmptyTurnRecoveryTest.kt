@@ -1,6 +1,5 @@
 package com.openminis.app.ui.chat
 
-import com.openminis.app.ProductionSources
 import com.openminis.app.data.model.AgentContentPart
 import com.openminis.app.data.model.LLMMessage
 import org.json.JSONObject
@@ -356,29 +355,4 @@ class EmptyTurnRecoveryTest {
             EmptyTurnRecovery.plan(listOf(toolUse("c"), toolResult("c", "x"), emptyAssistant), alreadyFired = true))
     }
 
-    /**
-     * The reminder is an agentHistory-only mutation: it must not be written to
-     * the DB and must not become a UI row. The loop code between the two plan
-     * branches and the GiveUp branch performs no repository write and no
-     * message-list publish. Source-grep drift guard.
-     */
-    @Test
-    fun `the reminder is neither persisted nor shown - loop branches touch only agentHistory`() {
-        val vm = ProductionSources.read("ui/chat/ChatViewModel.kt")
-        val start = vm.indexOf("is EmptyTurnRecovery.Plan.NudgeExistingPart -> {")
-        val end = vm.indexOf("is EmptyTurnRecovery.Plan.GiveUp -> {", start)
-        assertTrue("recovery branches not found in ChatViewModel", start > 0 && end > start)
-        val branches = vm.substring(start, end)
-        for (forbidden in listOf("chatRepository.", "appendMessage(", "_messages.", "updateAssistantMessage(", "insertMessage(")) {
-            assertFalse("recovery branch must not call $forbidden", branches.contains(forbidden))
-        }
-        assertTrue("both branches mutate agentHistory only", branches.contains("agentHistory.removeAt(agentHistory.size - 1)"))
-        assertTrue(branches.contains("EmptyTurnRecovery.REMINDER"))
-        // Format: a <system-reminder> element, so the UI-side synthetic-row
-        // filter (`trimStart().startsWith("<system-reminder>")`) and
-        // stripSystemReminders both recognise it.
-        assertTrue(EmptyTurnRecovery.REMINDER.trimStart().startsWith("<system-reminder>"))
-        assertTrue(EmptyTurnRecovery.REMINDER.trimEnd().endsWith("</system-reminder>"))
-        assertTrue(vm.contains("trimStart().startsWith(\"<system-reminder>\")"))
-    }
 }

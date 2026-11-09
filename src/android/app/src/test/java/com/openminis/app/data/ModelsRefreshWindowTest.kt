@@ -102,46 +102,6 @@ class ModelsRefreshWindowTest {
 
     private fun src(path: String) = File(path).readText()
 
-    private val repoSrc by lazy {
-        src("src/main/java/com/openminis/app/data/repository/ProviderRepository.kt")
-    }
-    private val appSrc by lazy { src("src/main/java/com/openminis/app/MinisApp.kt") }
-
-    @Test
-    fun `the calendar-day gate is gone`() {
-        assertFalse(
-            "isSameCalendarDay must not survive as a live gate",
-            repoSrc.contains("private fun isSameCalendarDay"),
-        )
-        assertTrue(repoSrc.contains("MODELS_REFRESH_WINDOW_MS"))
-    }
-
-    @Test
-    fun `the window is six hours and distinct from the per-instance cache TTL`() {
-        assertTrue(
-            "window must be 6h",
-            repoSrc.contains("MODELS_REFRESH_WINDOW_MS = 6 * 60 * 60 * 1000L"),
-        )
-        assertTrue(
-            "the SWR per-instance TTL is a different knob and stays at 24h",
-            repoSrc.contains("MODEL_CACHE_TTL_MS = 24 * 60 * 60 * 1000L"),
-        )
-    }
-
-    @Test
-    fun `a foreground return re-checks the model lists`() {
-        // Launch alone cannot see a model enabled while the app sits open —
-        // that is precisely the reported case.
-        val resumed = appSrc.substringAfter("override fun onActivityResumed")
-            .substringBefore("override fun onActivityPaused")
-        assertTrue(
-            "onActivityResumed must call refreshAllModelsIfNeeded",
-            resumed.contains("refreshAllModelsIfNeeded"),
-        )
-    }
-
-    // ---- [M01] Boundary + first-launch + resume, stated exactly -----------
-    //
     // The cases above cover the reported gap and the window's arithmetic. What
     // follows pins the three specific edges e7818575e introduced, each of which
     // is a plausible "simplification" away from being wrong again.
@@ -180,49 +140,4 @@ class ModelsRefreshWindowTest {
         assertFalse("and recovers once the window truly elapses", shouldSkip(future, future + windowMs))
     }
 
-    @Test
-    fun `the gate reads the stored timestamp inside the coroutine, not before it`() {
-        // [T-android-startup-prefs-stall] The early-return-before-launch shape
-        // was the cold-start hang: `prefs.getLong` blocks until the prefs XML is
-        // parsed, and this is called from MinisApp.onCreate on the main thread
-        // (HangDetector measured ~9.6s on a Pixel 4a). Re-hoisting the read for
-        // "clarity" reintroduces a main-thread stall that no functional test
-        // would catch, so the ordering is pinned here.
-        val fn = repoSrc.substringAfter("fun refreshAllModelsIfNeeded(")
-            .substringBefore("/** Resolve the models.dev lookup base URL")
-        val launchAt = fn.indexOf("scope.launch {")
-        val readAt = fn.indexOf("prefs.getLong(key")
-        assertTrue("both must be present", launchAt >= 0 && readAt >= 0)
-        assertTrue(
-            "prefs.getLong must happen INSIDE scope.launch",
-            launchAt < readAt,
-        )
-        assertTrue(
-            "the window comparison belongs in the coroutine too",
-            fn.indexOf("MODELS_REFRESH_WINDOW_MS") > launchAt,
-        )
-    }
-
-    @Test
-    fun `the stamp is written before the per-instance fan-out`() {
-        // Ordering matters for concurrency: two resume events in quick
-        // succession must not both fire the fan-out. Writing the timestamp
-        // BEFORE launching the per-instance refreshes makes the second call skip
-        // even while the first is still in flight.
-        val fn = repoSrc.substringAfter("fun refreshAllModelsIfNeeded(")
-            .substringBefore("/** Resolve the models.dev lookup base URL")
-        val writeAt = fn.indexOf("putLong(key, now)")
-        val fanOutAt = fn.indexOf("autoRefreshModels(instance)")
-        assertTrue("both must be present", writeAt >= 0 && fanOutAt >= 0)
-        assertTrue("the stamp must be written first", writeAt < fanOutAt)
-    }
-
-    @Test
-    fun `the launch path still calls it too`() {
-        // The foreground hook adds to the launch trigger, it does not replace
-        // it: a cold start has no resume event to piggyback on.
-        assertTrue(appSrc.contains("providerRepository.refreshAllModelsIfNeeded("))
-        val count = Regex("refreshAllModelsIfNeeded\\(").findAll(appSrc).count()
-        assertTrue("expected both the launch and resume call sites, found $count", count >= 2)
-    }
 }

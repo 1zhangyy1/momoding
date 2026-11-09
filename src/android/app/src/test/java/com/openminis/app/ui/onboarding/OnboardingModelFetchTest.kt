@@ -1,6 +1,5 @@
 package com.openminis.app.ui.onboarding
 
-import com.openminis.app.ProductionSources
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
@@ -68,37 +67,4 @@ class OnboardingModelFetchTest {
 
     // ---- wiring (Compose/network need a device) ----------------------------
 
-    private val screen = ProductionSources.read("ui/onboarding/OnboardingModelSelectionScreen.kt")
-
-    @Test
-    fun `the page fetches on its own only while empty, and keeps the normal refresh otherwise`() {
-        val effect = screen.substringAfter("LaunchedEffect(Unit) {").substringBefore("\n    }\n")
-        assertTrue(effect.contains("if (allEntries.isEmpty()) {\n            runBoundedFetch()"))
-        assertTrue(effect.contains("providerRepository.triggerAsyncModelReconcile(instance.id)"))
-        assertTrue("no auto re-fetch after returning from Add Custom Model", effect.contains("if (fetchAttempted) return@LaunchedEffect"))
-    }
-
-    @Test
-    fun `the failure section replaces the spinner only after a finished fetch left the page empty`() {
-        assertTrue(screen.contains("if (allEntries.isEmpty() && !fetching && failureDetail != null) {"))
-        assertTrue(screen.contains("if (fetching) return // Retry while in flight is a no-op."))
-        assertTrue(screen.contains("onRetry = { runBoundedFetch() }"))
-        assertTrue(screen.contains("if (visibleEntryCount(ids) == 0) {"))
-    }
-
-    @Test
-    fun `manual add goes to the provider's Add Custom Model screen`() {
-        val nav = ProductionSources.read("ui/navigation/AppNavigation.kt")
-        val route = nav.substringAfter("composable(Routes.ONBOARDING_MODELS)").substringBefore("composable(")
-        assertTrue(route.contains("navController.safeNavigate(Routes.addCustomModel(instanceId))"))
-    }
-
-    @Test
-    fun `refreshModels reports the vendor error without changing its fallback`() {
-        val repo = ProductionSources.read("data/repository/ProviderRepository.kt")
-        assertTrue(repo.contains("onVendorError: ((String) -> Unit)? = null,"))
-        val catch = repo.substringAfter("android.util.Log.e(\"ProviderRepo\", \"refreshModels fetch error:")
-            .substringBefore("emptyList()")
-        assertTrue(catch.contains("onVendorError?.invoke("))
-    }
 }

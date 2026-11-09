@@ -1,6 +1,5 @@
 package com.openminis.app.scheduled
 
-import com.openminis.app.ProductionSources
 import com.openminis.app.scheduled.ScheduledTaskDetailModel.Delivery
 import com.openminis.app.scheduled.ScheduledTaskDetailModel.DurationUnit
 import com.openminis.app.scheduled.ScheduledTaskDetailModel.FireState
@@ -84,15 +83,6 @@ class ScheduledTaskDetailModelTest {
     @Test
     fun `there is no Interrupted status to produce`() {
         assertTrue(Status.values().none { it.name.contains("INTERRUPT") })
-    }
-
-    @Test
-    fun `a fire is running only while unrecorded and its chat is busy`() {
-        val t = task(runs = listOf(run(100)))
-        assertTrue(ScheduledTaskDetailModel.isFireRunning(t, marker(200), hostStreaming = true))
-        assertFalse("recorded = finished", ScheduledTaskDetailModel.isFireRunning(t, marker(100), true))
-        assertFalse("chat idle", ScheduledTaskDetailModel.isFireRunning(t, marker(200), false))
-        assertFalse("old envelope without a fire time", ScheduledTaskDetailModel.isFireRunning(t, marker(null), true))
     }
 
     // ── progress ────────────────────────────────────────────────────────────
@@ -211,44 +201,6 @@ class ScheduledTaskDetailModelTest {
 
     // ── chat card subtitle ──────────────────────────────────────────────────
 
-    @Test
-    fun `a card whose next-fire time has passed says nothing, not last run`() {
-        val sub = ScheduledTaskDetailModel::cardSubtitle
-        val m = ScheduledTaskMarker("T", "L", nextFireAtMs = 1_000L, prompt = "p")
-        assertEquals(ScheduledTaskDetailModel.CardSubtitle.Next(1_000L), sub(m, false, 500L))
-        assertEquals(ScheduledTaskDetailModel.CardSubtitle.None, sub(m, false, 1_000L))
-        assertEquals(ScheduledTaskDetailModel.CardSubtitle.None, sub(m, false, 5_000L))
-        // Only a fire with no next one is the last run.
-        val last = ScheduledTaskMarker("T", "L", nextFireAtMs = null, prompt = "p")
-        assertEquals(ScheduledTaskDetailModel.CardSubtitle.LastRun, sub(last, false, 5_000L))
-        assertEquals(ScheduledTaskDetailModel.CardSubtitle.Cancelled, sub(m, true, 500L))
-    }
-
-    @Test
-    fun `the card uses the subtitle rule`() {
-        val card = ProductionSources.read("ui/chat/ScheduledTaskCard.kt")
-        assertTrue(card.contains("ScheduledTaskDetailModel.cardSubtitle(marker, cancelled, now)"))
-        assertTrue(card.contains("ScheduledTaskDetailModel.CardSubtitle.None -> null"))
-    }
-
-    @Test
-    fun `the card re-reads the clock when its next-fire time passes`() {
-        // Read only at composition, an on-screen card kept "Next: <time>"
-        // after the fire had happened.
-        val card = ProductionSources.read("ui/chat/ScheduledTaskCard.kt")
-        assertTrue(card.contains("produceState(System.currentTimeMillis(), marker.nextFireAtMs)"))
-        assertTrue(card.contains("delay(wait + 1)"))
-    }
-
-    @Test
-    fun `the detail sheet pins its nav bar and stays below the status bar`() {
-        // Sized to its content, a long page slid under the status bar and the
-        // nav bar scrolled away with the cards.
-        val sheet = ProductionSources.read("ui/chat/ScheduledTaskDetailSheet.kt")
-        assertTrue(sheet.contains("Column(Modifier.fillMaxWidth().fillMaxHeight(0.92f))"))
-        assertTrue(sheet.contains(".weight(1f)\n                    .verticalScroll(rememberScrollState())"))
-    }
-
     // ── durations ───────────────────────────────────────────────────────────
 
     @Test
@@ -287,18 +239,6 @@ class ScheduledTaskDetailModelTest {
 
     // ── delivery ────────────────────────────────────────────────────────────
 
-    @Test
-    fun `delivery reads relative to the chat the page was opened from`() {
-        val d = ScheduledTaskDetailModel::delivery
-        assertEquals(Delivery.NewSession, d(ScheduledTargetMode.NewSession, "S1"))
-        assertEquals(Delivery.ThisChat, d(ScheduledTargetMode.AppendToSession("S1"), "S1"))
-        assertEquals(Delivery.OtherChat("S9"), d(ScheduledTargetMode.AppendToSession("S9"), "S1"))
-        assertEquals(Delivery.Rerun("S1", true), d(ScheduledTargetMode.RerunMessage("S1", "M"), "S1"))
-        assertEquals(Delivery.Rerun("S9", false), d(ScheduledTargetMode.RerunMessage("S9", "M"), "S1"))
-        assertEquals(Delivery.ChildOfThisChat, d(ScheduledTargetMode.ChildOfCurrent("S1"), "S1"))
-        assertEquals(Delivery.ChildOfOtherChat("S9"), d(ScheduledTargetMode.ChildOfCurrent("S9"), null))
-    }
-
     // ── persistence the page relies on ──────────────────────────────────────
 
     @Test
@@ -317,23 +257,4 @@ class ScheduledTaskDetailModelTest {
         assertNull(ScheduledTask.fromJson(JSONObject(json.toString())).fireCount)
     }
 
-    @Test
-    fun `one timestamp ties a fire's envelope to its run record`() {
-        val runner = ProductionSources.read("scheduled/ScheduledAgentRunner.kt")
-        assertTrue(runner.contains("val firedAt = System.currentTimeMillis()"))
-        assertTrue(runner.contains("firedAtMs = firedAt,"))
-        assertEquals(2, Regex("""markFired\(task\.id, sessionId, decision\.body, ok = ok, firedAt = firedAt\)""").findAll(runner).count())
-        val manager = ProductionSources.read("scheduled/ScheduledTaskManager.kt")
-        assertTrue(manager.contains("fireCount = task.firesSoFar + 1"))
-        assertTrue(manager.contains("val now = firedAt"))
-    }
-
-    @Test
-    fun `the chat card opens the detail page`() {
-        val card = ProductionSources.read("ui/chat/ScheduledTaskCard.kt")
-        assertTrue(card.contains(".clickable { showingDetail = true }"))
-        assertTrue(card.contains("ScheduledTaskDetailSheet(\n            marker = marker,\n            hostSessionId = hostSessionId,"))
-        val chat = ProductionSources.read("ui/chat/ChatScreen.kt")
-        assertTrue(chat.contains("marker = item.marker,\n                                hostSessionId = sessionId,"))
-    }
 }

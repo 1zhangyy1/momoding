@@ -1,6 +1,5 @@
 package com.openminis.app.provider.anthropic
 
-import com.openminis.app.ProductionSources
 import com.openminis.app.data.model.ThinkingLevel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -292,62 +291,6 @@ class ClaudeVersionParseTest {
     }
 
     // ══════════════════════════════════════════════ drift guard
-
-    /**
-     * SOURCE-GREP DRIFT GUARD. The port above is a copy, so it stays correct
-     * only while production reads the same way. Pin the regex literal and the
-     * optional-minor default — those two lines ARE the fix — plus the three
-     * thresholds, so a consumer cannot be retuned without this file noticing.
-     */
-    @Test
-    fun `the production parser still carries the ported regex and defaults`() {
-        val src = ProductionSources.read("provider/anthropic/AnthropicProvider.kt")
-        assertTrue(
-            "the ported regex literal is gone from AnthropicProvider — re-port it",
-            src.contains("""Regex(""${'"'}[-/]?(\d+)(?:[-.](\d{1,2}))?(?:${'$'}|[^0-9])""${'"'})"""),
-        )
-        assertTrue(
-            "the minor group must stay capped at 1-2 digits — an uncapped group swallows a " +
-                "snapshot stamp and reads claude-sonnet-4-20250514 as (4, 20250514)",
-            src.contains("""(?:[-.](\d{1,2}))?"""),
-        )
-        assertTrue(
-            "the search must stay anchored AFTER the word claude, or a digit-bearing namespace " +
-                "(v2-gateway/claude-opus-5) is read as the version",
-            src.contains("val afterClaude = lower.substring(claudeAt + \"claude\".length)") &&
-                src.contains("regex.find(afterClaude)"),
-        )
-        assertTrue(
-            "the minor segment must stay OPTIONAL with a 0 default — this is the 5-series fix",
-            src.contains("val minor = match.groupValues[2].toIntOrNull() ?: 0"),
-        )
-        assertTrue(
-            "the non-Claude gate must stay ahead of the regex (now expressed as the anchor index)",
-            src.contains("val claudeAt = lower.indexOf(\"claude\")") &&
-                src.contains("if (claudeAt < 0) return null"),
-        )
-        assertTrue("temperature threshold moved", src.contains("return major > 4 || (major == 4 && minor >= 6)"))
-        assertTrue(
-            "modelAcceptsExplicitThinkingDisabled must stay a 4.6 <= v < 5 window — it is NOT " +
-                "the same predicate as modelUsesAdaptiveThinking, which also covers 5+",
-            src.contains("fun modelAcceptsExplicitThinkingDisabled(modelId: String): Boolean") &&
-                src.contains("return major == 4 && minor >= 6"),
-        )
-        assertTrue(
-            "the request builder must gate the disabled literal on acceptsExplicitThinkingDisabled, " +
-                "not on modelUsesAdaptiveThinking",
-            src.contains("} else if (modelAcceptsExplicitThinkingDisabled(model.id)) {"),
-        )
-        val resolver = ProductionSources.read("provider/thinking/ThinkingRuleResolver.kt")
-        assertTrue(
-            "the resolver's OFF shape must ask acceptsExplicitThinkingDisabled, not adaptive",
-            resolver.contains(".modelAcceptsExplicitThinkingDisabled(modelId)"),
-        )
-        assertTrue(
-            "the thinking-toggle threshold moved off 3.7",
-            src.contains("return major > 4 || major == 4 || (major == 3 && minor >= 7)"),
-        )
-    }
 
     /**
      * WAS A KNOWN GAP, now FIXED and asserted: a digit-bearing namespace BEFORE

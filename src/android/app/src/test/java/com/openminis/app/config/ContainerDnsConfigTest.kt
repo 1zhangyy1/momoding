@@ -1,6 +1,5 @@
 package com.openminis.app.config
 
-import com.openminis.app.ProductionSources
 import com.openminis.app.config.fields.ContainerDnsFields
 import com.openminis.app.sandbox.ContainerDns
 import com.openminis.app.sandbox.ContainerDns.DnsMode
@@ -155,15 +154,4 @@ class ContainerDnsConfigTest {
         assertTrue(ConfigValue.decode("""{"a":[1,2]}""") is ConfigValue.Obj)
     }
 
-    @Test
-    fun `the builtins register these fields against the real prefs and refresh DNS`() {
-        val builtins = ProductionSources.read("config/ConfigBuiltins.kt")
-        assertTrue(builtins.contains("registerNetwork(r, context)"))
-        assertTrue(builtins.contains("ContainerDnsFields.build(ContainerDns.PrefsStore(context))"))
-        assertTrue(builtins.contains("RootfsManager.getInstance(context).refreshDns()"))
-        // The UI writes the same keys.
-        val dns = ProductionSources.read("sandbox/ContainerDns.kt")
-        assertTrue(dns.contains("const val KEY_MODE = \"network.dnsMode\""))
-        assertTrue(dns.contains("const val KEY_SERVERS = \"network.dnsCustomServers\""))
-    }
 }

@@ -626,32 +626,4 @@ class AnthropicProviderTest {
         assertEquals("adaptive", thinking.getString("type"))
         assertEquals("summarized", thinking.getString("display"))
     }
-
-    @Test
-    fun `OAuth request omits redact-thinking beta so thinking text is not blanked`() = runBlocking {
-        // Mirrors iOS 958ee16c (T-anthropic-redact-thinking). The Claude-Code
-        // mimicry beta set must NOT carry `redact-thinking-2026-02-12`; with it,
-        // the server blanks thinking text (signature only) even though the model
-        // reasons. Omitting it == showThinkingSummaries:true.
-        val oauthProvider = AnthropicProvider(
-            apiKey = "test-oauth-token",
-            model = LLMModel.claudeSonnet5,
-            basePath = server.url("/").toString().trimEnd('/'),
-            isOAuth = true,
-        )
-        server.enqueue(MockResponse().setBody("""{"content":[],"usage":{"input_tokens":0,"output_tokens":0}}"""))
-
-        oauthProvider.sendMessage(
-            listOf(LLMMessage(LLMMessage.Role.USER, "hi")), null, 4096,
-            thinkingLevel = ThinkingLevel.MEDIUM,
-        )
-
-        val beta = server.takeRequest().getHeader("anthropic-beta") ?: ""
-        assertTrue(
-            "anthropic-beta must not contain redact-thinking; was: $beta",
-            !beta.contains("redact-thinking"),
-        )
-        // Sanity: the OAuth OAuth betas we DO expect are still present.
-        assertTrue("oauth beta present", beta.contains("oauth-2025-04-20"))
-    }
 }

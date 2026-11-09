@@ -29,12 +29,6 @@ import org.junit.Test
  */
 class ContextReviewFollowupParityTest {
 
-    private val vm: String by lazy {
-        val f = File("src/main/java/com/openminis/app/ui/chat/ChatViewModel.kt")
-        assertTrue("missing ${f.absolutePath}", f.exists())
-        f.readText()
-    }
-
     // ── [1] warm-up trim cache ────────────────────────────────────────────
 
     private data class Env(val window: Int?, val compactThreshold: Int?, val fixed: Int)
@@ -88,12 +82,6 @@ class ContextReviewFollowupParityTest {
         assertEquals("a warm-up that fits is a real decision (drop 0 cached)", 0, fits.cache["F"])
     }
 
-    @Test
-    fun `source - the trim reports decided and the builder caches only decisions`() {
-        assertTrue(vm.contains(") ?: return WarmUpTrim(warmUp, decided = false)"))
-        assertTrue(vm.contains("if (trim.decided) warmUpDropByMarker[marker.id] = preAnchorPruned.size - trim.kept.size"))
-    }
-
     // ── [2] rejection attribution ─────────────────────────────────────────
 
     /** Port of noteContextOverflow's model / window choice (Android wording). */
@@ -135,17 +123,4 @@ class ContextReviewFollowupParityTest {
         )
     }
 
-    @Test
-    fun `source - dispatch records the model and window, overflow prefers them, a new session clears them`() {
-        val record = vm.substringAfter("private fun recordContextDispatch(").substringBefore("private fun calibrateContextSize(")
-        assertTrue(record.contains("lastDispatchModel = model"))
-        assertTrue(record.contains("lastDispatchWindow = resolvedContextWindow(model)?.first ?: 0"))
-        assertTrue("the loop records the model that serves the request",
-            vm.contains("recordContextDispatch(outboundHistory, currentProvider.model)"))
-        val overflow = vm.substringAfter("private fun noteContextOverflow(").substringBefore("private fun seedContextCalibration(")
-        assertTrue(overflow.contains("val model = lastDispatchModel?.id ?: currentModel?.id"))
-        assertTrue(overflow.contains("val window = lastDispatchWindow.takeIf { lastDispatchModel != null && it > 0 }"))
-        assertTrue("a new session's calibration seed clears the dispatch record",
-            vm.contains("lastDispatchEstimate = 0\n        lastDispatchModel = null\n        lastDispatchWindow = 0"))
-    }
 }

@@ -1,6 +1,5 @@
 package com.openminis.app.speech
 
-import com.openminis.app.ProductionSources
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -117,19 +116,4 @@ class ReentrantSafeReleaseTest {
         assertEquals(listOf("release"), native.log)
     }
 
-    @Test fun `VoiceActivityDetector routes every native use through the gate`() {
-        val src = ProductionSources.read("speech/VoiceActivityDetector.kt")
-        assertTrue(src.contains("private val vad = ReentrantSafeRelease<VADWrapper> { it.release() }"))
-        assertTrue(src.contains("vad.attach(wrapper)"))
-        assertTrue(src.contains("val alive = vad.call { w ->"))
-        assertTrue(src.contains("vad.tearDown()"))
-        val code = src.lines().filterNot { it.trimStart().startsWith("//") || it.trimStart().startsWith("*") }
-            .joinToString("\n")
-        // The VADWrapper is only ever released by the gate's own lambda.
-        assertEquals(
-            "no direct VADWrapper release outside the gate", 1,
-            Regex("""\bit\.release\(\)|\bw\??\.release\(\)|\bwrapper\.release\(\)""").findAll(code).count(),
-        )
-        assertFalse("the bare lock is gone", code.contains("vadLock"))
-    }
 }

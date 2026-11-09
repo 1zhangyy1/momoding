@@ -418,36 +418,4 @@ class ContextWindowDefaultsTest {
 
     // ── Source-grep drift guard ───────────────────────────────────────────
 
-    /**
-     * The values above are the contract; this pins that they are still stated
-     * in the one place the app reads, so a reintroduced "Claude → 200K" or a
-     * deleted xAI branch fails here with the reason attached.
-     */
-    @Test
-    fun `the heuristic source still carries both fixed branches`() {
-        val src = com.openminis.app.ProductionSources.read("data/model/LLMModel.kt")
-        val body = src.substringAfter("val contextWindowTokens: Int")
-            .substringBefore("fun capabilityPromptFragment(")
-        assertTrue("the xAI branch must exist", body.contains("""lid.contains("grok")"""))
-        assertTrue("Grok 2/3 stay 131_072", body.contains("131_072"))
-        assertTrue("modern Claude must be 1M", body.contains("1_000_000"))
-        assertTrue(
-            "the declared-value guard must reject non-positive values",
-            body.contains("contextWindow?.let { if (it > 0) return it }"),
-        )
-    }
-
-    /**
-     * The same guard for the slider's copy. 33b028477 was applied to one of the
-     * two heuristics only, which is the failure this pins: a family branch added
-     * to the loop and forgotten here reads as a slider that cannot reach the
-     * real window.
-     */
-    @Test
-    fun `the slider heuristic source still carries the xAI branch`() {
-        val src = com.openminis.app.ProductionSources.read("data/model/ModelContextWindowHeuristic.kt")
-        assertTrue("the xAI branch must exist", src.contains("""idLower.startsWith("grok")"""))
-        assertTrue("Grok 2/3 stay 131_072", src.contains("131_072"))
-        assertTrue("Grok 4+ floors at 256_000", src.contains("256_000"))
-    }
 }

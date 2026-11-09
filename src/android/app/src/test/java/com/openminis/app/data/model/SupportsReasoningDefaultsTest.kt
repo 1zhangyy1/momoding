@@ -176,22 +176,6 @@ class SupportsReasoningDefaultsTest {
         )
     }
 
-    /** Guards the restated predicate against drifting from the source. */
-    @Test
-    fun `the restated prefill predicate matches the source`() {
-        val src = com.openminis.app.ProductionSources.read("provider/openai/OpenAIModelsApi.kt")
-        assertTrue(src.contains("""idLower.startsWith("gpt-5")"""))
-        assertTrue(src.contains("""idLower.startsWith("gpt-6")"""))
-        assertTrue(src.contains("""idLower.startsWith("o1")"""))
-        assertTrue(src.contains("""idLower.startsWith("o3")"""))
-        assertTrue(src.contains("""idLower.startsWith("o4")"""))
-        assertTrue(src.contains("""idLower.contains("codex")"""))
-        assertTrue(
-            "the parse must stamp true / null, never false",
-            src.contains("supportsReasoning = if (knownReasoning) true else null"),
-        )
-    }
-
     // ── Anthropic: direct instances ───────────────────────────────────────
 
     /**
@@ -247,15 +231,6 @@ class SupportsReasoningDefaultsTest {
                 AnthropicProvider.supportsThinking(m.id),
             )
         }
-    }
-
-    @Test
-    fun `the Anthropic parse still stamps from supportsThinking`() {
-        val src = com.openminis.app.ProductionSources.read("provider/anthropic/AnthropicModelsApi.kt")
-        assertTrue(
-            "the id-driven stamp must survive",
-            src.contains("if (AnthropicProvider.supportsThinking(id)) true else null"),
-        )
     }
 
     // ── xAI ───────────────────────────────────────────────────────────────

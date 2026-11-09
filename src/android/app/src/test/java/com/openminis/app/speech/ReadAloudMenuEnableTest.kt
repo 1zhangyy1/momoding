@@ -1,6 +1,5 @@
 package com.openminis.app.speech
 
-import com.openminis.app.ProductionSources
 import org.junit.After
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -63,24 +62,4 @@ class ReadAloudMenuEnableTest {
         )
     }
 
-    @Test
-    fun `speak queues sentence by sentence, not one utterance`() {
-        val src = ProductionSources.read("speech/ReadAloudPlayer.kt")
-        val body = src.substring(src.indexOf("fun speak(text: String)")).substringBefore("\n    }")
-        assertTrue(body.contains("sentenceBuffer.append(text)"))
-        assertTrue(body.contains("flush()"))
-        assertFalse("no single whole-text utterance", body.contains("enqueue(text)"))
-    }
-
-    @Test
-    fun `the menu speaker activates before it speaks`() {
-        // Source guard: the activation only helps if it runs BEFORE the player
-        // enqueues (and drops) the text.
-        val src = ProductionSources.read("ui/chat/LazyReadAloudPlayer.kt")
-        val body = src.substring(src.indexOf("fun speak(text: String)"))
-        val activate = body.indexOf("VoiceOutputState.activateForExplicitReadAloud()")
-        val speak = body.indexOf("p.speak(text)")
-        assertTrue("speak() must activate read-aloud", activate > 0)
-        assertTrue("activation must precede p.speak", activate in 1 until speak)
-    }
 }

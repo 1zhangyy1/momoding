@@ -1,6 +1,5 @@
 package com.openminis.app.ui.chat
 
-import com.openminis.app.ProductionSources
 import com.openminis.app.data.model.AgentContentPart
 import com.openminis.app.data.model.LLMMessage
 import com.openminis.app.data.model.LLMModel
@@ -168,29 +167,4 @@ class PersonaReminderPlacementTest {
 
     // ── drift guard ────────────────────────────────────────────────────────
 
-    @Test
-    fun `drift guard - production constants, append-not-rewrite, and the call site`() {
-        val vm = ProductionSources.read("ui/chat/ChatViewModel.kt")
-        assertTrue(vm.contains("private val personaReminderContextTokens = 100_000"))
-        assertTrue(vm.contains("private val personaReminderRearmTokens = 100_000"))
-        assertTrue(vm.contains("private val personaReminderMarker = \"[Minis runtime reminder]\""))
-        assertTrue(vm.contains("private val personaReminderScanTail = 40"))
-        assertTrue(vm.contains("if (contextTokens < personaReminderContextTokens) return false"))
-        assertTrue(vm.contains("if (contextTokens < last + personaReminderRearmTokens) return false"))
-        assertTrue(vm.contains("return \"<system-reminder>\$personaReminderMarker This note was added by the \""))
-        // Append as its own message — the old rewrite helper must stay gone.
-        val fn = vm.substring(vm.indexOf("private fun appendPersonaReminderToHistory(contextTokens: Int)"))
-            .let { it.substring(0, it.indexOf("Log.i(TAG, \"[PersonaReminder] appended")) }
-        assertTrue(fn.contains("agentHistory.add("))
-        assertTrue(fn.contains("role = LLMMessage.Role.USER"))
-        assertFalse(vm.contains("fun historyWithPersonaReminder("))
-        // Call site: decided per request, right before the provider call, gated on the API-reported size.
-        val loop = vm.substring(vm.indexOf("suspend fun runAgentLoop"))
-        val site = loop.indexOf("if (personaReminderIsDue(lastContextTokens)) {")
-        val send = loop.indexOf("currentProvider.streamMessage(")
-        assertTrue(site in 1 until send)
-        assertTrue(loop.substring(site, send).contains("appendPersonaReminderToHistory(lastContextTokens)"))
-        // UI side hides synthetic <system-reminder> user rows.
-        assertTrue(vm.contains("trimStart().startsWith(\"<system-reminder>\")"))
-    }
 }

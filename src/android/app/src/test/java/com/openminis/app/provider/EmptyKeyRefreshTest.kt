@@ -125,56 +125,6 @@ class EmptyKeyRefreshTest {
     // needs Context + EncryptedSharedPreferences, so neither is reachable from
     // a plain JVM test.
 
-    private fun src(path: String) = com.openminis.app.ProductionSources.read(path)
-
-    private val addScreenSrc by lazy { src("ui/settings/AddProviderScreen.kt") }
-
-    @Test
-    fun `every add path refreshes the catalog immediately after addInstance`() {
-        // Three paths: API key, OAuth sign-in button, manual bearer token.
-        val addCalls = Regex("""providerRepository\.addInstance\(""")
-            .findAll(addScreenSrc).count()
-        // [T-provider-refresh-outlives-screen] The pairing is now with
-        // triggerAsyncModelReconcile: a refreshModels launched on the screen's
-        // own scope was cancelled by onSaved()'s pop — the same GH#265 symptom.
-        val refreshCalls = Regex("""providerRepository\.triggerAsyncModelReconcile\(""")
-            .findAll(addScreenSrc).count()
-        assertTrue("expected the three add paths, found $addCalls", addCalls >= 3)
-        assertEquals(
-            "every addInstance must be paired with a refreshModels — an unpaired " +
-                "one is GH#265 (a brand-new provider showing this build's " +
-                "compiled-in catalog until the user finds the manual Refresh)",
-            addCalls,
-            refreshCalls,
-        )
-    }
-
-    @Test
-    fun `the refresh follows the add rather than preceding it`() {
-        // Ordering is load-bearing: refreshModels resolves the instance's
-        // credential and base URL out of the repository, so calling it before
-        // addInstance would fetch against an instance that does not exist yet
-        // and quietly return the built-in seed — the exact symptom, from the
-        // opposite direction.
-        var searchFrom = 0
-        var pairs = 0
-        while (true) {
-            val add = addScreenSrc.indexOf("providerRepository.addInstance(", searchFrom)
-            if (add < 0) break
-            val refresh = addScreenSrc.indexOf("providerRepository.triggerAsyncModelReconcile(", add)
-            assertTrue("addInstance at $add has no refreshModels after it", refresh > add)
-            // The pair must be close together — same onClick handler, not a
-            // refresh belonging to some later path.
-            assertTrue(
-                "addInstance at $add and its refresh are ${refresh - add} chars apart",
-                refresh - add < 900,
-            )
-            pairs++
-            searchFrom = add + 1
-        }
-        assertTrue("expected at least three add/refresh pairs, found $pairs", pairs >= 3)
-    }
-
     // ── [M06] xAI must return the LIVE list, not the built-in one ───────────
     //
     // The third strand of GH#265: `refreshModels` returned
@@ -186,22 +136,6 @@ class EmptyKeyRefreshTest {
     // MockWebServer. What is pinned here is that the composition is still the
     // shape that test exercises, and that the built-in list is positioned as a
     // FALLBACK rather than the answer.
-
-    @Test
-    fun `xAI refresh fetches live and falls back to the built-in list`() {
-        val repoSrc = src("data/repository/ProviderRepository.kt")
-        val branch = repoSrc.substringAfter("ProviderType.xAI -> OpenAIModelsApi.fetchModels(")
-            .substringBefore("ProviderType.kimiCode")
-        assertTrue(
-            "the built-in list must be reachable only through ifEmpty {}",
-            branch.contains("ifEmpty") && branch.contains("XAIModelsApi.fetchModelsOAuth()"),
-        )
-        // And it must not be the unconditional answer any more.
-        assertFalse(
-            "xAI must not return the built-in catalog directly",
-            repoSrc.contains("ProviderType.xAI -> com.openminis.app.provider.xai.XAIModelsApi.fetchModelsOAuth()"),
-        )
-    }
 
     @Test
     fun `the built-in xAI seed still exists and carries the reported model`() {

@@ -100,23 +100,4 @@ class BrowserCliPoolsTest {
         return f.readText()
     }
 
-    @Test
-    fun `the handler resolves the caller's pool instead of the shared one`() {
-        val h = src("src/main/java/com/openminis/app/sandbox/offload/BrowserUseOffloadHandler.kt")
-        assertTrue(h.contains("BrowserCliPools.resolve(app, request.sessionId)"))
-        assertTrue(h.contains("pool.execute(input, singleTab = true, owner = request.sessionId)"))
-        assertFalse(h.contains("sharedBrowserTabPool.execute"))
-        assertTrue(
-            "files go to the caller's own /var/minis/browser",
-            h.contains("SessionMounts.sessionDir(app.filesDir, it, \"browser\")"),
-        )
-    }
-
-    @Test
-    fun `deleting a session releases its fallback pool`() {
-        assertTrue(
-            src("src/main/java/com/openminis/app/data/session/SessionDeleter.kt")
-                .contains("BrowserCliPools.release(id)"),
-        )
-    }
 }

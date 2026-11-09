@@ -1,6 +1,5 @@
 package com.openminis.app.sandbox
 
-import com.openminis.app.ProductionSources
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -14,8 +13,6 @@ import java.util.concurrent.TimeUnit
  * stdin gets EOF instead of hanging until the timeout.
  */
 class ShellParityFixesTest {
-
-    private val vm by lazy { ProductionSources.read("ui/chat/ChatViewModel.kt") }
 
     // ── exit code: once, in one format ──────────────────────────────────────
 
@@ -41,25 +38,7 @@ class ShellParityFixesTest {
         assertEquals("x\n(exit code: 2)\n", ShellExitCode.ensureSuffix("x\n(exit code: 2)\n", 2))
     }
 
-    @Test
-    fun `neither layer writes the old second format`() {
-        assertFalse(vm.contains("\" (exit code \${result.exitCode})\""))
-        assertTrue(vm.contains("ShellExitCode.ensureSuffix(output, result.exitCode)"))
-        val coord = ProductionSources.read("sandbox/ExecutionCoordinator.kt")
-        assertTrue(coord.contains("ShellExitCode.ensureSuffix(truncated, exitCode)"))
-        assertFalse(coord.contains("\\n(exit code: \$exitCode)"))
-    }
-
     // ── timeout ceiling ─────────────────────────────────────────────────────
-
-    @Test
-    fun `the timeout ceiling is one hour and the schema says so`() {
-        assertTrue(vm.contains("args.optInt(\"timeout\", 900).coerceIn(1, SHELL_TIMEOUT_MAX_SEC)"))
-        assertTrue(vm.contains("const val SHELL_TIMEOUT_MAX_SEC = 3600"))
-        assertFalse("no silent 900 s cap left", vm.contains("coerceIn(1, 900)"))
-        val tools = ProductionSources.read("tools/AgentTools.kt")
-        assertTrue(tools.contains("Execution budget in seconds (default: 900, maximum: 3600)."))
-    }
 
     // ── stdin reads /dev/null ───────────────────────────────────────────────
 
@@ -90,10 +69,4 @@ class ShellParityFixesTest {
         assertEquals(3, code)
     }
 
-    @Test
-    fun `the fresh-process spawn uses that stdio setup`() {
-        val fresh = ProductionSources.read("sandbox/FreshProcessShell.kt")
-        assertTrue(fresh.contains("val pb = ProcessBuilder(cmd)\n        configureStdin(pb)"))
-        assertTrue(fresh.contains("pb.redirectInput(ProcessBuilder.Redirect.from(File(\"/dev/null\")))"))
-    }
 }

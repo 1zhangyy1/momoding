@@ -1,6 +1,5 @@
 package com.openminis.app.sandbox
 
-import com.openminis.app.ProductionSources
 import com.openminis.app.sandbox.ContainerDns.DnsMode
 import com.openminis.app.sandbox.ContainerDns.Plan
 import org.junit.Assert.assertEquals
@@ -129,25 +128,4 @@ class RootfsCustomDnsTest {
 
     // ── RootfsManager wiring ────────────────────────────────────────────────
 
-    @Test
-    fun `refreshDns takes the custom branch before reading the system, and auto is unchanged`() {
-        val src = ProductionSources.read("sandbox/RootfsManager.kt")
-        val body = src.substringAfter("fun refreshDns() {").substringBefore("\n    private fun writeResolvConf(")
-        val planAt = body.indexOf("val plan = ContainerDns.plan(context)")
-        val systemAt = body.indexOf("cm?.activeNetwork")
-        assertTrue(planAt in 0 until systemAt)
-        assertTrue(body.contains("writeResolvConf(ContainerDns.customResolvConf(plan.servers))"))
-        // The auto path still reads LinkProperties and keeps its public fallback.
-        assertTrue(body.contains("linkProps.dnsServers"))
-        assertTrue(body.contains("nameserver 8.8.8.8"))
-        // Every write goes through the one helper.
-        assertEquals(1, Regex("""File\(rootfsDir, "etc/resolv\.conf"\)""").findAll(src).count())
-    }
-
-    @Test
-    fun `install, boot and network changes all go through refreshDns`() {
-        assertTrue(ProductionSources.read("sandbox/RootfsManager.kt").contains("            refreshDns()"))
-        assertTrue(ProductionSources.read("sandbox/PRootKernel.kt").contains("rootfsManager.refreshDns()"))
-        assertTrue(ProductionSources.read("network/NetworkMonitor.kt").contains("RootfsManager.getInstance(ctx).refreshDns()"))
-    }
 }

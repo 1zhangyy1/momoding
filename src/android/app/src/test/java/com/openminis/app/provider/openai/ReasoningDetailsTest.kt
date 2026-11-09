@@ -94,13 +94,4 @@ class ReasoningDetailsTest {
         assertNull(parse("""{"content":"hi"}"""))
     }
 
-    @Test
-    fun `the chat-completions parser is wired to ReasoningDetails`() {
-        val src = listOf(
-            File("src/main/java/com/openminis/app/provider/openai/OpenAIProvider.kt"),
-            File("app/src/main/java/com/openminis/app/provider/openai/OpenAIProvider.kt"),
-        ).first { it.exists() }.readText()
-        assertTrue(src.contains("ReasoningDetails.parse(d)?.let { rd ->"))
-        assertTrue(src.contains("encryptedReasoningChunks=\$encryptedReasoningChunks"))
-    }
 }

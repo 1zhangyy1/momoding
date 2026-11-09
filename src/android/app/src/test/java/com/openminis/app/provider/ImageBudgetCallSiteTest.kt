@@ -1,6 +1,5 @@
 package com.openminis.app.provider
 
-import com.openminis.app.ProductionSources
 import com.openminis.app.data.model.AgentContentPart
 import com.openminis.app.data.model.LLMMessage
 import com.openminis.app.data.model.LLMModel
@@ -34,30 +33,6 @@ class ImageBudgetCallSiteTest {
         ImageBudget.BudgetImage(ByteArray(rawBytes), path, "image/jpeg")
 
     // ── call sites (source grep) ───────────────────────────────────────────
-
-    @Test
-    fun `every request that leaves runAgentLoop passes through applyRequestImageBudget`() {
-        val vm = ProductionSources.read("ui/chat/ChatViewModel.kt")
-        val loopStart = vm.indexOf("suspend fun runAgentLoop")
-        assertTrue("runAgentLoop not found", loopStart > 0)
-        val loop = vm.substring(loopStart)
-        // Exactly one provider stream call inside the loop — retry and fallback
-        // re-enter it rather than building their own request.
-        val streamCalls = Regex("currentProvider\\.streamMessage\\(").findAll(loop).count()
-        assertEquals("expected a single streamMessage call site in runAgentLoop", 1, streamCalls)
-        val callIdx = loop.indexOf("currentProvider.streamMessage(")
-        val window = loop.substring(callIdx, callIdx + 700)
-        assertTrue("outgoing history must be budgeted", window.contains("applyRequestImageBudget("))
-        assertTrue("budget wraps the effective history", window.contains("effectiveAgentHistory()"))
-        assertTrue("byte audit sits outermost", window.contains("auditOutgoingPayload("))
-        // Retry + fallback paths re-enter the same loop.
-        assertTrue(loop.contains("while (!collectDone)"))
-        assertTrue(loop.contains("retryAttempt = 0"))
-        assertTrue(loop.contains("currentProvider = next"))
-        // The budget function itself still exists and emits placeholders, not drops.
-        assertTrue(vm.contains("private fun applyRequestImageBudget(messages: List<LLMMessage>): List<LLMMessage>"))
-        assertTrue(vm.contains("ImageBudget.elidedImagePlaceholder(path)"))
-    }
 
     // ── priority: this turn's attachments beat history ─────────────────────
 

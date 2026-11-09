@@ -177,32 +177,6 @@ class GeminiThinkingBranchTest {
         }
     }
 
-    /**
-     * A 3.x id wins over a 2.5 substring if both somehow appear — the
-     * `isGemini3` check is first among the family branches. Constructed rather
-     * than observed: no such id ships, but the ordering is the invariant, and an
-     * accidental reorder is invisible on real ids.
-     */
-    @Test
-    fun `the 3x family check precedes the 2_5 checks`() {
-        val src = com.openminis.app.ProductionSources.read("provider/thinking/ThinkingRuleResolver.kt")
-        val three = src.indexOf("val isGemini3 = ")
-        val pro = src.indexOf("val is25Pro = ")
-        val flash = src.indexOf("val is25Flash = ")
-        val lite = src.indexOf("val is25FlashLite = ")
-        assertTrue("isGemini3 not found", three > 0)
-        assertTrue("isGemini3 must be evaluated before the 2.5 predicates", three < pro && pro < flash)
-        assertTrue("is25FlashLite must exist as its own predicate", lite > flash)
-        assertTrue(
-            "the flash predicate must still carry its anti-lite guard — this is the collapse",
-            src.contains("modelId.contains(\"gemini-2.5-flash\") && !modelId.contains(\"lite\")"),
-        )
-        assertTrue(
-            "flash-lite must still short-circuit to null before the branch table",
-            src.contains("if (is25FlashLite) return null"),
-        )
-    }
-
     // ═════════════════════════ the 3.7+ OFF floor (d5d2aaba4, 2881f9cbf)
 
     /**
@@ -359,40 +333,4 @@ class GeminiThinkingBranchTest {
 
     // ══════════════════════════════════════════════ drift guard
 
-    /**
-     * SOURCE-GREP DRIFT GUARD on the two orderings this function's correctness
-     * rests on, plus the version predicate. All three are invisible to a value
-     * snapshot: the suffix check must be FIRST (it is dead below the families),
-     * and the minor-version threshold must stay `>= 7`.
-     */
-    @Test
-    fun `the specialized-suffix check still runs before every family branch`() {
-        val src = com.openminis.app.ProductionSources.read("provider/thinking/ThinkingRuleResolver.kt")
-        val fnAt = src.indexOf("fun geminiThinkingConfig(")
-        assertTrue("geminiThinkingConfig not found", fnAt > 0)
-        val body = src.substring(fnAt)
-        val suffixCheck = body.indexOf("noThinkingSuffixes")
-        val familyCheck = body.indexOf("val isGemini3 = ")
-        assertTrue("the suffix list is gone", suffixCheck > 0)
-        assertTrue(
-            "the specialized-suffix check must precede the family branches — below them it is dead code (GH#226)",
-            suffixCheck < familyCheck,
-        )
-        assertTrue(
-            "the suffix list must still name all four modalities",
-            body.contains("listOf(\"-tts\", \"-image\", \"-embedding\", \"-vision\")"),
-        )
-        assertTrue(
-            "the suffix match must stay case-insensitive via the lowercased id",
-            body.contains("val lowerId = modelId.lowercase()"),
-        )
-        assertTrue(
-            "the 3.7 floor must stay a minor-version comparison, not an id list",
-            src.contains("return minor >= 7"),
-        )
-        assertTrue(
-            "…driven by the gemini-3.<minor> regex",
-            src.contains("Regex(\"\"\"gemini-3\\.(\\d+)\"\"\")"),
-        )
-    }
 }

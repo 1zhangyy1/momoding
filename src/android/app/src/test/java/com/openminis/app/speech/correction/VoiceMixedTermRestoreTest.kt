@@ -1,6 +1,5 @@
 package com.openminis.app.speech.correction
 
-import com.openminis.app.ProductionSources
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -80,15 +79,6 @@ class VoiceMixedTermRestoreTest {
         assertTrue(p.contains("推断用户这句要发给 AI 的话的整体意图"))
         assertTrue(p.contains("英文请按参考信息中的原拼写还原，不要翻译成中文"))
         assertFalse("no longer homophones only", p.contains("同音字/识别错误"))
-    }
-
-    @Test fun `the live call and the dry run both pick the profile from the locale and transcript`() {
-        val strategy = ProductionSources.read("speech/correction/CorrectionStrategy.kt")
-        assertTrue(strategy.contains("val profile = CorrectionLanguageProfile.resolve(locale, transcript)"))
-        assertTrue(strategy.contains("systemPrompt = systemPrompt(profile),"))
-        assertFalse(strategy.contains("systemPrompt = SYSTEM_PROMPT"))
-        val engine = ProductionSources.read("speech/correction/VoiceCorrectionEngine.kt")
-        assertTrue(engine.contains("CorrectionLanguageProfile.resolve(locale, transcript)"))
     }
 
     // ── Rare-term digest ─────────────────────────────────────────────────

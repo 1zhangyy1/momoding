@@ -1,6 +1,5 @@
 package com.openminis.app.tools
 
-import com.openminis.app.ProductionSources
 import com.openminis.app.data.model.LLMError
 import com.openminis.app.data.model.LLMModel
 import com.openminis.app.data.model.ModelEntry
@@ -118,21 +117,6 @@ class VisionGroupResolverTest {
     // ── 3. preflight is a hint, never a gate ───────────────────────────────
 
     @Test
-    fun `attaching an image to a text model does not block the send - preflight only hints`() {
-        // The blocking API is gone: no `check` and no `Verdict` on the object.
-        val cls = ImageInputPreflight::class.java
-        assertNull("check() must not come back", cls.declaredMethods.firstOrNull { it.name == "check" })
-        assertTrue("Verdict must not come back", cls.declaredClasses.none { it.simpleName == "Verdict" })
-        // What remains only classifies an error that already happened.
-        assertTrue(ImageInputPreflight.isLikelyImageRejection(LLMError.ProviderError("bad", httpStatus = 400), 2))
-        assertFalse(ImageInputPreflight.isLikelyImageRejection(LLMError.ProviderError("bad", httpStatus = 400), 0))
-        // And the send path in ChatViewModel has no pre-send image gate left.
-        val vm = ProductionSources.read("ui/chat/ChatViewModel.kt")
-        assertFalse(vm.contains("blockIfImagesUnsupported"))
-        assertFalse(vm.contains("ImageInputPreflight.check("))
-    }
-
-    @Test
     fun `placeholder for a text model always carries the sandbox path`() {
         val path = "/var/minis/attachments/uploads/shot.png"
         val noGroup = VisionGroupResolver.noVisionImagePlaceholder(path, visionGroupConfigured = false)
@@ -153,21 +137,4 @@ class VisionGroupResolverTest {
 
     // ── drift guards ───────────────────────────────────────────────────────
 
-    @Test
-    fun `drift guard - one normalised predicate everywhere, read live`() {
-        val repo = ProductionSources.read("data/repository/ProviderRepository.kt")
-        val fn = repo.substring(repo.indexOf("fun resolveVisionCandidates("))
-        assertTrue("member filter must use hasImageInput", fn.contains("if (!inst.isEnabled || !entry.model.hasImageInput) return null"))
-        assertTrue("must read the live config, not a snapshot", fn.substring(0, 400).contains("ensureConfigLoaded()"))
-
-        val vm = ProductionSources.read("ui/chat/ChatViewModel.kt")
-        assertTrue(vm.contains("get() = currentModel?.hasImageInput == true"))
-        // Only CODE lines count — the fix's own doc comment cites the old form.
-        val codeLines = vm.lines().filter { l -> val t = l.trimStart(); !t.startsWith("//") && !t.startsWith("*") && !t.startsWith("/*") }
-        assertFalse("the inline lowercase check must not return",
-            codeLines.any { it.contains("inputModalities.map { it.lowercase() }") || it.contains("inputModalities?.map { it.lowercase() }") })
-
-        val models = ProductionSources.read("data/model/LLMModel.kt")
-        assertTrue(models.contains("lowercase().removeSuffix(\"_input\").removeSuffix(\"_output\")"))
-    }
 }

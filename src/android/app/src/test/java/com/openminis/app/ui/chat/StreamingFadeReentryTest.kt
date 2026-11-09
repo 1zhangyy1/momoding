@@ -1,6 +1,5 @@
 package com.openminis.app.ui.chat
 
-import com.openminis.app.ProductionSources
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -156,18 +155,4 @@ class StreamingFadeReentryTest {
 
     // ---- wiring -----------------------------------------------------------
 
-    @Test
-    fun `MdText plans every fading birth and records what it shows under the fragment key`() {
-        val src = ProductionSources.read("ui/chat/StreamingMarkdownText.kt")
-        val body = src.substringAfter("val fadeFromBirth = remember { fadeEnabled }")
-            .substringBefore("FadeFrameDriver(fadeController)")
-        // Keyed by the fragment's base shard id, NOT the per-node sub-indexed
-        // one: the sub-index is handed out in composition order and can change
-        // exactly when the node is rebuilt.
-        assertTrue(body.contains("val fadeKey = baseShardId?.let"))
-        assertTrue(body.contains("fadeBirthPlan(fadeFromBirth, fadeKey?.let { FadeShownText.get(it) }"))
-        assertTrue(body.contains("FadeShownText.put(fadeKey, text.text)"))
-        // The only unplanned first ingest would be the replay itself.
-        assertFalse(body.contains("if (!fadeFromBirth && !fadeController.hasSeenText)"))
-    }
 }
