@@ -31,6 +31,7 @@ object NotifyDecision {
         val raw = reply.orEmpty()
         val fallback = visible(raw).take(previewChars).ifBlank { "(no response)" }
         if (failed) return Decision(true, fallback)
+        if (Quiet.chose(raw)) return Decision(false, "")
         val json = FENCE.findAll(raw).lastOrNull()?.groupValues?.get(1)
             ?.let { runCatching { JSONObject(it.trim()) }.getOrNull() }
             ?: return Decision(true, fallback)
@@ -42,6 +43,6 @@ object NotifyDecision {
     const val INSTRUCTION =
         "End your reply with a fenced block the person never sees, telling the app whether this result is worth " +
             "interrupting them for:\n```" + BLOCK + "\n{\"notify\": true, \"text\": \"<one short line: the result itself>\"}\n```\n" +
-            "Use \"notify\": false when nothing changed or nothing needs them (no new mail, no price move, all as usual); " +
-            "the reply still stays in the chat. Use true when there is news, something due, or something needs their say."
+            "Use true when there is news, something due, or something needs their say; false when the reply is worth keeping but not an interruption. " +
+            "When nothing changed and nothing needs them (no new mail, no price move, all as usual), " + Quiet.HOW
 }

@@ -153,6 +153,21 @@ object ScreenWork {
         }
     }
 
+    /** What the chat is told of a run: its conclusion, the outward taps that went through, where the steps are. */
+    fun report(result: HandsOperator.Result): String = buildString {
+        append(when (val outcome = result.outcome) {
+            is HandsOperator.Outcome.Done -> outcome.answer
+            is HandsOperator.Outcome.NeedsUser -> outcome.question
+            is HandsOperator.Outcome.Failed -> outcome.message
+            is HandsOperator.Outcome.Infeasible -> outcome.message
+            is HandsOperator.Outcome.Stopped -> "${outcome.message} Stopped; do not restart it."
+        }.trim().ifBlank { result.outcome.code })
+        append("\n(").append(result.steps).append(" steps")
+        if (result.done.isNotEmpty()) append("; went through: ").append(result.done.joinToString("; ").take(400))
+        result.tracePath?.let { append("; every step: ").append(it) }
+        append(")")
+    }
+
     fun resultJson(result: HandsOperator.Result): JSONObject {
         val out = JSONObject().put("ok", result.outcome is HandsOperator.Outcome.Done).put("outcome", result.outcome.code)
             .put("steps", result.steps).put("run_id", result.runId).put("model", result.model)

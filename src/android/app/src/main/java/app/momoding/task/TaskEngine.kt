@@ -32,6 +32,9 @@ object TaskEngine {
     /** How a hand's report starts, in the conversation it goes to: `[task <id> · <hand> · <kind>] <words>`. */
     const val REPORT_CUE = "[task "
 
+    /** In a command's result: work went to another hand, which reports back on its own (调研/M50 T1). */
+    const val HANDED_ON = "handed_on"
+
     enum class Report { PROGRESS, ASK, DONE, FAILED }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -263,9 +266,13 @@ object TaskEngine {
         }
         if (kind != Report.PROGRESS) {
             log(dao, task.id, if (next.state == TaskEntity.State.ENDED.name) TaskLogEntity.Kind.END else TaskLogEntity.Kind.REPORT, text)
-            val words = "$REPORT_CUE${task.id} · ${handName(context, hand)} · ${kind.name.lowercase()}] $text"
+            // a Bot's own words go to the person under its name and face (ui/chat/BotLines)
+            val bot = MoApps.ofSession(context, hand)?.takeIf { kind == Report.DONE || kind == Report.FAILED }
+            val words = "$REPORT_CUE${task.id} · ${handName(context, hand)} · ${kind.name.lowercase()}] " +
+                (bot?.let { "${AppBots.FROM_CUE}${it.name}] " } ?: "") + fit(context, task.conversation, task.id, text)
             Inbox.post(dao, task.conversation, words, task.id)
-            after += { tellChat(context, task.conversation) }
+            // a result that chose silence (a routine with nothing new) is kept, and wakes nobody (调研/M50 P8)
+            if (!(kind == Report.DONE && app.momoding.chat.Quiet.chose(text))) after += { tellChat(context, task.conversation) }
             if (next.state == TaskEntity.State.ENDED.name) {
                 after += {
                     MoApps.ofSession(context, hand)?.let { AppBots.reported(context, it, task.conversation, text) }
@@ -290,8 +297,10 @@ object TaskEngine {
         val (open, ended) = db.withTransaction { dao(context).openIn(conversation) to dao(context).endedIn(conversation) }
         if (open.isEmpty() && ended.isEmpty()) return null
         return buildString {
-            append("## Tasks\nWork tracked in this chat. A message starting $REPORT_CUE<id> · <hand> · done|ask|failed|stopped] is that task's report, not the person: ")
-            append("tell the person what came of it in your own words, in a line or two (with a link to open a Momoding's app when there is something to see); for an ask, ask the person. ")
+            append("## Tasks\nWork tracked in this chat. A message starting $REPORT_CUE<id> · <hand> · done|ask|failed|stopped] is that task's result, not the person, and the person has not seen it. ")
+            append("When it is new and relevant, tell them what came of it in a line or two, starting with which task it was (with a link to open a Momoding's app when there is something to see); for an ask, ask the person; for a failure, say what stopped it and what you propose. ")
+            append("When its text starts ${AppBots.FROM_CUE}<name>], those are that Momoding's own words: start your reply with the same tag and pass its words on unchanged, adding only what the person needs from you. ")
+            append("A task that was stopped, and a result that is stale, a duplicate or that nobody is waiting on, needs no word: ${app.momoding.chat.Quiet.HOW} ")
             append("A command_result is a background tool result for the current task: use it to continue before reporting the task done. ")
             append("Their answer, or anything more they want of a task, goes to its hand with `momoding-task tell <id> \"<their words>\"`. ")
             append("When they make a task wait on their word (\"check with me first\", \"only cancel if it can be refunded\"), `momoding-task hold <id> \"<their words>\"`; ")
@@ -563,7 +572,9 @@ object TaskEngine {
             if (outcome != TaskEntity.Outcome.STOPPED) dao.task(id)?.let { dao.updateTask(it.copy(outcome = outcome.name)) }
             val words = dao.log(id).last { it.kind == TaskLogEntity.Kind.END.name }.body
             Inbox.post(dao, root.conversation, "$REPORT_CUE$id · ${handName(context, root.hand)} · ${outcome.name.lowercase()}] $words", id)
-            after += { tellChat(context, root.conversation) }
+            // momoding: a stop came from the chat or the person, so nobody waits to hear it: the row
+            // is read with the next message (调研/M50 P3). A failure still wakes the chat.
+            if (outcome != TaskEntity.Outcome.STOPPED) after += { tellChat(context, root.conversation) }
         }
         return dao.task(id)
     }
@@ -739,10 +750,12 @@ object TaskEngine {
         if (question == null) screenParentReady(dao, id)
         parent?.let { refreshBudget(dao, it) }
         val ownParent = parent?.let { dao.task(it) }?.takeIf { it.conversation == it.hand }
-        val closed = if (question == null && ownParent != null) completeOwnIn(dao, ownParent.id, outcome, body) else null
+        // momoding: the chat gets the conclusion, not the run's JSON with every step (调研/M50 P2)
+        val said = ScreenWork.report(observed)
+        val closed = if (question == null && ownParent != null) completeOwnIn(dao, ownParent.id, outcome, said) else null
         val reportedOutcome = closed?.outcome ?: outcome
         val receipt = ownParent?.id ?: id
-        val words = closed?.words ?: body
+        val words = closed?.words ?: said
         Inbox.post(dao, task.conversation, "$REPORT_CUE$receipt · screen · ${if (question != null) "ask" else reportedOutcome.name.lowercase()}] $words", receipt)
         after += { tellChat(context, task.conversation) }
     }
@@ -1100,7 +1113,7 @@ object TaskEngine {
         }
         refreshBudget(dao, id)
         val closed = completeOwnIn(dao, id, if (result.success) TaskEntity.Outcome.DONE else TaskEntity.Outcome.FAILED, result.output)
-        val words = "$REPORT_CUE$id · command · ${closed?.outcome?.name?.lowercase() ?: "command_result"}] ${closed?.words ?: result.output}"
+        val words = "$REPORT_CUE$id · command · ${closed?.outcome?.name?.lowercase() ?: "command_result"}] ${fit(context, task.hand, id, closed?.words ?: result.output)}"
         if (announce) {
             Inbox.post(dao, task.hand, words, id, sender = InboxEntity.Sender.COMMAND)
             after += { tellChat(context, task.hand) }
@@ -1216,6 +1229,22 @@ object TaskEngine {
     }
 
     /** A hand's report for the chat it works for: read when that chat's turn ends, or a turn of its own. */
+    /**
+     * A result as it enters a chat's history, where it is resent with every later request: past
+     * [RESULT_LIMIT] characters its start stays and the whole goes to a file the chat can read
+     * (调研/M50 P1, P9). The task log keeps the full text.
+     */
+    private fun fit(context: Context, chat: String, taskId: String, text: String): String {
+        if (text.length <= RESULT_LIMIT) return text
+        val path = com.openminis.app.data.ContextOffload.offloadContent(context, chat, text,
+            toolId = System.currentTimeMillis().toString(36), toolName = "result_$taskId", ext = "md")
+        if (path.isEmpty()) return text
+        return text.take(RESULT_PREVIEW) + "\n\n[The first $RESULT_PREVIEW of ${text.length} characters. The whole result is in $path: read it with file_read only if you need more.]"
+    }
+
+    private const val RESULT_LIMIT = 2_000
+    private const val RESULT_PREVIEW = 1_200
+
     private suspend fun tellChat(context: Context, chat: String) {
         runCatching { Inbox.wake(context, chat) }
             .onFailure { AppLogger.warning(TAG, "report to ${chat.take(8)}: ${it.message}") }

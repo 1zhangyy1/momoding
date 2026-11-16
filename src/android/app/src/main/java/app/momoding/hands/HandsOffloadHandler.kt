@@ -128,7 +128,7 @@ class HandsOffloadHandler(private val context: Context) : NativeOffloadHandler {
             val sid = requireNotNull(sessionId) { "a screen task needs its conversation" }
             val parent = runBlocking { TaskEngine.executionTask(context, sid, process) }
             val work = runBlocking { TaskEngine.openScreen(context, opts, parent?.id, call = call) }
-            return ok(JSONObject().put("task", work.id).put("state", work.state.lowercase())
+            return ok(JSONObject().put("task", work.id).put("state", work.state.lowercase()).put(app.momoding.task.TaskEngine.HANDED_ON, true)
                 .put("note", "The screen task is saved and will run when the screen is free. Its result arrives here automatically. Do not repeat it or poll."))
         }
         // Taken atomically, so two runs arriving together cannot both start; given back when the run ends.

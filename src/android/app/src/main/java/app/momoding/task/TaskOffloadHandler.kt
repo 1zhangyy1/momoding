@@ -54,7 +54,7 @@ class TaskOffloadHandler(private val context: Context) : NativeOffloadHandler {
             }
             else -> throw IllegalArgumentException("--to helper | bot:<name>")
         }
-        return ok(JSONObject().put("task", task.id).put("state", task.state.lowercase())
+        return ok(JSONObject().put("task", task.id).put("state", task.state.lowercase()).put(TaskEngine.HANDED_ON, true)
             .put("note", "It has its own line in this chat and reports back here when there is a result, a question or a problem; no need to wait or check."))
     }
 

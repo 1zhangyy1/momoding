@@ -198,7 +198,7 @@ When the person answers that it is on, carry on with the task."""
         }
         if (i.helpersEnabled) {
             append("- A helper (through shell_execute): work of many rounds that needs no one's say on the way — reading and comparing many pages, going through many files — goes to one, so you stay free for the person: ")
-            append("`momoding-task new --to helper --title \"<a few words>\" \"<a complete brief: the goal, what to return, the limits; it sees nothing of this chat>\"`. It has its own line here, and its answer comes back as a report. Several at once for separate parts; not for what one or two steps do.\n")
+            append("`momoding-task new --to helper --title \"<a few words>\" \"<a complete brief: the goal, what to return, the limits; it sees nothing of this chat>\"`. It has its own line here, and its answer comes back as a report. Write your one line to the person (what it is on) in the same reply as that command: the turn ends there. Several at once for separate parts; not for what one or two steps do.\n")
         }
         append("Writing scripts, handling files, installing packages or running programs in the sandbox: read the files-and-scripts skill first.\n")
         append("Settings the person may need (models, the hands, permissions): give the link [label](minis://settings/...) instead of changing them yourself.")

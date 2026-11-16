@@ -1,6 +1,7 @@
 package app.momoding.apps
 
 import android.content.Context
+import app.momoding.task.TaskEngine
 import android.os.Handler
 import android.os.Looper
 import com.openminis.app.R
@@ -56,7 +57,7 @@ class AppsOffloadHandler(private val context: Context) : NativeOffloadHandler {
         require(brief.isNotEmpty()) { "--brief: what the person wants, in their words, with anything you know that helps" }
         val app = MoApps.create(context, name, title, args.get("what")?.trim().orEmpty())
         val task = runBlocking { AppBots.create(context, app, request.sessionId, brief) }
-        return ok(JSONObject().put("app", name).put("folder", app.linuxDir).put("task", task)
+        return ok(JSONObject().put("app", name).put("folder", app.linuxDir).put("task", task).put(TaskEngine.HANDED_ON, true)
             .put("tell_user", "It is starting now and reports back here. Say so in one line; do not do its work yourself."))
     }
 

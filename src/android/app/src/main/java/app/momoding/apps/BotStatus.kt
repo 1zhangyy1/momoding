@@ -143,6 +143,14 @@ object BotStatus {
         return cues.fold(words) { t, c -> t.removePrefix(c).trim() }.lineSequence().first().take(max).ifBlank { null }
     }
 
+    /** The chat's last reply as written, protocol blocks included. */
+    suspend fun lastReply(context: Context, sid: String): String? {
+        val repo = (context.applicationContext as MinisApp).chatRepository
+        val total = repo.messageCount(sid)
+        return repo.loadMessagePage(sid, offset = maxOf(0, total - 4), limit = 4, maxChars = 400, includeTools = false)
+            .lastOrNull { it.role == "assistant" }?.text
+    }
+
     /** What a row says, without the notes the app adds for the model (`<system-reminder>`): nobody said those. */
     private fun said(text: String) = text.substringBefore("<system-reminder>").trim()
 }

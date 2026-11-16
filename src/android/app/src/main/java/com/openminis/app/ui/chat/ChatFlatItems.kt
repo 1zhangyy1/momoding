@@ -833,6 +833,7 @@ internal fun buildFlatChatItems(
             }
         }
         if (!showSteps && !isSystem && stepsOnlyTurn(message)) continue // momoding
+        if (message.role == "assistant" && !message.isStreaming && app.momoding.chat.Quiet.chose(message.content)) continue // momoding: it chose to say nothing
         val joinedMarkdown = run {
             val parts = message.toolBlocks
                 .filter { it.kind == "text" && it.content.isNotEmpty() }

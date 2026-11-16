@@ -11082,6 +11082,16 @@ class ChatViewModel(
                 // through to normal next-turn dispatch so the queue doesn't
                 // pin the loop indefinitely.
             }
+            // momoding: the step only handed work on and the person was already told: the turn is
+            // done — no further call just to say it again (调研/M50 T1). The result comes back on its own.
+            if (helperConfig == null && accumulatedText.isNotBlank() && handedOnOnly(resultParts) &&
+                app.momoding.apps.MoApps.ofSession(context, activeSessionId) == null
+            ) {
+                AppLogger.info(TAG_STREAM, "runAgentLoop turn=$turn work handed on and announced → end")
+                withContext(Dispatchers.Main) { updateAssistantMessage(assistantId, accumulatedText, false, allToolBlocks) }
+                loopExitedNormally = true
+                break
+            }
         }
         // Two ways to leave the for-loop above:
         //   (a) `break` from the "no tool calls" happy-path → loopExitedNormally=true,
@@ -12257,6 +12267,14 @@ class ChatViewModel(
      * prompt; every other chat gets Momoding's. Upstream's general sandbox prompt is no longer
      * used by any role.
      */
+    /** momoding: every result of this step says its work went to another hand (TaskEngine.HANDED_ON). */
+    private fun handedOnOnly(parts: List<AgentContentPart>): Boolean =
+        parts.isNotEmpty() && parts.all {
+            it is AgentContentPart.ToolResult && !it.isError && HANDED_ON_FIELD.containsMatchIn(it.content)
+        }
+
+    private val HANDED_ON_FIELD = Regex("\"${app.momoding.task.TaskEngine.HANDED_ON}\"\\s*:\\s*true")
+
     private fun buildSystemPrompt(): String? {
         val sid = realSessionId.ifEmpty { sessionId }
         val browserToolEnabled = com.openminis.app.tools.AgentToolSwitch.BROWSER.isEnabled(context)

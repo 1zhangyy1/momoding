@@ -44,6 +44,14 @@ class ScheduledPreemptiveInsertTest {
     }
 
     @Test
+    fun `a task's result waits for the turn to end, and so does what came after it`() {
+        val report = QueuedPrompt(id = "1", text = "[task t1 · 帮手 · done] found it", origin = QueuedPromptOrigin.PROGRAMMATIC)
+        assertEquals(emptyList<String>(), ids(QueuedPromptBatching.nextInsertBatch(listOf(report, user("2")))))
+        assertEquals(listOf("2"), ids(QueuedPromptBatching.nextInsertBatch(listOf(user("2"), report))))
+        assertEquals(listOf("1", "2"), ids(QueuedPromptBatching.nextDrainBatch(listOf(report, user("2")))))
+    }
+
+    @Test
     fun `messages before a routine stay in arrival order and later words cannot overtake it`() {
         // A contiguous prefix travels together; the scheduled fire is a boundary, not something to skip.
         val q = listOf(callback("1"), user("2"), fire("3"), user("4"))

@@ -89,6 +89,9 @@ class BackgroundTaskNotifier(
                 // Momoding started reaches the person through that Momoding instead
                 if (!isError && !app.momoding.apps.BotStatus.forPerson(context, sessionId)) return@launch
                 if (app.momoding.apps.BotStatus.quiet(context, sessionId)) return@launch
+                val reply = if (isError) null else app.momoding.apps.BotStatus.lastReply(context, sessionId)
+                if (app.momoding.chat.Quiet.chose(reply)) return@launch // it chose to say nothing
+                if (reply?.startsWith(app.momoding.apps.AppBots.FROM_CUE) == true) return@launch // a Bot's words, already announced under its name (AppBots.reported)
                 val rawTitle = app.momoding.apps.BotStatus.name(context, sessionId)
                 val title = if (isError) "❌ $rawTitle" else rawTitle
                 val body = if (isError) {
