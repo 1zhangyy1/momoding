@@ -18,7 +18,10 @@ object Quiet {
 
     private val FENCE = Regex("```$BLOCK[\\s\\S]*?```")
 
-    /** The reply chose silence: the quiet block (on one line or two), and nothing for the eye. */
+    /** It asked for silence: the quiet block is there, whatever else was written with it (nobody is woken or notified). */
+    fun asked(reply: String?): Boolean = reply != null && FENCE.containsMatchIn(reply)
+
+    /** The reply chose silence: the quiet block (on one line or two), and nothing for the eye (nothing is drawn). */
     fun chose(reply: String?): Boolean =
         reply != null && FENCE.containsMatchIn(reply) && NotifyDecision.visible(FENCE.replace(reply, "")).isEmpty()
 }

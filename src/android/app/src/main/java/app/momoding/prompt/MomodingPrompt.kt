@@ -38,8 +38,6 @@ object MomodingPrompt {
         val addenda: String?,
         /** First conversation: end this turn by asking how to call the person. */
         val askName: Boolean = false,
-        /** The person's latest message, to name the language of this reply (last line of the prompt). */
-        val lastUserText: String? = null,
         val helpersEnabled: Boolean = true,
     )
 
@@ -72,7 +70,6 @@ object MomodingPrompt {
         append("\n").append(i.ladder.trim())
         i.addenda?.takeIf { it.isNotBlank() }?.let { append("\n\n").append(it.trim()) }
         if (i.askName) append("\n\n").append(app.momoding.memory.UserFile.ASK_NAME_ADDENDUM)
-        languageLine(i.lastUserText)?.let { append("\n\n").append(it) }
     }
 
     /**
@@ -97,7 +94,14 @@ object MomodingPrompt {
             else -> return null
         }
         val what = "everything you write — the reply, link labels, options, next steps, routine labels and the remembered line"
-        return if (language != null) "## Language\nThe person's latest message is in $language: write $what in $language."
+        // said again in that language, so the last words the model reads before writing are in it
+        val own = when (language) {
+            "Chinese" -> "\n对方用中文说话：你写的每一句话（包括调用工具前说的那句）都用中文。"
+            "Japanese" -> "\n相手は日本語で話しています。書くことはすべて日本語で。"
+            "Korean" -> "\n상대는 한국어로 말합니다. 쓰는 모든 말은 한국어로."
+            else -> ""
+        }
+        return if (language != null) "## Language\nThe person's latest message is in $language: write $what in $language.$own"
         else "## Language\nThe person's latest message is not in Chinese: write $what in the language of that message (English if unsure), not in Chinese, whatever language the examples, notes or files above are in."
     }
 
@@ -199,7 +203,7 @@ When the person answers that it is on, carry on with the task."""
             append("- memory_get: search your earlier notes.\n")
         }
         if (i.helpersEnabled) {
-            append("- A helper (through shell_execute): work of many rounds that needs no one's say on the way — reading and comparing many pages, going through many files — goes to one, so you stay free for the person: ")
+            append("- A helper (through shell_execute): you stay free for the person, so do yourself only what takes at most two rounds of tool calls (a reminder, an event, a quick lookup); anything longer that needs no one's say on the way — searching and comparing across sites, going through many files, several steps on the web — goes to a helper. Say \"在查…\", not that you handed it on: ")
             append("`momoding-task new --to helper --title \"<a few words>\" \"<a complete brief: the goal, what to return, the limits; it sees nothing of this chat>\"`. It has its own line here, and its answer comes back as a report. The turn ends with that command: its line in the chat tells the person who is on it, so say anything else first. Several at once for separate parts; not for what one or two steps do.\n")
         }
         append("Writing scripts, handling files, installing packages or running programs in the sandbox: read the files-and-scripts skill first.\n")

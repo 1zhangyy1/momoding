@@ -6617,13 +6617,17 @@ class ChatViewModel(
     }
 
     /**
-     * momoding: the request's history, with this chat's task table as a note at its very end
-     * (调研/M50 A2). The table changes as tasks move; at the end of the system prompt each change
-     * resent the whole history uncached, at the end of the request it costs only itself.
+     * momoding: the request's history, with what changes from turn to turn as a note at its very end
+     * (调研/M50 A2): this chat's task table, and the language of the reply (the person's latest
+     * words decide it). At the end of the system prompt each change resent the whole history
+     * uncached; at the end of the request it costs only itself, and it is the last thing read.
      */
-    private suspend fun withTaskTable(history: List<LLMMessage>): List<LLMMessage> {
-        val table = app.momoding.task.TaskEngine.table(context, activeSessionId) ?: return history
-        val note = "<system-reminder>\n$table\n</system-reminder>"
+    private suspend fun withTurnNote(history: List<LLMMessage>): List<LLMMessage> {
+        val language = if (helperConfig != null) null
+            else app.momoding.prompt.MomodingPrompt.languageLine(_messages.value.lastOrNull { it.rendersAsUserBubble() }?.content)
+        val parts = listOfNotNull(app.momoding.task.TaskEngine.table(context, activeSessionId), language)
+        if (parts.isEmpty()) return history
+        val note = "<system-reminder>\n${parts.joinToString("\n\n")}\n</system-reminder>"
         return history + LLMMessage(role = LLMMessage.Role.USER, content = note, contentParts = listOf(AgentContentPart.Text(note)))
     }
 
@@ -9560,7 +9564,7 @@ class ChatViewModel(
                         // for it calibrates the meter, and size max_tokens from it.
                         val requestSystemPrompt = loopSystemPrompt
                         contextFixedTokens = ContextSizeMeter.estimateFixedTokens(requestSystemPrompt, if (helperWrapUpInjected) emptyList() else agentTools)
-                        val outboundHistory = withTaskTable(effectiveAgentHistory())
+                        val outboundHistory = withTurnNote(effectiveAgentHistory())
                         val dispatchInputTokens = recordContextDispatch(outboundHistory, currentProvider.model)
                         AppLogger.info(
                             TAG,
@@ -12324,7 +12328,6 @@ class ChatViewModel(
                         app.momoding.apps.AppBots.standingNote(context, sid) ?: app.momoding.apps.AppBots.directory(context),
                     ).joinToString("\n\n").ifBlank { null },
                     askName = memoryOn && app.momoding.memory.UserFile.shouldAskName(context),
-                    lastUserText = _messages.value.lastOrNull { it.rendersAsUserBubble() }?.content, // the person's words, not a report
                 ),
             )
         }
@@ -13477,6 +13480,7 @@ class ChatViewModel(
             kotlinx.coroutines.delay(200)
             refreshInbox()
             if (_unreadInbox.value.isEmpty()) return@launch
+            if (_unreadInbox.value.all(QueuedPromptBatching::waitsForNextMessage)) return@launch // momoding: nothing to say now
             if (_isStreaming.value || incomingMutex.isLocked || pendingSendPrompt != null) return@launch
             // [T-android-compact-queued-drain] Defer while a compact is in
             // flight — draining would mutate agentHistory mid-marker-write.

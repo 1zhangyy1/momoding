@@ -28,8 +28,11 @@ object AutoCompactPrefs {
     @Volatile
     private var appContext: Context? = null
 
+    /** momoding: on unless the person turns it off — a long chat is compacted, never paused on a dialog (调研/M50 H3). */
+    private const val DEFAULT_ENABLED = true
+
     @Volatile
-    private var cachedEnabled: Boolean = false
+    private var cachedEnabled: Boolean = DEFAULT_ENABLED
 
     private fun prefs(context: Context): SharedPreferences =
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -41,10 +44,10 @@ object AutoCompactPrefs {
      */
     fun prime(context: Context) {
         appContext = context.applicationContext
-        cachedEnabled = prefs(context).getBoolean(KEY_ENABLED, false)
+        cachedEnabled = prefs(context).getBoolean(KEY_ENABLED, DEFAULT_ENABLED)
     }
 
-    /** Context-free read. False before [prime] runs, matching a fresh install. */
+    /** Context-free read. [DEFAULT_ENABLED] before [prime] runs, matching a fresh install. */
     fun isEnabled(): Boolean = cachedEnabled
 
     fun setEnabled(context: Context, enabled: Boolean) {

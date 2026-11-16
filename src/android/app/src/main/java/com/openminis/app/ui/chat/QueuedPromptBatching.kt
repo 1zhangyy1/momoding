@@ -15,6 +15,13 @@ internal object QueuedPromptBatching {
         return if (first.isScheduledFire) listOf(first) else queue.takeWhile { !it.isScheduledFire }
     }
 
+    /**
+     * momoding: a result nobody needs to hear now — a task that was stopped, or one that asked for
+     * silence (调研/M50 P3, P8). It starts no turn of its own; it is read with the next message.
+     */
+    fun waitsForNextMessage(p: QueuedPrompt): Boolean =
+        p.isTaskResult && (p.text.substringBefore(']').endsWith("· stopped") || app.momoding.chat.Quiet.asked(p.text))
+
     private val QueuedPrompt.isTaskResult: Boolean
         get() = origin == QueuedPromptOrigin.PROGRAMMATIC && text.startsWith(app.momoding.task.TaskEngine.REPORT_CUE)
 }

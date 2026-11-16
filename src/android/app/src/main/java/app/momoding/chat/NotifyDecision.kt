@@ -31,7 +31,7 @@ object NotifyDecision {
         val raw = reply.orEmpty()
         val fallback = visible(raw).take(previewChars).ifBlank { "(no response)" }
         if (failed) return Decision(true, fallback)
-        if (Quiet.chose(raw)) return Decision(false, "")
+        if (Quiet.asked(raw)) return Decision(false, "")
         val json = FENCE.findAll(raw).lastOrNull()?.groupValues?.get(1)
             ?.let { runCatching { JSONObject(it.trim()) }.getOrNull() }
             ?: return Decision(true, fallback)

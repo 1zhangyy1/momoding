@@ -45,6 +45,9 @@ object AppBots {
         val repo = repo(context)
         val session = repo.createSession(modelId = "", title = app.title)
         repo.dao.updateSource(session.id, SOURCE_PREFIX + app.name)
+        // a Bot builds and runs an app over many steps: it thinks a little, where the main chat does
+        // not (调研/M50 R2; with thinking off a Bot reported its own test call as the task's failure)
+        repo.dao.updateThinkingOverride(session.id, com.openminis.app.data.model.ThinkingLevel.LOW.name)
         app.setBot(session.id)
         val chat = askedIn?.takeIf { repo.getSession(it) != null } ?: MainChat.resolve(context, repo)
         return TaskEngine.open(context, chat, app.title, session.id, brief).id

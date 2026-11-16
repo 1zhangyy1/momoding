@@ -267,12 +267,12 @@ object TaskEngine {
         if (kind != Report.PROGRESS) {
             log(dao, task.id, if (next.state == TaskEntity.State.ENDED.name) TaskLogEntity.Kind.END else TaskLogEntity.Kind.REPORT, text)
             // a Bot's own words go to the person under its name and face (ui/chat/BotLines)
-            val bot = MoApps.ofSession(context, hand)?.takeIf { kind == Report.DONE || kind == Report.FAILED }
+            val bot = MoApps.ofSession(context, hand)?.takeIf { kind == Report.DONE }
             val words = "$REPORT_CUE${task.id} · ${handName(context, hand)} · ${kind.name.lowercase()}] " +
                 (bot?.let { "${AppBots.FROM_CUE}${it.name}] " } ?: "") + fit(context, task.conversation, task.id, text)
             Inbox.post(dao, task.conversation, words, task.id)
             // a result that chose silence (a routine with nothing new) is kept, and wakes nobody (调研/M50 P8)
-            if (!(kind == Report.DONE && app.momoding.chat.Quiet.chose(text))) after += { tellChat(context, task.conversation) }
+            if (!(kind == Report.DONE && app.momoding.chat.Quiet.asked(text))) after += { tellChat(context, task.conversation) }
             if (next.state == TaskEntity.State.ENDED.name) {
                 after += {
                     MoApps.ofSession(context, hand)?.let { AppBots.reported(context, it, task.conversation, text) }
