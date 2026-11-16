@@ -24,7 +24,7 @@ Momoding is built on OpenMinis (an open-source Android agent). Momoding's own co
 
 | Folder | What it is |
 | - | - |
-| `prompt/` | What you are told every turn: `MomodingPrompt.kt` (how you work, the phone, tools), `MomodingRules.kt`, `MomodingHelper.kt` |
+| `prompt/` | What you are told every turn: `MomodingPrompt.kt` (the main chat: how you work, the phone, tools), `MomodingHelper.kt` (a helper's whole prompt) |
 | `ui/chat/` | The chat cards: ask / next steps, drafts, sign-in handoff with the QR code (`MomodingBlock.kt`, `QrWatch.kt`), permission cards, reactions |
 | `hands/` | Operating apps on the screen: the loop (`HandsOperator.kt`), how the screen is read (`ScreenTree.kt`), the hidden background screen (`HandsDisplay.kt`), Shizuku install, the capsule with Stop |
 | `web/` | Looking things up without the browser: `momoding-web search` / `read` (`WebLookup.kt`, `WebText.kt`) |
