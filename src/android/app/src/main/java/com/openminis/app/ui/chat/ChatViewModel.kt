@@ -7538,7 +7538,9 @@ class ChatViewModel(
         fallbackStrategy: com.openminis.app.data.model.FallbackStrategy,
     ) {
         while (true) {
-            val batch = QueuedPromptBatching.nextDrainBatch(app.momoding.task.Inbox.unread(context, activeSessionId))
+            val unread = app.momoding.task.Inbox.unread(context, activeSessionId)
+            if (unread.all(QueuedPromptBatching::waitsForNextMessage)) return // momoding: read with the next message
+            val batch = QueuedPromptBatching.nextDrainBatch(unread)
             if (batch.isEmpty()) return
             var loopStarted = false
             try {

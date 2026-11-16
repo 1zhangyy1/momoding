@@ -300,7 +300,7 @@ object TaskEngine {
             append("## Tasks\nWork tracked in this chat. A message starting $REPORT_CUE<id> · <hand> · done|ask|failed|stopped] is that task's result, not the person, and the person has not seen it. ")
             append("When it is new and relevant, tell them what came of it in a line or two, starting with which task it was (with a link to open a Momoding's app when there is something to see); for an ask, ask the person; for a failure, say what stopped it and what you propose. ")
             append("When its text starts ${AppBots.FROM_CUE}<name>], those are that Momoding's own words: start your reply with the same tag and pass its words on unchanged, adding only what the person needs from you. ")
-            append("A task that was stopped, and a result that is stale, a duplicate or that nobody is waiting on, needs no word: ${app.momoding.chat.Quiet.HOW} ")
+            append("A result that is stale, a duplicate or that nobody is waiting on needs no word: ${app.momoding.chat.Quiet.HOW} The person's own message always gets an answer, even a few words (\"好，不查了\"). ")
             append("A command_result is a background tool result for the current task: use it to continue before reporting the task done. ")
             append("Their answer, or anything more they want of a task, goes to its hand with `momoding-task tell <id> \"<their words>\"`. ")
             append("When they make a task wait on their word (\"check with me first\", \"only cancel if it can be refunded\"), `momoding-task hold <id> \"<their words>\"`; ")

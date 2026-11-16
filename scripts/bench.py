@@ -22,6 +22,8 @@ CASES = {
     "lookup": "查一下这周六北京到上海最早的一班高铁",
     "routine": "以后每天早上八点给我一份北京的天气简报",
     "helper": "派个帮手去查一下 iPhone 18 和 Pixel 11 哪个续航更好，给我结论",
+    "compare": "帮我比较一下北京评分最高的三家烤鸭店，人均多少、要不要排队",
+    "english": "What's the weather like in Beijing tomorrow?",
 }
 OUT = os.path.expanduser("~/.momoding-dev/bench")
 
@@ -52,6 +54,18 @@ def text_of(m):
     return "".join(p.get("value", "") for p in m.get("parts", []) if p.get("type") == "text").strip()
 
 
+def is_chinese(text):
+    han = sum('\u4e00' <= c <= '\u9fff' for c in text)
+    latin = sum(c.isascii() and c.isalpha() for c in text)
+    return han >= 2 and han * 2 >= latin
+
+
+def language_slip(asked, said):
+    """How many of the turn's lines are not in the language of the person's message."""
+    want = is_chinese(asked)
+    return sum(1 for line in said if is_chinese(line.split("```")[0]) != want)
+
+
 def turn_stats(msgs, start):
     """Stats for the assistant messages of one turn, from the user row at index `start`."""
     t0 = msgs[start]["createdAt"]
@@ -71,6 +85,7 @@ def turn_stats(msgs, start):
         "out": sum(u.get("outputTokens", 0) for u in use),
         "fixed": use[0].get("estimatedFixedTokens") if use else None,
         "reply": " / ".join(text_of(m) for m in said)[:300],
+        "lang": language_slip(text_of(msgs[start]), [text_of(m) for m in said]),
     }
 
 
@@ -105,10 +120,10 @@ def run_case(name, prompt):
 
 def show(label, results):
     print(f"\n== {label}")
-    print(f"{'case':8} {'first':>6} {'turn':>6} {'calls':>5} {'in':>7} {'out':>6} {'fixed':>6} {'back':>6} {'report':>7}")
+    print(f"{'case':8} {'first':>6} {'turn':>6} {'calls':>5} {'in':>7} {'out':>6} {'fixed':>6} {'back':>6} {'report':>7} {'slip':>4}")
     for name, s in results.items():
         f = lambda k: "" if s.get(k) is None else str(s[k])
-        print(f"{name:8} {f('first'):>6} {f('turn'):>6} {f('calls'):>5} {f('in'):>7} {f('out'):>6} {f('fixed'):>6} {f('back'):>6} {f('report'):>7}")
+        print(f"{name:8} {f('first'):>6} {f('turn'):>6} {f('calls'):>5} {f('in'):>7} {f('out'):>6} {f('fixed'):>6} {f('back'):>6} {f('report'):>7} {f('lang'):>4}")
 
 
 def main():

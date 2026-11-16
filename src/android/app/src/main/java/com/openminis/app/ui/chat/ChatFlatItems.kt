@@ -878,10 +878,14 @@ internal fun buildFlatChatItems(
         // momoding: with steps hidden, the tool calls fold away but what the Bot says between them
         // stays — what it is on, what it found so far, a slow step coming (Instinct's milestone
         // updates; Grok Bot's "useful progress"). The prompt keeps those lines few and real.
+        // momoding: the person's latest words, for the language of what is said between steps
+        val personSaid = (idx - 1 downTo 0).asSequence().map { messages[it] }.firstOrNull { it.rendersAsUserBubble() }?.content
         blocks.forEachIndexed { index, block ->
             when (block.kind) {
                 "text" -> {
-                    if (block.content.isNotEmpty()) {
+                    val selfTalk = (index + 1 until blocks.size).any { blocks[it].kind == "tool_use" } &&
+                        app.momoding.chat.Narration.selfTalk(block.content, personSaid)
+                    if (block.content.isNotEmpty() && !selfTalk) {
                         val isLastText = index == lastTextIdx
                         // Pattern A: split this text block's content into
                         // independent markdown fragments so each becomes its

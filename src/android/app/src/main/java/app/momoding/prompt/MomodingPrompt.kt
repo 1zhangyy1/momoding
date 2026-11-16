@@ -96,9 +96,11 @@ object MomodingPrompt {
         val what = "everything you write — the reply, link labels, options, next steps, routine labels and the remembered line"
         // said again in that language, so the last words the model reads before writing are in it
         val own = when (language) {
-            "Chinese" -> "\n对方用中文说话：你写的每一句话（包括调用工具前说的那句）都用中文。"
-            "Japanese" -> "\n相手は日本語で話しています。書くことはすべて日本語で。"
-            "Korean" -> "\n상대는 한국어로 말합니다. 쓰는 모든 말은 한국어로."
+            // with the opening line shown in that language: without the example the model opened
+            // multi-step work in English ("I'll check…") 2–3 times in 10, with it 0 in 10 (调研/M50)
+            "Chinese" -> "\n对方用中文说话：你写的每一句话都用中文。要先查或先做几步的事，调用工具之前用一句中文说你在做什么，例如「在查周六京沪最早的高铁」。"
+            "Japanese" -> "\n相手は日本語で話しています。書くことはすべて日本語で。何手かかる作業は、ツールを使う前に日本語で一言「今週土曜の新幹線を調べています」のように伝えて。"
+            "Korean" -> "\n상대는 한국어로 말합니다. 쓰는 모든 말은 한국어로. 몇 단계 걸리는 일은 도구를 쓰기 전에 한국어로 한 줄, 예: 「토요일 KTX 첫차를 찾는 중」."
             else -> ""
         }
         return if (language != null) "## Language\nThe person's latest message is in $language: write $what in $language.$own"
