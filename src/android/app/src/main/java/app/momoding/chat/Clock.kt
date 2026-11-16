@@ -1,7 +1,6 @@
 package app.momoding.chat
 
 import java.time.Instant
-import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -21,17 +20,5 @@ object Clock {
     /** For the instructions: where the time is, and the zone, which does not change minute to minute. */
     fun promptSection(zone: ZoneId = ZoneId.systemDefault()): String =
         "## Time\nThe person's time zone is ${zone.id}. Each message opens with <time>…</time>, when it arrived: " +
-            "work out today, tomorrow and yesterday from the latest one, not from your notes. " +
-            "The note at the end of the conversation lists the coming days: take a weekday's date from it."
-
-    private val DAY = DateTimeFormatter.ofPattern("EEE MM-dd", Locale.ENGLISH)
-
-    /**
-     * The coming week, day by day, for the note at the end of each request. Working out "this
-     * Saturday" from a date is arithmetic the model gets wrong now and then (调研/M50 eval: 11-22
-     * for 11-21); reading it off a list it does not. Not in the instructions: it changes daily.
-     */
-    fun days(today: LocalDate = LocalDate.now()): String =
-        "## Days\nToday is " + DateTimeFormatter.ofPattern("EEEE yyyy-MM-dd", Locale.ENGLISH).format(today) +
-            ". Coming days: " + (1L..7L).joinToString(" · ") { DAY.format(today.plusDays(it)) } + "."
+            "work out today, tomorrow and yesterday from the latest one, not from your notes."
 }

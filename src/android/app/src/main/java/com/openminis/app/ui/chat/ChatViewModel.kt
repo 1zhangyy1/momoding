@@ -6625,7 +6625,7 @@ class ChatViewModel(
     private suspend fun withTurnNote(history: List<LLMMessage>): List<LLMMessage> {
         val language = if (helperConfig != null) null
             else app.momoding.prompt.MomodingPrompt.languageLine(_messages.value.lastOrNull { it.rendersAsUserBubble() }?.content)
-        val parts = listOfNotNull(app.momoding.chat.Clock.days(), app.momoding.task.TaskEngine.table(context, activeSessionId), language)
+        val parts = listOfNotNull(app.momoding.task.TaskEngine.table(context, activeSessionId), language)
         if (parts.isEmpty()) return history
         val note = "<system-reminder>\n${parts.joinToString("\n\n")}\n</system-reminder>"
         return history + LLMMessage(role = LLMMessage.Role.USER, content = note, contentParts = listOf(AgentContentPart.Text(note)))

@@ -29,9 +29,4 @@ class MomodingPromptTest {
         assertTrue(MomodingPrompt.languageLine("ok") == null)
         assertTrue(MomodingPrompt.languageLine("") == null)
     }
-
-    @Test fun `the coming days are listed, so this Saturday is read off, not worked out`() {
-        val d = app.momoding.chat.Clock.days(java.time.LocalDate.of(2026, 11, 16))
-        assertTrue(d, d.contains("Today is Monday 2026-11-16") && d.contains("Sat 11-21") && d.contains("Mon 11-23"))
-    }
 }
