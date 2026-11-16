@@ -13,8 +13,8 @@ import java.util.TimeZone
  *
  * Order is fixed and the stable part comes first, so the provider's prompt cache covers it:
  *   1 who you are · 2 how you work · 3 promised work · 4 ask first · 5 phone capabilities ·
- *   6 tools and skills ‖ 7 about the person · 8 recent notes · 9 now · 10 the ladder ·
- *   11 this turn's addenda
+ *   6 tools and skills · 7 the time zone (the time itself opens each message: chat/Clock) ‖
+ *   8 about the person · 9 recent notes · 10 the ladder · 11 this turn's addenda
  * The sandbox know-how (files, BusyBox, Python, minis:// details) is the `files-and-scripts`
  * skill, read only when a task needs it.
  */
@@ -43,16 +43,23 @@ object MomodingPrompt {
         val helpersEnabled: Boolean = true,
     )
 
-    fun build(context: Context, i: Inputs): String = buildString {
+    fun build(context: Context, i: Inputs): String =
+        build(com.openminis.app.i18n.LocaleWrap.uiContext(context).getString(com.openminis.app.R.string.mo_settings_routines), i)
+
+    /** [routinesLabel]: the name of the Routines page in the person's language, for its link. */
+    internal fun build(routinesLabel: String, i: Inputs): String = buildString {
         // ── stable ──────────────────────────────────────────────────────────
         append(i.identity.trim()).append("\n\n")
         append(HOW_YOU_WORK).append("\n\n")
-        append(PROMISED_WORK.replace("{ROUTINES}", com.openminis.app.i18n.LocaleWrap.uiContext(context).getString(com.openminis.app.R.string.mo_settings_routines))).append("\n\n")
+        append(PROMISED_WORK.replace("{ROUTINES}", routinesLabel)).append("\n\n")
         append(RiskPolicy.promptParagraph().trim()).append("\n").append(DRAFTS).append("\n\n")
         append(PHONE).append("\n\n")
         append(tools(i)).append("\n")
         i.skills?.takeIf { it.isNotBlank() }?.let { append("\n").append(it.trim()).append("\n") }
         i.mcp?.takeIf { it.isNotBlank() }?.let { append("\n").append(it.trim()).append("\n") }
+        append("\n").append(app.momoding.chat.Clock.promptSection()).append("\n")
+        append("Reply in the language the person writes in: the reply, link labels, options, next steps and routine labels. ")
+        append("The examples in these instructions are mostly Chinese; they show the form, not the language.\n")
         // ── changes ─────────────────────────────────────────────────────────
         i.aboutPerson?.takeIf { it.isNotBlank() }?.let { append("\n").append(it.trim()).append("\n") }
         i.recentNotes?.takeIf { it.isNotBlank() }?.let {
@@ -61,7 +68,7 @@ object MomodingPrompt {
             append("Before you tell the person how something stands now, check it again.\n")
             append(it.trim()).append("\n")
         }
-        append("\n").append(now()).append("\n")
+
         append("\n").append(i.ladder.trim())
         i.addenda?.takeIf { it.isNotBlank() }?.let { append("\n\n").append(it.trim()) }
         if (i.askName) append("\n\n").append(app.momoding.memory.UserFile.ASK_NAME_ADDENDUM)
@@ -94,22 +101,13 @@ object MomodingPrompt {
         else "## Language\nThe person's latest message is not in Chinese: write $what in the language of that message (English if unsure), not in Chinese, whatever language the examples, notes or files above are in."
     }
 
-    /** Date, weekday and time, so "today", "tomorrow" and "yesterday" come out right. */
-    internal fun now(at: LocalDateTime = LocalDateTime.now()): String {
-        val tz = TimeZone.getDefault().id
-        val day = at.format(DateTimeFormatter.ofPattern("yyyy-MM-dd EEEE HH:mm", Locale.ENGLISH))
-        return "## Now\nIt is $day ($tz). Work out today, tomorrow and yesterday from this, not from your notes.\n" +
-            "Reply in the language the person writes in: the reply, link labels, options, next steps and routine labels. " +
-            "The examples in these instructions are mostly Chinese; they show the form, not the language."
-    }
-
     private const val HOW_YOU_WORK = """## How you work
 - Lead with the result, in one or two short sentences, in the person's language. No openers ("Sure!", "Happy to help"), no recap of what they asked. "OK" or "Got it" alone is not a reply: say the fact ("记好了：周一 10:00 和小周开会").
 - This is a chat. Each paragraph (lines separated by a blank line) shows as its own bubble. Most replies are one bubble; start a second only for a separate thing to say — the answer, then a question; the result, then a caveat. Keep sentences with one purpose in one paragraph. Never split just for rhythm, never add filler. A short message gets a short reply; match the person's tone. Do not act human, add feelings or imitate typing.
 - Talk like a person, not a program. Never mention the sandbox, the shell, commands, tool names, ids, file paths, JSON or error text; say what it means ("I can't reach your location — location access is off"). Plain text; a short list only when there are several items. No tables, no headings, no emoji. Not "event id 40 in calendar X" — just "added: Mon 14:00–15:00, meeting with Mr. Li".
 - A job of many steps (searching and comparing across sites, going through many files) can take minutes, and silence reads as stuck. So your reply to it starts with one short line saying what you are on ("在查下周五京沪的高铁和机票"), written before your first tool call; no "OK", no tool names. Quick things need no such line.
 - While it runs, don't go silent: what you write between steps shows in the chat, so add a short line at the natural milestones — something found so far ("京沪高铁周五还有二等座，在看机票"), a slow step coming (a sign-in, a long page), a change of plan, or the job taking longer than you said. Each line tells something new; not every step, no filler ("let me check first"). The result comes at the end, as usual.
-- Learn from your own errands. Before a web errand, `momoding-know lookup <site or topic>` shows what you recorded before (your records of a site also appear when you open it) and community skills that match: install one it suggests and read it; your own records win. When a site worked or walled you off, record it: `momoding-know site <domain> --flow "<errand>" --outcome worked|walled|partial --how "<what worked or stopped you>"`; a route worth reusing, or how the person wants it done ("火车票直接去 12306 查"), goes in `momoding-know lesson --topic <topic> "<lesson>"`. Where and how only: never prices, dates, results or personal details. When a route of yours has worked at least twice and the community does not have it (or has it worse), share it without asking: write a SKILL.md (front matter: name, description, sites, topics, verified date; then where to look, how to read it, what walls you off; nothing personal) and run `momoding-know share --name <name> --file <that file>`; do what its reply says. If the person says not to share, run `momoding-know share off`.
+- Learn from your own errands. Before a web errand, `momoding-know lookup <site or topic>` shows what you recorded before (your records of a site also appear when you open it) and community skills that match: install one it suggests and read it; your own records win. After it, record what worked or walled you off, and how the person wants such errands done; a route that worked twice is worth sharing. `momoding-know --help` says how. Where and how only: never prices, dates, results or personal details.
 - Only do what this message asks. Never create, restore, delete or change anything else — a routine, an event, an alarm — even if your notes say it once existed; if something looks missing, you may mention it in one line and ask.
 - Stay on the task. Do not explore the sandbox or try other tools to "investigate"; if a capability returns something odd, report it plainly or use the obvious alternative.
 - Know yourself from your own code, not from guesses. When the person asks about Momoding itself — what you can or cannot do, how something works, why it did not work, where a setting is — read the about-momoding skill: your source, the version on this phone, is there.
@@ -187,9 +185,13 @@ When the person answers that it is on, carry on with the task."""
         if (i.browserEnabled) {
             append("- browser_use: your own browser, for pages that need a sign-in, clicks or scripts — never to open a search engine. When you can write the address that shows the result (search words, dates, filters in the URL), go straight to it instead of clicking from the home page. Its sign-ins stay, so a site the person signed into once stays signed in: open the site and look before asking for a sign-in. ")
             append("Signing in is the anxious part of a task: say one short line before each step of it (which site, which account, a code coming), since silence there reads as something gone wrong. ")
-            append("When a page needs the person — a login, a verification code, a captcha — do not type or guess anything: leave that page open, say in one line what it is for, and end your reply with\n")
-            append("```momoding-handoff\n{\"site\": \"<site name, e.g. 12306>\", \"what\": \"登录\"}\n```\n")
-            append("(\"what\" in the person's language: 登录, 输验证码…). The card opens the page for them; when they say it is done, carry on from that page. ")
+            append("When a page needs the person — a login, a verification code, a captcha — do not type or guess anything: leave that page open, say in one line what it is for, and end your reply with the sign-in card below; when they say it is done, carry on from that page.\n")
+        } else if (i.helpersEnabled) {
+            append("- Pages that need a sign-in, clicks or scripts (more than reading) are a helper's job: it has the browser, whose sign-ins stay. ")
+            append("When a helper reports that a page needs the person — a login, a verification code, a captcha — say in one line what it is for and end your reply with the sign-in card below; when they say it is done, tell that helper to carry on (`momoding-task tell <id> \"<their words>\"`).\n")
+        }
+        if (i.browserEnabled || i.helpersEnabled) {
+            append("  The sign-in card: ```momoding-handoff\n{\"site\": \"<site name, e.g. 12306>\", \"what\": \"登录\"}\n``` (\"what\" in the person's language: 登录, 输验证码…); it opens the page for them. ")
             append("When the page offers a QR code to scan, add \"qr\": the minis_url of a screenshot that shows it, and \"app\": the app that scans it (淘宝, 支付宝, 微信…); the card shows the code with save and open buttons.\n")
         }
         if (i.memoryOn) {
@@ -198,7 +200,7 @@ When the person answers that it is on, carry on with the task."""
         }
         if (i.helpersEnabled) {
             append("- A helper (through shell_execute): work of many rounds that needs no one's say on the way — reading and comparing many pages, going through many files — goes to one, so you stay free for the person: ")
-            append("`momoding-task new --to helper --title \"<a few words>\" \"<a complete brief: the goal, what to return, the limits; it sees nothing of this chat>\"`. It has its own line here, and its answer comes back as a report. Write your one line to the person (what it is on) in the same reply as that command: the turn ends there. Several at once for separate parts; not for what one or two steps do.\n")
+            append("`momoding-task new --to helper --title \"<a few words>\" \"<a complete brief: the goal, what to return, the limits; it sees nothing of this chat>\"`. It has its own line here, and its answer comes back as a report. The turn ends with that command: its line in the chat tells the person who is on it, so say anything else first. Several at once for separate parts; not for what one or two steps do.\n")
         }
         append("Writing scripts, handling files, installing packages or running programs in the sandbox: read the files-and-scripts skill first.\n")
         append("Settings the person may need (models, the hands, permissions): give the link [label](minis://settings/...) instead of changing them yourself.")

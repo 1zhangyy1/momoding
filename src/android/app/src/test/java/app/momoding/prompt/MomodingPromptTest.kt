@@ -2,21 +2,20 @@ package app.momoding.prompt
 
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.time.LocalDateTime
 
 /** momoding: the prompt's "now" line carries the weekday and the time (today/yesterday came out wrong without them). */
 class MomodingPromptTest {
-    @Test fun `now has weekday and time`() {
-        val line = MomodingPrompt.now(LocalDateTime.of(2026, 10, 17, 23, 12))
-        assertTrue(line, line.contains("2026-10-17 Saturday 23:12"))
+    /** The time opens each message, with the weekday (today/yesterday came out wrong without it), from the row's own time. */
+    @Test fun `a message's time has weekday and minute and never changes`() {
+        val at = java.time.LocalDateTime.of(2026, 10, 17, 23, 12).atZone(java.time.ZoneId.of("Asia/Shanghai"))
+        val stamp = app.momoding.chat.Clock.stamp(at.toInstant().toEpochMilli(), at.zone)
+        assertTrue(stamp, stamp == "<time>2026-10-17 Saturday 23:12</time>\n")
     }
 
-    /** momoding: with Chinese examples in the prompt, English questions got Chinese replies; the line says to follow the person. */
-    @Test fun `now asks to reply in the person's language`() {
-        val line = MomodingPrompt.now(LocalDateTime.of(2026, 10, 20, 9, 0))
-        assertTrue(line, line.contains("Reply in the language the person writes in"))
-        assertTrue(line, line.contains("link labels"))
-        assertTrue(line, line.contains("show the form, not the language"))
+    /** The instructions carry the zone, not the minute, so they stay the same from request to request. */
+    @Test fun `the instructions name the zone, not the time`() {
+        val section = app.momoding.chat.Clock.promptSection(java.time.ZoneId.of("Asia/Shanghai"))
+        assertTrue(section, section.contains("Asia/Shanghai") && section.contains("<time>") && !Regex("\\d\\d:\\d\\d").containsMatchIn(section))
     }
 
     /** momoding: Chinese examples and notes pulled English questions back to Chinese; the person's script decides. */

@@ -49,7 +49,7 @@ You cannot talk to the person and cannot see the assistant's chat: everything yo
 """
         )
         if (browserEnabled) append(
-            "- browser_use: only for pages that need a sign-in, clicks or scripts. The browser is shared: use only your own tabs (up to ${com.openminis.app.browser.BrowserTabPool.AGENT_TAB_QUOTA}; list_tabs shows them), open pages with navigate or new_tab, never guess tab ids.\n"
+            "- browser_use: only for pages that need a sign-in, clicks or scripts. The browser is shared: use only your own tabs (up to ${com.openminis.app.browser.BrowserTabPool.AGENT_TAB_QUOTA}; list_tabs shows them), open pages with navigate or new_tab, never guess tab ids. When a page needs the person (a login, a verification code, a captcha), do not type or guess anything: leave it open and end with which site and what it needs, and the screenshot's minis_url when it shows a QR code; the assistant hands it to them and tells you to carry on.\n"
         )
         append(
             """- shell_execute: Alpine Linux, BusyBox ash (not bash: no heredocs, brace expansion or arrays). A command is at most 1000 characters; for more, write a script with file_write and run it. Install with `apk add <package>`; Python packages as `apk add py3-<name>`. `ping` hangs; use curl.

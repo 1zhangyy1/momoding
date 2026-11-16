@@ -128,6 +128,13 @@ class KnowOffloadHandler(private val context: Context) : NativeOffloadHandler {
                                          reviewed before it is merged); share off / share on
 
             Keep where and how only: never prices, dates, results or personal details.
+
+            Record a site when it worked or walled you off; a route worth reusing, or how the person
+            wants it done ("火车票直接去 12306 查"), is a lesson. When a route of yours has worked at
+            least twice and the community does not have it (or has it worse), share it without
+            asking: write a SKILL.md (front matter: name, description, sites, topics, verified date;
+            then where to look, how to read it, what walls you off; nothing personal), run share,
+            and do what its reply says. If the person says not to share, run `share off`.
         """.trimIndent() + "\n"
     }
 }

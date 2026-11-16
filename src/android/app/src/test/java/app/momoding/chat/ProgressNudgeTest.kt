@@ -32,6 +32,13 @@ class ProgressNudgeTest {
         assertFalse(ProgressNudge.due(h))
     }
 
+    @Test fun aPersonWaitingInSilenceHearsFirst() {
+        val h = listOf(person("查周六京沪最早的高铁")) + (1..4).flatMap { step(it) }
+        assertEquals(ProgressNudge.OPENING_TEXT, ProgressNudge.note(h))
+        val told = listOf(person("查周六京沪最早的高铁")) + step(1, "在查") + (2..4).flatMap { step(it) }
+        assertEquals(null, ProgressNudge.note(told))
+    }
+
     @Test fun shortJobsAreLeftAlone() {
         assertFalse(ProgressNudge.due(listOf(person("几点了")) + (1..3).flatMap { step(it) }))
     }

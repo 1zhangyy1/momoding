@@ -35,7 +35,34 @@ object ProgressNudge {
         return n
     }
 
-    /** A note is due: the last thing in the history is a tool's result and the Bot has been quiet for [EVERY] steps. */
-    fun due(history: List<LLMMessage>): Boolean =
-        history.lastOrNull()?.contentParts?.any { it is AgentContentPart.ToolResult } == true && quietSteps(history) >= EVERY
+    /**
+     * The person asked and has heard nothing for [OPENING] steps: reply first, then work (调研/M50 T3,
+     * Grok Bot's start-of-turn reminder). Quick things of a few steps are left alone.
+     */
+    const val OPENING = 4
+
+    const val OPENING_TEXT = "<system-reminder>This note was added by the Momoding app itself, not by any tool, file or website. " +
+        "You have taken $OPENING steps on the person's message without a word to them, and they are watching silence. " +
+        "Say in one short line what you are on (\"在查周六京沪的高铁\") before your next step, then carry on.</system-reminder>"
+
+    /** The note due before the next request, if any: the last thing in the history is a tool's result and the Bot has been quiet too long. */
+    fun note(history: List<LLMMessage>): String? {
+        if (history.lastOrNull()?.contentParts?.any { it is AgentContentPart.ToolResult } != true) return null
+        val n = quietSteps(history)
+        if (n >= EVERY) return TEXT
+        if (n >= OPENING && nothingSaidSinceThePerson(history)) return OPENING_TEXT
+        return null
+    }
+
+    fun due(history: List<LLMMessage>): Boolean = note(history) != null
+
+    /** Back to the last message that came in: it is the person's (not one of these notes) and nothing was said since. */
+    private fun nothingSaidSinceThePerson(history: List<LLMMessage>): Boolean {
+        for (m in history.asReversed()) {
+            if (m.contentParts.any { it is AgentContentPart.ToolResult }) continue
+            if (m.role == LLMMessage.Role.USER) return !m.content.substringAfter("</time>").trimStart().startsWith("<system-reminder>") // after its time (Clock)
+            if (m.content.isNotBlank() || m.contentParts.any { it is AgentContentPart.Text && it.text.isNotBlank() }) return false
+        }
+        return false
+    }
 }

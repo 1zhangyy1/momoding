@@ -57,8 +57,8 @@ def turn_stats(msgs, start):
     t0 = msgs[start]["createdAt"]
     turn = []
     for m in msgs[start + 1:]:
-        if m["role"] == "user" and text_of(m):  # tool results are user rows too, without text
-            break
+        if m["role"] == "user" and text_of(m) and not text_of(m).startswith("<system-reminder>"):
+            break  # tool results and the app's own notes are user rows too
         if m["role"] == "assistant":
             turn.append(m)
     said = [m for m in turn if text_of(m)]

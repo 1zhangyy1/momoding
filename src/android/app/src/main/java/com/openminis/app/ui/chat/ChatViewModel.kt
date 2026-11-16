@@ -1904,8 +1904,17 @@ class ChatViewModel(
             ),
             memoryEnabled = _memoryEnabled.value,
             isHelper = isHelper,
-            browserEnabled = com.openminis.app.tools.AgentToolSwitch.BROWSER.isEnabled(context),
+            browserEnabled = browserInThisChat(),
         )
+
+    /**
+     * momoding: the browser is a helper's tool (and a Bot's), not the main chat's (调研/M50 A4):
+     * pages that need a sign-in, clicks or scripts are many steps of screenshots, done in the
+     * background, and the main chat stays light. Its definition alone was half the tools' size.
+     */
+    private fun browserInThisChat(): Boolean =
+        com.openminis.app.tools.AgentToolSwitch.BROWSER.isEnabled(context) &&
+            (helperConfig != null || app.momoding.apps.MoApps.ofSession(context, realSessionId.ifEmpty { sessionId }) != null)
 
 
     /**
@@ -6607,8 +6616,16 @@ class ChatViewModel(
         return if (oauth) "$prefix\n\n$bare" else bare
     }
 
-    private suspend fun systemPromptWithTasks(base: String?): String? =
-        listOfNotNull(base, app.momoding.task.TaskEngine.table(context, activeSessionId)).joinToString("\n\n").ifBlank { null }
+    /**
+     * momoding: the request's history, with this chat's task table as a note at its very end
+     * (调研/M50 A2). The table changes as tasks move; at the end of the system prompt each change
+     * resent the whole history uncached, at the end of the request it costs only itself.
+     */
+    private suspend fun withTaskTable(history: List<LLMMessage>): List<LLMMessage> {
+        val table = app.momoding.task.TaskEngine.table(context, activeSessionId) ?: return history
+        val note = "<system-reminder>\n$table\n</system-reminder>"
+        return history + LLMMessage(role = LLMMessage.Role.USER, content = note, contentParts = listOf(AgentContentPart.Text(note)))
+    }
 
     private fun isBoundToAbandonedModel(): Boolean =
         _autoRetryAttempt.value > 0 || _autoRetryCountdown.value > 0
@@ -9159,7 +9176,7 @@ class ChatViewModel(
             // drops the tools) so the guards and the calibration pair see the
             // real fixed share.
             contextFixedTokens = ContextSizeMeter.estimateFixedTokens(
-                systemPromptWithTasks(loopSystemPrompt),
+                loopSystemPrompt,
                 if (helperWrapUpInjected) emptyList() else agentTools,
             )
             effectiveContextWindowTokens()?.takeIf { it > 0 }?.let { window ->
@@ -9535,15 +9552,15 @@ class ChatViewModel(
                             appendPersonaReminderToHistory(lastContextTokens)
                         }
                         // momoding: a long job in the chat says how it is going (a background job's words are not seen)
-                        if (helperConfig == null && app.momoding.chat.ProgressNudge.due(agentHistory)) {
-                            appendAppNoteToHistory(app.momoding.chat.ProgressNudge.TEXT)
+                        if (helperConfig == null) app.momoding.chat.ProgressNudge.note(agentHistory)?.let {
+                            appendAppNoteToHistory(it)
                         }
                         // [T-ctx-measure-outbound] Record our estimate of THIS request
                         // (pre-budget, like every measurement) so the provider's count
                         // for it calibrates the meter, and size max_tokens from it.
-                        val requestSystemPrompt = systemPromptWithTasks(loopSystemPrompt)
+                        val requestSystemPrompt = loopSystemPrompt
                         contextFixedTokens = ContextSizeMeter.estimateFixedTokens(requestSystemPrompt, if (helperWrapUpInjected) emptyList() else agentTools)
-                        val outboundHistory = effectiveAgentHistory()
+                        val outboundHistory = withTaskTable(effectiveAgentHistory())
                         val dispatchInputTokens = recordContextDispatch(outboundHistory, currentProvider.model)
                         AppLogger.info(
                             TAG,
@@ -11082,12 +11099,13 @@ class ChatViewModel(
                 // through to normal next-turn dispatch so the queue doesn't
                 // pin the loop indefinitely.
             }
-            // momoding: the step only handed work on and the person was already told: the turn is
-            // done — no further call just to say it again (调研/M50 T1). The result comes back on its own.
-            if (helperConfig == null && accumulatedText.isNotBlank() && handedOnOnly(resultParts) &&
+            // momoding: the step only handed work on: the turn is done (调研/M50 T1). The task's line
+            // already tells the person who is on it; no further call just to say so. The result
+            // comes back on its own.
+            if (helperConfig == null && handedOnOnly(resultParts) &&
                 app.momoding.apps.MoApps.ofSession(context, activeSessionId) == null
             ) {
-                AppLogger.info(TAG_STREAM, "runAgentLoop turn=$turn work handed on and announced → end")
+                AppLogger.info(TAG_STREAM, "runAgentLoop turn=$turn work handed on → end")
                 withContext(Dispatchers.Main) { updateAssistantMessage(assistantId, accumulatedText, false, allToolBlocks) }
                 loopExitedNormally = true
                 break
@@ -12277,7 +12295,7 @@ class ChatViewModel(
 
     private fun buildSystemPrompt(): String? {
         val sid = realSessionId.ifEmpty { sessionId }
-        val browserToolEnabled = com.openminis.app.tools.AgentToolSwitch.BROWSER.isEnabled(context)
+        val browserToolEnabled = browserInThisChat()
         val prompt = helperConfig?.let { cfg ->
             app.momoding.prompt.MomodingHelper.build(
                 cfg,
@@ -14310,6 +14328,15 @@ class ChatViewModel(
         } catch (_: Exception) {
             textContent = partsJson
             contentParts.add(AgentContentPart.Text(partsJson))
+        }
+        // momoding: what arrives (the person's words, a result, a routine's fire) opens with when it
+        // arrived, from the row's own time, so it reads the same in every request (app.momoding.chat.Clock)
+        if (r == LLMMessage.Role.USER && contentParts.none { it is AgentContentPart.ToolResult }) {
+            val stamp = app.momoding.chat.Clock.stamp(createdAt)
+            textContent = stamp + textContent
+            val first = contentParts.indexOfFirst { it is AgentContentPart.Text }
+            if (first >= 0) contentParts[first] = AgentContentPart.Text(stamp + (contentParts[first] as AgentContentPart.Text).text)
+            else contentParts.add(0, AgentContentPart.Text(stamp.trimEnd()))
         }
 
         return LLMMessage(
