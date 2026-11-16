@@ -28,7 +28,7 @@ class PromptBudgetTest {
     }
 
     private companion object {
-        const val MAIN_CHAT = 18_000
+        const val MAIN_CHAT = 11_000
         const val HELPER = 3_800
     }
 }
