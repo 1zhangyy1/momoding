@@ -45,6 +45,15 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
  */
 object OpenCodeSessionHeader {
 
+    /**
+     * momoding: OpenRouter keys "sticky routing" on `x-session-id`: every request of a conversation
+     * goes to the provider that already holds its prompt cache. Without it each request was routed
+     * afresh (Wafer, Venice, InferenceNet…) and most missed the cache; with it the second request
+     * on was cached and cost a seventh (调研/M50 step 3, measured 2026-11-16). Same privacy gate.
+     */
+    const val OPENROUTER_HEADER = "x-session-id"
+    private const val OPENROUTER_HOST = "openrouter.ai"
+
     /** The header OpenCode Go requires. Lowercase per their docs; HTTP header names are case-insensitive. */
     const val HEADER = "x-opencode-session"
 
@@ -58,19 +67,30 @@ object OpenCodeSessionHeader {
      * because no custom base URL is set) and unparseable input are false — a
      * URL we cannot read the host of is one we must not send the id to.
      */
-    fun matches(baseUrl: String?): Boolean {
-        val raw = baseUrl?.trim()?.takeIf { it.isNotEmpty() } ?: return false
+    fun matches(baseUrl: String?): Boolean = hostOf(baseUrl)?.let { it == HOST || it.endsWith(".$HOST") } == true
+
+    /** The session header for [baseUrl]'s host: OpenCode Go's, OpenRouter's, or none. */
+    private fun headerFor(baseUrl: String?): String? {
+        val host = hostOf(baseUrl) ?: return null
+        return when {
+            host == HOST || host.endsWith(".$HOST") -> HEADER
+            host == OPENROUTER_HOST || host.endsWith(".$OPENROUTER_HOST") -> OPENROUTER_HEADER
+            else -> null
+        }
+    }
+
+    private fun hostOf(baseUrl: String?): String? {
+        val raw = baseUrl?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         // Users type the endpoint from the docs freely, and the base-URL field
         // only trims — it never adds a scheme. `toHttpUrlOrNull` requires one,
         // so a scheme-less `opencode.ai/zen/go/v1` would otherwise be read as
         // "not OpenCode" and the header silently dropped. Matches iOS, which
         // normalizes the same way ([T-opencode-session-header]).
         val normalized = if (raw.contains("://")) raw else "https://$raw"
-        val host = normalized.toHttpUrlOrNull()?.host ?: return false
         // `HttpUrl.host` is already lowercased and punycode-encoded, so a
         // literal comparison is safe. The leading dot on the suffix test is
         // what stops `not-opencode.ai` from matching.
-        return host == HOST || host.endsWith(".$HOST")
+        return normalized.toHttpUrlOrNull()?.host
     }
 
     /**
@@ -92,10 +112,10 @@ object OpenCodeSessionHeader {
      * applied here so no call site can forget it.
      */
     fun headersFor(baseUrl: String?, sessionId: String?): Map<String, String> {
-        if (!matches(baseUrl)) return emptyMap()
+        val header = headerFor(baseUrl) ?: return emptyMap()
         val id = sessionId?.trim().orEmpty()
         if (!isPersistedSessionId(id)) return emptyMap()
-        return mapOf(HEADER to id)
+        return mapOf(header to id)
     }
 
     /**

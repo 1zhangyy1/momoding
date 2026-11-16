@@ -130,6 +130,14 @@ class OpenCodeSessionHeaderTest {
     }
 
     @Test
+    fun `openrouter gets its own session header, so a conversation stays on one cache`() {
+        assertEquals(mapOf("x-session-id" to SID), OpenCodeSessionHeader.headersFor("https://openrouter.ai/api/v1", SID))
+        assertTrue(OpenCodeSessionHeader.headersFor("https://openrouter.ai.example.com/v1", SID).isEmpty())
+        assertTrue(OpenCodeSessionHeader.headersFor("https://openrouter.ai/api/v1", "__new__x").isEmpty())
+        assertFalse(OpenCodeSessionHeader.matches("https://openrouter.ai/api/v1"))
+    }
+
+    @Test
     fun `an unmatched host never gets the header`() {
         assertTrue(OpenCodeSessionHeader.headersFor("https://api.openai.com/v1", SID).isEmpty())
         assertTrue(OpenCodeSessionHeader.headersFor("https://not-opencode.ai/v1", SID).isEmpty())
