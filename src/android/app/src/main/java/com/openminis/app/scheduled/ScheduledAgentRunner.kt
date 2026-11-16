@@ -258,7 +258,9 @@ object ScheduledAgentRunner {
             // [T-android-scheduled-task-thinking] Was hardcoded null, so a
             // task could not run with any reasoning effort. null still means
             // "inherit" inside HeadlessChatRunner.
-            thinkingLevel = task.thinkingLevel,
+            // momoding: only in a chat the routine made itself — the level is persisted on the
+            // session, so a fire into the person's chat would change theirs for good
+            thinkingLevel = task.thinkingLevel.takeIf { mode is ScheduledTargetMode.NewSession },
             wait = wait,
             timeoutMs = RUN_TIMEOUT_MS,
             prefill = prefill,

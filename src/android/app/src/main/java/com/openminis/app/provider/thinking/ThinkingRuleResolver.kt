@@ -413,6 +413,10 @@ object ThinkingRuleResolver {
      * Only the FIRST segment is checked: `extra_body.model` is a vendor's own nested
      * field and is none of our business, while a root `model` is.
      */
+    /** momoding: OpenRouter model families that reason by default and accept `reasoning:{enabled:false}`
+     *  (checked 2026-11-16; `z-ai/glm-5.3` refuses it: "Reasoning is mandatory for this endpoint"). */
+    private val OPENROUTER_OFF_FAMILIES = listOf("deepseek", "kimi", "minimax", "qwen")
+
     private val RESERVED_ROOT_KEYS = setOf(
         "messages", "model", "stream", "stream_options", "tools", "tool_choice",
         "n", "functions", "function_call", "response_format",
@@ -467,7 +471,15 @@ object ThinkingRuleResolver {
             is ThinkingWireFormat.OmitEverything -> null to null
 
             is ThinkingWireFormat.ReasoningEffortNested -> {
-                if (!ctx.level.isEnabled) return null to null
+                if (!ctx.level.isEnabled) {
+                    // momoding: omitting the field leaves a model that reasons by default
+                    // reasoning on every call, unseen (调研/M47: 4.9 s → 1.4 s a call). Off is
+                    // said explicitly for the families checked to accept it; GLM 5.3 and other
+                    // forced-reasoning backends answer 400, so they keep the omission.
+                    if (!OPENROUTER_OFF_FAMILIES.any { lid.contains(it) }) return null to null
+                    body.put("reasoning", JSONObject().put("enabled", false))
+                    return "off" to "off"
+                }
                 val effort = wireEffort(ctx.level)
                 body.put("reasoning", JSONObject().put("effort", effort))
                 effort to effort

@@ -432,6 +432,17 @@ class ThinkingOffAllowlistTest {
         assertFalse("OpenRouter omits at OFF: $off", off.has("reasoning"))
     }
 
+    /** Models that reason by default are told off explicitly; forced-reasoning ones (GLM) are not. */
+    @Test
+    fun `OpenRouter says off to the families that accept it`() {
+        for (id in listOf("deepseek/deepseek-v4.1-flash", "moonshotai/kimi-k3", "minimax/minimax-m3", "qwen/qwen4-max")) {
+            val (off, _) = resolve(ctx(id, offEffort = null, isOpenRouter = true))
+            assertFalse("$id: $off", off.getJSONObject("reasoning").getBoolean("enabled"))
+        }
+        val (glm, _) = resolve(ctx("z-ai/glm-5.3", offEffort = null, isOpenRouter = true))
+        assertFalse("GLM refuses reasoning off: $glm", glm.has("reasoning"))
+    }
+
     // ═══════════════ deepseek-flash vs deepseek-v4, side by side (466b00f9b, GH#356)
 
     /**

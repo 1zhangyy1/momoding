@@ -363,14 +363,14 @@ mimo-on-unified/HIGH -> {reasoning_effort:"high"}
 mimo-on-unified/XHIGH -> {reasoning_effort:"high"}
 mimo-on-unified/MAX -> {reasoning_effort:"high"}
 mimo-on-unified/ULTRA -> {reasoning_effort:"high"}
-qwen-on-openrouter/OFF -> {}
+qwen-on-openrouter/OFF -> {reasoning:{enabled:false}}
 qwen-on-openrouter/LOW -> {reasoning:{effort:"low"}}
 qwen-on-openrouter/MEDIUM -> {reasoning:{effort:"medium"}}
 qwen-on-openrouter/HIGH -> {reasoning:{effort:"high"}}
 qwen-on-openrouter/XHIGH -> {reasoning:{effort:"xhigh"}}
 qwen-on-openrouter/MAX -> {reasoning:{effort:"xhigh"}}
 qwen-on-openrouter/ULTRA -> {reasoning:{effort:"xhigh"}}
-deepseek-v4-on-openrouter/OFF -> {}
+deepseek-v4-on-openrouter/OFF -> {reasoning:{enabled:false}}
 deepseek-v4-on-openrouter/LOW -> {reasoning:{effort:"low"}}
 deepseek-v4-on-openrouter/MEDIUM -> {reasoning:{effort:"medium"}}
 deepseek-v4-on-openrouter/HIGH -> {reasoning:{effort:"high"}}
