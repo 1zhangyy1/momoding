@@ -24,9 +24,22 @@ object MemoryGit {
     private val lock = Mutex()
     @Volatile private var installFailedAt = 0L
 
-    fun commitAfterTurn(context: Context, sessionId: String, words: String?) {
+    /**
+     * After a turn: commit what the chat saved, then let [MemoryReflect] catch what it missed and
+     * commit that apart, so `git log` tells the chat's saves from the background's. [words] is
+     * what the person said this turn (null when a helper's report woke the chat); [reply], the answer.
+     */
+    fun afterTurn(context: Context, sessionId: String, words: String?, reply: String?) {
         val app = context.applicationContext
-        scope.launch { runCatching { commit(app, message(sessionId, words)) }.onFailure { Log.w(TAG, "commit failed: ${it.message}") } }
+        scope.launch {
+            runCatching {
+                lock.withLock {
+                    commit(app, message(sessionId, words))
+                    if (!words.isNullOrBlank() && MemoryReflect.reflect(app, words, reply.orEmpty()).isNotEmpty())
+                        commit(app, "reflect " + message(sessionId, words))
+                }
+            }.onFailure { Log.w(TAG, "after turn: ${it.message}") }
+        }
     }
 
     /** One line: which chat, and what the person said there. */
@@ -48,8 +61,8 @@ object MemoryGit {
         ).joinToString("\n")
     }
 
-    private suspend fun commit(context: Context, message: String) = lock.withLock {
-        if (System.currentTimeMillis() - installFailedAt < RETRY_INSTALL_MS) return@withLock
+    private suspend fun commit(context: Context, message: String) {
+        if (System.currentTimeMillis() - installFailedAt < RETRY_INSTALL_MS) return
         // a turn that saved with file_write never started the sandbox
         if (!PRootKernel.isBooted) PRootKernel.boot(context)
         val r = ShellExecutor.execute(context, script(message), timeout = 90_000)

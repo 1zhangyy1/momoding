@@ -12342,7 +12342,12 @@ class ChatViewModel(
         // momoding: what this turn wrote into memory gets its "记住了：…" line under the reply,
         // unless the reply carries the model's own momoding-remember block; git keeps its history
         val added = app.momoding.memory.Memory.added(context, sid)
-        if (_memoryEnabled.value) app.momoding.memory.MemoryGit.commitAfterTurn(context, sid, _messages.value.lastOrNull { it.role == "user" }?.content)
+        if (_memoryEnabled.value && helperConfig == null) {
+            // the person's own words this turn (a helper's brief is not); a turn a helper's report woke has none
+            val said = _messages.value.lastOrNull { it.role == "user" }?.content
+                ?.takeUnless { it.startsWith("[task ") || it.startsWith("<system-reminder>") }
+            app.momoding.memory.MemoryGit.afterTurn(context, sid, said, _messages.value.lastOrNull { it.role == "assistant" }?.content)
+        }
         val last = _messages.value.lastOrNull { it.role == "assistant" }
         val saidIt = last?.toolBlocks?.any { it.kind == "text" && it.content.contains("```momoding-remember") } == true ||
             last?.content?.contains("```momoding-remember") == true

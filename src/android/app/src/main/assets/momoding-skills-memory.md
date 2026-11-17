@@ -5,12 +5,12 @@ description: How the person's memory at /var/minis/memory is laid out and kept �
 
 # Memory
 
-The person's memory is a folder of Markdown at `/var/minis/memory`, kept in git. The app commits it after each turn with the chat and the person's words as the message, so where a line came from and what it said before are in `git log -p`, never in the file. You only edit files.
+The person's memory is a folder of Markdown at `/var/minis/memory`, kept in git. The app commits it after each turn with the chat and the person's words as the message, and after each turn looks again in the background for anything worth keeping that was said in passing; so where a line came from and what it said before are in `git log -p`, never in the file. You only edit files.
 
 ## Layout
 
-- `MEMORY.md` is the entry. It is in every conversation, so it holds only what every conversation needs: how to call the person, who they are, what matters to them now, the people they mention most, and an `## Index` of the other files with a few words on what each holds, in the words a future question would use ("妈妈、爸爸、家里人", not "people notes").
-- Everything else goes in topic files, named after their subject: `people/妈妈.md`, `places/家.md`, `plans/搬家.md`, `preferences/吃饭.md`, `work.md`… Let the layout grow with what the person talks about; group related subjects in one folder rather than many top-level ones.
+- `MEMORY.md` is the entry. It is in every conversation, so it holds only what every conversation needs: how to call the person, who they are, what matters to them now, the people they mention most.
+- Everything else goes in topic files, named after their subject so the path says what is inside (the app lists every file under MEMORY.md, so no index is needed): `people/妈妈.md`, `places/家.md`, `plans/搬家.md`, `preferences/吃饭.md`, `work.md`… Let the layout grow with what the person talks about; group related subjects in one folder rather than many top-level ones.
 - One home per subject. Before writing, `grep -ril` for the name or topic and add to the file it belongs in; never start a near-duplicate.
 - Link files with `[[path]]` from the memory root without `.md` (`[[people/妈妈]]`). Keep a fact in one place and link to it elsewhere; update links when you move or rename a file.
 - Leave alone: `SOUL.md` (who you are), `GLOBAL.md` (the person's own note), `know-how/` and `sites.json` (how errands went), `days/` (old daily notes, there to search).

@@ -46,15 +46,21 @@ object Memory {
 
     private const val TEMPLATE = "# Memory\n\n"
 
-    fun promptFragment(context: Context): String = render(read(context))
+    fun promptFragment(context: Context): String = render(read(context), topics(dir(context)))
 
-    internal fun render(text: String): String = buildString {
+    /** The person's other memory files, which the prompt lists so none is lost for want of a link. */
+    internal fun topics(dir: File): List<String> =
+        dir.walkTopDown().onEnter { it == dir || it.name !in NOT_MEMORY }
+            .filter { it.isFile && it.name.endsWith(".md") && it.name !in NOT_MEMORY && it.name != "MEMORY.md" }
+            .map { it.relativeTo(dir).path }.sorted().toList()
+
+    internal fun render(text: String, topics: List<String> = emptyList()): String = buildString {
         appendLine("## Memory")
-        append("Your memory of the person is a folder of notes at $SANDBOX_DIR, kept in git (the app commits it after each turn). ")
-        append("MEMORY.md, below, is always with you: how to call them, who they are, what matters now, and links to the other files. ")
-        appendLine("When they mention a person, place, plan or anything from before that it does not cover, look first (`grep -ril \"<word>\" $SANDBOX_DIR`, follow [[links]]) instead of answering from a guess.")
-        append("When they tell you something worth keeping (about them, someone in their life, a preference, a plan with a date, a decision, a change to what you knew), save it before you reply. ")
-        append("MEMORY.md and its index are below, so you usually know where it goes: what every conversation needs in MEMORY.md, what is about one person, place or plan in that subject's file, linked from the index. ")
+        append("Your memory of the person is a folder of notes at $SANDBOX_DIR, kept in git (the app commits it after each turn and keeps it in the background too). ")
+        append("MEMORY.md, below, is always with you: how to call them, who they are, what matters now; the other files are listed after it. ")
+        appendLine("When a request touches one of them, or they mention a person, place, plan or anything from before, read it first (`grep -ril \"<word>\" $SANDBOX_DIR`) instead of answering from a guess.")
+        append("When they ask you to remember something, or tell you something you need right away, save it before you reply: ")
+        append("what every conversation needs in MEMORY.md, what is about one person, place or plan in that subject's file. ")
         append("Change the line that is no longer true rather than add another; one fact per line as `- … [added: YYYY-MM-DD]`. ")
         appendLine("Only what they said, never what you guessed; never passwords or codes. To tidy or reorganize memory, read the memory skill.")
         appendLine("After saving, end your reply with a fenced block the app shows as one quiet line:")
@@ -62,14 +68,15 @@ object Memory {
         appendLine("{\"text\": \"<just the fact, in the person's language, e.g. 开会尽量放下午 / meetings in the afternoon>\"}")
         appendLine("```")
         val facts = text.lines().any { it.trimStart().startsWith("- ") }
-        if (!facts) {
-            append("MEMORY.md has nothing yet. When they tell you how to call them, write that first.")
-        } else {
-            appendLine("<memory>")
-            appendLine(text.take(MAX_CHARS))
-            if (text.length > MAX_CHARS) appendLine("(MEMORY.md is over $MAX_CHARS characters: move details into topic files and leave a link.)")
-            append("</memory>")
+        if (!facts && topics.isEmpty()) {
+            append("Memory has nothing yet. When they tell you how to call them, write that first.")
+            return@buildString
         }
+        appendLine("<memory>")
+        appendLine(text.take(MAX_CHARS))
+        if (text.length > MAX_CHARS) appendLine("(MEMORY.md is over $MAX_CHARS characters: move details into topic files.)")
+        appendLine("</memory>")
+        if (topics.isNotEmpty()) append("Other memory files: ").append(topics.joinToString(", "))
     }
 
     // ── first conversation: ask how to call them ─────────────────────────────
@@ -95,11 +102,11 @@ object Memory {
     private val atTurnStart = java.util.concurrent.ConcurrentHashMap<String, Set<String>>()
 
     /** Not the person's memory: the identity, the person's own global note, site know-how, old notes. */
-    private val notMemory = setOf("SOUL.md", "GLOBAL.md", "know-how", "days", ".git")
+    val NOT_MEMORY = setOf("SOUL.md", "GLOBAL.md", "know-how", "days", ".git")
 
     internal fun facts(dir: File): Set<String> =
-        dir.walkTopDown().onEnter { it == dir || it.name !in notMemory }
-            .filter { it.isFile && it.name.endsWith(".md") && it.name !in notMemory }
+        dir.walkTopDown().onEnter { it == dir || it.name !in NOT_MEMORY }
+            .filter { it.isFile && it.name.endsWith(".md") && it.name !in NOT_MEMORY }
             .flatMap { f -> runCatching { f.readLines() }.getOrDefault(emptyList()).asSequence() }
             .map { it.trim() }.filter { it.startsWith("- ") }
             .map { it.removePrefix("- ").trim() }.filter { it.isNotEmpty() }

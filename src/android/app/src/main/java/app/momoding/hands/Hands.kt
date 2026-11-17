@@ -173,10 +173,18 @@ object Hands {
      */
     fun textModel(context: Context): ScreenModel? {
         val repo = repo(context) ?: return null
-        val entry = repo.lastUsedVisibleEntry() ?: return null
-        val inst = repo.config.value.instances.firstOrNull { it.id == entry.providerInstanceId }?.takeIf { it.isEnabled } ?: return null
-        val key = repo.usableApiKey(inst) ?: return null
-        return ScreenModel(inst, entry, key, Why.CHAT)
+        val cfg = repo.config.value
+        fun byEntry(entry: ModelEntry?): ScreenModel? {
+            entry ?: return null
+            val inst = cfg.instances.firstOrNull { it.id == entry.providerInstanceId }?.takeIf { it.isEnabled } ?: return null
+            val key = repo.usableApiKey(inst) ?: return null
+            return ScreenModel(inst, entry, key, Why.CHAT)
+        }
+        // a chat that runs on a model group has no "last used" model: then the default group's
+        byEntry(repo.lastUsedVisibleEntry())?.let { return it }
+        val group = cfg.modelGroups.firstOrNull { it.id == cfg.defaultPrimaryGroupId } ?: cfg.modelGroups.firstOrNull()
+        return group?.memberEntryIds?.firstNotNullOfOrNull { id -> byEntry(cfg.modelEntries.firstOrNull { it.id == id }) }
+            ?: repo.allVisibleEntries().firstNotNullOfOrNull { byEntry(it) }
     }
 
     private fun repo(context: Context): ProviderRepository? = (context.applicationContext as? MinisApp)?.providerRepositoryOrNull

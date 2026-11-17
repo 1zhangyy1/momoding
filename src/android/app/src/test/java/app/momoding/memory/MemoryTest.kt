@@ -15,13 +15,14 @@ class MemoryTest {
         val p = Memory.render("# Memory\n")
         assertTrue(p.contains("/var/minis/memory"))
         assertTrue(p.contains("nothing yet"))
+        assertTrue(Memory.render("# Memory\n", listOf("people/妈妈.md")).contains("Other memory files: people/妈妈.md"))
         assertFalse(p.contains("<memory>"))
     }
 
     @Test fun `content is included and capped`() {
         val p = Memory.render("- 叫我老王 [added: 2026-11-17]\n" + "x".repeat(Memory.MAX_CHARS * 2))
         assertTrue(p.contains("叫我老王"))
-        assertTrue(p.contains("topic files and leave a link"))
+        assertTrue(p.contains("move details into topic files"))
         assertTrue(p.length < Memory.MAX_CHARS + 2000)
     }
 
@@ -47,5 +48,41 @@ class MemoryTest {
         val script = MemoryGit.script("chat s1: it's mine")
         assertTrue(script.contains("-m 'chat s1: it'\\''s mine'"))
         assertTrue(script.contains("git diff --cached --quiet && exit 0"))
+    }
+}
+
+/** momoding: the background reflection's input, output and how it writes. */
+class MemoryReflectTest {
+    @get:Rule val tmp = TemporaryFolder()
+
+    @Test fun `only paths inside the person's memory`() {
+        assertEquals("people/妈妈.md", MemoryReflect.safePath("people/妈妈.md"))
+        assertEquals("MEMORY.md", MemoryReflect.safePath("/var/minis/memory/MEMORY.md"))
+        listOf("SOUL.md", "know-how/x.md", "../x.md", "/etc/x.md", "a.txt", "days/2026-01-01.md", "").forEach {
+            assertEquals(it, null, MemoryReflect.safePath(it))
+        }
+    }
+
+    @Test fun `parse takes the files and nothing else`() {
+        val w = MemoryReflect.parse("""ok {"files":[{"path":"MEMORY.md","content":"# Memory\n- 住望京"},{"path":"SOUL.md","content":"x"}]}""")
+        assertEquals(listOf("MEMORY.md" to "# Memory\n- 住望京"), w)
+        assertTrue(MemoryReflect.parse("""{"files":[]}""").isEmpty())
+        assertTrue(MemoryReflect.parse("no json").isEmpty())
+    }
+
+    @Test fun `a file the chat changed meanwhile is left alone`() {
+        val dir = tmp.root
+        dir.resolve("MEMORY.md").writeText("# Memory\n")
+        val before = MemoryReflect.files(dir)
+        dir.resolve("MEMORY.md").writeText("# Memory\n- 叫我晓晓\n")
+        val wrote = MemoryReflect.apply(dir, before, listOf("MEMORY.md" to "# Memory\n- 住望京", "places/家.md" to "- 望京"))
+        assertEquals(listOf("places/家.md"), wrote)
+        assertEquals("# Memory\n- 叫我晓晓\n", dir.resolve("MEMORY.md").readText())
+    }
+
+    @Test fun `the question marks the reply as not the person's`() {
+        val q = MemoryReflect.question(mapOf("MEMORY.md" to "# Memory"), "我住望京", "推荐几家火锅", "2026-11-17 星期二")
+        assertTrue(q.contains("The person said:\n我住望京"))
+        assertTrue(q.contains("(not the person)"))
     }
 }
