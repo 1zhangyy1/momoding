@@ -21,46 +21,46 @@ class ShellGuardHereDocumentTest {
     }
 
     @Test fun `network calls in Python string data and comments do not execute`() {
-        assertEquals(RiskClass.SAFE, ShellGuard.assess("python3 - <<'PY'\ns='''requests.post('https://example.com')\nshutil.rmtree('notes')'''\n# requests.post('https://example.com')\nopen('code.txt','w').write(s)\nPY").riskClass)
+        assertEquals(RiskClass.SAFE, ShellGuard.assess("python3 - <<'PY'\ns='''requests.post('https://hooks.slack.com/x')\nshutil.rmtree('notes')'''\n# requests.post('https://hooks.slack.com/x')\nopen('code.txt','w').write(s)\nPY").riskClass)
     }
 
     @Test fun `an actual Python send in a heredoc still asks`() {
-        assertEquals(RiskClass.OUTBOUND, ShellGuard.assess("python3 - <<'PY'\nimport requests\nrequests.post('https://example.com', json={})\nPY").riskClass)
+        assertEquals(RiskClass.OUTBOUND, ShellGuard.assess("python3 - <<'PY'\nimport requests\nrequests.post('https://hooks.slack.com/x', json={})\nPY").riskClass)
     }
 
     @Test fun `a real shell send after the closing delimiter still asks`() {
-        assertEquals(RiskClass.OUTBOUND, ShellGuard.assess("python3 - <<'PY'\nprint('ok')\nPY\ncurl -X POST https://example.com -d data").riskClass)
+        assertEquals(RiskClass.OUTBOUND, ShellGuard.assess("python3 - <<'PY'\nprint('ok')\nPY\ncurl -X POST https://hooks.slack.com/x -d data").riskClass)
     }
 
     @Test fun `commands on the heredoc header are checked too`() {
-        assertEquals(RiskClass.OUTBOUND, ShellGuard.assess("cat <<'DATA' | curl -X POST https://example.com -d @-\nhello\nDATA").riskClass)
+        assertEquals(RiskClass.OUTBOUND, ShellGuard.assess("cat <<'DATA' | curl -X POST https://hooks.slack.com/x -d @-\nhello\nDATA").riskClass)
     }
 
-    @Test fun `shell heredoc deleting user files still asks`() {
-        assertEquals(RiskClass.DESTRUCTIVE, ShellGuard.assess("sh <<'END-SH'\nrm -rf /var/minis/workspace/notes\nEND-SH").riskClass)
+    @Test fun `shell heredoc deleting the phone's files still asks`() {
+        assertEquals(RiskClass.DESTRUCTIVE, ShellGuard.assess("sh <<'END-SH'\nrm -rf /var/minis/mounts/phone/notes\nEND-SH").riskClass)
     }
 
     @Test fun `a data heredoc does not execute its content`() {
-        assertEquals(RiskClass.SAFE, ShellGuard.assess("cat <<'DATA' > js/main.js\nrequests.post('https://example.com')\nrm -rf notes\nDATA").riskClass)
+        assertEquals(RiskClass.SAFE, ShellGuard.assess("cat <<'DATA' > js/main.js\nrequests.post('https://hooks.slack.com/x')\nrm -rf notes\nDATA").riskClass)
     }
 
     @Test fun `tab stripped heredocs keep the script together`() {
         assertEquals(RiskClass.SAFE, ShellGuard.assess("python3 - <<-'PY'\n\tprint('stops.push(v)')\n\tPY").riskClass)
-        assertEquals(RiskClass.OUTBOUND, ShellGuard.assess("python3 - <<-'PY'\nimport requests\nrequests.post('https://example.com')\n\tPY").riskClass)
+        assertEquals(RiskClass.OUTBOUND, ShellGuard.assess("python3 - <<-'PY'\nimport requests\nrequests.post('https://hooks.slack.com/x')\n\tPY").riskClass)
     }
 
     @Test fun `unquoted heredoc shell substitutions are still checked`() {
-        val command = "cat <<DATA\n" + '$' + "(curl -X POST https://example.com -d data)\nDATA"
+        val command = "cat <<DATA\n" + '$' + "(curl -X POST https://hooks.slack.com/x -d data)\nDATA"
         assertEquals(RiskClass.OUTBOUND, ShellGuard.assess(command).riskClass)
     }
 
     @Test fun `quoted heredoc does not expand shell substitutions`() {
-        val command = "cat <<'DATA'\n" + '$' + "(curl -X POST https://example.com -d data)\nDATA"
+        val command = "cat <<'DATA'\n" + '$' + "(curl -X POST https://hooks.slack.com/x -d data)\nDATA"
         assertEquals(RiskClass.SAFE, ShellGuard.assess(command).riskClass)
     }
 
     @Test fun `Python inline file data and real sends remain distinct`() {
         assertEquals(RiskClass.SAFE, ShellGuard.assess("python3 -c \"s='requests.post(1)'; print(s)\"").riskClass)
-        assertEquals(RiskClass.OUTBOUND, ShellGuard.assess("python3 -c \"import requests; requests.post('https://example.com')\"").riskClass)
+        assertEquals(RiskClass.OUTBOUND, ShellGuard.assess("python3 -c \"import requests; requests.post('https://hooks.slack.com/x')\"").riskClass)
     }
 }

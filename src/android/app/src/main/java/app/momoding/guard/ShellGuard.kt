@@ -11,8 +11,10 @@ package app.momoding.guard
  * and arguments; the strongest verdict wins. Inline scripts (`sh -c`, `python -c`, heredocs
  * fed to a shell) are judged recursively or by content.
  *
- * The cwd of every agent shell is the session workspace, so relative paths are the user's
- * files. Scratch space (`/tmp`, `/var/tmp`, `/dev/shm`) is free to delete.
+ * momoding: what stays in the sandbox is the agent's own business and is never asked about —
+ * its files, scripts, installs and lookups on the web, whatever it deletes there. Only what
+ * reaches beyond it asks: the phone's own storage mounted at [PHONE], a message or post under
+ * the person's name, money.
  */
 object ShellGuard {
     const val WORKSPACE = "/var/minis/workspace"
@@ -25,7 +27,6 @@ object ShellGuard {
     /** momoding: where a relative path points — the last `cd` of the command being judged. */
     private val cwd = ThreadLocal<String?>()
 
-    private val scratchPrefixes = listOf("/tmp/", "/var/tmp/", "/dev/shm/", "\$TMPDIR/", "\${TMPDIR}/")
     /**
      * Programs that run another program: each with the options that take a separate value, so
      * `sudo -u root rm`, `nice -n 19 rm`, `timeout -k 5 10 rm` are judged by the `rm`.
@@ -59,6 +60,8 @@ object ShellGuard {
     private val dataFlags = setOf("-d", "--data", "--data-raw", "--data-binary", "--data-urlencode", "--data-ascii", "-F", "--form", "--form-string", "--json", "-T", "--upload-file", "--post-data", "--post-file", "--body", "--body-file", "-I")
     private val wgetSends = setOf("--post-data", "--post-file", "--body-data", "--body-file")
     private val writeMethods = setOf("POST", "PUT", "PATCH", "DELETE")
+    /** A URL's host and path, without its query: what a request is to, not what it asks. */
+    private val pageAddress = Regex("https?://[^\\s'\"?#]+", RegexOption.IGNORE_CASE)
     private val urlRegex = Regex("https?://([^/\\s:'\"]+)", RegexOption.IGNORE_CASE)
     private val hostArg = Regex("^(?:[\\w.-]+@)?([\\w.-]+\\.[a-z]{2,}|\\d{1,3}(?:\\.\\d{1,3}){3}|[\\w-]+)(?::|$)", RegexOption.IGNORE_CASE)
 
@@ -70,6 +73,11 @@ object ShellGuard {
     // Inline-code reach, for `python -c`, `node -e`, heredocs.
     private val codeDeletes = Regex("\\b(shutil\\.rmtree|os\\.(remove|unlink|rmdir|removedirs)|pathlib\\.[^\\n]*\\.unlink|\\.unlink\\(|fs\\.(rm|rmSync|rmdir|rmdirSync|unlink|unlinkSync)|rimraf|File\\.delete|FileUtils\\.rm)\\b")
     private val codeSends = Regex("\\b(requests\\.(post|put|patch|delete)|urllib\\.request\\.urlopen\\([^)]*data|httpx\\.(post|put|patch|delete)|aiohttp[^\\n]*\\.(post|put)|smtplib|sendmail|axios\\.(post|put|patch|delete)|fetch\\([^)]*method\\s*:\\s*['\"](POST|PUT|PATCH|DELETE)|nodemailer|twilio|SendGrid|boto3[^\\n]*\\.(put_object|send_email|publish)|lark|feishu|dingtalk|wecom|telegram|slack_sdk)\\b", RegexOption.IGNORE_CASE)
+    /**
+     * momoding: a write to the web is the agent's own lookup (many sites query by POST) unless it
+     * goes to people: a mail, a chat or push service, a webhook. Money is judged on its own.
+     */
+    private val toPeople = Regex("(smtp|sendmail|mail\\.|nodemailer|twilio|sendgrid|mailgun|feishu|lark|dingtalk|wecom|qyapi|weixin|wechat|telegram|slack|discord|pushover|bark|ntfy|hooks\\.|webhook)", RegexOption.IGNORE_CASE)
     private val codeInstalls = Regex("\\b(pip\\.main|subprocess[^\\n]*(pip|apk|apt|npm)\\s+(install|add))\\b")
 
     fun assess(command: String): RiskAssessment = assess(command, depth = 0)
@@ -132,8 +140,7 @@ object ShellGuard {
             program == "xargs" -> assessSimple(dropOptions(args, xargsValueOptions).joinToString(" ") { quote(it) } + " ?", depth)
             program == "rm" -> rm(args)
             program == "find" -> find(args)
-            program in setOf("shred", "wipe", "srm") -> RiskAssessment(RiskClass.DESTRUCTIVE, "destroys files", folderOf(args.lastOrNull { !it.startsWith("-") }))
-            program == "truncate" -> RiskAssessment(RiskClass.DESTRUCTIVE, "empties a file", folderOf(args.lastOrNull { !it.startsWith("-") }))
+            program in setOf("shred", "wipe", "srm", "truncate") -> rm(args)
             program == "crontab" && "-r" in args -> RiskAssessment(RiskClass.DESTRUCTIVE, "removes all scheduled jobs", "crontab")
             program == "git" -> git(args)
             program in setOf("curl", "wget", "http", "https", "xh", "httpie") -> httpClient(program, args)
@@ -181,13 +188,14 @@ object ShellGuard {
         if (Regex("(^|\\n|;|&&)\\s*(rm|curl|wget|git|apk|apt|pip|npm|find|lark-cli|gh|ssh|scp|rsync)\\b").containsMatchIn(executable)) {
             r = RiskAssessment.merge(r, assess(code, depth + 1))
         }
-        if (runs(codeDeletes)) r = RiskAssessment.merge(r, RiskAssessment(RiskClass.DESTRUCTIVE, "code deletes files", null))
-        if (runs(codeSends)) {
+        if (runs(codeDeletes) && code.contains(PHONE)) r = RiskAssessment.merge(r, RiskAssessment(RiskClass.DESTRUCTIVE, "code deletes the phone's files", PHONE))
+        val where = pageAddress.findAll(code).joinToString(" ") { it.value }
+        if (runs(codeSends) && (toPeople.containsMatchIn(code) || moneyWords.containsMatchIn(where))) {
             val host = urlRegex.find(code)?.groupValues?.get(1)
             r = RiskAssessment.merge(r, RiskAssessment(RiskClass.OUTBOUND, "code sends data" + (host?.let { " to $it" } ?: ""), host))
         }
         if (runs(codeInstalls)) r = RiskAssessment.merge(r, RiskAssessment(RiskClass.INSTALL, "code installs packages", null))
-        if (r.riskClass == RiskClass.OUTBOUND && moneyWords.containsMatchIn(code)) r = r.copy(riskClass = RiskClass.MONEY, reason = "looks like a payment: " + r.reason)
+        if (r.riskClass == RiskClass.OUTBOUND && moneyWords.containsMatchIn(where)) r = r.copy(riskClass = RiskClass.MONEY, reason = "looks like a payment: " + r.reason)
         return r
     }
 
@@ -221,49 +229,31 @@ object ShellGuard {
     // ── programs ───────────────────────────────────────────────────────────────────────────
 
     private fun rm(args: List<String>): RiskAssessment {
-        val targets = positional(args)
-        if (targets.isEmpty()) return RiskAssessment.SAFE
-        val resolved = targets.map { resolve(it) }
-        val whole = resolved.filter { isWholeTree(it) }
-        if (whole.isNotEmpty()) {
-            return RiskAssessment(RiskClass.DESTRUCTIVE, "removes ${whole.first()} entirely", folderOf(whole.first()), warnings = listOf("wipes ${whole.first()}"))
+        val resolved = positional(args).map { resolve(it) }
+        val whole = resolved.firstOrNull { it in holdsPhone }
+        if (whole != null) {
+            return RiskAssessment(RiskClass.DESTRUCTIVE, "removes $whole entirely, the phone's own files with it", PHONE, warnings = listOf("wipes $whole"))
         }
-        val kept = resolved.filterNot { isScratch(it) }
-        if (kept.isEmpty()) return RiskAssessment.SAFE
-        val shown = kept.take(3).joinToString(", ") + if (kept.size > 3) " …" else ""
-        return RiskAssessment(RiskClass.DESTRUCTIVE, "deletes $shown", folderOf(kept.first()))
+        val phone = resolved.filter { onPhone(it) }
+        if (phone.isEmpty()) return RiskAssessment.SAFE
+        val shown = phone.take(3).joinToString(", ") + if (phone.size > 3) " …" else ""
+        return RiskAssessment(RiskClass.DESTRUCTIVE, "deletes $shown", PHONE)
     }
 
     private fun find(args: List<String>): RiskAssessment {
-        val deletes = "-delete" in args || args.zipWithNext().any { (a, b) -> (a == "-exec" || a == "-execdir" || a == "-ok") && basename(b) == "rm" } ||
-            args.zipWithNext().any { (a, b) -> a == "-exec" && basename(b) == "shred" }
+        val deletes = "-delete" in args || args.zipWithNext().any { (a, b) -> (a == "-exec" || a == "-execdir" || a == "-ok") && basename(b) in setOf("rm", "shred") }
         if (!deletes) return RiskAssessment.SAFE
         val start = resolve(args.firstOrNull { !it.startsWith("-") } ?: ".")
-        if (isScratch(start)) return RiskAssessment.SAFE
-        return RiskAssessment(RiskClass.DESTRUCTIVE, "deletes files under $start", folderOf(start))
+        return if (onPhone(start) || start in holdsPhone) RiskAssessment(RiskClass.DESTRUCTIVE, "deletes files under $start", PHONE) else RiskAssessment.SAFE
     }
 
     private fun git(all: List<String>): RiskAssessment {
-        // `git -C <dir> …` works in <dir>
         val at = all.indexOf("-C").takeIf { it >= 0 && it + 1 < all.size }
         val args = at?.let { all.drop(it + 2) } ?: all
-        val repo = resolve(at?.let { all[it + 1] } ?: (cwd.get() ?: WORKSPACE))
         val sub = args.firstOrNull { !it.startsWith("-") } ?: return RiskAssessment.SAFE
-        val rest = args.drop(args.indexOf(sub) + 1)
-        // in an app's repository, discarding changes is its Momoding going back in its own work
-        if (sub != "push" && isScratch("$repo/")) return RiskAssessment.SAFE
-        return when (sub) {
-            "push" -> {
-                val remote = rest.firstOrNull { !it.startsWith("-") && !it.startsWith("+") } ?: "origin"
-                RiskAssessment(RiskClass.OUTBOUND, "pushes to $remote", "git:$remote")
-            }
-            "clean" -> if (rest.any { it.startsWith("-") && (it.contains('f') || it == "--force") }) RiskAssessment(RiskClass.DESTRUCTIVE, "git clean removes untracked files", WORKSPACE) else RiskAssessment.SAFE
-            "reset" -> if ("--hard" in rest) RiskAssessment(RiskClass.DESTRUCTIVE, "git reset --hard discards changes", WORKSPACE) else RiskAssessment.SAFE
-            "checkout", "restore" -> if (rest.any { it == "--" || it == "." } || (sub == "restore" && rest.isNotEmpty() && rest.none { it.startsWith("--staged") })) RiskAssessment(RiskClass.DESTRUCTIVE, "git $sub discards working changes", WORKSPACE) else RiskAssessment.SAFE
-            "branch" -> if ("-D" in rest || "--delete" in rest && "--force" in rest) RiskAssessment(RiskClass.DESTRUCTIVE, "force-deletes a branch", WORKSPACE) else RiskAssessment.SAFE
-            "stash" -> if (rest.firstOrNull() in setOf("drop", "clear")) RiskAssessment(RiskClass.DESTRUCTIVE, "drops stashed changes", WORKSPACE) else RiskAssessment.SAFE
-            else -> RiskAssessment.SAFE
-        }
+        if (sub != "push") return RiskAssessment.SAFE // a repository in the sandbox is the agent's own work
+        val remote = args.drop(args.indexOf(sub) + 1).firstOrNull { !it.startsWith("-") && !it.startsWith("+") } ?: "origin"
+        return RiskAssessment(RiskClass.OUTBOUND, "pushes to $remote", "git:$remote")
     }
 
     private fun httpClient(program: String, args: List<String>): RiskAssessment {
@@ -272,7 +262,8 @@ object ShellGuard {
         var method: String? = null
         var sendsData = false
         // wget's short flags mean other things (-T timeout, -d debug): only its long send flags count.
-        if (program == "wget") return if (args.any { it.substringBefore("=") in wgetSends } || args.any { it.startsWith("--method=") && it.substringAfter("=").uppercase() in writeMethods })
+        if (program == "wget") return if ((args.any { it.substringBefore("=") in wgetSends } || args.any { it.startsWith("--method=") && it.substringAfter("=").uppercase() in writeMethods }) &&
+            toPeople.containsMatchIn(args.joinToString(" ")))
             RiskAssessment(RiskClass.OUTBOUND, "POSTs to ${host ?: "a server"}", host) else RiskAssessment.SAFE
         args.forEachIndexed { i, a ->
             when {
@@ -293,6 +284,10 @@ object ShellGuard {
         }
         val writes = sendsData || method in writeMethods
         if (!writes) return RiskAssessment.SAFE
+        // money is judged on where it goes, not on words in a query (a hotel search has checkOut=…)
+        val where = args.flatMap { pageAddress.findAll(it).map { m -> m.value }.toList() }.joinToString(" ")
+        if (moneyWords.containsMatchIn(where)) return RiskAssessment(RiskClass.MONEY, "looks like a payment: ${method ?: "POST"}s to ${host ?: "a server"}", host)
+        if (!toPeople.containsMatchIn(args.joinToString(" "))) return RiskAssessment.SAFE
         return RiskAssessment(RiskClass.OUTBOUND, "${method ?: "POST"}s to ${host ?: "a server"}", host)
     }
 
@@ -412,33 +407,11 @@ object ShellGuard {
         return "/" + parts.joinToString("/")
     }
 
-    /**
-     * Free to delete: scratch space, and what is inside an app's folder — that is Momoding's own
-     * work (the app's code, kept in its git; what the app keeps for the person is not there). The
-     * app itself, removed whole, is the person's and asks.
-     */
-    private fun isScratch(path: String): Boolean =
-        scratchPrefixes.any { path.startsWith(it) } || path in setOf("/tmp", "/var/tmp", "/dev/shm") ||
-            (path.startsWith("$APPS/") && path.removePrefix("$APPS/").contains('/'))
+    /** The phone's own storage, mounted into the sandbox: the person's real files. */
+    private fun onPhone(path: String): Boolean = path == PHONE || path.startsWith("$PHONE/")
 
-    /** The roots nobody deletes in one go. */
-    private fun isWholeTree(path: String): Boolean = path in setOf(
-        "/", "/root", "/home", "/etc", "/usr", "/var", "/bin", "/lib", "/opt", "/var/minis", WORKSPACE, SHARED, "/var/minis/skills", "/var/minis/attachments", APPS,
-    ) || path == "/*"
-
-    /** The folder a standing grant is bound to. */
-    private fun folderOf(pathOrNull: String?): String? {
-        val path = pathOrNull?.let { resolve(it) } ?: return null
-        return when {
-            path.startsWith("$WORKSPACE/") || path == WORKSPACE -> WORKSPACE
-            path.startsWith("$SHARED/") || path == SHARED -> SHARED
-            path.startsWith("$PHONE/") || path == PHONE -> PHONE
-            else -> {
-                val parts = path.trim('/').split('/')
-                if (parts.size <= 2) "/" + parts.joinToString("/") else "/" + parts.take(2).joinToString("/")
-            }
-        }
-    }
+    /** Folders that hold the phone's storage: removing one whole removes it too. */
+    private val holdsPhone = setOf("/", "/var", "/var/minis", "/*")
 
     // ── tokenizing ─────────────────────────────────────────────────────────────────────────
 

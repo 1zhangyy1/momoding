@@ -10,7 +10,7 @@ import org.junit.Test
 import org.json.JSONObject
 import java.io.File
 
-/** A restorable workspace permission used only by an isolated counter fixture. */
+/** A restorable permission for the phone's files, used only by an isolated counter fixture. */
 class TranscriptFixtureSettingsTest {
     @Test fun configureOrRestoreOwnedFixture() {
         val args = InstrumentationRegistry.getArguments()
@@ -32,8 +32,8 @@ class TranscriptFixtureSettingsTest {
         val command = requireNotNull(args.getString("m41_transcript_command"))
         val assessment = ShellGuard.assess(command)
         assertEquals(RiskClass.DESTRUCTIVE, assessment.riskClass)
-        assertEquals(ShellGuard.WORKSPACE, assessment.target)
-        require(command.startsWith("rm -f /var/minis/workspace/m41-transcript-"))
+        assertEquals(ShellGuard.PHONE, assessment.target)
+        require(command.startsWith("rm -f /var/minis/mounts/phone/m41-transcript-"))
         require(command.contains("M41_TRANSCRIPT_EFFECT"))
         check(!snapshot.exists()) { "Restore the previous fixture before configuring another." }
         snapshot.writeText(JSONObject().put("existed", file.exists()).put("text", if (file.exists()) file.readText() else "").toString())
