@@ -13,8 +13,8 @@ class PromptBudgetTest {
 
     @Test fun `the main chat's instructions stay under their ceiling`() {
         val prompt = MomodingPrompt.build("Routines", MomodingPrompt.Inputs(
-            identity = identity, browserEnabled = false, memoryOn = true, skills = null, mcp = null,
-            recentNotes = null, aboutPerson = null, ladder = "", addenda = null, helpersEnabled = true,
+            identity = identity, browserEnabled = false, skills = null, mcp = null,
+            memory = null, ladder = "", addenda = null, helpersEnabled = true,
         ))
         assertTrue("main chat: ${prompt.length} characters", prompt.length <= MAIN_CHAT)
     }

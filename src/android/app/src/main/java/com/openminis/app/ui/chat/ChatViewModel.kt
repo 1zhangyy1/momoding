@@ -7689,7 +7689,7 @@ class ChatViewModel(
         origin: QueuedPromptOrigin? = null,
         prompt: QueuedPrompt,
     ): SubmitOutcome {
-        app.momoding.memory.UserFile.markTurnStart(context, realSessionId.ifEmpty { sessionId }) // momoding: "记住了" lines
+        app.momoding.memory.Memory.markTurnStart(context, realSessionId.ifEmpty { sessionId }) // momoding: "记住了" lines
         // [T-android-paste-mediaref] `[Pasted#N]` markers are NOT expanded here
         // any more.
         //
@@ -12318,18 +12318,16 @@ class ChatViewModel(
                     identity = com.openminis.app.agent.SystemPromptBuilder.identitySection(context),
                     browserEnabled = browserToolEnabled,
                     helpersEnabled = app.momoding.apps.MoApps.ofSession(context, sid) == null,
-                    memoryOn = memoryOn,
                     skills = skillRepository?.skillPromptFragment(activeSessionId),
                     mcp = mcpRepository?.mcpPromptFragment(activeSessionId),
-                    recentNotes = if (memoryOn) memoryRepository?.loadRecentDailyMemoryFragment() else null,
-                    aboutPerson = if (memoryOn) app.momoding.memory.UserFile.promptFragment(context) else null,
+                    memory = if (memoryOn) app.momoding.memory.Memory.promptFragment(context) else null,
                     ladder = app.momoding.hands.Hands.promptParagraph(context),
                     // an app's own Momoding is told which app it is; a main chat, what Momoding Apps are and which exist
                     addenda = listOfNotNull(
                         app.momoding.chat.SessionAddenda.forPrompt(sid),
                         app.momoding.apps.AppBots.standingNote(context, sid) ?: app.momoding.apps.AppBots.directory(context),
                     ).joinToString("\n\n").ifBlank { null },
-                    askName = memoryOn && app.momoding.memory.UserFile.shouldAskName(context),
+                    askName = memoryOn && app.momoding.memory.Memory.shouldAskName(context),
                 ),
             )
         }
@@ -12341,9 +12339,10 @@ class ChatViewModel(
     private fun momodingAfterTurn() {
         val sid = realSessionId.ifEmpty { sessionId }
         app.momoding.chat.SessionAddenda.onTurnFinished(sid)
-        // momoding: what this turn wrote into USER.md gets its "记住了：…" line under the reply,
-        // unless the reply carries the model's own momoding-remember block
-        val added = app.momoding.memory.UserFile.added(context, sid)
+        // momoding: what this turn wrote into memory gets its "记住了：…" line under the reply,
+        // unless the reply carries the model's own momoding-remember block; git keeps its history
+        val added = app.momoding.memory.Memory.added(context, sid)
+        if (_memoryEnabled.value) app.momoding.memory.MemoryGit.commitAfterTurn(context, sid, _messages.value.lastOrNull { it.role == "user" }?.content)
         val last = _messages.value.lastOrNull { it.role == "assistant" }
         val saidIt = last?.toolBlocks?.any { it.kind == "text" && it.content.contains("```momoding-remember") } == true ||
             last?.content?.contains("```momoding-remember") == true
@@ -12351,7 +12350,7 @@ class ChatViewModel(
             val at = (last?.completedAt ?: System.currentTimeMillis()) - 1
             added.forEach { app.momoding.guard.RuleHits.record(sid, it, app.momoding.guard.RuleHits.REMEMBER, at) }
         }
-        if (_memoryEnabled.value && app.momoding.memory.UserFile.shouldAskName(context)) app.momoding.memory.UserFile.markNameAsked(context) // momoding: asked once
+        if (_memoryEnabled.value && app.momoding.memory.Memory.shouldAskName(context)) app.momoding.memory.Memory.markNameAsked(context) // momoding: asked once
         // momoding: a turn that worked hard on the web teaches this phone's know-how, in the background (调研/M21)
         app.momoding.know.KnowHowLearner.afterTurn(context, activeSessionId, _messages.value.lastOrNull { it.role == "user" }?.content, last?.content)
     }

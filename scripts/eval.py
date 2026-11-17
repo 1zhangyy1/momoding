@@ -316,7 +316,7 @@ def main():
     label = sys.argv[1]
     names = sys.argv[2:] or list(CASES)
     relaunch()
-    # a clean slate: earlier runs leave notes, USER.md lines and routines that leak into later cases
+    # a clean slate: earlier runs leave memory and routines that leak into later cases
     for s in rpc("chat.sessions.list", {"limit": 500})["sessions"]:
         if s["title"].startswith(("eval-", "bench-")) or s["title"].startswith("Agent ·"):
             try:
@@ -324,7 +324,6 @@ def main():
             except RuntimeError:
                 pass  # a helper's chat goes with the chat that started it
     rpc("momoding.reset", {"confirm": True})
-    rpc("debug.shellExecute", {"command": "rm -f /var/minis/memory/USER.md"})
     # a few chats at a time: each case has its own chat, and most of the wait is the network
     with ThreadPoolExecutor(2) as pool:
         futures = {n: pool.submit(run_case, n, CASES[n]) for n in names}

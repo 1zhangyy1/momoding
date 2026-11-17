@@ -11,7 +11,7 @@ import app.momoding.guard.RiskPolicy
  *
  * Order is fixed and the stable part comes first, so the provider's prompt cache covers it:
  *   identity · your place · how you talk · how you act · cards · promised work · ask first ·
- *   the phone · tools · skills · time ‖ about the person · recent notes · the ladder · addenda
+ *   the phone · tools · skills · time ‖ memory · the ladder · addenda
  */
 object MomodingPrompt {
 
@@ -19,14 +19,11 @@ object MomodingPrompt {
         /** SOUL.md identity and personality (upstream's identity section). */
         val identity: String,
         val browserEnabled: Boolean,
-        val memoryOn: Boolean,
         /** Upstream's skill index (`<available_skills>…`), null when there are none. */
         val skills: String?,
         val mcp: String?,
-        /** Upstream's recent daily logs, null when empty or memory is off. */
-        val recentNotes: String?,
-        /** USER.md paragraph. */
-        val aboutPerson: String?,
+        /** The memory paragraph with MEMORY.md (app/momoding/memory), null when memory is off. */
+        val memory: String?,
         /** The hands ladder: whether the screen can be used now. */
         val ladder: String,
         /** Turn-limited addenda for this session (a routine's turn, …). */
@@ -58,22 +55,16 @@ object MomodingPrompt {
         append("Reply in the language the person writes in: the reply, link labels, options, next steps and routine labels. ")
         append("The examples in these instructions are mostly Chinese; they show the form, not the language.\n")
         // ── changes ─────────────────────────────────────────────────────────
-        i.aboutPerson?.takeIf { it.isNotBlank() }?.let { append("\n").append(it.trim()).append("\n") }
-        i.recentNotes?.takeIf { it.isNotBlank() }?.let {
-            append("\n## Recent notes\n")
-            append("Your notes from earlier. They record what was true then: a permission, an alarm, a calendar or an app may have changed since. ")
-            append("Before you tell the person how something stands now, check it again.\n")
-            append(it.trim()).append("\n")
-        }
+        i.memory?.takeIf { it.isNotBlank() }?.let { append("\n").append(it.trim()).append("\n") }
 
         append("\n").append(i.ladder.trim())
         i.addenda?.takeIf { it.isNotBlank() }?.let { append("\n\n").append(it.trim()) }
-        if (i.askName) append("\n\n").append(app.momoding.memory.UserFile.ASK_NAME_ADDENDUM)
+        if (i.askName) append("\n\n").append(app.momoding.memory.Memory.ASK_NAME_ADDENDUM)
     }
 
     /**
      * The language of this reply, said last, where the model weighs it most. The prompt's Chinese
-     * examples, notes and USER.md pulled English questions back to Chinese replies (a routine, a
+     * examples, notes and memory pulled English questions back to Chinese replies (a routine, a
      * remembered preference, next-step buttons), so the person's own script decides, in code.
      */
     internal fun languageLine(text: String?): String? {
@@ -180,7 +171,6 @@ Through shell_execute; `<command> --help` shows the options. They work in the ba
         if (i.browserEnabled || i.helpersEnabled) {
             append("  The sign-in card: ```momoding-handoff\n{\"site\": \"<e.g. 12306>\", \"what\": \"登录\"}\n```; for a QR code to scan add \"qr\": the screenshot's minis_url, and \"app\": the app that scans it (淘宝, 支付宝, 微信…).\n")
         }
-        if (i.memoryOn) append("- memory_write notes what happened today; memory_get searches earlier notes. Durable facts about the person go in USER.md (below).\n")
         append("- Settings the person may need (models, the hands, permissions): give the link [label](minis://settings/...) instead of changing them.")
     }
 }

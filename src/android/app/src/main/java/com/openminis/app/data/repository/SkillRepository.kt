@@ -1243,6 +1243,9 @@ class SkillRepository(private val context: Context) {
         // momoding: how a Momoding App works, for the Momoding that builds it (app/momoding/apps)
         runCatching { context.assets.open("momoding-skills-apps.md").bufferedReader().readText() }
             .getOrNull()?.let { installBundledSkill("momoding-apps", installed, it) }
+        // momoding: how the person's memory is laid out and kept (app/momoding/memory)
+        runCatching { context.assets.open("momoding-skills-memory.md").bufferedReader().readText() }
+            .getOrNull()?.let { installBundledSkill("memory", installed, it) }
         installSelfSkill()
     }
 

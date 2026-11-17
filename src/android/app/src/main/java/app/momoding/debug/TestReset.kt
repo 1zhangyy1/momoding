@@ -24,8 +24,10 @@ object TestReset {
         val routines = scheduled.list().onEach { scheduled.delete(it.id) }.size
 
         val memoryDir = File(context.filesDir, "minis-global/memory")
-        val notes = memoryDir.listFiles { f -> f.isFile && f.name.endsWith(".md") && f.name !in setOf("SOUL.md", "GLOBAL.md") }
-            .orEmpty().count { it.delete() }
+        // the person's memory, with its history; the identity and the site know-how stay
+        val notes = memoryDir.listFiles { f -> f.name !in setOf("SOUL.md", "GLOBAL.md", "know-how", "sites.json") }
+            .orEmpty().count { it.deleteRecursively() }
+        app.momoding.memory.Memory.migrate(context)
 
         val rules = Grants.always.value.onEach { Grants.revoke(it.key) }.size
         RuleHits.clear()

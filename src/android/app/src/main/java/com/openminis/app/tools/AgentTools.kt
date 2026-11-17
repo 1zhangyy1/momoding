@@ -43,10 +43,8 @@ object AgentTools {
             add(ReadImageTool.definition())
         }
         if (browserEnabled) add(browserUseDefinition())
-        if (memoryEnabled) {
-            if (!isHelper) add(memoryWriteDefinition())
-            add(memoryGetDefinition())
-        }
+        // momoding: memory is a folder of notes the agent reads and edits with its shell
+        // (app/momoding/memory), so upstream's memory_write / memory_get are not offered.
     }
 
     // Aligned with iOS AIChatViewModel.swift:4982-4993
@@ -127,35 +125,5 @@ object AgentTools {
         ),
         required = listOf("tool_title", "action"),
         propertyOrdering = listOf("tool_title", "action", "tab_id", "url", "selector", "text", "coordinate_x", "coordinate_y", "direction", "amount", "scroll_count", "item_selector", "script", "user_agent", "max_depth", "keywords", "fuzzy", "cookies", "timeout", "viewport_width", "viewport_height", "reset", "full_page"),
-    )
-
-    // Aligned with iOS AIChatViewModel.swift:5059-5067
-    private fun memoryWriteDefinition(): AgentToolDefinition = AgentToolDefinition(
-        name = "memory_write",
-        description = "Write a memory entry to today's daily log (YYYY-MM-DD.md). Memories persist across all sessions. " +
-            "Each entry is prepended with a timestamp. " +
-            "Save: user preferences, recurring patterns, key facts, project conventions, reusable knowledge. " +
-            "Avoid saving passwords, API keys, tokens, or secrets unless the user explicitly confirms after being warned. " +
-            "Keep entries concise and general-purpose. GLOBAL.md is read-only (user-maintained via Settings).",
-        parameters = mapOf(
-            "tool_title" to AgentToolParam("string", "A concise 5-10 word summary of what this tool call does, shown to the user (e.g. 'Save user preference for Python', 'Note today's project context'). Use the same language as the user."),
-            "content" to AgentToolParam("string", "The memory content to write. Use concise Markdown with a short heading (## Topic) and context about what was done/learned."),
-        ),
-        required = listOf("tool_title", "content"),
-        propertyOrdering = listOf("tool_title", "content"),
-    )
-
-    // Aligned with iOS AIChatViewModel.swift:5069-5078
-    private fun memoryGetDefinition(): AgentToolDefinition = AgentToolDefinition(
-        name = "memory_get",
-        description = "Retrieve memories from persistent storage. Supports keyword-based fuzzy search across memory files. " +
-            "Returns matching lines with surrounding context. Use this to recall previous knowledge, user preferences, or past notes.",
-        parameters = mapOf(
-            "tool_title" to AgentToolParam("string", "A concise 5-10 word summary of what this tool call does, shown to the user (e.g. 'Recall user preferences', 'Search past notes'). Use the same language as the user."),
-            "scope" to AgentToolParam("string", "Memory scope to search: 'daily' for daily logs only, 'all' for daily logs + GLOBAL.md.", enumValues = listOf("daily", "all")),
-            "keywords" to AgentToolParam("string", "Space-separated keywords for fuzzy matching (e.g. 'python preference' or 'API key setup'). All keywords must appear in a line or its surrounding context for a match. Leave empty to return full memory files."),
-        ),
-        required = listOf("tool_title"),
-        propertyOrdering = listOf("tool_title", "scope", "keywords"),
     )
 }
