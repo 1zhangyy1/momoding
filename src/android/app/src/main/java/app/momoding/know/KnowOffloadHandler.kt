@@ -14,6 +14,7 @@ import org.json.JSONObject
  *     momoding-know lookup <site or words>
  *     momoding-know site <domain> --flow "<errand>" --outcome worked|walled|partial --how "<what worked or stopped you>"
  *     momoding-know lesson --topic <topic> "<where to look and how>" [--replaces "<start of the line it supersedes>"]
+ *     momoding-know tool --name <name> --file <script> --what "<what it does>" --usage "<how to run it>" [--site <domain>]
  *     momoding-know topics
  *     momoding-know install <community skill>
  *     momoding-know share --name <skill-name> --file <SKILL.md you wrote>
@@ -31,6 +32,7 @@ class KnowOffloadHandler(private val context: Context) : NativeOffloadHandler {
                 "lookup" -> lookup(args.positional.drop(1).joinToString(" "))
                 "site" -> site(args)
                 "lesson" -> lesson(args)
+                "tool" -> tool(args, request)
                 "topics" -> ok(JSONObject().put("topics", JSONArray(KnowHow.areas(context))))
                 "install" -> install(args.positional.getOrNull(1))
                 "share" -> when (args.positional.getOrNull(1)) {
@@ -47,9 +49,11 @@ class KnowOffloadHandler(private val context: Context) : NativeOffloadHandler {
         val now = System.currentTimeMillis()
         val sites = SiteLedger.lookup(context, query)
         val lessons = KnowHow.lookup(context, query)
+        val tools = KnowTools.lookup(context, query)
         val installed = (context.applicationContext as? com.openminis.app.MinisApp)?.skillRepository?.skills?.value?.map { it.id }?.toSet().orEmpty()
         val community = CommunitySkills.match(CommunitySkills.index(context), query)
         return ok(JSONObject()
+            .put("tools", JSONArray().apply { tools.forEach { put(KnowTools.render(it)) } })
             .put("sites", JSONArray().apply { sites.forEach { e -> SiteLedger.render(e, now)?.let { put(it) } } })
             .put("lessons", JSONArray(lessons))
             .put("community", JSONArray().apply {
@@ -58,7 +62,8 @@ class KnowOffloadHandler(private val context: Context) : NativeOffloadHandler {
                         .put(if (c.name in installed) "read" else "install", if (c.name in installed) "/var/minis/skills/${c.name}/SKILL.md" else "momoding-know install ${c.name}"))
                 }
             })
-            .put("note", "Your own records win over community skills; no record means unknown, not blocked."))
+            .put("note", (if (tools.isNotEmpty()) "A tool of yours did this errand before: run it first; if the site changed, fix it and keep it again. " else "") +
+                "Your own records win over community skills; no record means unknown, not blocked."))
     }
 
     private fun site(args: OffloadArgs): NativeOffloadResult {
@@ -74,6 +79,15 @@ class KnowOffloadHandler(private val context: Context) : NativeOffloadHandler {
         val line = args.positional.drop(1).joinToString(" ")
         if (!KnowHow.add(context, topic, line, args.get("replaces"))) return NativeOffloadResult(2, "not recorded: a short lesson about where and how, nothing secret\n")
         return ok(JSONObject().put("recorded", KnowHow.slug(topic)))
+    }
+
+    private fun tool(args: OffloadArgs, request: NativeOffloadRequest): NativeOffloadResult {
+        val name = args.get("name").orEmpty()
+        val path = args.get("file") ?: return NativeOffloadResult(2, "momoding-know tool --name <name> --file <script> --what … --usage …\n")
+        val script = readSandboxFile(path, request) ?: return NativeOffloadResult(2, "cannot read $path (a file under 64 KB)\n")
+        val t = KnowTools.save(context, name, path.substringAfterLast('.', "sh"), script, args.get("what").orEmpty(), args.get("usage").orEmpty(), args.get("site"))
+            ?: return NativeOffloadResult(2, "not kept: give --name (letters and digits), --what and --usage\n")
+        return ok(KnowTools.render(t).put("kept", true))
     }
 
     private fun install(name: String?): NativeOffloadResult {
@@ -107,7 +121,9 @@ class KnowOffloadHandler(private val context: Context) : NativeOffloadHandler {
 
     private fun readSandboxFile(path: String, request: NativeOffloadRequest): String? {
         val linux = if (path.startsWith("/")) path else request.cwd.trimEnd('/') + "/" + path
-        val host = request.sessionId?.let { com.openminis.app.sandbox.PRootKernel.resolveSessionHostPath(it, linux, context) }
+        // a helper's /var/minis is its parent's (ExecutionCoordinator.mountedSessionIdFor)
+        val host = request.sessionId?.let { com.openminis.app.sandbox.ExecutionCoordinator.mountedSessionIdFor(it) }
+            ?.let { com.openminis.app.sandbox.PRootKernel.resolveSessionHostPath(it, linux, context) }
             ?: com.openminis.app.sandbox.PRootKernel.resolveHostPath(linux)
         return host?.takeIf { it.isFile && it.length() < 64_000 }?.readText()
     }
@@ -121,6 +137,8 @@ class KnowOffloadHandler(private val context: Context) : NativeOffloadHandler {
               lookup <site or words>     your records of sites and your lessons that match
               site <domain> --flow "<errand>" --outcome worked|walled|partial --how "<what worked, or what stopped you>"
               lesson --topic <topic> "<where to look and how>" [--replaces "<start of the line it supersedes>"]
+              tool --name <name> --file <script> --what "<what it does>" --usage "<how to run it>" [--site <domain>]
+                                         keep a script that did an errand, to run it next time
               topics                     topics that have lessons
               install <skill>            install a community skill that lookup found, then read it
               share --name <skill-name> --file <SKILL.md>
@@ -128,6 +146,11 @@ class KnowOffloadHandler(private val context: Context) : NativeOffloadHandler {
                                          reviewed before it is merged); share off / share on
 
             Keep where and how only: never prices, dates, results or personal details.
+
+            A script that got an errand done (a site's API, parsing its answer) is worth more than
+            a lesson in words: keep it with `tool`, with what changes each time (a date, a city)
+            as arguments, nothing personal inside. lookup lists it; next time run it instead of
+            working the site out again. If it no longer works, fix it and keep it again.
 
             Record a site when it worked or walled you off; a route worth reusing, or how the person
             wants it done ("火车票直接去 12306 查"), is a lesson. When a route of yours has worked at
