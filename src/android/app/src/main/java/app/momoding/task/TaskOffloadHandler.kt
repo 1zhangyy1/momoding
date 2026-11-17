@@ -14,6 +14,7 @@ import org.json.JSONObject
  *
  *     momoding-task new --to helper|bot:<name> --title "<a few words>" "<what to do>"   (a chat) hand work on
  *     momoding-task tell <id> "<words>"                                          (a chat) more for that hand
+ *     momoding-task tell "<words>"                                               (a hand) a word for that chat, working on
  *     momoding-task report progress|ask|done|failed "<words>"                    (a hand) on the task it is on
  *
  * Who may use which is decided by the calling session: a chat hands work on, a hand reports.
@@ -58,7 +59,14 @@ class TaskOffloadHandler(private val context: Context) : NativeOffloadHandler {
             .put("note", "It has its own line in this chat and reports back here when there is a result, a question or a problem; no need to wait or check."))
     }
 
+    /** Agents talk with tell both ways: a chat to the hand of one of its tasks, a hand to the chat it works for. */
     private fun tell(args: OffloadArgs, sid: String, call: ToolCall?): NativeOffloadResult {
+        if (runBlocking { TaskEngine.dao(context).heldBy(sid) } != null) {
+            val text = args.positional.drop(1).joinToString(" ").trim()
+            require(text.isNotEmpty()) { "momoding-task tell \"<words>\"" }
+            val task = runBlocking { TaskEngine.report(context, sid, TaskEngine.Report.TELL, text) }
+            return ok(JSONObject().put("task", task.id).put("state", task.state.lowercase()))
+        }
         val id = args.positional.getOrNull(1) ?: throw IllegalArgumentException("momoding-task tell <id> \"<words>\"")
         val text = args.positional.drop(2).joinToString(" ").trim()
         require(text.isNotEmpty()) { "momoding-task tell $id \"<words>\"" }
@@ -69,7 +77,7 @@ class TaskOffloadHandler(private val context: Context) : NativeOffloadHandler {
     }
 
     private fun report(args: OffloadArgs, sid: String): NativeOffloadResult {
-        val kind = args.positional.getOrNull(1)?.let { k -> TaskEngine.Report.entries.firstOrNull { it.name.equals(k, true) } }
+        val kind = args.positional.getOrNull(1)?.let { k -> TaskEngine.Report.entries.firstOrNull { it != TaskEngine.Report.TELL && it.name.equals(k, true) } }
             ?: throw IllegalArgumentException("momoding-task report progress|ask|done|failed \"<words>\"")
         val text = args.positional.drop(2).joinToString(" ").trim()
         require(text.isNotEmpty()) { "momoding-task report ${kind.name.lowercase()} \"<words>\"" }
@@ -128,6 +136,7 @@ class TaskOffloadHandler(private val context: Context) : NativeOffloadHandler {
                                    to its question); a task that is done picks up again
 
             From a hand, on the task it is on:
+              tell "<words>"                        a word for the chat now, while you keep working
               report progress "<where it stands>"   updates the task's line; sends no message
               report ask "<question>"               the chat asks the person
               report done "<what came of it>"

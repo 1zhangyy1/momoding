@@ -35,7 +35,8 @@ object TaskEngine {
     /** In a command's result: work went to another hand, which reports back on its own (调研/M50 T1). */
     const val HANDED_ON = "handed_on"
 
-    enum class Report { PROGRESS, ASK, DONE, FAILED }
+    /** [TELL]: a word for the chat while the hand keeps working (Grok Bot's WakeParent); the task goes on. */
+    enum class Report { PROGRESS, TELL, ASK, DONE, FAILED }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _active = MutableStateFlow<List<TaskEntity>>(emptyList())
@@ -249,7 +250,7 @@ object TaskEngine {
         }
         val now = System.currentTimeMillis()
         val draft = when (kind) {
-            Report.PROGRESS -> task.copy(progress = text.lineSequence().first().take(120))
+            Report.PROGRESS, Report.TELL -> task.copy(progress = text.lineSequence().first().take(120))
             Report.ASK -> task.copy(state = TaskEntity.State.WAITING.name, ask =
                 if (Approval.pending(task.ask).isNotEmpty()) JSONObject(task.ask!!).put("question", text).toString()
                 else JSONObject().put("question", text).put("screen", task.ask?.let { runCatching { JSONObject(it).optString("screen") }.getOrNull() }?.takeIf { it.isNotBlank() }).toString())
@@ -297,10 +298,10 @@ object TaskEngine {
         val (open, ended) = db.withTransaction { dao(context).openIn(conversation) to dao(context).endedIn(conversation) }
         if (open.isEmpty() && ended.isEmpty()) return null
         return buildString {
-            append("## Tasks\nWork tracked in this chat. A message starting $REPORT_CUE<id> · <hand> · done|ask|failed|stopped] is that task's result, not the person, and the person has not seen it. ")
+            append("## Tasks\nWork tracked in this chat. A message starting $REPORT_CUE<id> · <hand> · tell|done|ask|failed|stopped] is from that task, not the person, and the person has not seen it; a tell comes while the hand keeps working, and more may follow. ")
             append("When it is new and relevant, tell them what came of it in a line or two, starting with which task it was (with a link to open a Momoding's app when there is something to see); for an ask, ask the person; for a failure, say what stopped it and what you propose. ")
             append("When its text starts ${AppBots.FROM_CUE}<name>], those are that Momoding's own words: start your reply with the same tag and pass its words on unchanged, adding only what the person needs from you. ")
-            append("A result that is stale, a duplicate or that nobody is waiting on needs no word: ${app.momoding.chat.Quiet.HOW} The person's own message always gets an answer, even a few words (\"好，不查了\"). ")
+            append("Tell the person only what is new to them; what adds nothing new, is stale, or nobody is waiting on needs no word: ${app.momoding.chat.Quiet.HOW} The person's own message always gets an answer, even a few words (\"好，不查了\"). ")
             append("A command_result is a background tool result for the current task: use it to continue before reporting the task done. ")
             append("Their answer, or anything more they want of a task, goes to its hand with `momoding-task tell <id> \"<their words>\"`. ")
             append("When they make a task wait on their word (\"check with me first\", \"only cancel if it can be refunded\"), `momoding-task hold <id> \"<their words>\"`; ")

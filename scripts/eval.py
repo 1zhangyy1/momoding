@@ -8,48 +8,75 @@ what the person would see:
   answered  the person's last message got a visible reply (not only the quiet block)
   lang      every visible line is in the language of the person's message
   leak      no command names, paths or task ids in what the person sees
-  handoff   the work was handed on (True) or done right here (False), as the case expects
+  handoff   the work was handed on (True) or done right here (False), as the case expects; where it
+            does not matter to the person, only `handed` is recorded
   calls     at most this many model calls for the first turn
   first     the first visible words came within this many seconds
+  answer    (pattern, seconds): the first visible words that answer it came this soon
   has/not   a visible reply matches / does not match a pattern (dates, numbers)
   cmd       a command the main chat ran matches a pattern
 
 Usage: scripts/eval.py LABEL [case ...]   (needs `adb forward tcp:5321 tcp:5321`)
 Results go to ~/.momoding-dev/eval/LABEL.json; compare two runs with `scripts/eval.py --diff A B`.
-The dates assume the device clock: cases are written for the week of Monday 2026-11-16.
+Dates and weekdays are checked against the emulator's own date.
 """
 import json, os, re, sys, time, urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
-# today is Monday 2026-11-16; "this Saturday" is the 21st, "tomorrow" the 17th
-CASES = {
+def device_day():
+    """The emulator's date: the date and weekday cases are checked against it, not a fixed day."""
+    import datetime, subprocess
+    try:
+        out = subprocess.run(["adb", "-s", "emulator-5554", "shell", "date", "+%F"], capture_output=True, text=True, timeout=10).stdout.strip()
+        return datetime.date.fromisoformat(out)
+    except Exception:
+        return datetime.date.today()
+
+
+def build_cases(today):
+    import datetime
+    tomorrow = today + datetime.timedelta(days=1)
+    sat = today + datetime.timedelta(days=(5 - today.weekday()) % 7)
+    off = "|".join(str((sat + datetime.timedelta(days=k)).day) for k in (-1, 1, 2, 6, 7))
+    wrong_sat = rf"(?<!\d)({off})\s*[日号]|{sat.month}月({off})(?!\d)"
+    others = "".join(c for i, c in enumerate("一二三四五六日") if i != today.weekday()) + ("天" if today.weekday() != 6 else "")
+    t, s1, d = today.day, sat.day, tomorrow.day
+    return {
     "greet":     {"say": ["你好"], "handoff": False, "calls": 1},
     "math":      {"say": ["37 乘以 48 等于多少"], "handoff": False, "calls": 1, "has": r"1,?776"},
-    "today":     {"say": ["今天几号，星期几"], "handoff": False, "calls": 1, "has": r"16", "not": r"星期[二三四五六日天]|周[二三四五六日天]"},
-    "saturday":  {"say": ["这周六是几号"], "handoff": False, "calls": 1, "has": r"21", "not": r"2[02378]\s*[日号]"},
+    "today":     {"say": ["今天几号，星期几"], "handoff": False, "calls": 1, "has": rf"(?<!\d){t}(?!\d)", "not": rf"星期[{others}]|周[{others}]"},
+    "saturday":  {"say": ["这周六是几号"], "handoff": False, "calls": 1, "has": rf"(?<!\d){s1}(?!\d)", "not": wrong_sat},
     "abilities": {"say": ["你都能帮我做什么"], "handoff": False, "calls": 1},
     "vague":     {"say": ["帮我看看"], "handoff": False, "calls": 1},
     "fact":      {"say": ["珠穆朗玛峰有多高"], "handoff": False, "calls": 2, "has": r"8,?84[89]"},
     "allergy":   {"say": ["我对花生过敏，记一下"], "handoff": False, "calls": 3},
     "battery":   {"say": ["我手机现在还有多少电"], "handoff": False, "calls": 3, "has": r"\d+\s*%"},
     "remind":    {"say": ["明天下午三点提醒我给妈妈打电话"], "handoff": False, "calls": 3,
-                  "has": r"(明天|17).*(三点|3\s*点|15[:：]00)|(三点|3\s*点|15[:：]00).*(明天|17)"},
+                  "has": rf"(明天|{d}).*(三点|3\s*点|15[:：]00)|(三点|3\s*点|15[:：]00).*(明天|{d})"},
     "routine":   {"say": ["以后每天早上八点给我一份北京的天气简报"], "handoff": False, "calls": 6,
                   "has": r"(八点|8\s*点|8[:：]00)"},
-    "train":     {"say": ["查一下这周六北京到上海最早的一班高铁"], "handoff": True, "first": 5,
-                  "not": r"2[02378]\s*[日号]|11月2[02378]"},
-    "duck":      {"say": ["帮我比较一下北京评分最高的三家烤鸭店，人均多少、要不要排队"], "handoff": True, "first": 5},
+    "train":     {"say": ["查一下这周六北京到上海最早的一班高铁"], "first": 5, "answer": (r"\b[GDC]\d{1,4}\b", 30), "not": wrong_sat},
+    "duck":      {"say": ["帮我比较一下北京评分最高的三家烤鸭店，人均多少、要不要排队"], "first": 5},
     "phones":    {"say": ["派个帮手去查一下 iPhone 18 和 Pixel 11 哪个续航更好，给我结论"], "handoff": True, "first": 5},
-    "trip":      {"say": ["这周六我要去上海玩两天，帮我把高铁和酒店都查好，做个行程"], "handoff": True, "first": 5,
-                  "not": r"2[02378]\s*[日号]|11月2[02378]"},
+    "trip":      {"say": ["这周六我要去上海玩两天，帮我把高铁和酒店都查好，做个行程"], "first": 5},
     "english":   {"say": ["What's the weather like in Beijing tomorrow?"]},
     "japanese":  {"say": ["明日の東京の天気はどうですか？"]},
     # a second message while the first is still being worked on
-    "aside":     {"say": ["查一下这周六北京到上海最早的一班高铁", (4, "对了，12 乘 12 是多少")], "handoff": True,
-                  "has": r"144", "aside_first": 10},
-    "cancel":    {"say": ["帮我比较一下北京评分最高的三家烤鸭店，人均多少、要不要排队", (6, "算了，别查了")], "handoff": True, "tasks": False},
+    "aside":     {"say": ["查一下这周六北京到上海最早的一班高铁", (4, "对了，12 乘 12 是多少")], "has": r"144", "aside_first": 10},
+    "cancel":    {"say": ["帮我比较一下北京评分最高的三家烤鸭店，人均多少、要不要排队", (6, "算了，别查了")], "tasks": False},
     "thanks":    {"say": ["明天下午三点提醒我给妈妈打电话", (0, "谢谢")], "handoff": False},
-}
+    # longer work, and talking while it runs
+    "status":    {"say": ["帮我比较一下北京评分最高的三家烤鸭店，人均多少、要不要排队", (10, "查到哪了？")], "first": 5, "aside_first": 10},
+    "redirect":  {"say": ["帮我查一下这周六北京到上海的高铁和机票，比较一下哪个划算", (8, "算了，只看高铁就行")], "first": 5, "aside_first": 10},
+    "flight":    {"say": ["查一下下周五北京飞上海最便宜的机票"], "first": 5},
+    "news":      {"say": ["帮我总结一下这两天关于 DeepSeek 的新闻，挑三条最重要的"], "first": 5},
+    "weekend":   {"say": ["这周六北京天气怎么样，顺便看下故宫要不要提前预约"], "first": 5},
+    "guide":     {"say": ["帮我写一份上海两日游攻略，存成文件给我"], "first": 5},
+    "ramen":     {"say": ["Find the three best-rated ramen places in Shinjuku, with prices"], "first": 5},
+    }
+
+
+CASES = build_cases(device_day())
 
 # what the person must never see: command names, paths, task ids, tool plumbing
 LEAK = re.compile(r"momoding-[a-z]+|/var/minis|shell_execute|browser_use|handed_on|[A-Z]+\.md\b|\bcurl\b|"
@@ -112,12 +139,16 @@ def has_han(s):
 
 
 def language(s):
-    s = QUIET.sub("", s)
-    if re.search(r"[぀-ヿ]", s):
+    """The script most of the text is in: an English reply may name a place in Japanese."""
+    s = CARD.sub("", QUIET.sub("", s))
+    kana = len(re.findall(r"[぀-ヿ]", s))
+    han = sum(1 for c in s if '一' <= c <= '鿿')
+    latin = len(re.findall(r"[A-Za-z]", s))
+    if kana and (kana + han) * 2 >= latin:
         return "ja"
-    if has_han(s):
+    if han and han * 2 >= latin:
         return "zh"
-    return "en" if re.search(r"[A-Za-z]{3}", s) else None
+    return "en" if latin >= 3 else None
 
 
 def visible(msgs, person):
@@ -167,7 +198,8 @@ def settle(sid, timeout, tasks=True):
         if not busy and tasks:
             msgs = messages(sid)
             _, handed = commands(msgs, 0, len(msgs))
-            back = sum(1 for m in msgs if m["role"] == "user" and "".join(texts(m)).startswith("[task "))
+            back = sum(1 for m in msgs if m["role"] == "user" and "".join(texts(m)).startswith("[task ")
+                       and "· tell]" not in "".join(texts(m)).split("]", 1)[0] + "]")
             busy = handed > back
         if busy:
             quiet_since = None
@@ -226,6 +258,13 @@ def run_case(name, case):
     if "aside_first" in case:
         ans = next((t for i, t, _ in seen if i > last_p), None)
         checks["aside_first"] = ans is not None and (ans - msgs[last_p]["createdAt"]) / 1000 <= case["aside_first"]
+    useful = next((t for i, t, w in seen if i > first_p and len(w) >= 40), None)
+    answer_s = None
+    if "answer" in case:
+        pattern, limit = case["answer"]
+        at = next((t for i, t, w in seen if i > first_p and re.search(pattern, w)), None)
+        answer_s = round((at - msgs[first_p]["createdAt"]) / 1000, 1) if at else None
+        checks["answer"] = answer_s is not None and answer_s <= limit
     joined = "\n".join(words)
     if "has" in case:
         checks["has"] = bool(re.search(case["has"], joined))
@@ -240,6 +279,9 @@ def run_case(name, case):
         "timed_out": timed_out,
         "first": round((first_seen - msgs[first_p]["createdAt"]) / 1000, 1) if first_seen else None,
         "calls": len(turn1),
+        "answer": answer_s,
+        "useful": round((useful - msgs[first_p]["createdAt"]) / 1000, 1) if useful else None,
+        "done": round((seen[-1][1] - msgs[first_p]["createdAt"]) / 1000, 1) if seen else None,
         "handed": handed,
         "slips": slips,
         "leaks": leaks,
@@ -256,7 +298,7 @@ def show(label, results):
     for name, r in results.items():
         bad = [k for k, v in r["checks"].items() if not v] + (["timeout"] if r["timed_out"] else [])
         mark = "✓" if r["pass"] else "✗"
-        print(f"{mark} {name:10} first={r['first']!s:>5} calls={r['calls']:<2} {'FAIL ' + ','.join(bad) if bad else ''}")
+        print(f"{mark} {name:10} first={r['first']!s:>5} useful={r.get('useful')!s:>5} done={r.get('done')!s:>5} answer={r.get('answer')!s:>5} handed={r.get('handed')} calls={r['calls']:<2} {'FAIL ' + ','.join(bad) if bad else ''}")
         if bad:
             print(f"    said: {' / '.join(r['said'])[:240]}")
 
