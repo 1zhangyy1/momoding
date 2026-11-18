@@ -229,17 +229,11 @@ object Hands {
         val r = readiness(context)
         val handsName = com.openminis.app.i18n.LocaleWrap.uiContext(context).getString(com.openminis.app.R.string.mo_hands_title)
         return buildString {
-            append("## Apps without an API — the ladder (Momoding)\n")
-            append("Most everyday apps here (12306, 微信, 支付宝, 美团, 淘宝, 京东…) have no API. Climb in this order (never mention the order, rungs or levels to the person): ")
-            append("(1) a skill, a CLI or an MCP server, and `momoding-web` for public pages; (2) a page that needs the user's login, clicks or scripts, through a helper with the browser; (3) the phone's own screen, last. ")
-            append("A task is rarely all screen: find the number with a command, the button with the screen, and ask before it is pressed. ")
-            append("Use the screen only for a step that needs an app's screen; never to look around the phone or for a routine's trial run. When the person asks you to open an app or a page and look, open it with the screen and answer from what it shows.\n")
+            append("## Apps without an API (Momoding)\n")
+            append("Most everyday apps here (12306, 微信, 支付宝, 美团, 淘宝…) have no API. Prefer a skill, a command or `momoding-web`; a page that needs the person's login goes to a helper with the browser; the phone's screen comes last, only for the step that needs an app's screen.\n")
             if (on && r.ready) {
-                append("The screen is available: `momoding-hands run --task \"<one clear task, with every detail the hands need>\" [--app \"<app name>\"]` ")
-                append("(screen model: ${r.model?.label}). It reads the screen's elements (a screenshot when they are not enough) and taps, types and swipes; a capsule with Stop shows the user what it does. ")
-                append("It never types passwords, codes or card numbers: for a login or a code it hands the phone to the user and waits. Taps that pay, send, post or delete go through the same approval card as the shell and the browser. ")
-                append("It returns a saved task id immediately; a busy screen queues it. Its result arrives here automatically: `outcome` is done (with `answer`), stopped (the user tapped Stop — do not restart it), needs_user (`question` — relay it and wait), infeasible or failed (with `message`); `last_screen` is a picture you can show with `![screen](<last_screen>)`; `done` lists the taps that paid, sent or deleted and went through — report those as done whatever the outcome. ")
-                append("Do not repeat it, wait or poll. Update it with `momoding-task tell <id>` and stop it with `momoding-task stop <id>`. Tell the user in one line that you are about to use the screen and which app, then run it; give one task per run, and never a payment as the task. `momoding-hands apps` lists the installed apps; `momoding-hands status` says what is set up.")
+                append("The screen is available: `momoding-hands run --task \"<one clear task, with every detail>\" [--app \"<app name>\"]` (screen model: ${r.model?.label}; `momoding-hands --help` has the rest). ")
+                append("Say in one line which app you are about to use; one task per run, never a payment. It hands the phone to the person for a login or a code, and its taps that pay, send or delete go through the approval card. Its result comes back here as a task; report what it says was done.")
             } else if (on) {
                 val missing = buildList {
                     if (!r.androidOk) add("Android 11 or newer")
@@ -247,9 +241,9 @@ object Hands {
                     if (!r.overlayOk) add("no permission to draw over other apps")
                     if (r.model == null) add("no model that can see pictures")
                 }.joinToString(", ")
-                append("The screen is switched on but not usable yet ($missing). If a task needs it, say so in one line and give the link [$handsName]($DEEP_LINK) (label in the person's language) — it opens the setting; do not try android-a11y-cli instead.")
+                append("The screen is switched on but not usable yet ($missing). If a task needs it, say so in one line with the link [$handsName]($DEEP_LINK).")
             } else {
-                append("Operating the phone's screen is switched off (the default). If a task can only be done on the screen, say so in one line and give the link [$handsName]($DEEP_LINK) (label in the person's language) so the user can switch it on; do not try android-a11y-cli instead, and do not pretend.")
+                append("Operating the phone's screen is switched off (the default). If a task can only be done on the screen, say so in one line with the link [$handsName]($DEEP_LINK).")
             }
             // the phone's own files: one switch away; once on, the whole storage is mounted for the shell
             if (app.momoding.files.PhoneFiles.allowed()) {

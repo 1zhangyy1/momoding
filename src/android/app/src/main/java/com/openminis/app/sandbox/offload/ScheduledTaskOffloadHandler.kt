@@ -638,6 +638,18 @@ class ScheduledTaskOffloadHandler(private val context: Context) : NativeOffloadH
               A failing command is not a failed task: the model sees its output and exit
               status and decides what to do (explain, retry, or report).
 
+            WRITING ONE WELL:
+              A one-off reminder is not a task: later today, an alarm (android-alarm); another
+              day, a calendar event with --alarm.
+              Something to do when a text or notification arrives is --app/--match, never
+              polling; match the words as such texts are written (both languages when unsure,
+              e.g. "取件码|快递|pickup code").
+              Write --prompt in four lines, labelled in the person's language (做什么：/
+              什么时候：/ 何时告诉我：/ 不要：); tell them only when there is news or they
+              are needed.
+              A repeating task that reports something: do it once now, so they see what they
+              will get. A plain reminder needs no trial run.
+
             Tasks are kept by the system alarm service: they fire even when Minis is in the
             background or closed, and survive a reboot (a force-stop pauses them until the
             app is next opened).

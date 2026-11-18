@@ -187,6 +187,11 @@ The screen model sees screenshots only. It never types passwords or codes (the u
 pay, send, post or delete wait for the same approval card as the shell and the browser. Off by default:
 Settings → Hands. run returns a saved task id immediately, queues when the screen is busy and reports back here.
 Exit codes: 0 accepted · 2 usage · 3 off or not ready. Use momoding-task tell <id> to update it or stop <id> to stop it.
+
+Its result: outcome done (with answer), stopped (the user tapped Stop: do not restart it), needs_user (a
+question: relay it and wait), infeasible or failed (with message). last_screen is a picture to show as
+![screen](<last_screen>); done lists the taps that paid, sent or deleted and went through: report those as done
+whatever the outcome. Do not repeat a run, wait or poll.
 """
     }
 }
