@@ -2938,6 +2938,9 @@ class ChatViewModel(
 
     @Volatile private var preparedSummary: PreparedSummary? = null
 
+    /** momoding: memory in the prompt, rendered afresh only when a compaction starts a new period. */
+    private val frozenMemory = app.momoding.memory.FrozenMemory()
+
     /** Still on top of the latest marker, and its anchor is still in this history (no revert or edit took it). */
     private fun PreparedSummary.fits(history: List<LLMMessage>): Boolean =
         afterMarkerId == _cachedLatestMarker?.id && anchorIdx(history) >= 0
@@ -12384,7 +12387,7 @@ class ChatViewModel(
                     helpersEnabled = app.momoding.apps.MoApps.ofSession(context, sid) == null,
                     skills = skillRepository?.skillPromptFragment(activeSessionId),
                     mcp = mcpRepository?.mcpPromptFragment(activeSessionId),
-                    memory = if (memoryOn) app.momoding.memory.Memory.promptFragment(context) else null,
+                    memory = if (memoryOn) frozenMemory.get(_cachedLatestMarker?.id) { app.momoding.memory.Memory.promptFragment(context) } else null,
                     ladder = app.momoding.hands.Hands.promptParagraph(context),
                     // an app's own Momoding is told which app it is; a main chat, what Momoding Apps are and which exist
                     addenda = listOfNotNull(

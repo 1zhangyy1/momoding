@@ -51,6 +51,20 @@ class MemoryTest {
     }
 }
 
+/** momoding: memory in the prompt changes only when a compaction starts a new period. */
+class FrozenMemoryTest {
+    @Test fun `rendered once per compaction period`() {
+        val frozen = FrozenMemory()
+        var renders = 0
+        val render = { renders++; "memory v$renders" }
+        assertEquals("memory v1", frozen.get(null, render))
+        assertEquals("memory v1", frozen.get(null, render)) // a line saved meanwhile does not show
+        assertEquals("memory v2", frozen.get("marker-1", render)) // compaction: afresh
+        assertEquals("memory v2", frozen.get("marker-1", render))
+        assertEquals(2, renders)
+    }
+}
+
 /** momoding: the background reflection's input, output and how it writes. */
 class MemoryReflectTest {
     @get:Rule val tmp = TemporaryFolder()
