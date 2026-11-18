@@ -175,6 +175,12 @@ class ChatViewModel(
          */
         internal const val MAX_COMPACT_LLM_CALLS = 6
 
+        /** momoding: how much of the history the summary model reads, about 100K tokens of Chinese. */
+        private const val SUMMARY_INPUT_CHARS = 200_000
+
+        /** momoding: the compacted history, word for word, in the session's sandbox folder. */
+        private const val TRANSCRIPT_FILE = "transcript.md"
+
         /**
          * [T-compact-idle-timeout] How long compaction may go WITHOUT receiving
          * any new stream data before it is declared stuck.
@@ -2957,6 +2963,7 @@ class ChatViewModel(
         val existing = _compactSummary.value
         val p = PreparedSummary(_cachedLatestMarker?.id, anchorId)
         AppLogger.info(TAG, "[Compact] background: summarizing ${toCompact.size} entries")
+        compactCallsIssued.set(0) // its own call budget, like a compaction's
         p.job = viewModelScope.launch(Dispatchers.IO) {
             p.text = runCatching {
                 withTimeout(COMPACT_MAX_TOTAL_MS) { generateCompactSummaryWithSplitting(toCompact, existing, 0) }.trim().ifEmpty { null }
@@ -3274,6 +3281,7 @@ class ChatViewModel(
                 if (markerPersisted) {
                     rollbackMarkerId = marker.id
                     previousMarker = priorMarkerBeforeCompact
+                    writeTranscript(sid, history.subList(0, verifiedAnchorIdx + 1))
                 }
                 _compactSummary.value = summary
                 // Keep the marker in memory so effectiveAgentHistory() can
@@ -4129,6 +4137,12 @@ class ChatViewModel(
             "The following is a summary of the earlier conversation that was compacted to save context space.\n" +
             "Treat it as background context only. The user's most recent message (below or in the next turn) takes precedence — if it changes the task, the goal, or any numbers/scope, follow the new instruction and do not resume the old plan from this summary. Do not re-run discovery (reading memory, scanning skills, re-reading files) unless the new instruction requires it.\n\n" +
             summary +
+            // momoding: details live in the record, not in the summary (Grok Bot)
+            transcriptPath()?.let {
+                "\n\nThis summary leaves most details out. The earlier conversation, word for word, is in $it: " +
+                    "before you quote it, give a number, name or date from it, or say what was found or said there, " +
+                    "grep that file and read the lines around the match. Never rebuild earlier wording from this summary."
+            }.orEmpty() +
             "\n</context-summary>"
 
         // ─── v2 markers (id-only anchor model) ─────────────────────────
@@ -4606,39 +4620,28 @@ class ChatViewModel(
     }
 
     /**
-     * Format the agent history as a plain-text transcript for the
-     * summarisation LLM. Keeps role prefixes and truncates long tool arg /
-     * output bodies so we stay well under any context window. Mirrors iOS
-     * `buildConversationTextForSummary`.
+     * momoding: the history as the summary model reads it — all of it, the person's words whole,
+     * the rest cut fairly to fit [SUMMARY_INPUT_CHARS] (Grok Bot), see [app.momoding.chat.Transcript].
+     * A model whose window is smaller still gets it halved by [generateCompactSummaryWithSplitting].
      */
-    private fun buildConversationTextForSummary(history: List<LLMMessage>): String = buildString {
-        for (msg in history) {
-            val role = msg.role.name.lowercase()
-            val text = msg.content.take(500)
-            if (text.isNotEmpty()) {
-                append(role).append(": ").append(text).append('\n')
-            }
-            for (part in msg.contentParts) {
-                when (part) {
-                    is AgentContentPart.Text -> {
-                        append(role).append(": ").append(part.text.take(500)).append('\n')
-                    }
-                    is AgentContentPart.ToolUse -> {
-                        val preview = part.input.toString().take(200)
-                        append(role).append(" [tool:").append(part.name).append("]: ")
-                            .append(preview).append('\n')
-                    }
-                    is AgentContentPart.ToolResult -> {
-                        append(role).append(" [result:").append(part.name).append("]: ")
-                            .append(part.content.take(500)).append('\n')
-                    }
-                    is AgentContentPart.ImageData -> {
-                        append(role).append(" [image: ").append(part.mimeType).append("]\n")
-                    }
-                }
-            }
-        }
-    }
+    private fun buildConversationTextForSummary(history: List<LLMMessage>): String =
+        app.momoding.chat.Transcript.run { render(fit(lines(history), SUMMARY_INPUT_CHARS)) }
+
+    /**
+     * momoding: everything compacted so far, word for word, where the model can grep it
+     * (`/var/minis/offloads/transcript.md`); the summary says so. Rewritten at each compaction,
+     * as the history up to the new anchor. "" when it could not be written.
+     */
+    private fun writeTranscript(sid: String, history: List<LLMMessage>): String = runCatching {
+        val dir = java.io.File(context.filesDir, "minis-sessions/$sid/offloads").apply { mkdirs() }
+        java.io.File(dir, TRANSCRIPT_FILE).writeText(app.momoding.chat.Transcript.run { render(lines(history)) })
+        "${ContextOffload.LINUX_OFFLOADS_DIR}/$TRANSCRIPT_FILE"
+    }.onFailure { AppLogger.warning(TAG, "[Compact] transcript not written: ${it.message}") }.getOrDefault("")
+
+    /** The sandbox path of this session's transcript, once a compaction has written it. */
+    private fun transcriptPath(): String? = activeSessionId.takeIf { it.isNotEmpty() }
+        ?.takeIf { java.io.File(context.filesDir, "minis-sessions/$it/offloads/$TRANSCRIPT_FILE").isFile }
+        ?.let { "${ContextOffload.LINUX_OFFLOADS_DIR}/$TRANSCRIPT_FILE" }
 
     /**
      * Summarize [messages], recursively halving when a whole-input attempt
