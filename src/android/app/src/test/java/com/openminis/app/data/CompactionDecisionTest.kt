@@ -28,7 +28,7 @@ import org.junit.Test
 class CompactionDecisionTest {
 
     private val window = 128_000
-    private val policy = ContextPolicy.forContextWindow(window)
+    private val policy = ContextPolicy.forModel(window)
 
     private fun step(
         verdict: CheckResult = CheckResult.NEEDS_COMPACT,

@@ -28,6 +28,8 @@ data class ContextPolicy(
     val exhaustedOnly: Boolean,
     /** Whether the "Compact now" button is offered in the UI. */
     val manualCompactAllowed: Boolean,
+    /** momoding: the tokens this conversation works within ([forModel]); how full it is, as the person sees it. */
+    val budget: Int = 0,
 ) {
     enum class CheckResult { OK, NEEDS_COMPACT, EXHAUSTED }
 
@@ -109,59 +111,33 @@ data class ContextPolicy(
             }
         }
 
-        /**
-         * Produce the policy for a given context window size. Four tiers:
-         *   - `<32K`   → offload/compact disabled; UI tells user to start a new chat.
-         *   - `32K–64K` → offload only; exhaust line = ctx − 10k.
-         *   - `64K–128K` → offload + compact; headroom 10k for compact.
-         *   - `≥128K`  → generous offload + compact; headroom 20k.
-         */
-        /**
-         * [T-ctx-user-cap] A user-chosen group cap is NOT a model's native
-         * window, and the tier table only makes sense for the latter. The fixed
-         * 10k/20k/40k headroom subtractions — and disabling auto-compact under
-         * 64K — exist because a genuinely small model cannot afford a summary
-         * plus re-appended warm-up turns. When the user caps a 1M model at 32K
-         * none of that holds: the model has room to run the compaction call, and
-         * "keep this group under 32K" is an instruction to compact, not a reason
-         * to stop compacting. iOS parity: ContextPolicy.swift `isUserCap`.
-         */
-        fun forUserCap(contextWindow: Int): ContextPolicy = ContextPolicy(
-            offloadThreshold = (contextWindow * 0.70).toInt(),
-            offloadTarget = (contextWindow * 0.55).toInt(),
-            compactThreshold = (contextWindow * 0.85).toInt(),
-            exhaustedOnly = false,
-            manualCompactAllowed = true,
-        )
+        /** momoding: a conversation works within this many tokens whatever the model's window (Grok Bot's `agentTokenLimit`). */
+        const val BUDGET = 200_000
 
-        fun forContextWindow(contextWindow: Int): ContextPolicy = when {
-            contextWindow < 32_000 -> ContextPolicy(
-                offloadThreshold = 0,
-                offloadTarget = 0,
-                compactThreshold = 0,
-                exhaustedOnly = true,
-                manualCompactAllowed = false,
-            )
-            contextWindow < 64_000 -> ContextPolicy(
-                offloadThreshold = contextWindow - 10_000,
-                offloadTarget = contextWindow - 15_000,
-                compactThreshold = 0,
-                exhaustedOnly = true,
-                manualCompactAllowed = true,
-            )
-            contextWindow < 128_000 -> ContextPolicy(
-                offloadThreshold = contextWindow - 20_000,
-                offloadTarget = contextWindow - 30_000,
-                compactThreshold = contextWindow - 10_000,
+        /** Below this a summary plus the fixed prompt leaves no room to talk: only say the chat is full. */
+        const val MIN_BUDGET = 24_000
+
+        /**
+         * momoding: one rule for every model. The conversation's budget is [BUDGET], or the group's
+         * [cap] when the person set one, never more than the model's [window] less room for the
+         * reply (OpenCode's reserve, at most a fifth of a small window). Within it, as Grok Bot does,
+         * compact when less than 5% (or 5K) is left; before that, at 70%, old tool output goes to
+         * disk down to 55% (lossless, so it comes first: Anthropic's context editing, Manus).
+         *
+         * A long chat on a 1M model then compacts near 190K instead of 1M, a 128K model near 103K,
+         * and a switch to a smaller model, or a fallback with one, is judged on that model's budget
+         * before the request goes out. Replaces the four window tiers and the separate user-cap rule.
+         */
+        fun forModel(window: Int, cap: Int? = null): ContextPolicy {
+            val budget = minOf(cap?.takeIf { it > 0 } ?: BUDGET, window - minOf(20_000, window / 5))
+            if (budget < MIN_BUDGET) return ContextPolicy(0, 0, 0, exhaustedOnly = true, manualCompactAllowed = false, budget = window)
+            return ContextPolicy(
+                offloadThreshold = budget * 70 / 100,
+                offloadTarget = budget * 55 / 100,
+                compactThreshold = budget - maxOf(5_000, budget / 20),
                 exhaustedOnly = false,
                 manualCompactAllowed = true,
-            )
-            else -> ContextPolicy(
-                offloadThreshold = contextWindow - 40_000,
-                offloadTarget = contextWindow - 60_000,
-                compactThreshold = contextWindow - 20_000,
-                exhaustedOnly = false,
-                manualCompactAllowed = true,
+                budget = budget,
             )
         }
     }

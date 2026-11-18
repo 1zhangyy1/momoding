@@ -561,6 +561,8 @@ internal object ProviderMutationMethods {
         }
         if (params.has("strategy")) current.strategy = parseStrategy(params.optString("strategy"))
         if (params.has("fallbackStrategy")) current.fallbackStrategy = parseFallback(params.optString("fallbackStrategy"))
+        // momoding: the conversation's budget for this group; 0 clears it
+        if (params.has("contextLimitTokens")) current.contextLimitTokens = params.optInt("contextLimitTokens", 0).takeIf { it > 0 }
         repo.updateGroup(current)
         return JSONObject().put("group", groupToJson(repo, current))
     }

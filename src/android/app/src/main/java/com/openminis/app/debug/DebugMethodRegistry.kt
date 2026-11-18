@@ -796,6 +796,7 @@ object DebugMethodRegistry {
                 ParamSpec("memberEntryIds", "[string]", required = false, description = "Replace members entirely; order preserved."),
                 ParamSpec("strategy", "string", required = false, description = "fallback / loadBalance"),
                 ParamSpec("fallbackStrategy", "string", required = false, description = "default / always"),
+                ParamSpec("contextLimitTokens", "int", required = false, description = "The conversation's token budget for this group; 0 clears it."),
             ),
             returns = "{group:{...}}",
             example = ex("groupId" to "grp_xyz"),

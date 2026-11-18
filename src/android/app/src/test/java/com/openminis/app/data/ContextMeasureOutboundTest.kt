@@ -109,7 +109,7 @@ class ContextMeasureOutboundTest {
     // estimate × providerFactor for whatever is actually sent.
 
     private val window = 128_000
-    private val policy = ContextPolicy.forContextWindow(window)
+    private val policy = ContextPolicy.forModel(window)
     private val providerFactor = 1.4
     private val fixed = 9_000
 

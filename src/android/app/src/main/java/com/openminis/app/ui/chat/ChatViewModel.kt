@@ -1602,7 +1602,7 @@ class ChatViewModel(
                 // Re-resolve the window on every emission: switching model or
                 // editing a group's contextLimitTokens changes the denominator
                 // without changing the token count, and the glow must follow.
-                ContextUsage.from(tokens, effectiveContextWindowTokens())
+                ContextUsage.from(tokens, contextBudgetTokens())
             }
             .stateIn(
                 viewModelScope,
@@ -1651,7 +1651,7 @@ class ChatViewModel(
         if (isHelper) return
         val usage = ContextUsage.from(
             usedTokens = _lastTurnContextTokens.value,
-            windowTokens = effectiveContextWindowTokens(),
+            windowTokens = contextBudgetTokens(),
         )
         // The glow is derived from [contextUsage] and needs no assignment
         // here — see its KDoc. This function now decides only whether the
@@ -1709,7 +1709,7 @@ class ChatViewModel(
         if (isHelper) return
         val usage = ContextUsage.from(
             usedTokens = _lastTurnContextTokens.value,
-            windowTokens = effectiveContextWindowTokens(),
+            windowTokens = contextBudgetTokens(),
         ) ?: return
         contextTierTracker.observe(usage.tier, System.currentTimeMillis())
         contextHintGeneration += 1
@@ -2394,30 +2394,33 @@ class ChatViewModel(
      * proportional thresholds instead of the native-window tier table.
      */
     private fun resolvedContextWindow(forModel: LLMModel? = null): Pair<Int, Boolean>? {
+        val (window, cap) = modelWindowAndCap(forModel) ?: return null
+        // A cap above the model's own window is not a licence to overflow the
+        // model — it just means "no practical limit".
+        return if (cap != null && cap < window) cap to true else window to false
+    }
+
+    /** The live model's own window, and the group's cap when the person set one. */
+    private fun modelWindowAndCap(forModel: LLMModel? = null): Pair<Int, Int?>? {
         val config = providerRepository.config.value
         val liveModel = forModel ?: _activeEntryId.value
             ?.let { id -> config.modelEntries.find { it.id == id }?.model }
             ?: currentModel
         val window = liveModel?.contextWindowTokens ?: return null
-        val groupLimit = _selectedGroupId.value
+        val cap = _selectedGroupId.value
             ?.let { gid -> config.modelGroups.find { it.id == gid }?.contextLimitTokens }
             ?.takeIf { it > 0 }
-            ?: return window to false
-        // A cap above the model's own window is not a licence to overflow the
-        // model — it just means "no practical limit".
-        return if (groupLimit < window) groupLimit to true else window to false
+        return window to cap
     }
 
-    /** [T-ctx-user-cap] Policy for the current window, honouring a user cap. */
+    /** momoding: the policy for the model about to be called, and that model's own window (the hard limit). */
     private fun currentContextPolicy(): Pair<ContextPolicy, Int>? {
-        val (window, isUserCap) = resolvedContextWindow() ?: return null
-        val policy = if (isUserCap) {
-            ContextPolicy.forUserCap(window)
-        } else {
-            ContextPolicy.forContextWindow(window)
-        }
-        return policy to window
+        val (window, cap) = modelWindowAndCap() ?: return null
+        return ContextPolicy.forModel(window, cap) to window
     }
+
+    /** momoding: how much the conversation may hold before it compacts; what the context glow measures against. */
+    private fun contextBudgetTokens(): Int? = currentContextPolicy()?.first?.budget?.takeIf { it > 0 }
 
     val currentModelMaxOutputTokens: Int?
         get() = currentModel?.maxOutputTokens
@@ -5029,8 +5032,8 @@ class ChatViewModel(
                 InLoopContextAction.COMPACTED
             }
 
-            // EXHAUSTED is only ever returned by `exhaustedOnly` tiers — windows
-            // under 64K, where ContextPolicy sets compactThreshold = 0 precisely
+            // EXHAUSTED is only ever returned by `exhaustedOnly` policies — a
+            // budget under ContextPolicy.MIN_BUDGET, where compactThreshold = 0 precisely
             // BECAUSE the window is too small for auto-compact to pay for itself
             // (the summary plus re-appended recent turns would eat the headroom
             // it just freed). Attempting a "rescue" compaction here would
@@ -5936,7 +5939,7 @@ class ChatViewModel(
                 // session shows its glow on open without announcing a line.
                 val restored = ContextUsage.from(
                     usedTokens = _lastTurnContextTokens.value,
-                    windowTokens = effectiveContextWindowTokens(),
+                    windowTokens = contextBudgetTokens(),
                 )
                 contextTierTracker.reset(restored?.tier ?: ContextUsage.Tier.NORMAL)
             }
@@ -8400,13 +8403,8 @@ class ChatViewModel(
         force: Boolean = false,
     ) {
         val sid = activeSessionId
-        // [T-ctx-user-cap] The caller passes the already-capped window, so the
-        // policy must be built the same way the capacity guards build it —
-        // otherwise a 32K cap lands in the native small-window tier and
-        // disables offload (offloadThreshold == 0) for a model that has ample
-        // room to offload.
-        val policy = currentContextPolicy()?.takeIf { it.second == contextWindow }?.first
-            ?: ContextPolicy.forContextWindow(contextWindow)
+        // the same policy the capacity guards judge by (budget, group cap and all)
+        val policy = currentContextPolicy()?.first ?: ContextPolicy.forModel(contextWindow)
 
         if (!force && policy.offloadThreshold == 0) {
             // Small-window tier: offload disabled — UI surfaces "exhausted"
@@ -9323,8 +9321,8 @@ class ChatViewModel(
                     // Without this the bubble stays on "Minis is thinking"
                     // forever — the streamJob's finally only clears the GLOBAL
                     // _isStreaming, not the per-message flags. Reachable with no
-                    // failure at all: ContextPolicy gives every model with a
-                    // context window under 64K `exhaustedOnly = true`, so
+                    // failure at all: ContextPolicy gives every model whose
+                    // budget is under MIN_BUDGET `exhaustedOnly = true`, so
                     // crossing the exhaust line lands here directly.
                     withContext(Dispatchers.Main) {
                         updateAssistantMessage(
