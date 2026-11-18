@@ -30,6 +30,8 @@ data class ContextPolicy(
     val manualCompactAllowed: Boolean,
     /** momoding: the tokens this conversation works within ([forModel]); how full it is, as the person sees it. */
     val budget: Int = 0,
+    /** momoding: from here the summary is written in the background, so compacting at [compactThreshold] costs no wait. 0 = never. */
+    val backgroundStart: Int = 0,
 ) {
     enum class CheckResult { OK, NEEDS_COMPACT, EXHAUSTED }
 
@@ -121,8 +123,9 @@ data class ContextPolicy(
          * momoding: one rule for every model. The conversation's budget is [BUDGET], or the group's
          * [cap] when the person set one, never more than the model's [window] less room for the
          * reply (OpenCode's reserve, at most a fifth of a small window). Within it, as Grok Bot does,
-         * compact when less than 5% (or 5K) is left; before that, at 70%, old tool output goes to
-         * disk down to 55% (lossless, so it comes first: Anthropic's context editing, Manus).
+         * the summary starts in the background when less than 10% (or 10K) is left and is swapped in
+         * when less than 5% (or 5K) is; before that, at 70%, old tool output goes to disk down to 55%
+         * (lossless, so it comes first: Anthropic's context editing, Manus).
          *
          * A long chat on a 1M model then compacts near 190K instead of 1M, a 128K model near 103K,
          * and a switch to a smaller model, or a fallback with one, is judged on that model's budget
@@ -138,6 +141,7 @@ data class ContextPolicy(
                 exhaustedOnly = false,
                 manualCompactAllowed = true,
                 budget = budget,
+                backgroundStart = budget - maxOf(10_000, budget / 10),
             )
         }
     }

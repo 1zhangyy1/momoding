@@ -2898,6 +2898,87 @@ class ChatViewModel(
         if (!started) onFinished?.invoke(false)
     }
 
+    /** The last history entry at or before [upTo] that is persisted, which a compaction can anchor on; -1 if none. */
+    private fun lastPersistedIdx(history: List<LLMMessage>, upTo: Int): Int {
+        var i = upTo.coerceAtMost(history.lastIndex)
+        while (i >= 0 && history[i].dbMessageId.isNullOrEmpty()) i -= 1
+        return i
+    }
+
+    /**
+     * Where the next compaction starts: just after the latest marker's anchor. For v2 markers
+     * lastCompactedMessageId IS the previous anchor; v1 markers name the first kept entry, which
+     * starts the range itself. A marker whose anchor is no longer in history restarts from the top.
+     */
+    private fun compactStartIdx(history: List<LLMMessage>): Int {
+        val prev = _cachedLatestMarker ?: return 0
+        val prevId = if (prev.version >= 2) prev.lastCompactedMessageId?.takeIf { it.isNotEmpty() }
+            else prev.firstKeptMessageId?.takeIf { it.isNotEmpty() } ?: prev.boundaryMessageId?.takeIf { it.isNotEmpty() }
+        val prevIdx = prevId?.let { id -> history.indexOfFirst { it.dbMessageId == id } } ?: -1
+        return if (prevIdx < 0) 0 else if (prev.version >= 2) prevIdx + 1 else prevIdx
+    }
+
+    /**
+     * momoding: a summary written ahead of time, up to [anchorDbId], on top of the marker that was
+     * latest then ([afterMarkerId]). Null [text] once done means it failed and was discarded.
+     */
+    private class PreparedSummary(val afterMarkerId: String?, val anchorDbId: String) {
+        lateinit var job: Job
+        @Volatile var text: String? = null
+        val writing: Boolean get() = job.isActive
+        fun anchorIdx(history: List<LLMMessage>): Int = history.indexOfLast { it.dbMessageId == anchorDbId }
+        suspend fun await(): String? { job.join(); return text }
+    }
+
+    @Volatile private var preparedSummary: PreparedSummary? = null
+
+    /** Still on top of the latest marker, and its anchor is still in this history (no revert or edit took it). */
+    private fun PreparedSummary.fits(history: List<LLMMessage>): Boolean =
+        afterMarkerId == _cachedLatestMarker?.id && anchorIdx(history) >= 0
+
+    /**
+     * momoding: Grok Bot's background summarization. Once the conversation is past
+     * [ContextPolicy.backgroundStart] the summary of everything so far is written off the turn's
+     * path, so when it reaches the compact line the summary is swapped in at once and the person
+     * never waits for it. One at a time; one that failed is tried again only when there is more
+     * to summarize.
+     */
+    private fun prepareSummaryInBackground() {
+        if (_isCompacting.value) return
+        val history = agentHistory.toList()
+        val anchor = lastPersistedIdx(history, history.lastIndex)
+        val start = compactStartIdx(history)
+        if (anchor < 0 || start > anchor) return
+        val anchorId = history[anchor].dbMessageId ?: return
+        preparedSummary?.takeIf { it.fits(history) }?.let { p ->
+            if (p.writing || p.text != null || p.anchorDbId == anchorId) return
+        }
+        val toCompact = history.subList(start, anchor + 1).toList()
+        val existing = _compactSummary.value
+        val p = PreparedSummary(_cachedLatestMarker?.id, anchorId)
+        AppLogger.info(TAG, "[Compact] background: summarizing ${toCompact.size} entries")
+        p.job = viewModelScope.launch(Dispatchers.IO) {
+            p.text = runCatching {
+                withTimeout(COMPACT_MAX_TOTAL_MS) { generateCompactSummaryWithSplitting(toCompact, existing, 0) }.trim().ifEmpty { null }
+            }.onFailure {
+                if (it is CancellationException) throw it
+                AppLogger.warning(TAG, "[Compact] background summary failed, discarded: ${it.message}")
+            }.getOrNull()
+            if (p.text != null) AppLogger.info(TAG, "[Compact] background: summary ready (${p.text?.length} chars)")
+        }
+        preparedSummary = p
+    }
+
+    /**
+     * momoding: Grok Bot's timing, asked whenever the context is judged. Past the background line
+     * the summary starts; past the compact line it is swapped in once ready, and only at the budget
+     * itself does the turn wait for it. True when this request can still go out uncompacted.
+     */
+    private fun summaryStillWriting(policy: ContextPolicy, tokens: Int): Boolean {
+        if (policy.backgroundStart > 0 && tokens >= policy.backgroundStart) prepareSummaryInBackground()
+        return tokens < policy.budget && preparedSummary?.writing == true
+    }
+
     private inline fun compactAllImpl(
         anchorIdxOverride: Int?,
         allowDuringProcessing: Boolean,
@@ -2953,48 +3034,17 @@ class ChatViewModel(
         // 644-657 "walk back through agentHistory looking for dbMessageId
         // AND allRaw.contains" — split across two phases to honor suspend
         // boundaries.
-        val anchorIdx: Int = if (anchorIdxOverride != null) {
-            // compactBefore() supplied a specific anchor — walk back from
-            // there to the closest entry with a dbMessageId (mirrors the
-            // tail-walk-back logic but bounded to [0..override]).
-            var i = anchorIdxOverride.coerceIn(0, history.lastIndex)
-            while (i >= 0 && history[i].dbMessageId.isNullOrEmpty()) i -= 1
-            i
-        } else {
-            // compactAll() — walk back from the tail to the closest
-            // persisted entry. iOS compactAll calls compactBefore with the
-            // last active UI message; we go through agentHistory directly
-            // since Android's agentHistory and UI list are tighter-coupled.
-            var i = history.lastIndex
-            while (i >= 0 && history[i].dbMessageId.isNullOrEmpty()) i -= 1
-            i
-        }
+        // momoding: a summary already written in the background is used while it still fits this
+        // history; it covers up to its own anchor, and what came after stays verbatim (Grok Bot).
+        val prepared = if (anchorIdxOverride == null) preparedSummary?.takeIf { it.fits(history) } else null
+        // compactBefore() supplies an anchor; compactAll() starts from the tail
+        val anchorIdx: Int = prepared?.anchorIdx(history)
+            ?: lastPersistedIdx(history, anchorIdxOverride ?: history.lastIndex)
         if (anchorIdx < 0) {
             appendSystemInfo("Cannot compact: no persisted messages yet.", "compact")
             return
         }
-
-        // Slice to compact = (prev marker's anchor + 1) … anchorIdx inclusive.
-        // For v2 prev markers, lastCompactedMessageId IS the prev anchor —
-        // start at prevIdx + 1. For v1 prev markers, firstKeptMessageId points
-        // at "first kept" — start AT prevIdx (it was exclusive on right edge).
-        val prev = _cachedLatestMarker
-        val effectiveStartIdx: Int = if (prev == null) {
-            0
-        } else {
-            val prevAnchorOrFirstKept: String? = if (prev.version >= 2) {
-                prev.lastCompactedMessageId?.takeIf { it.isNotEmpty() }
-            } else {
-                prev.firstKeptMessageId?.takeIf { it.isNotEmpty() }
-                    ?: prev.boundaryMessageId?.takeIf { it.isNotEmpty() }
-            }
-            val prevIdx = prevAnchorOrFirstKept?.let { id ->
-                history.indexOfFirst { it.dbMessageId == id }
-            } ?: -1
-            if (prevIdx < 0) 0   // prev anchor not in current history — restart from top
-            else if (prev.version >= 2) prevIdx + 1
-            else prevIdx
-        }
+        val effectiveStartIdx = compactStartIdx(history)
         if (effectiveStartIdx > anchorIdx) {
             appendSystemInfo("Already compacted up to this point.", "compact")
             return
@@ -3007,6 +3057,7 @@ class ChatViewModel(
         // Past every precondition — from here the launch below owns the
         // onFinished callback.
         markStarted()
+        preparedSummary = null
         val compactMeasuredBefore = runCatching { measureOutboundContextTokens() }.getOrDefault(-1)
         _isCompacting.value = true
         // [T-compact-idle-timeout] The working limit is the per-stream idle
@@ -3071,8 +3122,11 @@ class ChatViewModel(
                 // RateLimited / isHttpServerError / isFallbackable, plus
                 // FallbackStrategy.always. Reusing it is what keeps compact and
                 // normal turns agreeing about what "worth switching" means.
-                var summary = ""
-                run {
+                // the background summary, waited for only if it is still being written; a failed one
+                // was discarded, and this compaction writes its own
+                var summary = prepared?.await().orEmpty()
+                if (summary.isNotEmpty()) AppLogger.info(TAG, "[Compact] using the summary written in the background")
+                if (summary.isEmpty()) run {
                     val strategy = _selectedGroupId.value
                         ?.let { gid ->
                             providerRepository.config.value.modelGroups
@@ -4836,11 +4890,14 @@ class ChatViewModel(
         if (tokens <= 0) return PreSendContextAction.PROCEED
         // [T-context-window-live-read] Live window (entry re-resolved + group
         // contextLimitTokens folded in) — not the currentModel snapshot.
-        // [T-ctx-user-cap] Honour a user-chosen group cap with proportional
-        // thresholds; a native window keeps the legacy tier table.
+        // The budget for the model about to be called, a group cap folded in.
         val (policy, window) = currentContextPolicy() ?: return PreSendContextAction.PROCEED
-        val verdict = policy.check(tokens, window)
-        logContextDecision("pre-send", m, policy.compactThreshold, window, verdict.name)
+        val checked = policy.check(tokens, window)
+        logContextDecision("pre-send", m, policy.compactThreshold, window, checked.name)
+        // momoding: while the summary is still being written in the background and the budget has
+        // room, the request goes out as it is; the summary is swapped in once ready
+        val summaryWriting = summaryStillWriting(policy, tokens)
+        val verdict = if (checked == ContextPolicy.CheckResult.NEEDS_COMPACT && summaryWriting) ContextPolicy.CheckResult.OK else checked
         return when (verdict) {
             ContextPolicy.CheckResult.OK -> PreSendContextAction.PROCEED
 
@@ -4984,8 +5041,12 @@ class ChatViewModel(
         if (tokens <= 0) return InLoopContextAction.PROCEED
         // [T-ctx-user-cap] Same resolution as the pre-send check.
         val (policy, window) = currentContextPolicy() ?: return InLoopContextAction.PROCEED
-        val verdict = policy.check(tokens, window)
-        logContextDecision("in-loop", m, policy.compactThreshold, window, verdict.name)
+        val checked = policy.check(tokens, window)
+        logContextDecision("in-loop", m, policy.compactThreshold, window, checked.name)
+        // momoding: while the summary is still being written in the background and the budget has
+        // room, the request goes out as it is; the summary is swapped in once ready
+        val summaryWriting = summaryStillWriting(policy, tokens)
+        val verdict = if (checked == ContextPolicy.CheckResult.NEEDS_COMPACT && summaryWriting) ContextPolicy.CheckResult.OK else checked
         return when (verdict) {
             ContextPolicy.CheckResult.OK -> InLoopContextAction.PROCEED
 

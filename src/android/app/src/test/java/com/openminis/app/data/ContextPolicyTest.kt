@@ -16,6 +16,7 @@ class ContextPolicyTest {
     @Test fun `a 1M model compacts near 190K, not near its window`() {
         val p = ContextPolicy.forModel(1_048_576)
         assertEquals(200_000, p.budget)
+        assertEquals(180_000, p.backgroundStart)
         assertEquals(190_000, p.compactThreshold)
         assertEquals(140_000, p.offloadThreshold)
         assertEquals(110_000, p.offloadTarget)
@@ -59,6 +60,7 @@ class ContextPolicyTest {
             assertFalse("$window", p.exhaustedOnly)
             assertTrue("$window", p.offloadTarget < p.offloadThreshold && p.offloadThreshold < p.compactThreshold)
             assertTrue("$window", p.compactThreshold < p.budget && p.budget < window)
+            assertTrue("$window", p.backgroundStart in 1 until p.compactThreshold)
             assertEquals("$window", CheckResult.OK, p.check(p.compactThreshold - 1, window))
             assertEquals("$window", CheckResult.NEEDS_COMPACT, p.check(p.compactThreshold, window))
         }
