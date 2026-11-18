@@ -36,11 +36,16 @@ class ShellGuardTest {
     }
 
     @Test fun `wiping what holds the phone is a warning with no standing grant`() {
-        for (cmd in listOf("rm -rf /", "rm -rf /var/minis", "rm -rf /*")) {
+        for (cmd in listOf("rm -rf /", "rm -rf /var/minis", "rm -rf /*", "rm -rf /var/minis/*", "rm -rf /var/*", "rm -rf /var/m*")) {
             val a = ShellGuard.assess(cmd)
             assertEquals(cmd, RiskClass.DESTRUCTIVE, a.riskClass)
             assertTrue(cmd, a.warnings.isNotEmpty())
         }
+    }
+
+    @Test fun `a glob beside the phone's storage is the agent's own`() {
+        for (cmd in listOf("rm -rf /var/minis/workspace/*", "rm -rf /tmp/*", "rm -rf /var/minis/w*")) assertEquals(cmd, RiskClass.SAFE, ShellGuard.assess(cmd).riskClass)
+        assertEquals(RiskClass.DESTRUCTIVE, ShellGuard.assess("find /var -delete").riskClass)
     }
 
     // ── reads and writes stay quiet ────────────────────────────────────────────────────────

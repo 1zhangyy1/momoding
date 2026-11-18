@@ -230,7 +230,7 @@ object ShellGuard {
 
     private fun rm(args: List<String>): RiskAssessment {
         val resolved = positional(args).map { resolve(it) }
-        val whole = resolved.firstOrNull { it in holdsPhone }
+        val whole = resolved.firstOrNull { holdsPhone(it) }
         if (whole != null) {
             return RiskAssessment(RiskClass.DESTRUCTIVE, "removes $whole entirely, the phone's own files with it", PHONE, warnings = listOf("wipes $whole"))
         }
@@ -244,7 +244,7 @@ object ShellGuard {
         val deletes = "-delete" in args || args.zipWithNext().any { (a, b) -> (a == "-exec" || a == "-execdir" || a == "-ok") && basename(b) in setOf("rm", "shred") }
         if (!deletes) return RiskAssessment.SAFE
         val start = resolve(args.firstOrNull { !it.startsWith("-") } ?: ".")
-        return if (onPhone(start) || start in holdsPhone) RiskAssessment(RiskClass.DESTRUCTIVE, "deletes files under $start", PHONE) else RiskAssessment.SAFE
+        return if (onPhone(start) || holdsPhone(start)) RiskAssessment(RiskClass.DESTRUCTIVE, "deletes files under $start", PHONE) else RiskAssessment.SAFE
     }
 
     private fun git(all: List<String>): RiskAssessment {
@@ -410,8 +410,19 @@ object ShellGuard {
     /** The phone's own storage, mounted into the sandbox: the person's real files. */
     private fun onPhone(path: String): Boolean = path == PHONE || path.startsWith("$PHONE/")
 
-    /** Folders that hold the phone's storage: removing one whole removes it too. */
-    private val holdsPhone = setOf("/", "/var", "/var/minis", "/*")
+    /**
+     * A folder that holds the phone's storage, removing which removes it too: the root, /var,
+     * /var/minis, or a wildcard that matches one of them. Judged against the folders above
+     * [PHONE], so no list has to be kept.
+     */
+    private fun holdsPhone(path: String): Boolean {
+        val above = PHONE.split('/').indices.drop(1).map { PHONE.split('/').take(it).joinToString("/").ifEmpty { "/" } }
+        if (path.none { it in "*?[" }) return path.trimEnd('/').ifEmpty { "/" } in above
+        val glob = Regex(path.trimEnd('/').split('/').joinToString("/") { seg ->
+            seg.split('*').joinToString("[^/]*") { part -> part.split('?').joinToString("[^/]") { Regex.escape(it) } }
+        })
+        return (above + PHONE).any { glob.matches(it) }
+    }
 
     // ── tokenizing ─────────────────────────────────────────────────────────────────────────
 

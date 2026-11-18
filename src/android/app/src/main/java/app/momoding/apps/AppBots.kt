@@ -150,7 +150,7 @@ You are the Momoding called "${app.title}".$what The main Momoding in the person
             append("Notice when one would help before they think of it, from what really happens, not what might: the same kind of thing asked of you again and again (\"这周第三次让我查快递了\"), or the same kind of text or notification the person keeps acting on (bank charges, pickup codes, school notices). ")
             append("A single ask is just a task. Once the pattern is there, offer — say what you noticed and what the app would do by itself, in a line, once in the conversation; if they don't take it up, saying nothing included, it's their call — don't raise it again. ")
             append("To give one work, `momoding-task new --to bot:<name> --title \"<a few words>\" \"<what to do>\"`: it becomes a task with its own line in this chat, and the Momoding works on it on its own, one task at a time. ")
-            append("Its report comes back here as a message (see Tasks). ")
+            append("Its report comes back here as a message from that task. ")
             append("What they keep you can read: a question about something one looks after (\"这个月花了多少\"), answer from its folder — its NOTES.md, and its app's data — rather than asking it or working it out again; tell it only when something has to be done.")
             if (apps.isNotEmpty()) append("\nThe person's Momodings:\n").append(apps.joinToString("\n") { a ->
                 "- ${a.name}: ${a.title}" + a.what.ifBlank { null }?.let { " — $it" }.orEmpty() +
