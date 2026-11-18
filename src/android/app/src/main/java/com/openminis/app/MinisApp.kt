@@ -514,6 +514,7 @@ class MinisApp : Application(), ImageLoaderFactory {
         mcpRepository = MCPRepository(this)
         memoryRepository = MemoryRepository(java.io.File(filesDir, "minis-global/memory"))
         app.momoding.memory.Memory.migrate(this) // momoding: USER.md → MEMORY.md, old daily notes → days/
+        app.momoding.memory.MemoryReflect.catchUp(this) // momoding: what was said before the app was closed
         webAppShortcutRepository = WebAppShortcutRepository(database.webAppShortcutDao())
 
         // T-android-safemode-lateinit-crash: every repository the UI layer

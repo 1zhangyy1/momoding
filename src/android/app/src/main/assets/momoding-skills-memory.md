@@ -5,7 +5,7 @@ description: How the person's memory at /var/minis/memory is laid out and kept â
 
 # Memory
 
-The person's memory is a folder of Markdown at `/var/minis/memory`, kept in git. The app commits it after each turn with the chat and the person's words as the message, and after each turn looks again in the background for anything worth keeping that was said in passing; so where a line came from and what it said before are in `git log -p`, never in the file. You only edit files.
+The person's memory is a folder of Markdown at `/var/minis/memory`, kept in git. The app commits it after each turn with the chat and the person's words as the message, and once the person has been quiet a while looks over what they said for anything worth keeping that was said in passing; so where a line came from and what it said before are in `git log -p`, never in the file. You only edit files.
 
 ## Layout
 

@@ -7690,6 +7690,8 @@ class ChatViewModel(
         prompt: QueuedPrompt,
     ): SubmitOutcome {
         app.momoding.memory.Memory.markTurnStart(context, realSessionId.ifEmpty { sessionId }) // momoding: "记住了" lines
+        // momoding: what the person says is set aside as it is sent, for memory to look over later
+        personsWords(text)?.let { app.momoding.memory.MemoryReflect.heard(context, realSessionId.ifEmpty { sessionId }, it) }
         // [T-android-paste-mediaref] `[Pasted#N]` markers are NOT expanded here
         // any more.
         //
@@ -12336,6 +12338,14 @@ class ChatViewModel(
     }
 
     /** momoding: after every completed turn — the turn budget of prompt addenda counts down. */
+    /** momoding: [text] when the person said it in this chat, null for a helper's brief, a helper's
+     *  report, a routine firing or the app's own note, or when memory is off here. */
+    private fun personsWords(text: String): String? = text.takeUnless {
+        !_memoryEnabled.value || helperConfig != null || it.isBlank() ||
+            it.startsWith(app.momoding.task.TaskEngine.REPORT_CUE) || it.startsWith("<system-reminder>") ||
+            com.openminis.app.scheduled.ScheduledTaskMarker.isMarkerText(it)
+    }
+
     private fun momodingAfterTurn() {
         val sid = realSessionId.ifEmpty { sessionId }
         app.momoding.chat.SessionAddenda.onTurnFinished(sid)
@@ -12343,10 +12353,8 @@ class ChatViewModel(
         // unless the reply carries the model's own momoding-remember block; git keeps its history
         val added = app.momoding.memory.Memory.added(context, sid)
         if (_memoryEnabled.value && helperConfig == null) {
-            // the person's own words this turn (a helper's brief is not); a turn a helper's report woke has none
-            val said = _messages.value.lastOrNull { it.role == "user" }?.content
-                ?.takeUnless { it.startsWith("[task ") || it.startsWith("<system-reminder>") }
-            app.momoding.memory.MemoryGit.afterTurn(context, sid, said, _messages.value.lastOrNull { it.role == "assistant" }?.content)
+            // labelled with the person's words this turn; a turn a helper's report woke has none
+            app.momoding.memory.MemoryGit.afterTurn(context, sid, _messages.value.lastOrNull { it.role == "user" }?.content?.let(::personsWords))
         }
         val last = _messages.value.lastOrNull { it.role == "assistant" }
         val saidIt = last?.toolBlocks?.any { it.kind == "text" && it.content.contains("```momoding-remember") } == true ||

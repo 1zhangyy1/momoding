@@ -21,24 +21,16 @@ object MemoryGit {
     private const val TAG = "MemoryGit"
     private const val RETRY_INSTALL_MS = 10 * 60_000L
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val lock = Mutex()
+    /** Held while memory is written and committed, so each commit holds only its own change. */
+    internal val lock = Mutex()
     @Volatile private var installFailedAt = 0L
 
-    /**
-     * After a turn: commit what the chat saved, then let [MemoryReflect] catch what it missed and
-     * commit that apart, so `git log` tells the chat's saves from the background's. [words] is
-     * what the person said this turn (null when a helper's report woke the chat); [reply], the answer.
-     */
-    fun afterTurn(context: Context, sessionId: String, words: String?, reply: String?) {
+    /** After a turn: commit what the chat saved. [words], the person's this turn, label it; null when a helper's report woke the chat. */
+    fun afterTurn(context: Context, sessionId: String, words: String?) {
         val app = context.applicationContext
         scope.launch {
-            runCatching {
-                lock.withLock {
-                    commit(app, message(sessionId, words))
-                    if (!words.isNullOrBlank() && MemoryReflect.reflect(app, words, reply.orEmpty()).isNotEmpty())
-                        commit(app, "reflect " + message(sessionId, words))
-                }
-            }.onFailure { Log.w(TAG, "after turn: ${it.message}") }
+            runCatching { lock.withLock { commit(app, message(sessionId, words)) } }
+                .onFailure { Log.w(TAG, "after turn: ${it.message}") }
         }
     }
 
@@ -61,7 +53,8 @@ object MemoryGit {
         ).joinToString("\n")
     }
 
-    private suspend fun commit(context: Context, message: String) {
+    /** Commits whatever changed; call it holding [lock]. */
+    internal suspend fun commit(context: Context, message: String) {
         if (System.currentTimeMillis() - installFailedAt < RETRY_INSTALL_MS) return
         // a turn that saved with file_write never started the sandbox
         if (!PRootKernel.isBooted) PRootKernel.boot(context)

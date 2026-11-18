@@ -27,6 +27,7 @@ object TestReset {
         // the person's memory, with its history; the identity and the site know-how stay
         val notes = memoryDir.listFiles { f -> f.name !in setOf("SOUL.md", "GLOBAL.md", "know-how", "sites.json") }
             .orEmpty().count { it.deleteRecursively() }
+        File(context.filesDir, "memory-heard.jsonl").delete() // what was said and not yet looked at
         app.momoding.memory.Memory.migrate(context)
 
         val rules = Grants.always.value.onEach { Grants.revoke(it.key) }.size

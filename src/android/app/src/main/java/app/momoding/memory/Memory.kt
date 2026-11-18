@@ -56,7 +56,7 @@ object Memory {
 
     internal fun render(text: String, topics: List<String> = emptyList()): String = buildString {
         appendLine("## Memory")
-        append("Your memory of the person is a folder of notes at $SANDBOX_DIR, kept in git (the app commits it after each turn and keeps it in the background too). ")
+        append("Your memory of the person is a folder of notes at $SANDBOX_DIR, kept in git (the app commits it after each turn, and later looks over what the person said for anything you did not save). ")
         append("MEMORY.md, below, is always with you: how to call them, who they are, what matters now; the other files are listed after it. ")
         appendLine("When a request touches one of them, or they mention a person, place, plan or anything from before, read it first (`grep -ril \"<word>\" $SANDBOX_DIR`) instead of answering from a guess.")
         append("When they ask you to remember something, or tell you something you need right away, save it before you reply: ")

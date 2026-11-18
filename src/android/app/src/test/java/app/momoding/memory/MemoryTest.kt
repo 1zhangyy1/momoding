@@ -80,9 +80,29 @@ class MemoryReflectTest {
         assertEquals("# Memory\n- 叫我晓晓\n", dir.resolve("MEMORY.md").readText())
     }
 
-    @Test fun `the question marks the reply as not the person's`() {
-        val q = MemoryReflect.question(mapOf("MEMORY.md" to "# Memory"), "我住望京", "推荐几家火锅", "2026-11-17 星期二")
-        assertTrue(q.contains("The person said:\n我住望京"))
-        assertTrue(q.contains("(not the person)"))
+    @Test fun `the question holds only the person's words, oldest first, with when`() {
+        val at = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.CHINA).parse("2026-11-17 14:02")!!.time
+        val said = listOf(MemoryReflect.Said(at, "s1", "我住望京"), MemoryReflect.Said(at + 60_000, "s2", "谢谢"))
+        val q = MemoryReflect.question(mapOf("MEMORY.md" to "# Memory"), said, "2026-11-17 星期二")
+        assertTrue(q.contains("The person said:\n[2026-11-17 14:02] 我住望京\n[2026-11-17 14:03] 谢谢\n"))
+    }
+
+    @Test fun `the reflect commit lists each thing said with its chat`() {
+        val m = MemoryReflect.commitMessage(listOf(MemoryReflect.Said(1, "s1", "我住望京"), MemoryReflect.Said(2, "s1", "谢谢"), MemoryReflect.Said(3, "s2", "我一般坐二等座")))
+        assertEquals("reflect: what the person said in 2 chats\n\nchat s1: 我住望京\nchat s1: 谢谢\nchat s2: 我一般坐二等座", m)
+    }
+
+    @Test fun `what was heard waits in order, and only what was looked at is dropped`() {
+        val f = tmp.root.resolve("heard.jsonl")
+        assertTrue(MemoryReflect.Heard.read(f).isEmpty())
+        MemoryReflect.Heard.add(f, MemoryReflect.Said(1, "s1", "我住望京\n第二行"))
+        MemoryReflect.Heard.add(f, MemoryReflect.Said(2, "s1", "我一般坐二等座"))
+        val looked = MemoryReflect.Heard.read(f)
+        MemoryReflect.Heard.add(f, MemoryReflect.Said(3, "s2", "谢谢")) // said while looking
+        assertEquals(listOf("我住望京\n第二行", "我一般坐二等座"), looked.map { it.words })
+        MemoryReflect.Heard.drop(f, looked.size)
+        assertEquals(listOf("谢谢"), MemoryReflect.Heard.read(f).map { it.words })
+        MemoryReflect.Heard.drop(f, 1)
+        assertFalse(f.exists())
     }
 }
