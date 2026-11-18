@@ -31,18 +31,22 @@ Add a home-screen shortcut, use it, and ask its own Bot for changes as you go.</
 
 ---
 
-## Recent update 1.0.11: Faster, and better at remembering
+## Recent update 1.0.11: Memory system
 
-- **Remembers what you tell it.** Things you ask it to note are saved right away. Things you mention in passing (where you live, how you like to travel, your family) are sorted into memory in the background half an hour after you stop chatting. When something changes ("put meetings in the morning now"), the old note is replaced.
-- **Long chats no longer slow down.** As a chat grows, it is summarised in the background without making you wait. Ask about earlier details later and it looks them up in the original conversation instead of answering from a vague impression.
-- **Speaks up as it goes.** Helpers share useful findings as soon as they have them. For the earliest train, you hear back in 7–13 seconds (previously 10–63).
-- **Faster the second time.** Helpers keep the scripts that got a job done and reuse them. Checking 12306 trains dropped from about 30 seconds to about 10.
-- **The main chat is always free.** It handles one- or two-step jobs itself and hands longer ones to helpers; while a helper is busy, a new message gets a response within 1–2 seconds.
-- **Fewer confirmations.** Work inside its own sandbox (files, scripts, web requests) no longer stops to ask. It asks only when touching files on your phone, messaging other people or spending money.
-- **Thinking off means off.** With DeepSeek, Kimi, MiniMax, Qwen and similar models, turning thinking off no longer leaves it thinking in the background. One train lookup went from 87 seconds to 17.
-- **Fixes.** The opening line of a multi-step job was sometimes in English; stopped tasks could reply on their own; messages like "never mind, stop" sometimes got no response.
+**Memory is a git repository on your phone.**
 
-[Full release notes](docs/releases/1.0.11.md) · [Download 1.0.11](https://github.com/1zhangyy1/momoding/releases/tag/v1.0.11)
+- **How it's stored.** A set of Markdown notes. The entry file, `MEMORY.md`, goes into every conversation and indexes the topic files; one fact per line, with its date.
+- **How it's written.** Say "remember this" and it is saved right away. Things you mention in passing (where you live, how you travel, your family) are sorted in by a background pass once you have been quiet for half an hour. When something changes, the old line is edited rather than kept alongside the new one.
+- **Traceable.** After each turn that changed memory, the app makes a commit whose message names the conversation and the words you said. `git log` shows when and why any note was written.
+
+**Other improvements**
+
+- **Long chats stay fast.** Each chat works within 200K tokens; the summary is written ahead of time in the background, so compaction doesn't make you wait. The full history is kept word for word, and later questions about details are looked up there.
+- **Tells you as it goes.** Helpers share useful findings as soon as they have them, and you can keep chatting while they work.
+- **Faster the second time.** Jobs it has done before go quicker next time.
+- **Fewer interruptions.** Work in its own space needs no approval; it asks only before touching files on your phone, messaging other people or spending money.
+
+A few fixes too; see the [full release notes](docs/releases/1.0.11.md) · [Download 1.0.11](https://github.com/1zhangyy1/momoding/releases/tag/v1.0.11)
 
 ### 1.0.10: Every job you hand off is a task
 
