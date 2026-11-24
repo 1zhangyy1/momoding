@@ -26,7 +26,8 @@ class AndroidScriptOffloadHandler(private val context: Context) : NativeOffloadH
 
     private fun run(args: OffloadArgs, request: NativeOffloadRequest): NativeOffloadResult {
         val given = args.positional.drop(1).joinToString(" ").takeIf { it.isNotBlank() }
-        val code = (if ("e" in args.optionNames) given else given?.let { readSandboxFile(it, request) })
+        // a file in the sandbox, else the words themselves are the code (`run '<code>'` without -e)
+        val code = (if ("e" in args.optionNames) given else given?.let { readSandboxFile(it, request) ?: it.takeIf { c -> c.any { ch -> ch in "(;=." } } })
             ?: return NativeOffloadResult(2, "momoding-android run <file.js> | run -e \"<code>\"\n")
         val timeout = (args.get("timeout")?.toLongOrNull() ?: 20L).coerceIn(1L, 300L) * 1000
         var r = AndroidScript.run(context, code, request.sessionId, request.binding, timeout)

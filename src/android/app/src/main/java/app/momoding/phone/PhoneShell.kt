@@ -21,7 +21,9 @@ import java.net.NetworkInterface
  * Shizuku: nothing else to install, two switches for the person — wireless debugging on, then
  * Pair, where the code is read off the system dialog ([PairingService]).
  *
- * Every privileged call in the app goes through [runProcess] / [isReady]: the system command
+ * Wireless debugging is the way in; the commands then run in a resident shell process
+ * ([ShellServer]) that stays when Android switches wireless debugging off on a Wi-Fi change, until
+ * the phone restarts. Every privileged call in the app goes through [runProcess] / [isReady]: the system command
  * (`android-system`), granting Momoding its own permissions ([app.momoding.guard.SelfGrant]), the
  * hands' hidden screen ([app.momoding.hands.HandsDisplay]) and the accessibility repair.
  */
@@ -63,10 +65,33 @@ object PhoneShell {
     /** Rechecks the state in the background (a screen coming back to the front). */
     fun refresh() { Thread({ ensure() }, "phone-shell-refresh").start() }
 
-    /** Connected now, connecting if it can. Blocking (network, mDNS): not on the main thread. */
+    /** Ready now, connecting if it can. Blocking (network, mDNS): not on the main thread. */
     fun ensure(): Boolean {
         val context = app ?: return false
-        return synchronized(lock) { connect(context) } != null
+        return synchronized(lock) { resident(context) || connection?.isOpen == true }
+    }
+
+    /**
+     * The resident shell ([ShellServer]) is up, starting it through wireless debugging when it is
+     * not. Once up it outlives wireless debugging, which Android switches off on Wi-Fi changes.
+     */
+    private fun resident(context: Context): Boolean {
+        val (port, token) = residentAddress(context)
+        ShellServer.call(port, token, org.json.JSONObject().put("ping", true), 2_000)?.let { pong ->
+            if (pong.optInt("version") == ShellServer.VERSION) { set(State.READY); return true }
+            ShellServer.call(port, token, org.json.JSONObject().put("command", "pkill -f ${ShellServer::class.java.name}"), 2_000) // an older one
+        }
+        val c = connect(context) ?: return false
+        // a fresh port and secret each start: an old server, or another app, cannot answer for it
+        val fresh = (20000..60000).random() to java.util.UUID.randomUUID().toString().replace("-", "")
+        residentFile(context).writeText("${fresh.first} ${fresh.second}")
+        runCatching { c.shell(ShellServer.startCommand(context.applicationInfo.sourceDir, fresh.first, fresh.second), 5_000) }
+        repeat(30) {
+            Thread.sleep(100)
+            if (ShellServer.call(fresh.first, fresh.second, org.json.JSONObject().put("ping", true), 1_000) != null) return true
+        }
+        AppLogger.warning(TAG, "the resident shell did not start; commands go over wireless debugging")
+        return false
     }
 
     /** Runs [argv] as the shell. Same contract as the Shizuku process it replaces. */
@@ -78,6 +103,11 @@ object PhoneShell {
             append(argv.joinToString(" ") { quote(it) })
         }
         synchronized(lock) {
+            if (resident(context)) {
+                val (port, token) = residentAddress(context)
+                ShellServer.call(port, token, org.json.JSONObject().put("command", command).put("timeoutMs", timeoutMs), timeoutMs)
+                    ?.let { return ProcessResult(it.optInt("exit", 126), it.optString("stdout"), it.optString("stderr")) }
+            }
             repeat(2) { attempt ->
                 val c = connection?.takeIf { it.isOpen } ?: connect(context) ?: return ProcessResult(126, "", notReady())
                 try {
@@ -101,7 +131,7 @@ object PhoneShell {
         val ok = r.ok || AdbPairing.pair(wifiAddress() ?: return false.also { log(r.detail) }, port, code, dir = dir(context)).ok
         if (!ok) { log(r.detail); return false }
         AdbPorts.forget(context)
-        synchronized(lock) { drop(); connect(context) }
+        synchronized(lock) { drop(); resident(context) || connect(context) != null }
         return isReady()
     }
 
@@ -120,6 +150,12 @@ object PhoneShell {
             null
         }
     }
+
+    private fun residentFile(context: Context) = File(dir(context).apply { mkdirs() }, "resident")
+
+    private fun residentAddress(context: Context): Pair<Int, String> = runCatching {
+        residentFile(context).readText().trim().split(' ').let { it[0].toInt() to it[1] }
+    }.getOrDefault(0 to "")
 
     private fun drop() { connection?.close(); connection = null }
 

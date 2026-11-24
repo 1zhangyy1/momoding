@@ -33,3 +33,6 @@
 -dontwarn java.beans.**
 -dontwarn javax.script.**
 -dontwarn jdk.dynalink.**
+
+# momoding: the resident phone shell is started by name with app_process (app.momoding.phone.ShellServer)
+-keep class app.momoding.phone.ShellServer { public static void main(java.lang.String[]); }
