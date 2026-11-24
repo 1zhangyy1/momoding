@@ -81,4 +81,8 @@
     <string name="mo_hands_background_on">On: it works on a hidden screen of its own; you keep using your phone</string>
     <string name="mo_hands_background_off">Off: it works on your screen, as before</string>
     <string name="mo_hands_background_footer">With advanced access on, Momoding opens apps on a screen you don\'t see and works there, so your screen stays yours. Logins and anything it shouldn\'t do alone still come to you. Without it, it works on your screen.</string>
+    <string name="mo_hands_take_over">Take over</string>
+    <string name="mo_hands_hand_back">Hand back</string>
+    <string name="mo_hands_close">Close</string>
+    <string name="mo_hands_taken_over">It\'s on your screen now. When you\'re done, tap Hand back and I\'ll take it from where you left it.</string>
 </resources>

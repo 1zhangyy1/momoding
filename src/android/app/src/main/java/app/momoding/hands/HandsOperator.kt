@@ -114,6 +114,8 @@ class HandsOperator(private val context: Context) {
     private val stop = AtomicBoolean(false)
     private val stopReason = AtomicReference<String?>(null)
     private val userSignal = AtomicReference<CountDownLatch?>(null)
+    /** The person asked for the app from the live view; taken at the next step. */
+    private val takeOverAsked = AtomicBoolean(false)
     private val capsule = HandsCapsule(context)
     @Volatile private var durableTaskId: String? = null
     private var instructionCursor: Long = 0
@@ -181,6 +183,8 @@ class HandsOperator(private val context: Context) {
             if (userSignal.get() != null) durableTaskId?.let { app.momoding.task.ScreenWork.answer(context, it) } ?: continueAfterUser()
         }
         capsule.onOpenApp = { capsule.bringAppToFront(opts.sessionId) }
+        capsule.onTakeOver = { takeOverAsked.set(true) }
+        takeOverAsked.set(false)
         // the approval answered where the person is: the same request the chat card shows,
         // and only ours (a shell or browser card of another conversation is not the capsule's to answer)
         capsule.onAllow = { ownPendingRequest()?.let { RiskGate.decide(it.id, RiskDecision.ALLOW_ONCE) } }
@@ -207,6 +211,7 @@ class HandsOperator(private val context: Context) {
             // the hidden display, when this run can work in the background (advanced access); else the person's screen
             bg = if (opts.background && treeMode && HandsDisplay.available(context)) HandsDisplay.ensure(context) else null
             capsule.background = bg != null
+            hiddenRun = bg != null
             if (bg != null) log += "working on the hidden display ${bg} (the person's screen stays theirs)"
             fun pause(ms: Long) = if (treeMode) ScreenTree.settle(svc, context.packageName, screenRect, maxMs = ms + 600, displayId = bg) else Thread.sleep(ms)
             val turns = mutableListOf<Turn>()
@@ -244,6 +249,16 @@ class HandsOperator(private val context: Context) {
                 if (stop.get()) return finish(Outcome.Stopped(stopReason.get() ?: "stopped"), steps, runId, lastScreen, traceDir, log, model.label)
                 if (System.currentTimeMillis() - started - pausedMs.get() > MAX_RUN_MS) {
                     return finish(Outcome.Stopped("the run hit its time limit"), steps, runId, lastScreen, traceDir, log, model.label)
+                }
+                // taken over from the live view: the app on the person's screen until they hand it back
+                if (takeOverAsked.getAndSet(false) && bg != null) {
+                    val pkg = driving
+                    handToPersonScreen()
+                    if (!waitForUser(ui.getString(com.openminis.app.R.string.mo_hands_taken_over), handBack = true))
+                        return finish(Outcome.Stopped(stopReason.get() ?: "stopped"), steps, runId, lastScreen, traceDir, log, model.label)
+                    backToHidden(pkg)
+                    log += "the person took over and handed back"
+                    lastResult = "the person took the app over for a while and handed it back; look at the screen as it is now before going on."
                 }
                 keepOnOwnScreen()?.let { log += it; lastResult = listOfNotNull(lastResult, it).joinToString(" ") }
                 steps++
@@ -384,9 +399,11 @@ class HandsOperator(private val context: Context) {
                         return finish(Outcome.NeedsUser(action.question.ifBlank { parsed.thought }), steps, runId, lastScreen, traceDir, log, model.label)
                     }
                     is HandsAction.TakeOver -> {
+                        val pkg = driving
                         handToPersonScreen()
                         val cont = waitForUser(action.reason.ifBlank { parsed.thought })
                         if (!cont) return finish(Outcome.Stopped(stopReason.get() ?: "stopped"), steps, runId, lastScreen, traceDir, log, model.label)
+                        backToHidden(pkg)
                         lastResult = "the user did it themselves and says to continue; look at the screen as it is now."
                     }
                     is HandsAction.Click, is HandsAction.DoubleTap, is HandsAction.LongPress -> {
@@ -561,8 +578,10 @@ class HandsOperator(private val context: Context) {
             capsule.hide()
             Hands.current = null
             SessionActivityTracker.setCameraSuppressActive(false)
-            if (durableTaskId == null || runBlocking { app.momoding.task.TaskEngine.dao(context).task(durableTaskId!!)?.state }
-                in listOf(app.momoding.task.TaskEntity.State.RUNNING.name, app.momoding.task.TaskEntity.State.WAITING.name)) capsule.bringAppToFront(opts.sessionId)
+            // a run that stayed on the hidden display ends where it was: the app stays there on its last
+            // page and nothing comes to the front of the person's screen (the chat says what was done)
+            if (bg == null && (durableTaskId == null || runBlocking { app.momoding.task.TaskEngine.dao(context).task(durableTaskId!!)?.state }
+                in listOf(app.momoding.task.TaskEntity.State.RUNNING.name, app.momoding.task.TaskEntity.State.WAITING.name))) capsule.bringAppToFront(opts.sessionId)
         }
     }
 
@@ -573,11 +592,11 @@ class HandsOperator(private val context: Context) {
     // ── the user's turn ────────────────────────────────────────────────────
 
     /** Shows the take-over card and waits for Continue; false when Stop was tapped or nobody came. */
-    private fun waitForUser(reason: String): Boolean {
+    private fun waitForUser(reason: String, handBack: Boolean = false): Boolean {
         val latch = CountDownLatch(1)
         userSignal.set(latch)
         durableTaskId?.let { id -> runBlocking { app.momoding.task.TaskEngine.screenWaiting(context, id, reason) } }
-        capsule.takeOver(reason)
+        capsule.takeOver(reason, handBack)
         Hands.reportWaiting(reason) // the chat says what is asked, not only the step
         val pausedAt = System.currentTimeMillis()
         val came = if (durableTaskId != null) { latch.await(); true } else latch.await(TAKE_OVER_TIMEOUT_MS, TimeUnit.MILLISECONDS)
@@ -700,6 +719,22 @@ class HandsOperator(private val context: Context) {
         capsule.background = false
         Thread.sleep(600)
     }
+
+    /**
+     * Handed back after the person's part: a run that began on the hidden display takes the app
+     * back there (a new display: the old one went to hand it over), so the person's screen is
+     * theirs again. Where that fails the run simply carries on on their screen.
+     */
+    private fun backToHidden(pkg: String?) {
+        if (!hiddenRun || bg != null || pkg == null || !HandsDisplay.available(context)) return
+        val d = HandsDisplay.ensure(context) ?: return
+        val task = HandsDisplay.taskOn(0, pkg).takeIf { it > 0 } ?: return
+        HandsDisplay.move(task, d)
+        if (HandsDisplay.taskOn(d, pkg) > 0) { bg = d; pulls = 0; capsule.background = true }
+    }
+
+    /** This run began on the hidden display. */
+    @Volatile private var hiddenRun = false
 
     /** The display this run works on: the hands' hidden one, or null for the person's screen. */
     @Volatile private var bg: Int? = null

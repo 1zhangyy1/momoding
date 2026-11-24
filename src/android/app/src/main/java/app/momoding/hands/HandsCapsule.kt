@@ -80,6 +80,8 @@ class HandsCapsule(private val context: Context) {
     /** The approval answered on the capsule itself, where the person already is (0.1.33). */
     var onAllow: (() -> Unit)? = null
     var onDeny: (() -> Unit)? = null
+    /** The person takes the app onto their own screen from the live view (Gemini's "take over"). */
+    var onTakeOver: (() -> Unit)? = null
 
     private fun dp(v: Int): Int = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), context.resources.displayMetrics).toInt()
 
@@ -98,9 +100,14 @@ class HandsCapsule(private val context: Context) {
         denyBtn?.visibility = View.GONE
     }
 
-    /** The hands wait for the user to do something on the phone. */
-    fun takeOver(reason: String) = onMain {
+    /**
+     * The hands wait for the user to do something on the phone. [handBack]: the person took over
+     * themselves, so the button hands the app back rather than continuing.
+     */
+    fun takeOver(reason: String, handBack: Boolean = false) = onMain {
         ensure()
+        peek(false)
+        continueBtn?.text = ui.getString(if (handBack) R.string.mo_hands_hand_back else R.string.mo_hands_continue)
         stage.mood(HandsStage.Mood.WAITING)
         stage.clear()
         ring?.turning(false)
@@ -132,6 +139,7 @@ class HandsCapsule(private val context: Context) {
     }
 
     fun hide() = onMain {
+        peek(false)
         val v = root
         root = null; params = null; titleView = null; detailView = null; continueBtn = null; openBtn = null; allowBtn = null; denyBtn = null
         ring?.turning(false); ring = null
@@ -237,6 +245,70 @@ class HandsCapsule(private val context: Context) {
         if (moved) Thread.sleep(120)
     }
 
+    // ── the live view ──────────────────────────────────────────────────────
+
+    private var peekView: View? = null
+    private var peekImage: ImageView? = null
+    private val peekTick = object : Runnable {
+        override fun run() {
+            val img = peekImage ?: return
+            HandsDisplay.frame()?.let { img.setImageBitmap(it) }
+            main.postDelayed(this, PEEK_MS)
+        }
+    }
+
+    /**
+     * The hidden display as it is now, under the capsule: what the hands see and do there, with
+     * Take over (the app comes to the person's screen) and Close. Frames twice a second.
+     */
+    private fun peek(show: Boolean) {
+        if (!show) {
+            main.removeCallbacks(peekTick)
+            peekView?.let { v -> runCatching { wm.removeView(v) } }
+            peekView = null; peekImage = null
+            return
+        }
+        if (peekView != null || root == null) return
+        val dm = context.resources.displayMetrics
+        val width = (dm.widthPixels * 0.62f).toInt()
+        val image = ImageView(context).apply {
+            adjustViewBounds = true
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            layoutParams = LinearLayout.LayoutParams(width - dp(16), LinearLayout.LayoutParams.WRAP_CONTENT)
+            clipToOutline = true
+            outlineProvider = object : ViewOutlineProvider() {
+                override fun getOutline(v: View, outline: Outline) { outline.setRoundRect(0, 0, v.width, v.height, dp(12).toFloat()) }
+            }
+            minimumHeight = (width - dp(16)) * dm.heightPixels / dm.widthPixels
+            setOnClickListener { peek(false) }
+        }
+        val row = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            setPadding(0, dp(8), 0, 0)
+            addView(button(ui.getString(R.string.mo_hands_close), 0x33FFFFFF) { peek(false) })
+            addView(button(ui.getString(R.string.mo_hands_take_over), ACCENT) { peek(false); onTakeOver?.invoke() })
+        }
+        val panel = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            background = GradientDrawable().apply { cornerRadius = dp(18).toFloat(); setColor(INK); setStroke(dp(1), EDGE) }
+            elevation = dp(8).toFloat()
+            addView(image); addView(row)
+        }
+        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        else @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
+        val lp = WindowManager.LayoutParams(width, WindowManager.LayoutParams.WRAP_CONTENT, type,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT).apply {
+            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            y = (params?.y ?: 0) + (root?.height ?: dp(52)) + dp(8)
+        }
+        if (runCatching { wm.addView(panel, lp) }.isFailure) return
+        peekView = panel; peekImage = image
+        main.post(peekTick)
+    }
+
     // ── building ───────────────────────────────────────────────────────────
 
     private fun onMain(block: () -> Unit) {
@@ -309,6 +381,8 @@ class HandsCapsule(private val context: Context) {
             maxLines = 2
         }
         texts.addView(title); texts.addView(detail)
+        // working on the hidden display: a tap on the capsule shows that screen, live
+        texts.setOnClickListener { if (background) peek(peekView == null) }
         val cont = button(ui.getString(R.string.mo_hands_continue), ACCENT) { onContinue?.invoke() }.apply { visibility = View.GONE }
         val open = button(ui.getString(R.string.mo_hands_open), ACCENT) { onOpenApp?.invoke() }.apply { visibility = View.GONE }
         val allow = button(ui.getString(R.string.mo_hands_allow_once), ACCENT) { onAllow?.invoke() }.apply { visibility = View.GONE }
@@ -516,6 +590,8 @@ class HandsCapsule(private val context: Context) {
         private const val EDGE = 0x1AFFFFFF
         /** Stop: a low-saturation red, not an alarm. */
         private const val STOP_RED = 0xFF9B3B3B.toInt()
+        /** The live view's frame interval. */
+        private const val PEEK_MS = 500L
         /** One breath: 2.4 s in, 2.4 s out — the rhythm of every working light on every client. */
         private const val BREATH_MS = 4800L
         /** Each bar 0.6 s behind the last, as a share of the breath. */

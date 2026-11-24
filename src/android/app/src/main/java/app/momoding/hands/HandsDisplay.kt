@@ -77,16 +77,46 @@ object HandsDisplay {
      */
     fun pullBack(displayId: Int, pkg: String): Boolean {
         val task = taskOn(0, pkg).takeIf { it > 0 } ?: return true
+        move(task, displayId)
+        return taskOn(0, pkg) == 0
+    }
+
+    /** Moves [task] to display [displayId], and waits for it to land. */
+    fun move(task: Int, displayId: Int) {
         shell("am", "display", "move-stack", task.toString(), displayId.toString())
         Thread.sleep(1200)
-        return taskOn(0, pkg) == 0
     }
 
     private fun shell(vararg argv: String) = app.momoding.phone.PhoneShell.runProcess(arrayOf(*argv), timeoutMs = 8_000)
 
+    @Volatile private var lastFrame: android.graphics.Bitmap? = null
+
+    /**
+     * What the hidden display shows now, for the person to look at (the capsule's live view): the
+     * newest frame, or the last one when nothing has changed since. Null when there is no display.
+     */
+    @Synchronized
+    fun frame(): android.graphics.Bitmap? {
+        val r = reader ?: return null
+        runCatching {
+            r.acquireLatestImage()?.use { img ->
+                val plane = img.planes[0]
+                val padded = android.graphics.Bitmap.createBitmap(plane.rowStride / plane.pixelStride, img.height, android.graphics.Bitmap.Config.ARGB_8888)
+                padded.copyPixelsFromBuffer(plane.buffer)
+                lastFrame = android.graphics.Bitmap.createBitmap(padded, 0, 0, img.width, img.height).also { if (it !== padded) padded.recycle() }
+            }
+        }.onFailure { AppLogger.warning(TAG, "frame: ${it.message}") }
+        return lastFrame
+    }
+
+    /**
+     * Releasing the display moves what is on it to the person's screen (Android's rule for a
+     * display that goes away): how the person takes over.
+     */
     @Synchronized
     fun release() {
         display?.release(); display = null
         reader?.close(); reader = null
+        lastFrame = null
     }
 }
