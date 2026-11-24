@@ -97,7 +97,7 @@
     <string name="mo_routine_wake_caption_no_time">Routine · %1$s</string>
     <string name="mo_status_idle">On your phone · ready when you are</string>
     <string name="mo_ob_model_preparing">Getting the models ready…</string>
-    <string name="mo_settings_phone">Phone permissions</string>
+    <string name="mo_settings_phone">Phone abilities</string>
     <string name="mo_settings_ask_first">Ask first</string>
     <string name="mo_settings_rules_page">Allow rules</string>
     <string name="mo_settings_rules_none">No rules yet</string>

@@ -113,18 +113,15 @@ class MinisNotificationListenerService : NotificationListenerService() {
             }
         }
 
-        /** True if the user has granted Notification Access for this app. */
-        fun isEnabled(context: Context): Boolean {
-            val pkg = context.packageName
-            val flat = Settings.Secure.getString(
-                context.contentResolver,
-                "enabled_notification_listeners",
-            ) ?: return false
-            return flat.split(':').any { entry ->
-                val cn = ComponentName.unflattenFromString(entry) ?: return@any false
-                cn.packageName == pkg
-            }
-        }
+        /**
+         * True if the user has granted Notification Access for this app. momoding: asked of
+         * NotificationManager; newer Android no longer lets apps read the secure setting this
+         * once parsed, so it read as off even when granted.
+         */
+        fun isEnabled(context: Context): Boolean = runCatching {
+            context.getSystemService(android.app.NotificationManager::class.java)
+                .isNotificationListenerAccessGranted(ComponentName(context, MinisNotificationListenerService::class.java))
+        }.getOrDefault(false)
 
         /** Intent action for opening the Notification Access settings page. */
         const val SETTINGS_ACTION: String = Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS

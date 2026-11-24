@@ -5,7 +5,7 @@
     <string name="mo_phone_shell_not_paired">點這裡，開啟「無線偵錯」，點「使用配對碼配對裝置」，把 6 位配對碼填進 Momoding 的通知裡，其餘 Momoding 自己完成</string>
     <string name="mo_phone_shell_off">無線偵錯關了：點這裡重新開啟（不用再配對）</string>
     <string name="mo_phone_shell_unsupported">需要 Android 11 或更新</string>
-    <string name="mo_phone_shell_footer">用的是 Android 內建的無線偵錯，由手機和自己配對：不用另裝 App，也不用電腦。要先開啟開發人員選項（設定 → 關於手機 → 連點版本號碼 7 下）。多數手機重新開機後會關掉無線偵錯，重新開啟即可，不用再配對。</string>
+    <string name="mo_phone_shell_footer">用的是安卓內建的無線偵錯，手機和自己配對：不用另裝 App，也不用電腦。配一次就好：重開機後 Momoding 會自己恢復（連著當初允許過的 Wi-Fi 時）。</string>
     <string name="mo_phone_shell_state_ready">已就緒</string>
     <string name="mo_phone_shell_state_not_paired">還沒設定</string>
     <string name="mo_phone_shell_state_off">無線偵錯關著</string>
@@ -19,4 +19,14 @@
     <string name="mo_phone_pair_code_action">填配對碼</string>
     <string name="mo_phone_pair_code_hint">6 位配對碼</string>
     <string name="mo_phone_pair_enter">把配對彈窗裡的 6 位配對碼填到這裡</string>
+    <string name="mo_phone_steps_left">還差 %1$d 步</string>
+    <string name="mo_phone_step_dev">開發人員選項</string>
+    <string name="mo_phone_step_dev_hint">設定 → 關於手機，連點「版本號碼」7 下</string>
+    <string name="mo_phone_step_wireless">無線偵錯</string>
+    <string name="mo_phone_step_wireless_hint">打開它；彈窗裡勾「一律允許透過這個網路進行」，再點允許</string>
+    <string name="mo_phone_step_pair">配對</string>
+    <string name="mo_phone_step_pair_hint">點「使用配對碼配對裝置」，把 6 位配對碼填進 Momoding 的通知</string>
+    <string name="mo_phone_step_on">已開啟</string>
+    <string name="mo_phone_step_said_on">我已經打開了</string>
+    <string name="mo_phone_xiaomi_note">小米 / 紅米：沒開「USB 偵錯（安全設定）」時，進階權限不能替 App 授權、不能在後台屏上點，其餘照常。打開它要插 SIM 卡並登入小米帳號。</string>
 </resources>

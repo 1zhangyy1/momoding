@@ -17,6 +17,7 @@ import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.runtime.Composable
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -35,6 +36,9 @@ import com.openminis.app.R
 /** One row of the prototype's "手机权限": what it is for and whether it is on. */
 data class PhonePermission(val key: String, @StringRes val title: Int, @StringRes val purpose: Int, val icon: ImageVector, val granted: Boolean)
 
+/** Bumped when Momoding switched one on itself (no trip to Settings to notice it by). */
+private val switched = androidx.compose.runtime.mutableIntStateOf(0)
+
 /** The phone's own permissions Momoding uses, re-read whenever Settings comes back to the front. */
 @Composable
 fun rememberPhonePermissions(): List<PhonePermission> {
@@ -45,7 +49,7 @@ fun rememberPhonePermissions(): List<PhonePermission> {
         val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) tick++ }
         owner.lifecycle.addObserver(obs); onDispose { owner.lifecycle.removeObserver(obs) }
     }
-    return remember(tick) {
+    return remember(tick, switched.intValue) {
         fun has(p: String) = ContextCompat.checkSelfPermission(context, p) == PackageManager.PERMISSION_GRANTED
         listOf(
             PhonePermission("notifications", R.string.mo_perm_row_notifications, R.string.mo_perm_purpose_notifications, Icons.Outlined.Notifications,
@@ -68,6 +72,18 @@ fun rememberPhonePermissions(): List<PhonePermission> {
             PhonePermission("background", R.string.mo_perm_row_background, R.string.mo_perm_purpose_background, Icons.Outlined.BatteryFull,
                 com.openminis.app.power.PowerOptimizationManager.isIgnoringBatteryOptimizations(context)),
         )
+    }
+}
+
+/**
+ * A tap on a row: switched on right away where advanced access allows (as the chat's card does),
+ * else the system page where the person switches it.
+ */
+fun onPermissionRow(context: Context, p: PhonePermission) {
+    if (p.granted) { openAppPermissionSettings(context, p); return }
+    kotlinx.coroutines.MainScope().launch {
+        val on = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { app.momoding.phone.PhoneNeeds.switchOn(context, p.key) }
+        if (on) switched.intValue++ else openAppPermissionSettings(context, p)
     }
 }
 

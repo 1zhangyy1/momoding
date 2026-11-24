@@ -30,7 +30,8 @@ import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Extension
-import androidx.compose.material.icons.outlined.TouchApp // momoding
+import androidx.compose.material.icons.outlined.TouchApp
+import androidx.compose.material.icons.outlined.AdminPanelSettings // momoding
 import androidx.compose.material.icons.outlined.Feedback
 import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.Folder
@@ -89,6 +90,7 @@ fun SettingsScreen(
     onEnvVarsClick: () -> Unit = {},
     onSkillsClick: () -> Unit = {},
     onHandsClick: () -> Unit = {}, // momoding: operating the phone's screen
+    onAdvancedAccessClick: () -> Unit = {}, // momoding: advanced access (app/momoding/phone)
     onRoutinesClick: () -> Unit = {}, // momoding: the routines list, on the first level
     onRulesClick: () -> Unit = {}, // momoding: remembered approvals
     onComputerClick: () -> Unit = {}, // momoding: its own computer (M14)
@@ -156,13 +158,23 @@ fun SettingsScreen(
                     subtitle = stringResource(R.string.mo_settings_models_change), onClick = onModelsClick, showDivider = false)
             }
             SettingsSection(title = stringResource(R.string.mo_settings_phone)) {
+                // momoding: the deepest layer first — set up once, it switches most of the rest on by itself
+                val shell by app.momoding.phone.PhoneShell.snapshot.collectAsState()
+                val shellOn = shell.state == app.momoding.phone.PhoneShell.State.READY
+                SettingsItem(icon = Icons.Outlined.AdminPanelSettings, iconColor = if (shellOn) Color(0xFF34C759) else Color(0xFF8E8E93),
+                    title = stringResource(R.string.mo_phone_shell_title),
+                    subtitle = stringResource(when (shell.state) {
+                        app.momoding.phone.PhoneShell.State.READY -> R.string.mo_phone_shell_state_ready
+                        app.momoding.phone.PhoneShell.State.OFF -> R.string.mo_phone_shell_state_off
+                        else -> R.string.mo_phone_shell_state_not_paired
+                    }), onClick = onAdvancedAccessClick)
                 SettingsItem(icon = Icons.Outlined.TouchApp, iconColor = Color(0xFF2E7A12), title = stringResource(R.string.mo_hands_title),
                     subtitle = stringResource(if (app.momoding.hands.Hands.enabled(context)) R.string.mo_hands_on else R.string.mo_hands_off), onClick = onHandsClick)
                 momodingPerms.forEachIndexed { i, p ->
                     SettingsItem(icon = p.icon, iconColor = if (p.granted) Color(0xFF34C759) else Color(0xFF8E8E93),
                         title = stringResource(p.title),
                         subtitle = stringResource(p.purpose) + " · " + stringResource(if (p.granted) R.string.mo_perm_state_on else R.string.mo_perm_state_off),
-                        onClick = { app.momoding.ui.settings.openAppPermissionSettings(context, p) }, showDivider = i < momodingPerms.lastIndex)
+                        onClick = { app.momoding.ui.settings.onPermissionRow(context, p) }, showDivider = i < momodingPerms.lastIndex)
                 }
             }
             SettingsSection(title = stringResource(R.string.mo_settings_ask_first)) {

@@ -623,6 +623,7 @@ fun AppNavigation(
                 onEnvVarsClick = { navController.safeNavigate(Routes.ENV_VARS) },
                 onSkillsClick = { navController.safeNavigate(Routes.SKILLS) },
                 onHandsClick = { navController.safeNavigate(app.momoding.ui.hands.ROUTE_HANDS) }, // momoding
+                onAdvancedAccessClick = { navController.safeNavigate(Routes.SHIZUKU) }, // momoding
                 onRoutinesClick = { navController.safeNavigate(Routes.SCHEDULED_TASKS) }, // momoding
                 onRulesClick = { navController.safeNavigate(app.momoding.ui.guard.ROUTE_RULES) }, // momoding
                 onComputerClick = { navController.safeNavigate(app.momoding.ui.computer.ROUTE_COMPUTER) }, // momoding

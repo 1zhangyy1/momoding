@@ -5,7 +5,7 @@
     <string name="mo_phone_shell_not_paired">Tap here, switch on Wireless debugging, tap “Pair device with pairing code”, and type the six digits into Momoding\'s notification. Momoding does the rest</string>
     <string name="mo_phone_shell_off">Wireless debugging is off: tap to switch it back on (no need to pair again)</string>
     <string name="mo_phone_shell_unsupported">Needs Android 11 or newer</string>
-    <string name="mo_phone_shell_footer">Uses Android\'s own wireless debugging, paired with this phone itself: nothing else to install, no computer. Developer options must be on (Settings → About phone → tap the build number 7 times). Most phones switch wireless debugging off when they restart; switch it back on, no need to pair again.</string>
+    <string name="mo_phone_shell_footer">It uses Android\'s own wireless debugging, the phone pairing with itself: nothing else to install, no computer. Set it up once: after a restart Momoding brings it back by itself, on a Wi-Fi you allowed.</string>
     <string name="mo_phone_shell_state_ready">Ready</string>
     <string name="mo_phone_shell_state_not_paired">Not set up</string>
     <string name="mo_phone_shell_state_off">Wireless debugging is off</string>
@@ -19,4 +19,14 @@
     <string name="mo_phone_pair_code_action">Enter code</string>
     <string name="mo_phone_pair_code_hint">6-digit pairing code</string>
     <string name="mo_phone_pair_enter">Type the six-digit code from the pairing dialog here</string>
+    <string name="mo_phone_steps_left">%1$d steps to go</string>
+    <string name="mo_phone_step_dev">Developer options</string>
+    <string name="mo_phone_step_dev_hint">Settings → About phone: tap the build number 7 times</string>
+    <string name="mo_phone_step_wireless">Wireless debugging</string>
+    <string name="mo_phone_step_wireless_hint">Switch it on; in the dialog tick “Always allow on this network”, then Allow</string>
+    <string name="mo_phone_step_pair">Pair</string>
+    <string name="mo_phone_step_pair_hint">Tap “Pair device with pairing code” and type the six digits into Momoding\'s notification</string>
+    <string name="mo_phone_step_on">On</string>
+    <string name="mo_phone_step_said_on">I\'ve turned it on</string>
+    <string name="mo_phone_xiaomi_note">Xiaomi / Redmi: without “USB debugging (Security settings)” on, advanced access cannot grant permissions to apps or tap on the hidden screen; everything else works. Turning that on needs a SIM card and a Xiaomi account.</string>
 </resources>

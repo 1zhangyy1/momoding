@@ -97,7 +97,7 @@
     <string name="mo_routine_wake_caption_no_time">🕗 例行 · %1$s</string>
     <string name="mo_status_idle">在你手機上 · 隨時可以交代</string>
     <string name="mo_ob_model_preparing">正在準備模型…</string>
-    <string name="mo_settings_phone">手機權限</string>
+    <string name="mo_settings_phone">手機能力</string>
     <string name="mo_settings_ask_first">先問你</string>
     <string name="mo_settings_rules_page">允許規則</string>
     <string name="mo_settings_rules_none">還沒有</string>
