@@ -13,28 +13,21 @@ import androidx.compose.ui.res.stringResource
 import app.momoding.phone.PairingService
 import app.momoding.phone.PhoneShell
 import com.openminis.app.R
-import com.openminis.app.accessibility.MinisAccessibilityService
 import com.openminis.app.ui.settings.SettingsRow
 
 /**
  * One row for advanced access (the phone shell): what it is now, and the one thing to tap.
- * Pairing reads the code off the system dialog with the accessibility service, so that comes
- * first when it is off.
+ * Pairing takes the code from the system dialog (accessibility) or from the notification input.
  */
 @Composable
 fun PhoneShellRow(showDivider: Boolean = false) {
     val context = LocalContext.current
     val snap by PhoneShell.snapshot.collectAsState()
-    val a11yOn = MinisAccessibilityService.getInstance() != null
     val (subtitle, action) = when (snap.state) {
         PhoneShell.State.READY -> stringResource(R.string.mo_phone_shell_ready) to null
         PhoneShell.State.UNSUPPORTED -> stringResource(R.string.mo_phone_shell_unsupported) to null
         PhoneShell.State.OFF -> stringResource(R.string.mo_phone_shell_off) to { openWirelessDebugging(context) }
-        PhoneShell.State.NOT_PAIRED -> if (!a11yOn) {
-            stringResource(R.string.mo_phone_shell_need_a11y) to { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-        } else {
-            stringResource(R.string.mo_phone_shell_not_paired) to { PairingService.start(context) }
-        }
+        PhoneShell.State.NOT_PAIRED -> stringResource(R.string.mo_phone_shell_not_paired) to { PairingService.start(context) }
     }
     SettingsRow(
         title = stringResource(R.string.mo_phone_shell_title),

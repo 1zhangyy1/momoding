@@ -2,8 +2,7 @@
 <resources>
     <string name="mo_phone_shell_title">高级权限</string>
     <string name="mo_phone_shell_ready">已开：它能改设置、管 App、在看不见的屏上操作</string>
-    <string name="mo_phone_shell_not_paired">两步：点这里，打开「无线调试」，再点「使用配对码配对设备」，其余 Momoding 自己完成</string>
-    <string name="mo_phone_shell_need_a11y">先打开 Momoding 的无障碍：它要替你读配对码</string>
+    <string name="mo_phone_shell_not_paired">点这里，打开「无线调试」，点「使用配对码配对设备」，把 6 位配对码填进 Momoding 的通知里，其余 Momoding 自己完成</string>
     <string name="mo_phone_shell_off">无线调试关了：点这里重新打开（不用再配对）</string>
     <string name="mo_phone_shell_unsupported">需要 Android 11 或更新</string>
     <string name="mo_phone_shell_footer">用的是安卓自带的无线调试，由手机和自己配对：不用另装 App，也不用电脑。要先打开开发者选项（设置 → 关于手机 → 连点版本号 7 下）。多数手机重启后会关掉无线调试，重新打开即可，不用再配对。</string>
@@ -11,8 +10,13 @@
     <string name="mo_phone_shell_state_not_paired">还没设置</string>
     <string name="mo_phone_shell_state_off">无线调试关着</string>
     <string name="mo_phone_shell_set_up">去设置</string>
-    <string name="mo_phone_pair_watching">请点「使用配对码配对设备」，配对码 Momoding 会自己读</string>
-    <string name="mo_phone_pair_not_seen">没看到配对弹窗，回 Momoding 再试一次</string>
+    <string name="mo_phone_pair_watching">在「无线调试」里点「使用配对码配对设备」，再把 6 位配对码填到这里（点「填配对码」）</string>
+    <string name="mo_phone_pair_not_seen">等太久了，回 Momoding 再试一次</string>
     <string name="mo_phone_pair_done">配好了：高级权限已开</string>
-    <string name="mo_phone_pair_failed">配对没成功，再试一次（配对码每次都会变）</string>
+    <string name="mo_phone_pair_failed">配对码不对或已失效，填现在显示的那个</string>
+    <string name="mo_phone_pair_six_digits">配对码是 6 位数字，再填一次</string>
+    <string name="mo_phone_pair_no_dialog">先别关配对弹窗，开着它再填配对码</string>
+    <string name="mo_phone_pair_code_action">填配对码</string>
+    <string name="mo_phone_pair_code_hint">6 位配对码</string>
+    <string name="mo_phone_pair_enter">把配对弹窗里的 6 位配对码填到这里</string>
 </resources>

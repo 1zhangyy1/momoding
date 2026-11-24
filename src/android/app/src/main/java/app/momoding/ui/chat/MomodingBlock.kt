@@ -225,13 +225,11 @@ private fun PermissionCard(o: JSONObject, code: String) {
             app.momoding.ui.settings.backgroundHint(context)
             AskState.choose(context, "perm.$id", "background"); state = "background"
         } else if (need == "system") {
-            // advanced access (app.momoding.phone): accessibility first (it reads the pairing code), then the two steps
+            // advanced access (app.momoding.phone): the two steps; the pairing code is read, or typed into the notification
             if (app.momoding.phone.PhoneShell.isReady()) {
                 AskState.choose(context, "perm.$id", "granted"); state = "granted"; MomodingSend.send(carryOn)
             } else {
-                if (com.openminis.app.accessibility.MinisAccessibilityService.getInstance() == null) {
-                    context.startActivity(android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
-                } else app.momoding.phone.PairingService.start(context)
+                app.momoding.phone.PairingService.start(context)
                 AskState.choose(context, "perm.$id", "switch"); state = "switch"
             }
         } else if (need == "hands") {

@@ -23,20 +23,24 @@ import kotlin.concurrent.thread
 object AdbPorts {
     private const val PREFS = "momoding_phone_shell"
     private const val KEY = "adbd_port"
-    private const val SERVICE = "_adb-tls-connect._tcp"
+    private const val CONNECT = "_adb-tls-connect._tcp"
+    private const val PAIRING = "_adb-tls-pairing._tcp"
 
     fun find(context: Context): Int? {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         prefs.getInt(KEY, 0).takeIf { it > 0 && AdbConnection.speaksAdb(it) }?.let { return it }
-        val port = advertised(context)?.takeIf { AdbConnection.speaksAdb(it) } ?: scan() ?: return null
+        val port = advertised(context, CONNECT)?.takeIf { AdbConnection.speaksAdb(it) } ?: scan() ?: return null
         prefs.edit().putInt(KEY, port).apply()
         return port
     }
 
+    /** The port of the pairing dialog that is open now (advertised over mDNS while it shows), or null. */
+    fun pairing(context: Context, timeoutMs: Long = 5000): Int? = advertised(context, PAIRING, timeoutMs)
+
     fun forget(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(KEY).apply()
 
-    /** The port adbd advertises over mDNS, or null within [timeoutMs]. */
-    private fun advertised(context: Context, timeoutMs: Long = 5000): Int? {
+    /** The port adbd advertises over mDNS for [service], or null within [timeoutMs]. */
+    private fun advertised(context: Context, service: String, timeoutMs: Long = 5000): Int? {
         val nsd = context.getSystemService(NsdManager::class.java) ?: return null
         val latch = CountDownLatch(1)
         var port = 0
@@ -52,13 +56,13 @@ object AdbPorts {
             override fun onDiscoveryStopped(serviceType: String) {}
             override fun onServiceLost(info: NsdServiceInfo) {}
             override fun onServiceFound(info: NsdServiceInfo) {
-                if (info.serviceType.startsWith(SERVICE) && resolving.compareAndSet(false, true)) {
+                if (info.serviceType.startsWith(service) && resolving.compareAndSet(false, true)) {
                     runCatching { @Suppress("DEPRECATION") nsd.resolveService(info, resolve) }
                 }
             }
         }
         return try {
-            nsd.discoverServices(SERVICE, NsdManager.PROTOCOL_DNS_SD, discovery)
+            nsd.discoverServices(service, NsdManager.PROTOCOL_DNS_SD, discovery)
             latch.await(timeoutMs, TimeUnit.MILLISECONDS)
             port.takeIf { it > 0 }
         } catch (t: Throwable) {
