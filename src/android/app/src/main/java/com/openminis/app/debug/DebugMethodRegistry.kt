@@ -954,6 +954,23 @@ object DebugMethodRegistry {
             example = ex("limit" to 10),
         ),
         MethodSpec(
+            name = "momoding.risk.open",
+            description = "Approval cards waiting for an answer now.",
+            params = listOf(),
+            returns = "{open:[{id, sessionId, kind, risk, preview}]}",
+            example = ex(),
+        ),
+        MethodSpec(
+            name = "momoding.risk.decide",
+            description = "Answer an approval card as the person would.",
+            params = listOf(
+                ParamSpec("id", "string", required = true, description = "The card's id from momoding.risk.open."),
+                ParamSpec("decision", "string", required = false, default = "DENY", description = "ALLOW_ONCE / ALLOW_SESSION / ALLOW_ALWAYS / DENY."),
+            ),
+            returns = "{decided}",
+            example = ex("id" to "…", "decision" to "DENY"),
+        ),
+        MethodSpec(
             name = "momoding.reset",
             description = "Momoding's own state back to a fresh install's: routines, notes and USER.md, remembered approvals, rule hits, card states. Keeps providers, keys and system grants. Delete chats with chat.session.delete.",
             params = listOf(ParamSpec("confirm", "bool", required = true, default = false, description = "Must be true.")),

@@ -270,6 +270,18 @@ class DebugRPCHandler(private val context: Context) {
             }
             // momoding: the main chat's inbox and tasks as stored (调研/M39)
             "task.dump" -> app.momoding.task.TaskEngine.dump(context, params.optInt("limit", 50))
+            // momoding: approval cards waiting now, and answering one (bench: did an outward step ask?)
+            "momoding.risk.open" -> JSONObject().put("open", org.json.JSONArray().apply {
+                app.momoding.guard.RiskGate.open.value.forEach { r ->
+                    put(JSONObject().put("id", r.id).put("sessionId", r.sessionId).put("kind", r.kind.name)
+                        .put("risk", r.assessment.riskClass.name).put("preview", r.preview))
+                }
+            })
+            "momoding.risk.decide" -> {
+                val decision = app.momoding.guard.RiskDecision.valueOf(params.optString("decision", "DENY"))
+                app.momoding.guard.RiskGate.decide(params.getString("id"), decision)
+                JSONObject().put("decided", decision.name)
+            }
             "momoding.reset" -> {
                 if (!params.optBoolean("confirm", false)) throw RPCException(-32602, "confirm must be true")
                 app.momoding.debug.TestReset.reset(context)
