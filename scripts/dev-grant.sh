@@ -20,3 +20,8 @@ case "$CUR" in *"$SVC"*) ;; null|"") CUR="$SVC" ;; *) CUR="$CUR:$SVC" ;; esac
 adb shell settings put secure enabled_accessibility_services "$CUR"
 adb shell settings put secure accessibility_enabled 1
 echo "granted for $P"
+# Advanced access (app.momoding.phone): wireless debugging on, so Momoding can pair with the phone
+# itself. Then in the app tap Settings → Advanced access, and "Pair device with pairing code".
+adb shell settings put global development_settings_enabled 1
+adb shell settings put global adb_wifi_enabled 1
+echo "wireless debugging on"

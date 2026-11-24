@@ -11,7 +11,7 @@ import com.openminis.app.logging.AppLogger
  * The hands' own screen: a display nobody sees, the size of the phone's, where an app can be opened
  * and worked on while the person keeps using their phone (RikkaHub's virtual display tools: the
  * display is created here, in-process; apps are started on it and input sent to it through
- * Shizuku with `am start --display` and `input -d`, which need the shell's rights).
+ * the phone shell with `am start --display` and `input -d`, which need the shell's rights).
  */
 object HandsDisplay {
     private const val TAG = "HandsDisplay"
@@ -40,9 +40,9 @@ object HandsDisplay {
 
     val id: Int? get() = display?.display?.displayId
 
-    /** Whether a run can work in the background now: switched on, and Shizuku running with our permission. */
+    /** Whether a run can work in the background now: switched on, and advanced access ready. */
     fun available(context: Context): Boolean =
-        Hands.background(context) && com.openminis.app.offload.ShizukuManager.isReady()
+        Hands.background(context) && app.momoding.phone.PhoneShell.isReady()
 
     /** Starts [pkg]'s launcher activity on display [displayId]. */
     fun launch(context: Context, displayId: Int, pkg: String): Boolean {
@@ -56,7 +56,33 @@ object HandsDisplay {
     /** `input -d <display> …`: tap x y | swipe x1 y1 x2 y2 ms | keyevent CODE. */
     fun input(displayId: Int, vararg args: String): Boolean = shell("input", "-d", displayId.toString(), *args).exitCode == 0
 
-    private fun shell(vararg argv: String) = com.openminis.app.offload.ShizukuManager.runProcess(arrayOf(*argv), timeoutMs = 8_000)
+    /**
+     * The task of [pkg] on display [displayId], or 0. From `am stack list`, which names each root
+     * task's real display (dumpsys keeps listing a moved task under the display it left; PhoneGo).
+     */
+    fun taskOn(displayId: Int, pkg: String): Int {
+        var display = -1
+        for (line in shell("am", "stack", "list").stdout.lineSequence()) {
+            Regex("""RootTask id=\d+ .*displayId=(\d+)""").find(line)?.let { display = it.groupValues[1].toInt() }
+            val task = Regex("""^\s*taskId=(\d+): ([^/\s]+)/""").find(line) ?: continue
+            if (display == displayId && task.groupValues[2] == pkg) return task.groupValues[1].toInt()
+        }
+        return 0
+    }
+
+    /**
+     * Some apps open a page as a new task, which the system puts on the person's screen even when
+     * the app runs on the hidden one (PhoneGo measured 小红书's search page, 淘宝). Moves [pkg]'s task
+     * back to [displayId]; true when it is no longer on the person's screen.
+     */
+    fun pullBack(displayId: Int, pkg: String): Boolean {
+        val task = taskOn(0, pkg).takeIf { it > 0 } ?: return true
+        shell("am", "display", "move-stack", task.toString(), displayId.toString())
+        Thread.sleep(1200)
+        return taskOn(0, pkg) == 0
+    }
+
+    private fun shell(vararg argv: String) = app.momoding.phone.PhoneShell.runProcess(arrayOf(*argv), timeoutMs = 8_000)
 
     @Synchronized
     fun release() {

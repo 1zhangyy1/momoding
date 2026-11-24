@@ -310,6 +310,7 @@ object ShellGuard {
      */
     private fun androidCli(program: String, args: List<String>): RiskAssessment {
         if (args.any { it == "--help" || it == "-h" }) return RiskAssessment.SAFE
+        if (program == "android-system" || program == "android-shizuku-cli") return androidSystem(args)
         val words = positional(args)
         val verb = words.firstOrNull()?.lowercase() ?: return RiskAssessment.SAFE
         return when {
@@ -326,6 +327,42 @@ object ShellGuard {
             else -> RiskAssessment.SAFE
         }
     }
+
+    /**
+     * `android-system`, the shell's rights on the phone (本期计划: trust the agent). Settings, toggles,
+     * stopping apps, granting permissions, input and other screens just run; only what loses the
+     * person's data (uninstalling, clearing an app's data, deleting files, removing a user) or
+     * reaches another person (a phone call) asks.
+     */
+    private fun androidSystem(args: List<String>): RiskAssessment {
+        val words = positional(args).map { it.lowercase() }
+        val group = words.getOrNull(0); val verb = words.getOrNull(1); val what = words.getOrNull(2)
+        return when {
+            group == "package" && verb == "uninstall" -> RiskAssessment(RiskClass.DESTRUCTIVE, "uninstalls an app and its data" + (what?.let { " ($it)" } ?: ""), what ?: "apps")
+            group == "package" && verb == "clear" -> RiskAssessment(RiskClass.DESTRUCTIVE, "clears an app's data" + (what?.let { " ($it)" } ?: ""), what ?: "apps")
+            group == "file" && verb == "rm" -> RiskAssessment(RiskClass.DESTRUCTIVE, "deletes files on the phone", "phone files")
+            group == "user" && verb == "remove" -> RiskAssessment(RiskClass.DESTRUCTIVE, "removes a user and their data", "users")
+            group == "exec" -> deviceShell(args.drop(args.indexOfFirst { it.equals("exec", true) } + 1).joinToString(" "))
+            else -> RiskAssessment.SAFE
+        }
+    }
+
+    /** A raw command run as the phone's shell: judged by what it does to the phone, not the sandbox. */
+    private fun deviceShell(command: String): RiskAssessment = splitPipelines(command).flatMap(::splitPipes).map { part ->
+        val t = unwrap(tokenize(part)).map { it.lowercase() }
+        val program = t.firstOrNull()?.let(::basename)
+        when {
+            program == "pm" && t.getOrNull(1) in setOf("uninstall", "clear") ||
+                program == "cmd" && t.getOrNull(1) == "package" && t.getOrNull(2) in setOf("uninstall", "clear") ->
+                RiskAssessment(RiskClass.DESTRUCTIVE, "removes an app's data", t.lastOrNull() ?: "apps")
+            program == "pm" && t.getOrNull(1) == "remove-user" -> RiskAssessment(RiskClass.DESTRUCTIVE, "removes a user and their data", "users")
+            program in setOf("rm", "shred", "truncate", "rmdir") -> RiskAssessment(RiskClass.DESTRUCTIVE, "deletes files on the phone", "phone files")
+            program == "am" && t.any { it.endsWith("action.call") } -> RiskAssessment(RiskClass.OUTBOUND, "places a phone call", "calls")
+            program == "service" && t.getOrNull(2) == "isms" -> RiskAssessment(RiskClass.OUTBOUND, "sends a text", "sms")
+            program in shells -> deviceShell(t.drop(1).filterNot { it.startsWith("-") }.joinToString(" "))
+            else -> RiskAssessment.SAFE
+        }
+    }.fold(RiskAssessment.SAFE, RiskAssessment::merge)
 
     private fun larkCli(program: String, args: List<String>): RiskAssessment {
         val plus = args.filter { it.startsWith("+") }

@@ -682,13 +682,14 @@ class MinisApp : Application(), ImageLoaderFactory {
             "minis-scheduled",
             com.openminis.app.sandbox.offload.ScheduledTaskOffloadHandler(this),
         )
-        // T322: android-shizuku-cli — privileged Android control via Shizuku.
-        // The handler short-circuits with a typed error envelope when the
-        // user hasn't installed / started / authorized Shizuku, so we
-        // can register unconditionally; ShizukuManager.init below wires
-        // up the binder lifecycle listeners + StateFlow.
-        NativeOffloadServer.register("android-shizuku-cli", ShizukuOffloadHandler(this))
-        com.openminis.app.offload.ShizukuManager.init(this)
+        // momoding: android-system — the shell's rights on this phone (settings, apps, permissions,
+        // input, displays) through wireless debugging paired with itself (app.momoding.phone,
+        // 调研/M59). Replaces Shizuku; the old name stays one release as an alias.
+        ShizukuOffloadHandler(this).let {
+            NativeOffloadServer.register("android-system", it)
+            NativeOffloadServer.register("android-shizuku-cli", it)
+        }
+        app.momoding.phone.PhoneShell.init(this)
 
         // T-android-minis-debug-cli: shell-side CLI wrapper around the in-app
         // DebugServer (127.0.0.1:5321) JSON-RPC. DEBUG-only — Release builds
@@ -709,6 +710,8 @@ class MinisApp : Application(), ImageLoaderFactory {
         NativeOffloadServer.register("momoding-hands", app.momoding.hands.HandsOffloadHandler(this))
         // momoding: momoding-know — what the Bot learned about errands and sites on this phone (调研/M21)
         NativeOffloadServer.register("momoding-know", app.momoding.know.KnowOffloadHandler(this))
+        // momoding: momoding-android — scripts against Android's own API (本期计划 step 2)
+        NativeOffloadServer.register("momoding-android", app.momoding.script.AndroidScriptOffloadHandler(this))
         // momoding: momoding-web — search and read pages without the browser (调研/M23)
         NativeOffloadServer.register("momoding-web", app.momoding.web.WebOffloadHandler())
         // momoding: momoding-app — Momoding Apps, each with its own Momoding (调研/M27)

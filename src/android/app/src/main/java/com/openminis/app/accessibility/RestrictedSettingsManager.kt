@@ -4,7 +4,7 @@ import android.content.Context
 import android.content.pm.PackageInstaller
 import android.os.Build
 import com.openminis.app.logging.AppLogger
-import com.openminis.app.offload.ShizukuManager
+import app.momoding.phone.PhoneShell
 
 /**
  * [T-android-restricted-settings] Detects Android 13+ "restricted settings"
@@ -179,11 +179,11 @@ object RestrictedSettingsManager {
      * @return true once the op reads back as allowed.
      */
     suspend fun clearWithShizuku(context: Context): Boolean {
-        if (!ShizukuManager.isReady()) {
+        if (!PhoneShell.isReady()) {
             AppLogger.info(TAG, "clear skipped: Shizuku not ready")
             return false
         }
-        val set = ShizukuManager.runProcess(
+        val set = PhoneShell.runProcess(
             arrayOf(
                 "appops", "set", context.packageName,
                 "ACCESS_RESTRICTED_SETTINGS", "allow",
@@ -197,7 +197,7 @@ object RestrictedSettingsManager {
         // Shizuku too: [isRestricted] reads the INSTALL SOURCE, which never
         // changes, and the appop itself is read-restricted to MANAGE_APPOPS
         // holders — so the in-process probe cannot observe this write at all.
-        val get = ShizukuManager.runProcess(
+        val get = PhoneShell.runProcess(
             arrayOf("appops", "get", context.packageName, "ACCESS_RESTRICTED_SETTINGS"),
         )
         // `cmd appops get` prints e.g. "ACCESS_RESTRICTED_SETTINGS: allow".

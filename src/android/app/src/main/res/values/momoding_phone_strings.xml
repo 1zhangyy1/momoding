@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mo_phone_shell_title">Advanced access</string>
+    <string name="mo_phone_shell_ready">On: it can change settings, manage apps and work on a hidden screen</string>
+    <string name="mo_phone_shell_not_paired">Two steps: tap here, switch on Wireless debugging, then tap “Pair device with pairing code” — Momoding does the rest</string>
+    <string name="mo_phone_shell_need_a11y">First switch on Momoding\'s accessibility: it reads the pairing code for you</string>
+    <string name="mo_phone_shell_off">Wireless debugging is off: tap to switch it back on (no need to pair again)</string>
+    <string name="mo_phone_shell_unsupported">Needs Android 11 or newer</string>
+    <string name="mo_phone_shell_footer">Uses Android\'s own wireless debugging, paired with this phone itself: nothing else to install, no computer. Developer options must be on (Settings → About phone → tap the build number 7 times). Most phones switch wireless debugging off when they restart; switch it back on, no need to pair again.</string>
+    <string name="mo_phone_shell_state_ready">Ready</string>
+    <string name="mo_phone_shell_state_not_paired">Not set up</string>
+    <string name="mo_phone_shell_state_off">Wireless debugging is off</string>
+    <string name="mo_phone_shell_set_up">Set up</string>
+    <string name="mo_phone_pair_watching">Tap “Pair device with pairing code”; Momoding reads the code</string>
+    <string name="mo_phone_pair_not_seen">Didn\'t see the pairing dialog. Try again from Momoding.</string>
+    <string name="mo_phone_pair_done">Paired: advanced access is on</string>
+    <string name="mo_phone_pair_failed">Pairing didn\'t work. Try again (the code changes each time).</string>
+</resources>

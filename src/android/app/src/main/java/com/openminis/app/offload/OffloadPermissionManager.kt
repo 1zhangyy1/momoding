@@ -88,7 +88,9 @@ object OffloadPermissionManager {
         // underlying system layer (Shizuku binder / Accessibility service)
         // is already authorized.
         ToolPermissionInfo("a11y_cli", "android-a11y-cli", PermissionCategory.INTEGRATIONS, PermissionLevel.NOT_ALLOWED),
-        ToolPermissionInfo("shizuku_cli", "android-shizuku-cli", PermissionCategory.INTEGRATIONS, PermissionLevel.NOT_ALLOWED),
+        // momoding: android-system (the phone shell) is on by default — trust the agent; what would
+        // lose the person's data still asks at the approval gate (ShellGuard)
+        ToolPermissionInfo("shizuku_cli", "android-system", PermissionCategory.INTEGRATIONS, PermissionLevel.BYPASS),
     )
 
     /** Stable session-id used by NativeOffloadHandlers when calling

@@ -104,7 +104,7 @@
     <string name="overlay_completion_cancelled">已取消</string>
     <string name="overlay_completion_timeout">已超时</string>
     <string name="a11y_repair_dialog_title">无障碍服务已关闭</string>
-    <string name="a11y_repair_dialog_message_shizuku">Momoding 的无障碍权限已丢失——强行停止应用后会出现这种情况。检测到 Shizuku 可用，可以立即恢复，无需前往系统设置。</string>
+    <string name="a11y_repair_dialog_message_shizuku">Momoding 的无障碍权限已丢失——强行停止应用后会出现这种情况。高级权限已开，可以立即恢复，无需前往系统设置。</string>
     <string name="a11y_repair_dialog_message_manual">Momoding 的无障碍权限已丢失——强行停止应用后会出现这种情况。请在「设置 → 无障碍」中重新开启 Momoding。</string>
     <string name="a11y_repair_action_repair">立即恢复</string>
     <string name="a11y_repair_action_open_settings">打开设置</string>
@@ -115,8 +115,8 @@
     <string name="a11y_repair_row_sub">权限已被撤销，可能是强行停止导致的</string>
     <string name="a11y_repair_in_progress">正在恢复…</string>
     <string name="a11y_repair_failed">恢复失败——请到系统设置中开启</string>
-    <string name="a11y_repair_footer_shizuku">每次应用被强行停止，Android 都会移除无障碍授权，且不会自动恢复。Shizuku 可以直接写回该授权。</string>
-    <string name="a11y_repair_footer_manual">每次应用被强行停止，Android 都会移除无障碍授权，且不会自动恢复。安装并授权 Shizuku 后，今后可一键恢复。</string>
+    <string name="a11y_repair_footer_shizuku">每次应用被强行停止，Android 都会移除无障碍授权，且不会自动恢复。高级权限开着时，Momoding 会自己写回。</string>
+    <string name="a11y_repair_footer_manual">每次应用被强行停止，Android 都会移除无障碍授权，且不会自动恢复。打开高级权限后，Momoding 会自己恢复。</string>
     <string name="bg_service_notification_title">Momoding 运行中</string>
     <string name="bg_service_notification_text">%1$s | %2$s | %3$s</string>
     <string name="bg_service_notification_text_running">%1$s | %2$s</string>
@@ -737,7 +737,7 @@
     <string name="perm_section_a11y">无障碍</string>
     <string name="perm_section_shizuku">Shizuku</string>
     <string name="perm_a11y_section_footer">android-a11y-cli 让 Agent 读取屏幕 UI、模拟点击与输入、监听系统事件。下方两项都需配置:选择 Agent 权限,并在系统设置启用无障碍服务。</string>
-    <string name="perm_shizuku_section_footer">android-shizuku-cli 通过 Shizuku 服务调用 Android 高权限 API(安装应用、settings put、强制停止等)。Shizuku 由无线 ADB 或 root 启动。下方两项都需配置。</string>
+    <string name="perm_shizuku_section_footer">android-system 通过手机自己配对的无线调试，让 Agent 拥有 shell 级权限（改设置、管 App、授权、输入、后台屏）。会丢你数据的操作仍会先问你。</string>
     <string name="perm_a11y_cli_description">让 Agent 读取屏幕、点击、输入、监听事件</string>
     <string name="perm_shizuku_cli_description">通过 Shizuku 调用 Android 高权限 API</string>
     <string name="perm_a11y_open_settings">前往无障碍设置</string>
@@ -815,8 +815,8 @@
     <string name="shizuku_recheck_subtitle">启动服务后重新检查状态</string>
     <string name="shizuku_grant_btn">授权 Momoding</string>
     <string name="shizuku_grant_subtitle">弹出授权对话框</string>
-    <string name="perm_section_privileged_backend">特权后端</string>
-    <string name="perm_privileged_cli_description">允许 Agent 通过特权后端（Shizuku 或 AXManager）执行 ADB 级系统命令</string>
+    <string name="perm_section_privileged_backend">高级权限</string>
+    <string name="perm_privileged_cli_description">允许 Agent 改设置、管理 App、在看不见的屏上操作</string>
     <string name="skill_title">技能</string>
     <string name="skill_add">添加 Skill</string>
     <string name="skill_section_installed">已安装</string>
@@ -1665,7 +1665,7 @@
     <string name="system_permissions_a11y_restricted_footer">对于通过下载的 APK 文件安装的应用，Android 会锁定无障碍开关。这是系统的安全策略，不是 Momoding 的问题，你的安装包没有损坏。「允许受限设置」只是把开关解锁，本身不授予任何权限，是否开启该服务仍由你决定。</string>
     <string name="system_permissions_a11y_restricted_manual">允许受限设置</string>
     <string name="system_permissions_a11y_restricted_manual_sub">应用详情 → 右上角 ⋮ 菜单 → 允许受限设置</string>
-    <string name="system_permissions_a11y_restricted_shizuku">通过 Shizuku 允许受限设置</string>
+    <string name="system_permissions_a11y_restricted_shizuku">用高级权限允许受限设置</string>
     <string name="system_permissions_a11y_restricted_shizuku_sub">一键解除，无需离开 Momoding</string>
     <string name="system_permissions_a11y_restricted_working">正在解除…</string>
     <string name="system_permissions_a11y_restricted_failed">解除失败 — 请按下方步骤手动操作</string>

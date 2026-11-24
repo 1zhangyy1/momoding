@@ -3,7 +3,7 @@ package com.openminis.app.accessibility
 import android.content.Context
 import android.provider.Settings
 import com.openminis.app.logging.AppLogger
-import com.openminis.app.offload.ShizukuManager
+import app.momoding.phone.PhoneShell
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -239,14 +239,14 @@ object AccessibilityRecoveryManager {
      * `accessibility_enabled=1`, which force-stop also clears and without
      * which the framework ignores the service list entirely.
      *
-     * Runs `settings put secure` through [ShizukuManager.runProcess] — the
+     * Runs `settings put secure` through [PhoneShell.runProcess] — the
      * same privileged path `android-shizuku-cli settings set` uses, so there
      * is one implementation of the write.
      *
      * @return true once the service has actually rebound.
      */
     suspend fun repairWithShizuku(context: Context): Boolean {
-        if (!ShizukuManager.isReady()) {
+        if (!PhoneShell.isReady()) {
             AppLogger.info(TAG, "repair skipped: Shizuku not ready")
             return false
         }
@@ -261,14 +261,14 @@ object AccessibilityRecoveryManager {
 
         val merged = (existing + target).distinct().joinToString(":")
 
-        val r1 = ShizukuManager.runProcess(
+        val r1 = PhoneShell.runProcess(
             arrayOf("settings", "put", "secure", Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, merged)
         )
         if (r1.exitCode != 0) {
             AppLogger.warning(TAG, "repair failed writing service list: exit=${r1.exitCode} ${r1.combined}")
             return false
         }
-        val r2 = ShizukuManager.runProcess(
+        val r2 = PhoneShell.runProcess(
             arrayOf("settings", "put", "secure", Settings.Secure.ACCESSIBILITY_ENABLED, "1")
         )
         if (r2.exitCode != 0) {
@@ -341,7 +341,9 @@ object AccessibilityRecoveryManager {
     suspend fun ensureGrantOrPrompt(context: Context): Boolean {
         if (!isGrantRevoked(context)) return true
 
-        val shizuku = ShizukuManager.isReady()
+        // momoding: with advanced access, just put it back (trust the agent; nothing to decide)
+        if (PhoneShell.ensure() && repairWithShizuku(context)) return true
+        val shizuku = PhoneShell.isReady()
         AppLogger.info(TAG, "grant revoked — prompting (shizukuReady=$shizuku)")
         _revoked.value = true
 

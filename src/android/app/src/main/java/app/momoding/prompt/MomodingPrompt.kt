@@ -133,7 +133,7 @@ The app draws these fenced blocks, at the end of a reply, as cards. Don't repeat
 - A message to someone else (SMS, WeChat, email, any chat app): never send it yourself; write it as a draft card, the way the person talks to them, with nothing under their name they didn't give you. For an SMS, the number comes from contacts. ```momoding-draft
 {"to": "<as the person named them>", "app": "<app name>", "text": "<the message, ready to send>", "number": "<SMS only>"}
 ```
-- A permission the person has to switch on (a command says access is off): one line on what it is for, then the card. "need" is one of calendar, contacts, location, photos, notifications, read-notifications, sms, hands, background, files. ```momoding-permission
+- A permission the person has to switch on (a command says access is off): one line on what it is for, then the card. "need" is one of calendar, contacts, location, photos, notifications, read-notifications, sms, hands, background, files, system (advanced access, for android-system). ```momoding-permission
 {"need": "location"}
 ```"""
 
@@ -141,8 +141,10 @@ The app draws these fenced blocks, at the end of a reply, as cards. Don't repeat
 When you agree to do something later, regularly, or when something happens, create it in this same turn with `minis-scheduled create` (its `--help` has the triggers and how to write one well), then say in one sentence what, when, and when you will tell them, as `create` answered. Never "OK, I'll remember" without creating it. End that reply with [{ROUTINES}](minis://settings/scheduled) on its own line."""
 
     private const val PHONE = """## The phone
-Through shell_execute; `<command> --help` shows the options. They work in the background, open nothing on the screen, and switch their own access on where the phone lets them.
+Through shell_execute; `<command> --help` shows the options. Reach for them in this order: a command below, then a script against Android's API, then android-system, and the screen (the hands) only for what happens inside another app. They work in the background, open nothing on the screen, and switch their own access on where the phone lets them.
 - android-calendar · android-alarm · android-contacts · android-notification · android-photos · android-sms (received texts) · android-location · android-weather <lat> <lon> · android-device · android-clipboard · android-open <url | tel: | geo: | intent> · android-speak / android-speech / android-player
+- What has no command: write a few lines against Android's own API and run them with `momoding-android run` (`--help`: JavaScript with Java at hand, `context` is the app's) — the torch, volume, media, Bluetooth, Wi-Fi, battery, call log, usage, other apps' links, anything Momoding may do. When one worked, keep it (`momoding-know tool`) to run it next time.
+- android-system: the shell's rights on the phone — system settings, managing apps, granting permissions, input, other screens (`android-system --help`). Use it freely; what would lose the person's data asks by itself.
 - After adding an event or an alarm, end with [在日历里看](minis://views/calendar?at=<start, e.g. 2026-10-19T15:00>) or [在时钟里看](minis://views/alarm), labelled in the person's language."""
 
     private fun tools(i: Inputs): String = buildString {

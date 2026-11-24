@@ -1,0 +1,155 @@
+package app.momoding.phone
+
+import android.app.Application
+import android.content.Context
+import android.os.Build
+import android.provider.Settings
+import app.momoding.phone.adb.AdbConnection
+import app.momoding.phone.adb.AdbPairing
+import app.momoding.phone.adb.AdbPorts
+import com.openminis.app.logging.AppLogger
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import java.io.File
+import java.net.Inet4Address
+import java.net.NetworkInterface
+
+/**
+ * The shell's rights on this phone (uid 2000: settings, apps, permissions, input, other displays),
+ * through wireless debugging paired with the phone itself (调研/M59; PhoneGo's way). Replaces
+ * Shizuku: nothing else to install, two switches for the person — wireless debugging on, then
+ * Pair, where the code is read off the system dialog ([PairingService]).
+ *
+ * Every privileged call in the app goes through [runProcess] / [isReady]: the system command
+ * (`android-system`), granting Momoding its own permissions ([app.momoding.guard.SelfGrant]), the
+ * hands' hidden screen ([app.momoding.hands.HandsDisplay]) and the accessibility repair.
+ */
+object PhoneShell {
+    private const val TAG = "PhoneShell"
+
+    enum class State {
+        /** Android 10 or older: no wireless debugging. */
+        UNSUPPORTED,
+        /** Never paired, or the phone forgot Momoding's key. */
+        NOT_PAIRED,
+        /** Paired, but wireless debugging is off now (most phones switch it off on restart). */
+        OFF,
+        READY,
+    }
+
+    data class Snapshot(val state: State, val detail: String = "")
+
+    data class ProcessResult(val exitCode: Int, val stdout: String, val stderr: String) {
+        val combined: String get() = if (stderr.isEmpty()) stdout else "$stdout\n$stderr".trimEnd()
+    }
+
+    private val _snapshot = MutableStateFlow(Snapshot(State.NOT_PAIRED))
+    val snapshot: StateFlow<Snapshot> = _snapshot.asStateFlow()
+
+    @Volatile private var app: Context? = null
+    @Volatile private var connection: AdbConnection? = null
+    private val lock = Any()
+
+    fun init(application: Application) {
+        app = application.applicationContext
+        refresh()
+    }
+
+    fun isReady(): Boolean = _snapshot.value.state == State.READY
+
+    fun dir(context: Context): File = File(context.filesDir, "phone-shell")
+
+    /** Rechecks the state in the background (a screen coming back to the front). */
+    fun refresh() { Thread({ ensure() }, "phone-shell-refresh").start() }
+
+    /** Connected now, connecting if it can. Blocking (network, mDNS): not on the main thread. */
+    fun ensure(): Boolean {
+        val context = app ?: return false
+        return synchronized(lock) { connect(context) } != null
+    }
+
+    /** Runs [argv] as the shell. Same contract as the Shizuku process it replaces. */
+    fun runProcess(argv: Array<String>, env: Array<String>? = null, cwd: String? = null, timeoutMs: Long = 5_000L): ProcessResult {
+        val context = app ?: return ProcessResult(126, "", "the phone shell is not set up")
+        val command = buildString {
+            cwd?.let { append("cd ").append(quote(it)).append(" && ") }
+            env?.takeIf { it.isNotEmpty() }?.let { append("env ").append(it.joinToString(" ") { e -> quote(e) }).append(' ') }
+            append(argv.joinToString(" ") { quote(it) })
+        }
+        synchronized(lock) {
+            repeat(2) { attempt ->
+                val c = connection?.takeIf { it.isOpen } ?: connect(context) ?: return ProcessResult(126, "", notReady())
+                try {
+                    val r = c.shell(command, timeoutMs.coerceIn(1_000L, 600_000L).toInt())
+                    return ProcessResult(r.exitCode, r.stdout, r.stderr)
+                } catch (e: java.net.SocketTimeoutException) {
+                    drop() // the stream is mid-command; a fresh connection for the next one
+                    return ProcessResult(124, "", "timed out after ${timeoutMs / 1000}s")
+                } catch (t: Throwable) {
+                    drop() // adbd restarted or wireless debugging was switched off: reconnect once
+                    if (attempt == 1) return ProcessResult(126, "", "${t.javaClass.simpleName}: ${t.message}")
+                }
+            }
+        }
+        return ProcessResult(126, "", notReady())
+    }
+
+    /** Pairs with [code] at the pairing dialog's [port], then connects. */
+    fun pair(context: Context, code: String, port: Int): Boolean {
+        val r = AdbPairing.pair("127.0.0.1", port, code, dir = dir(context))
+        val ok = r.ok || AdbPairing.pair(wifiAddress() ?: return false.also { log(r.detail) }, port, code, dir = dir(context)).ok
+        if (!ok) { log(r.detail); return false }
+        AdbPorts.forget(context)
+        synchronized(lock) { drop(); connect(context) }
+        return isReady()
+    }
+
+    private fun connect(context: Context): AdbConnection? {
+        connection?.takeIf { it.isOpen }?.let { set(State.READY); return it }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) { set(State.UNSUPPORTED); return null }
+        val (cert, key) = AdbPairing.identity(dir(context)) ?: run { set(State.NOT_PAIRED); return null }
+        if (!wirelessDebuggingOn(context)) { set(State.OFF); return null }
+        val port = AdbPorts.find(context) ?: run { set(State.OFF, "no port"); return null }
+        return try {
+            AdbConnection.open(cert, key, port, wifiAddress()).also { connection = it; set(State.READY) }
+        } catch (t: Throwable) {
+            AdbPorts.forget(context)
+            // a refused key means the phone forgot the pairing (or it was revoked in Settings)
+            set(if (t.message?.contains("pair again") == true) State.NOT_PAIRED else State.OFF, t.message.orEmpty())
+            null
+        }
+    }
+
+    private fun drop() { connection?.close(); connection = null }
+
+    private fun set(state: State, detail: String = "") {
+        val prev = _snapshot.value
+        _snapshot.value = Snapshot(state, detail)
+        if (prev.state == state) return
+        AppLogger.info(TAG, "state ${prev.state} → $state ${detail.take(120)}")
+        // newly connected (after a restart, or wireless debugging switched back on): the
+        // accessibility service back on if Android dropped it meanwhile
+        if (state == State.READY) app?.let { c -> Thread({ PhoneSetup.keepAlive(c) }, "phone-keepalive").start() }
+    }
+
+    private fun notReady() = when (_snapshot.value.state) {
+        State.UNSUPPORTED -> "needs Android 11 or newer (wireless debugging)"
+        State.NOT_PAIRED -> "not paired: Settings → Advanced access in Momoding, two steps"
+        State.OFF -> "wireless debugging is off: switch it on in Developer options (no need to pair again)"
+        State.READY -> "the phone shell dropped; try again"
+    }
+
+    private fun log(detail: String) = AppLogger.warning(TAG, "pairing failed: $detail")
+
+    private fun wirelessDebuggingOn(context: Context): Boolean =
+        runCatching { Settings.Global.getInt(context.contentResolver, "adb_wifi_enabled", 0) == 1 }.getOrDefault(true)
+
+    private fun wifiAddress(): String? = runCatching {
+        NetworkInterface.getNetworkInterfaces().toList().filter { it.isUp && it.name.startsWith("wlan") }
+            .flatMap { it.inetAddresses.toList() }.filterIsInstance<Inet4Address>().firstOrNull { !it.isLoopbackAddress }?.hostAddress
+    }.getOrNull()
+
+    private fun quote(s: String): String =
+        if (s.isNotEmpty() && s.all { it.isLetterOrDigit() || it in "@%+=:,./_-" }) s else "'" + s.replace("'", "'\\''") + "'"
+}

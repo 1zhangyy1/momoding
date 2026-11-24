@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mo_phone_shell_title">進階權限</string>
+    <string name="mo_phone_shell_ready">已開：它能改設定、管 App、在看不見的螢幕上操作</string>
+    <string name="mo_phone_shell_not_paired">兩步：點這裡，開啟「無線偵錯」，再點「使用配對碼配對裝置」，其餘 Momoding 自己完成</string>
+    <string name="mo_phone_shell_need_a11y">先開啟 Momoding 的無障礙：它要替你讀配對碼</string>
+    <string name="mo_phone_shell_off">無線偵錯關了：點這裡重新開啟（不用再配對）</string>
+    <string name="mo_phone_shell_unsupported">需要 Android 11 或更新</string>
+    <string name="mo_phone_shell_footer">用的是 Android 內建的無線偵錯，由手機和自己配對：不用另裝 App，也不用電腦。要先開啟開發人員選項（設定 → 關於手機 → 連點版本號碼 7 下）。多數手機重新開機後會關掉無線偵錯，重新開啟即可，不用再配對。</string>
+    <string name="mo_phone_shell_state_ready">已就緒</string>
+    <string name="mo_phone_shell_state_not_paired">還沒設定</string>
+    <string name="mo_phone_shell_state_off">無線偵錯關著</string>
+    <string name="mo_phone_shell_set_up">去設定</string>
+    <string name="mo_phone_pair_watching">請點「使用配對碼配對裝置」，配對碼 Momoding 會自己讀</string>
+    <string name="mo_phone_pair_not_seen">沒看到配對彈窗，回 Momoding 再試一次</string>
+    <string name="mo_phone_pair_done">配好了：進階權限已開</string>
+    <string name="mo_phone_pair_failed">配對沒成功，再試一次（配對碼每次都會變）</string>
+</resources>

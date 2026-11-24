@@ -74,7 +74,6 @@ import com.openminis.app.ui.settings.LogManagementScreen
 import com.openminis.app.ui.settings.MemoryFileEditScreen
 import com.openminis.app.ui.settings.MemoryManagementScreen
 import com.openminis.app.ui.settings.OffloadPermissionScreen
-import com.openminis.app.ui.settings.ShizukuPermissionScreen
 import com.openminis.app.sandbox.RootfsManager
 import com.openminis.app.sandbox.TerminalSession
 import com.openminis.app.ui.terminal.TerminalScreen
@@ -1443,9 +1442,7 @@ fun AppNavigation(
         }
 
         composable(Routes.SHIZUKU) {
-            ShizukuPermissionScreen(
-                onBack = { navController.safePopBackStack() },
-            )
+            app.momoding.ui.phone.PhoneShellScreen(onBack = { navController.safePopBackStack() })
         }
 
         composable(Routes.SYSTEM_PERMISSIONS) {

@@ -44,7 +44,7 @@ import com.openminis.app.ui.components.MinisTextButton
 import com.openminis.app.accessibility.AccessibilityRecoveryManager
 import com.openminis.app.accessibility.MinisAccessibilityService
 import com.openminis.app.accessibility.RestrictedSettingsManager
-import com.openminis.app.offload.ShizukuManager
+import app.momoding.phone.PhoneShell
 import com.openminis.app.power.PowerOptimizationManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -98,7 +98,7 @@ fun SystemPermissionsScreen(onBack: () -> Unit) {
             // never broken.
             a11yRevoked = !inSettings && !connected &&
                 AccessibilityRecoveryManager.hasEverBeenGranted(context)
-            shizukuReady = ShizukuManager.isReady()
+            shizukuReady = PhoneShell.isReady()
             // Re-probed each tick so the section disappears by itself the
             // moment the user allows restricted settings in system Settings
             // and comes back.

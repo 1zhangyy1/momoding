@@ -16,6 +16,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -181,7 +182,8 @@ private fun PermissionCard(o: JSONObject, code: String) {
         "files" -> stringResource(R.string.mo_perm_files)
         "read-notifications" -> stringResource(R.string.mo_perm_read_notifications)
         "sms" -> stringResource(R.string.mo_perm_sms)
-        else -> return
+        "system" -> stringResource(R.string.mo_phone_shell_title)
+        else -> if (need.startsWith("android.permission.")) o.optString("need").substringAfterLast('.').lowercase().replace('_', ' ') else return
     }
     val permissions = PermissionNeeds.androidPermissions(need)
     val carryOn = stringResource(R.string.mo_perm_carry_on_msg)
@@ -222,6 +224,16 @@ private fun PermissionCard(o: JSONObject, code: String) {
             else if (activity != null && power.needsOemAutostartGuidance() && !power.openOemAutostartSettings(activity)) power.openAppDetailsSettings(activity)
             app.momoding.ui.settings.backgroundHint(context)
             AskState.choose(context, "perm.$id", "background"); state = "background"
+        } else if (need == "system") {
+            // advanced access (app.momoding.phone): accessibility first (it reads the pairing code), then the two steps
+            if (app.momoding.phone.PhoneShell.isReady()) {
+                AskState.choose(context, "perm.$id", "granted"); state = "granted"; MomodingSend.send(carryOn)
+            } else {
+                if (com.openminis.app.accessibility.MinisAccessibilityService.getInstance() == null) {
+                    context.startActivity(android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                } else app.momoding.phone.PairingService.start(context)
+                AskState.choose(context, "perm.$id", "switch"); state = "switch"
+            }
         } else if (need == "hands") {
             // straight to the system switch that is missing (Momoding's own accessibility page where the phone allows)
             val step = app.momoding.hands.HandsSetup.next(context)
@@ -238,6 +250,15 @@ private fun PermissionCard(o: JSONObject, code: String) {
     if (state == null && !LocalMomodingLive.current) {
         SettledLine(stringResource(R.string.mo_card_expired_line, stringResource(R.string.mo_perm_ask, label)), done = false)
         return
+    }
+    // advanced access: paired in the background while the person is in Settings — carry on by itself
+    if (need == "system") {
+        val shell by app.momoding.phone.PhoneShell.snapshot.collectAsState()
+        androidx.compose.runtime.LaunchedEffect(shell.state) {
+            if (state == "switch" && shell.state == app.momoding.phone.PhoneShell.State.READY) {
+                AskState.choose(context, "perm.$id", "granted"); state = "granted"; MomodingSend.send(carryOn)
+            }
+        }
     }
     // hands: back from the system page — carry on by itself once everything is on, else say what is left
     var handsStep by remember(id) { mutableStateOf(if (need == "hands") app.momoding.hands.HandsSetup.next(context) else null) }
@@ -424,7 +445,7 @@ internal object PermissionNeeds {
         "photos" -> if (android.os.Build.VERSION.SDK_INT >= 33) arrayOf(android.Manifest.permission.READ_MEDIA_IMAGES) else arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE)
         "notifications" -> if (android.os.Build.VERSION.SDK_INT >= 33) arrayOf(android.Manifest.permission.POST_NOTIFICATIONS) else emptyArray()
         "sms" -> arrayOf(android.Manifest.permission.READ_SMS, android.Manifest.permission.RECEIVE_SMS)
-        else -> emptyArray()
+        else -> if (need.startsWith("android.permission.")) arrayOf(need.substringBefore('.') + ".permission." + need.substringAfter("android.permission.").uppercase()) else emptyArray()
     }
 }
 

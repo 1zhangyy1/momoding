@@ -3,7 +3,7 @@ package app.momoding.guard
 import android.content.Context
 import android.content.pm.PackageManager
 import com.openminis.app.logging.AppLogger
-import com.openminis.app.offload.ShizukuManager
+import app.momoding.phone.PhoneShell
 import java.util.concurrent.ConcurrentLinkedQueue
 
 /**
@@ -24,9 +24,9 @@ object SelfGrant {
     fun grant(context: Context, permissions: List<String>): Boolean {
         val missing = permissions.filterNot { granted(context, it) }
         if (missing.isEmpty()) return true
-        if (!ShizukuManager.isReady()) return false
+        if (!PhoneShell.isReady()) return false
         for (p in missing) {
-            val r = ShizukuManager.runProcess(arrayOf("pm", "grant", context.packageName, p))
+            val r = PhoneShell.runProcess(arrayOf("pm", "grant", context.packageName, p))
             if (r.exitCode != 0) AppLogger.warning(TAG, "pm grant $p: exit=${r.exitCode} ${r.combined}")
         }
         val now = missing.filter { granted(context, it) }

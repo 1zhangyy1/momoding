@@ -33,7 +33,7 @@ import com.openminis.app.accessibility.MinisAccessibilityService
 import com.openminis.app.accessibility.RestrictedSettingsManager
 import com.openminis.app.logging.AppLogger
 import com.openminis.app.offload.OffloadPermissionManager
-import com.openminis.app.offload.ShizukuManager
+import app.momoding.phone.PhoneShell
 import com.openminis.app.ui.components.MinisMenu
 import com.openminis.app.ui.components.MinisTextButton
 import kotlinx.coroutines.delay
@@ -80,7 +80,7 @@ fun OffloadPermissionScreen(
             delay(1000)
         }
     }
-    val shizukuSnap by ShizukuManager.snapshot.collectAsState()
+    val shizukuSnap by PhoneShell.snapshot.collectAsState()
 
     SettingsScaffold(
         title = stringResource(R.string.perm_title),
@@ -163,7 +163,7 @@ fun OffloadPermissionScreen(
                 header = stringResource(R.string.system_permissions_a11y_restricted_header),
                 footer = stringResource(R.string.system_permissions_a11y_restricted_footer),
             ) {
-                if (shizukuSnap.state == ShizukuManager.State.READY) {
+                if (shizukuSnap.state == PhoneShell.State.READY) {
                     SettingsRow(
                         title = stringResource(R.string.system_permissions_a11y_restricted_shizuku),
                         subtitle = when {
@@ -202,17 +202,16 @@ fun OffloadPermissionScreen(
         IntegrationSection(
             iconVector = Icons.Outlined.Shield,
             iconTint = Color(0xFFAF52DE),
-            // [T-android-privileged-backend] One section covers both Shizuku
-            // and AXManager (they share the same binder slot + protocol);
-            // toolName stays "shizuku_cli" so user authz is preserved.
+            // momoding: advanced access (the phone shell); toolName stays "shizuku_cli" so a
+            // person's earlier choice is kept
             sectionHeaderRes = R.string.perm_section_privileged_backend,
             sectionFooterRes = R.string.perm_shizuku_section_footer,
             toolName = "shizuku_cli",
             descriptionRes = R.string.perm_privileged_cli_description,
-            systemReady = ShizukuManager.isReady(),
+            systemReady = PhoneShell.isReady(),
             systemStatusTitleRes = shizukuSubtitleRes(shizukuSnap.state),
             systemActionTitleRes = shizukuActionTitleRes(shizukuSnap.state),
-            // Open the unified Shizuku-protocol screen for setup actions.
+            // Open the advanced access screen for setup.
             onSystemAction = onOpenPrivilegedBackend,
             // The status row itself opens the same page so users can revisit
             // the setup walkthrough even after the manager is already ready.
@@ -531,27 +530,13 @@ private fun openAppDetailsSettings(context: Context) {
     }
 }
 
-private fun shizukuSubtitleRes(state: ShizukuManager.State): Int = when (state) {
-    ShizukuManager.State.NOT_INSTALLED -> R.string.shizuku_state_not_installed
-    ShizukuManager.State.NOT_RUNNING -> R.string.shizuku_state_not_running
-    ShizukuManager.State.NEED_PERMISSION -> R.string.shizuku_state_need_permission
-    ShizukuManager.State.READY -> R.string.shizuku_state_ready
+// momoding: the phone shell's states (app.momoding.phone.PhoneShell), replacing Shizuku's
+private fun shizukuSubtitleRes(state: PhoneShell.State): Int = when (state) {
+    PhoneShell.State.UNSUPPORTED -> R.string.mo_phone_shell_unsupported
+    PhoneShell.State.NOT_PAIRED -> R.string.mo_phone_shell_state_not_paired
+    PhoneShell.State.OFF -> R.string.mo_phone_shell_state_off
+    PhoneShell.State.READY -> R.string.mo_phone_shell_state_ready
 }
 
-// T336: state-dependent action row title — different verbs per phase of
-// the Shizuku setup funnel.
-private fun shizukuActionTitleRes(state: ShizukuManager.State): Int = when (state) {
-    ShizukuManager.State.NOT_INSTALLED -> R.string.shizuku_install_btn
-    ShizukuManager.State.NOT_RUNNING -> R.string.shizuku_open_btn
-    ShizukuManager.State.NEED_PERMISSION -> R.string.shizuku_grant_btn
-    ShizukuManager.State.READY -> 0  // never displayed (systemReady=true)
-}
-
-private fun performShizukuAction(context: Context, state: ShizukuManager.State) {
-    when (state) {
-        ShizukuManager.State.NOT_INSTALLED -> ShizukuManager.openInstallPage(context)
-        ShizukuManager.State.NOT_RUNNING -> ShizukuManager.openShizukuApp(context)
-        ShizukuManager.State.NEED_PERMISSION -> ShizukuManager.requestPermission()
-        ShizukuManager.State.READY -> {} // no-op; row never rendered
-    }
-}
+private fun shizukuActionTitleRes(state: PhoneShell.State): Int =
+    if (state == PhoneShell.State.READY) 0 else R.string.mo_phone_shell_set_up

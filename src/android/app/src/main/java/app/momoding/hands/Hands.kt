@@ -54,7 +54,7 @@ object Hands {
     /** The chosen screen model's entry id; null means "pick one" ([screenModel]). */
     private const val KEY_BACKGROUND = "hands.background"
 
-    /** Work on the hands' own hidden screen when Shizuku allows it (the person keeps their screen). On unless switched off. */
+    /** Work on the hands' own hidden screen when advanced access allows it (the person keeps their screen). On unless switched off. */
     fun background(context: Context): Boolean = prefs(context).getBoolean(KEY_BACKGROUND, true)
     fun setBackground(context: Context, on: Boolean) { prefs(context).edit().putBoolean(KEY_BACKGROUND, on).apply() }
 

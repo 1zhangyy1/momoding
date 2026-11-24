@@ -70,7 +70,7 @@ class HandsOperator(private val context: Context) {
          * the model asks) was the fastest and most accurate in the 2026-10-20 comparison, so it is the default.
          */
         val mode: HandsPrompt.Mode = HandsPrompt.Mode.TREE,
-        /** Work on the hands' hidden display when Shizuku allows it; false keeps the run on the person's screen. */
+        /** Work on the hands' hidden display when advanced access allows it; false keeps the run on the person's screen. */
         val background: Boolean = true,
         /**
          * Steps without a screenshot go to the chat's text model. Off by default: in the 2026-10-20
@@ -204,7 +204,7 @@ class HandsOperator(private val context: Context) {
             var wantLook = false
             var lastApp: String? = null
             // after an action: a fixed pause the old way; with the tree, as soon as the screen stops changing
-            // the hidden display, when this run can work in the background (Shizuku); else the person's screen
+            // the hidden display, when this run can work in the background (advanced access); else the person's screen
             bg = if (opts.background && treeMode && HandsDisplay.available(context)) HandsDisplay.ensure(context) else null
             capsule.background = bg != null
             if (bg != null) log += "working on the hidden display ${bg} (the person's screen stays theirs)"
@@ -245,6 +245,7 @@ class HandsOperator(private val context: Context) {
                 if (System.currentTimeMillis() - started - pausedMs.get() > MAX_RUN_MS) {
                     return finish(Outcome.Stopped("the run hit its time limit"), steps, runId, lastScreen, traceDir, log, model.label)
                 }
+                keepOnOwnScreen()?.let { log += it; lastResult = listOfNotNull(lastResult, it).joinToString(" ") }
                 steps++
                 KeepAwake.a11yTouched()
                 capsule.working(steps, ui.getString(com.openminis.app.R.string.mo_hands_looking))
@@ -703,7 +704,42 @@ class HandsOperator(private val context: Context) {
     /** The display this run works on: the hands' hidden one, or null for the person's screen. */
     @Volatile private var bg: Int? = null
 
-    private fun openApp(app: HandsApps.App): Boolean = mayAct() && (bg?.let { HandsDisplay.launch(context, it, app.packageName) } ?: HandsApps.open(context, app))
+    /** The app this run opened last: kept on the hidden display while the run works there. */
+    @Volatile private var driving: String? = null
+    private var pulls = 0
+
+    private fun openApp(app: HandsApps.App): Boolean {
+        if (!mayAct()) return false
+        val d = bg ?: return HandsApps.open(context, app).also { if (it) driving = app.packageName }
+        if (!HandsDisplay.launch(context, d, app.packageName)) return false
+        driving = app.packageName
+        // landed where it was sent? Some launcher pages always live on the person's screen (singleTask)
+        val until = System.currentTimeMillis() + 3_000
+        while (System.currentTimeMillis() < until) {
+            if (HandsDisplay.taskOn(d, app.packageName) > 0) return true
+            Thread.sleep(300)
+        }
+        return true // keepOnOwnScreen() decides next: pull it back, or follow it
+    }
+
+    /**
+     * On the hidden display, an app can move a page onto the person's screen by itself (PhoneGo's
+     * escapes). Pull it back, twice at most; then follow it there for the rest of the run, rather
+     * than pulling again and losing what was typed. A line for the model when either happens.
+     */
+    private fun keepOnOwnScreen(): String? {
+        val d = bg ?: return null
+        val pkg = driving ?: return null
+        if (HandsDisplay.taskOn(0, pkg) == 0) return null
+        val label = HandsApps.labelOf(context, pkg) ?: pkg
+        if (pulls < 2) {
+            pulls++
+            if (HandsDisplay.pullBack(d, pkg)) return "$label jumped to the person's screen; moved it back to yours."
+        }
+        bg = null
+        capsule.background = false
+        return "$label keeps opening on the person's screen; working there for the rest of this task."
+    }
 
     private fun tap(svc: MinisAccessibilityService, x: Int, y: Int, durationMs: Long): Boolean {
         if (!mayAct()) return false
