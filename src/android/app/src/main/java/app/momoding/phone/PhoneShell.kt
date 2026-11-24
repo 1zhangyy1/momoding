@@ -23,12 +23,15 @@ import java.net.NetworkInterface
  *
  * Wireless debugging is the way in; the commands then run in a resident shell process
  * ([ShellServer]) that stays when Android switches wireless debugging off on a Wi-Fi change, until
- * the phone restarts. Every privileged call in the app goes through [runProcess] / [isReady]: the system command
+ * the phone restarts. After a restart Momoding switches wireless debugging on itself (it granted
+ * itself WRITE_SECURE_SETTINGS when paired), starts the resident shell again and switches it back
+ * off; Android allows that on a Wi-Fi it was told to always allow. Every privileged call in the app goes through [runProcess] / [isReady]: the system command
  * (`android-system`), granting Momoding its own permissions ([app.momoding.guard.SelfGrant]), the
  * hands' hidden screen ([app.momoding.hands.HandsDisplay]) and the accessibility repair.
  */
 object PhoneShell {
     private const val TAG = "PhoneShell"
+    private const val ADB_WIFI = "adb_wifi_enabled"
 
     enum class State {
         /** Android 10 or older: no wireless debugging. */
@@ -56,6 +59,13 @@ object PhoneShell {
     fun init(application: Application) {
         app = application.applicationContext
         refresh()
+        // after a restart Wi-Fi comes up later than Momoding: try again once it does
+        val wifi = android.net.NetworkRequest.Builder().addTransportType(android.net.NetworkCapabilities.TRANSPORT_WIFI).build()
+        runCatching {
+            application.getSystemService(android.net.ConnectivityManager::class.java).registerNetworkCallback(wifi, object : android.net.ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: android.net.Network) = refresh()
+            })
+        }
     }
 
     fun isReady(): Boolean = _snapshot.value.state == State.READY
@@ -81,6 +91,17 @@ object PhoneShell {
             if (pong.optInt("version") == ShellServer.VERSION) { set(State.READY); return true }
             ShellServer.call(port, token, org.json.JSONObject().put("command", "pkill -f ${ShellServer::class.java.name}"), 2_000) // an older one
         }
+        val switched = !wirelessDebuggingOn(context) && switchOn(context)
+        val up = startResident(context)
+        if (switched) { // back off as it was: the resident shell does not need it
+            drop()
+            runCatching { Settings.Global.putInt(context.contentResolver, ADB_WIFI, 0) }
+            if (!up) set(State.OFF)
+        }
+        return up
+    }
+
+    private fun startResident(context: Context): Boolean {
         val c = connect(context) ?: return false
         // a fresh port and secret each start: an old server, or another app, cannot answer for it
         val fresh = (20000..60000).random() to java.util.UUID.randomUUID().toString().replace("-", "")
@@ -88,7 +109,10 @@ object PhoneShell {
         runCatching { c.shell(ShellServer.startCommand(context.applicationInfo.sourceDir, fresh.first, fresh.second), 5_000) }
         repeat(30) {
             Thread.sleep(100)
-            if (ShellServer.call(fresh.first, fresh.second, org.json.JSONObject().put("ping", true), 1_000) != null) return true
+            if (ShellServer.call(fresh.first, fresh.second, org.json.JSONObject().put("ping", true), 1_000) != null) {
+                Thread({ PhoneSetup.keepAlive(context) }, "phone-keepalive").start() // a new one: the phone restarted, or Momoding was updated
+                return true
+            }
         }
         AppLogger.warning(TAG, "the resident shell did not start; commands go over wireless debugging")
         return false
@@ -179,7 +203,19 @@ object PhoneShell {
     private fun log(detail: String) = AppLogger.warning(TAG, "pairing failed: $detail")
 
     private fun wirelessDebuggingOn(context: Context): Boolean =
-        runCatching { Settings.Global.getInt(context.contentResolver, "adb_wifi_enabled", 0) == 1 }.getOrDefault(true)
+        runCatching { Settings.Global.getInt(context.contentResolver, ADB_WIFI, 0) == 1 }.getOrDefault(true)
+
+    /**
+     * Wireless debugging on, without the person: needs WRITE_SECURE_SETTINGS (granted after
+     * pairing) and a Wi-Fi the person allowed; Android switches it straight back off otherwise.
+     */
+    private fun switchOn(context: Context): Boolean {
+        if (context.checkSelfPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return false
+        if (AdbPairing.identity(dir(context)) == null || wifiAddress() == null) return false
+        if (runCatching { Settings.Global.putInt(context.contentResolver, ADB_WIFI, 1) }.isFailure) return false
+        Thread.sleep(1_500)
+        return wirelessDebuggingOn(context).also { AppLogger.info(TAG, "switched wireless debugging on: $it") }
+    }
 
     private fun wifiAddress(): String? = runCatching {
         NetworkInterface.getNetworkInterfaces().toList().filter { it.isUp && it.name.startsWith("wlan") }

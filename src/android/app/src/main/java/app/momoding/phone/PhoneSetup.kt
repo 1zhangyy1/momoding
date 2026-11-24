@@ -15,7 +15,9 @@ import kotlinx.coroutines.runBlocking
  * What Momoding sets up for itself once it has the shell's rights, without a dialog for each
  * (本期计划: trust the agent; what was turned on is said, not asked): the runtime permissions it
  * declares, reading notifications, staying out of battery saving, starting screens from the
- * background on ROMs that block it, and its accessibility service back on whenever it drops.
+ * background on ROMs that block it, wireless debugging back on after a restart, and its
+ * accessibility service on (no "restricted setting" for the person to get past) and back on
+ * whenever it drops.
  */
 object PhoneSetup {
     private const val TAG = "PhoneSetup"
@@ -24,6 +26,7 @@ object PhoneSetup {
     fun afterPaired(context: Context) {
         grantDeclared(context)
         val pkg = context.packageName
+        run("pm", "grant", pkg, "android.permission.WRITE_SECURE_SETTINGS")
         run("cmd", "notification", "allow_listener", ComponentName(context, MinisNotificationListenerService::class.java).flattenToString())
         run("cmd", "deviceidle", "whitelist", "+$pkg")
         // what scripts may need beyond runtime permissions: usage stats, system settings, Do Not Disturb
@@ -32,7 +35,8 @@ object PhoneSetup {
         run("cmd", "notification", "allow_dnd", pkg)
         // MIUI / HyperOS: "display pop-up windows while running in the background"
         if (Build.MANUFACTURER.equals("Xiaomi", true)) run("appops", "set", pkg, "10021", "allow")
-        keepAlive(context)
+        AccessibilityRecoveryManager.invalidateCache()
+        if (AccessibilityRecoveryManager.isGrantRevoked(context)) runBlocking { AccessibilityRecoveryManager.repairWithShizuku(context) }
     }
 
     /** Whenever the shell is ready: the accessibility service back on if Android dropped it. */
