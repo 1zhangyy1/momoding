@@ -26,3 +26,10 @@
 # NOTE FOR VERIFICATION: debug builds don't minify, so this bug is invisible
 # there. Any change here must be checked against an assembleRelease APK.
 -keep class io.codeconcept.realtimecutvadlibrary.** { *; }
+
+# momoding: Rhino (momoding-android scripts). It reflects over its own classes and reaches for
+# java.beans / javax.script, which Android does not have and the scripts never use.
+-keep class org.mozilla.javascript.** { *; }
+-dontwarn java.beans.**
+-dontwarn javax.script.**
+-dontwarn jdk.dynalink.**
