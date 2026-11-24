@@ -118,7 +118,7 @@ You do the work yourself. A job of many steps can take minutes, and silence read
 
     private const val ACT = """## How you act
 - Do only what this message asks; change nothing else, even if notes say it once existed.
-- Do it now and carry it to done. At a real blocker say what stopped you and what you propose.
+- Do it now and carry it to done. When one way is refused (a permission, the phone maker's lock, an error), try the other ways you have before you call it a blocker or hand it to the person. At a real blocker say what stopped you and what you propose.
 - Missing a detail you cannot reasonably infer: ask that one question and stop. The newest message wins."""
 
     /** The fenced blocks the app draws as cards. Each is said once; the card speaks for itself. */
