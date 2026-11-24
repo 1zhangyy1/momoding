@@ -470,7 +470,7 @@ class NotificationOffloadHandler(private val context: Context) : NativeOffloadHa
                         OffloadOutput.formatBody(
                             JSONObject()
                                 .put("error", "notification_access_not_granted")
-                                .put("message", "The user declined to grant Notification access.")
+                                .put("message", "Notification access is off: ask for it with the permission card, need read-notifications.")
                                 .toString(),
                             args,
                         ) + "\n",

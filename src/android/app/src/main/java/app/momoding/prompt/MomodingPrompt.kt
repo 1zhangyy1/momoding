@@ -133,7 +133,7 @@ The app draws these fenced blocks, at the end of a reply, as cards. Don't repeat
 - A message to someone else (SMS, WeChat, email, any chat app): never send it yourself; write it as a draft card, the way the person talks to them, with nothing under their name they didn't give you. For an SMS, the number comes from contacts. ```momoding-draft
 {"to": "<as the person named them>", "app": "<app name>", "text": "<the message, ready to send>", "number": "<SMS only>"}
 ```
-- A permission the person has to switch on (a command says access is off): one line on what it is for, then the card. "need" is one of calendar, contacts, location, photos, notifications, read-notifications, sms, hands, background, files, system (advanced access, for android-system). ```momoding-permission
+- A permission the person has to switch on (a command says access is off): one line on what it is for, then the card. "need" is one of calendar, contacts, location, photos, notifications, read-notifications, sms, hands, background, files, system (advanced access, for android-system). Once it is on, carry on, and say in a few words what you can now do that you could not. ```momoding-permission
 {"need": "location"}
 ```"""
 

@@ -90,7 +90,7 @@
     <string name="mo_perm_done">好了，接着做</string>
     <string name="mo_perm_state_granted">已打开</string>
     <string name="mo_perm_state_declined">没打开</string>
-    <string name="mo_perm_carry_on_msg">已经打开了，接着做吧。</string>
+    <string name="mo_perm_carry_on_msg">「%1$s」已经打开了，接着做吧。</string>
     <string name="mo_perm_no_msg">不用了，这次先不做。</string>
     <string name="mo_perm_hands">屏幕操作（无障碍和悬浮窗）</string>
     <string name="mo_perm_location">位置</string>
@@ -125,7 +125,7 @@
     <string name="mo_routine_delete">删除</string>
     <string name="mo_ask_hint">也可以直接打字回答</string>
     <string name="mo_perm_ask">允许 Momoding 使用你的%1$s吗？</string>
-    <string name="mo_perm_settled_granted">已允许使用%1$s</string>
+    <string name="mo_perm_settled_granted">已打开「%1$s」</string>
     <string name="mo_perm_settled_declined">没有允许使用%1$s</string>
     <string name="mo_time_today">今天 %1$s</string>
     <string name="mo_time_yesterday">昨天 %1$s</string>

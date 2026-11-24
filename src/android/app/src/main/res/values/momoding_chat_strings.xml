@@ -90,7 +90,7 @@
     <string name="mo_perm_done">Done, carry on</string>
     <string name="mo_perm_state_granted">Turned on</string>
     <string name="mo_perm_state_declined">Not turned on</string>
-    <string name="mo_perm_carry_on_msg">It\'s on — carry on.</string>
+    <string name="mo_perm_carry_on_msg">%1$s is on now. Carry on.</string>
     <string name="mo_perm_no_msg">Not now.</string>
     <string name="mo_perm_hands">the screen (accessibility and drawing over apps)</string>
     <string name="mo_perm_location">location</string>
@@ -125,7 +125,7 @@
     <string name="mo_routine_delete">Delete</string>
     <string name="mo_ask_hint">Or just type your answer</string>
     <string name="mo_perm_ask">Allow Momoding to use your %1$s?</string>
-    <string name="mo_perm_settled_granted">Allowed: %1$s</string>
+    <string name="mo_perm_settled_granted">On: %1$s</string>
     <string name="mo_perm_settled_declined">Not allowed: %1$s</string>
     <string name="mo_time_today">Today %1$s</string>
     <string name="mo_time_yesterday">Yesterday %1$s</string>

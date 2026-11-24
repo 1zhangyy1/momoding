@@ -76,7 +76,8 @@ val LocalMomodingLive = androidx.compose.runtime.compositionLocalOf { true }
 
 @Composable
 private fun cardId(code: String): String {
-    val message = LocalMomodingMessage.current
+    // the stored message when there is one: the bubble's id is temporary while the reply streams
+    val message = LocalMomodingSource.current ?: LocalMomodingMessage.current
     return remember(message, code) { Integer.toHexString((message + "\u0000" + code).hashCode()) }
 }
 
@@ -160,10 +161,10 @@ private object AskState {
 }
 
 /**
- * The prototype's permission card. Phone data (calendar, contacts, location, photos,
- * notifications) is asked with the system dialog right here; when granted the chat is told to
- * carry on. The hands need accessibility and drawing over apps, which live in Settings → Hands:
- * the card opens it and offers "Done, carry on" for when the person comes back.
+ * The one card for switching something on (M61: asked when first needed, never up front). "Turn
+ * on" switches it on right here where it can: Momoding itself when advanced access allows, else
+ * the system dialog, else the one system page with the switch (advanced access: its two steps).
+ * Back from there it checks by itself and carries on; "Done" is there for what it cannot see.
  */
 @Composable
 private fun PermissionCard(o: JSONObject, code: String) {
@@ -183,105 +184,48 @@ private fun PermissionCard(o: JSONObject, code: String) {
         "read-notifications" -> stringResource(R.string.mo_perm_read_notifications)
         "sms" -> stringResource(R.string.mo_perm_sms)
         "system" -> stringResource(R.string.mo_phone_shell_title)
-        else -> if (need.startsWith("android.permission.")) o.optString("need").substringAfterLast('.').lowercase().replace('_', ' ') else return
+        else -> if (need.startsWith("android.permission.")) need.substringAfterLast('.').replace('_', ' ') else return
     }
-    val permissions = PermissionNeeds.androidPermissions(need)
-    val carryOn = stringResource(R.string.mo_perm_carry_on_msg)
+    val carryOn = stringResource(R.string.mo_perm_carry_on_msg, label)
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    fun settle(to: String) { AskState.choose(context, "perm.$id", to); state = to }
+    fun done() {
+        if (state == "granted") return
+        settle("granted"); MomodingSend.send(carryOn)
+        // all files: the whole storage is mounted for the commands as soon as the switch is on
+        if (need == "files") scope.launch { app.momoding.files.PhoneFiles.ensureMounted(context) }
+    }
     val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions(),
     ) { result ->
-        if (result.values.any { it }) {
-            AskState.choose(context, "perm.$id", "granted"); state = "granted"; MomodingSend.send(carryOn)
-        } else {
-            // asked before and refused for good: the system no longer shows the dialog — its settings page does it
-            runCatching {
-                context.startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                    android.net.Uri.fromParts("package", context.packageName, null)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
-            }
-            AskState.choose(context, "perm.$id", "settings"); state = "settings"
-        }
+        if (result.values.any { it }) done()
+        else { app.momoding.phone.PhoneNeeds.openAppDetails(context); settle("opened") } // refused for good: only its settings page can now
     }
-    val allow: (String) -> Unit = { pick ->
-        if (pick == context.getString(R.string.mo_perm_no)) {
-            AskState.choose(context, "perm.$id", "declined"); state = "declined"
-            MomodingSend.send(context.getString(R.string.mo_perm_no_msg))
-        } else if (need == "files") {
-            // one switch, then the whole storage is mounted by itself on the way back
-            app.momoding.files.PhoneFiles.openSwitch(context)
-            AskState.choose(context, "perm.$id", "files"); state = "files"
-        } else if (need == "read-notifications") {
-            // notification access is a system list with one switch per app; checked again on the way back
-            runCatching {
-                context.startActivity(android.content.Intent(com.openminis.app.offload.MinisNotificationListenerService.SETTINGS_ACTION)
-                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+    val turnOn: () -> Unit = {
+        scope.launch {
+            val on = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { app.momoding.phone.PhoneNeeds.switchOn(context, need) }
+            when {
+                on -> done()
+                app.momoding.phone.PhoneNeeds.open(context, need) -> settle("opened")
+                else -> launcher.launch(app.momoding.phone.PhoneNeeds.runtime(need))
             }
-            AskState.choose(context, "perm.$id", "switch"); state = "switch"
-        } else if (need == "background") {
-            // let off the battery saver (a system dialog, one tap); the makers' own "background" page after, where there is one
-            val activity = context as? android.app.Activity
-            val power = com.openminis.app.power.PowerOptimizationManager
-            if (activity != null && !power.isIgnoringBatteryOptimizations(context)) power.requestBatteryOptimizationExemption(activity)
-            else if (activity != null && power.needsOemAutostartGuidance() && !power.openOemAutostartSettings(activity)) power.openAppDetailsSettings(activity)
-            app.momoding.ui.settings.backgroundHint(context)
-            AskState.choose(context, "perm.$id", "background"); state = "background"
-        } else if (need == "system") {
-            // advanced access (app.momoding.phone): the two steps; the pairing code is read, or typed into the notification
-            if (app.momoding.phone.PhoneShell.isReady()) {
-                AskState.choose(context, "perm.$id", "granted"); state = "granted"; MomodingSend.send(carryOn)
-            } else {
-                app.momoding.phone.PairingService.start(context)
-                AskState.choose(context, "perm.$id", "switch"); state = "switch"
-            }
-        } else if (need == "hands") {
-            // straight to the system switch that is missing (Momoding's own accessibility page where the phone allows)
-            val step = app.momoding.hands.HandsSetup.next(context)
-            if (step == app.momoding.hands.HandsSetup.Step.NONE) {
-                AskState.choose(context, "perm.$id", "granted"); state = "granted"; MomodingSend.send(carryOn)
-            } else {
-                app.momoding.hands.HandsSetup.open(context, step)
-                AskState.choose(context, "perm.$id", "hands"); state = "hands"
-            }
-        } else {
-            launcher.launch(permissions)
         }
     }
     if (state == null && !LocalMomodingLive.current) {
         SettledLine(stringResource(R.string.mo_card_expired_line, stringResource(R.string.mo_perm_ask, label)), done = false)
         return
     }
-    // advanced access: paired in the background while the person is in Settings — carry on by itself
-    if (need == "system") {
-        val shell by app.momoding.phone.PhoneShell.snapshot.collectAsState()
-        androidx.compose.runtime.LaunchedEffect(shell.state) {
-            if (state == "switch" && shell.state == app.momoding.phone.PhoneShell.State.READY) {
-                AskState.choose(context, "perm.$id", "granted"); state = "granted"; MomodingSend.send(carryOn)
-            }
-        }
-    }
-    // hands: back from the system page — carry on by itself once everything is on, else say what is left
+    // back from the system page (or paired in the background): carry on by itself once it is on
     var handsStep by remember(id) { mutableStateOf(if (need == "hands") app.momoding.hands.HandsSetup.next(context) else null) }
-    if ((need == "hands" || need == "files" || need == "read-notifications") && state != "granted" && state != "declined") {
+    if (state != null && state != "granted" && state != "declined") {
+        val shell by app.momoding.phone.PhoneShell.snapshot.collectAsState()
+        LaunchedEffect(shell.state) { if (need == "system" && shell.state == app.momoding.phone.PhoneShell.State.READY) done() }
         val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
         androidx.compose.runtime.DisposableEffect(owner, id) {
             val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
                 if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-                    if (need == "read-notifications") {
-                        if (state == "switch" && com.openminis.app.offload.MinisNotificationListenerService.isEnabled(context)) {
-                            AskState.choose(context, "perm.$id", "granted"); state = "granted"; MomodingSend.send(carryOn)
-                        }
-                    } else if (need == "files") {
-                        if (state == "files" && app.momoding.files.PhoneFiles.allowed()) {
-                            kotlinx.coroutines.MainScope().launch {
-                                app.momoding.files.PhoneFiles.ensureMounted(context)
-                                AskState.choose(context, "perm.$id", "granted"); state = "granted"; MomodingSend.send(carryOn)
-                            }
-                        }
-                    } else {
-                    handsStep = app.momoding.hands.HandsSetup.next(context)
-                    if (state == "hands" && handsStep == app.momoding.hands.HandsSetup.Step.NONE) {
-                        AskState.choose(context, "perm.$id", "granted"); state = "granted"; MomodingSend.send(carryOn)
-                    }
-                    }
+                    if (need == "hands") handsStep = app.momoding.hands.HandsSetup.next(context)
+                    if (app.momoding.phone.PhoneNeeds.granted(context, need)) done()
                 }
             }
             owner.lifecycle.addObserver(obs)
@@ -299,38 +243,30 @@ private fun PermissionCard(o: JSONObject, code: String) {
                 "sms" -> stringResource(R.string.mo_perm_sms_ask)
                 else -> stringResource(R.string.mo_perm_ask, label)
             })
-            val detail = when (handsStep) {
-                app.momoding.hands.HandsSetup.Step.ACCESSIBILITY -> stringResource(R.string.mo_perm_hands_a11y)
-                app.momoding.hands.HandsSetup.Step.UNLOCK -> stringResource(R.string.mo_perm_hands_unlock)
-                app.momoding.hands.HandsSetup.Step.OVERLAY -> stringResource(R.string.mo_perm_hands_overlay)
+            val detail = when {
+                need == "system" -> stringResource(R.string.mo_phone_shell_not_paired)
+                handsStep == app.momoding.hands.HandsSetup.Step.ACCESSIBILITY -> stringResource(R.string.mo_perm_hands_a11y)
+                handsStep == app.momoding.hands.HandsSetup.Step.UNLOCK -> stringResource(R.string.mo_perm_hands_unlock)
+                handsStep == app.momoding.hands.HandsSetup.Step.OVERLAY -> stringResource(R.string.mo_perm_hands_overlay)
                 else -> stringResource(R.string.mo_perm_detail)
             }
             Text(detail, fontSize = Design.Size.Note, lineHeight = Design.Line.Note, color = ChatColors.secondaryText)
             CardActions {
-                val left = handsStep
-                if (state == "hands" && left != null && left != app.momoding.hands.HandsSetup.Step.NONE) {
-                    // one more system page to go; the done button stays for phones where the check cannot see it
-                    PillButton(stringResource(R.string.mo_perm_done), primary = false) {
-                        AskState.choose(context, "perm.$id", "granted"); state = "granted"; MomodingSend.send(carryOn)
+                if (state == null) {
+                    PillButton(stringResource(R.string.mo_perm_no), primary = false) {
+                        settle("declined"); MomodingSend.send(context.getString(R.string.mo_perm_no_msg))
                     }
-                    PillButton(stringResource(R.string.mo_perm_open), primary = true) { app.momoding.hands.HandsSetup.open(context, left) }
-                } else if (state == "background" && com.openminis.app.power.PowerOptimizationManager.needsOemAutostartGuidance()) {
-                    // the phone maker's page cannot be checked from here: the person says when it is done
-                    PillButton(stringResource(R.string.mo_perm_background_oem), primary = false) {
-                        (context as? android.app.Activity)?.let { com.openminis.app.power.PowerOptimizationManager.openOemAutostartSettings(it) }
-                    }
-                    PillButton(stringResource(R.string.mo_perm_done), primary = true) {
-                        AskState.choose(context, "perm.$id", "granted"); state = "granted"; MomodingSend.send(carryOn)
-                    }
-                } else if (state == "settings" || state == "hands" || state == "background" || state == "files" || state == "switch") {
-                    PillButton(stringResource(R.string.mo_perm_done), primary = true) {
-                        AskState.choose(context, "perm.$id", "granted"); state = "granted"; MomodingSend.send(carryOn)
-                    }
+                    PillButton(stringResource(R.string.mo_perm_open), primary = true, onClick = turnOn)
                 } else {
-                    val no = stringResource(R.string.mo_perm_no)
-                    val open = stringResource(R.string.mo_perm_open)
-                    PillButton(no, primary = false) { allow(no) }
-                    PillButton(open, primary = true) { allow(open) }
+                    // opened: the way there again (a step left, or the page closed), and "done" for what the check cannot see
+                    if (need == "background" && com.openminis.app.power.PowerOptimizationManager.needsOemAutostartGuidance()) {
+                        PillButton(stringResource(R.string.mo_perm_background_oem), primary = false) {
+                            (context as? android.app.Activity)?.let { com.openminis.app.power.PowerOptimizationManager.openOemAutostartSettings(it) }
+                        }
+                    } else {
+                        PillButton(stringResource(R.string.mo_perm_open), primary = false, onClick = turnOn)
+                    }
+                    PillButton(stringResource(R.string.mo_perm_done), primary = true) { done() }
                 }
             }
         }
@@ -434,16 +370,3 @@ private fun HandoffCard(o: JSONObject, code: String) {
         }
     }
 }
-
-internal object PermissionNeeds {
-    fun androidPermissions(need: String): Array<String> = when (need) {
-        "calendar" -> arrayOf(android.Manifest.permission.READ_CALENDAR, android.Manifest.permission.WRITE_CALENDAR)
-        "contacts" -> arrayOf(android.Manifest.permission.READ_CONTACTS, android.Manifest.permission.WRITE_CONTACTS)
-        "location" -> arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION)
-        "photos" -> if (android.os.Build.VERSION.SDK_INT >= 33) arrayOf(android.Manifest.permission.READ_MEDIA_IMAGES) else arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE)
-        "notifications" -> if (android.os.Build.VERSION.SDK_INT >= 33) arrayOf(android.Manifest.permission.POST_NOTIFICATIONS) else emptyArray()
-        "sms" -> arrayOf(android.Manifest.permission.READ_SMS, android.Manifest.permission.RECEIVE_SMS)
-        else -> if (need.startsWith("android.permission.")) arrayOf(need.substringBefore('.') + ".permission." + need.substringAfter("android.permission.").uppercase()) else emptyArray()
-    }
-}
-

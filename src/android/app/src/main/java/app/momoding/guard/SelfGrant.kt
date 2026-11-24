@@ -20,7 +20,7 @@ object SelfGrant {
     private fun granted(context: Context, permission: String) =
         context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
 
-    /** Turns [permissions] on through Shizuku; true when all of them are on afterwards. */
+    /** Turns [permissions] on through advanced access (the phone shell); true when all of them are on afterwards. */
     fun grant(context: Context, permissions: List<String>): Boolean {
         val missing = permissions.filterNot { granted(context, it) }
         if (missing.isEmpty()) return true
@@ -31,7 +31,7 @@ object SelfGrant {
         }
         val now = missing.filter { granted(context, it) }
         turnedOn += now.map { it.substringAfterLast('.') }
-        if (now.isNotEmpty()) AppLogger.info(TAG, "turned on through Shizuku: ${now.joinToString()}")
+        if (now.isNotEmpty()) AppLogger.info(TAG, "turned on through advanced access: ${now.joinToString()}")
         return now.size == missing.size
     }
 
@@ -39,6 +39,6 @@ object SelfGrant {
     fun notice(): String {
         val names = generateSequence { turnedOn.poll() }.toList()
         if (names.isEmpty()) return ""
-        return "\n(Momoding turned on ${names.distinct().joinToString(", ")} itself through Shizuku — tell the person in a line.)\n"
+        return "\n(Momoding turned on ${names.distinct().joinToString(", ")} itself through advanced access — tell the person in a line.)\n"
     }
 }

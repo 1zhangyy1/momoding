@@ -132,9 +132,7 @@ object OffloadPermissionManager {
     /** Timeout for a single system permission dialog round-trip. */
     const val SYSTEM_DIALOG_TIMEOUT_MS: Long = 120_000L
 
-    // momoding: see requestAndroidPermission / requestSettingsGate
-    private const val JUST_DENIED_MS = 15_000L
-    @Volatile private var lastDeniedAt = 0L
+    // momoding: see requestAndroidPermission
     private fun appInForeground(): Boolean =
         androidx.lifecycle.ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)
 
@@ -191,7 +189,6 @@ object OffloadPermissionManager {
 
     /** Called from UI after the system permission dialog returns. */
     fun respondToAndroidPermission(result: AndroidPermissionResult) {
-        if (result == AndroidPermissionResult.DENIED) lastDeniedAt = System.currentTimeMillis() // momoding
         _pendingAndroidPermission.value = null
         androidPermissionContinuation?.resume(result)
         androidPermissionContinuation = null
@@ -240,46 +237,18 @@ object OffloadPermissionManager {
     private var settingsGateContinuation: kotlin.coroutines.Continuation<SettingsGateDecision>? = null
 
     /**
-     * Show an in-app dialog explaining why a settings trip is needed, then
-     * (if the user accepts) wait up to [SETTINGS_GATE_TIMEOUT_MS] polling
-     * [check] for success.
-     *
-     * Returns:
-     *  - [AndroidPermissionResult.GRANTED] if [check] succeeds within the
-     *    polling window.
-     *  - [AndroidPermissionResult.DENIED] if the user cancels the dialog.
-     *  - [AndroidPermissionResult.TIMEOUT] if the user accepts but doesn't
-     *    complete the grant within the window.
+     * What needs a trip to a settings page. Momoding shows no dialog for it (the in-app dialog
+     * this once was is gone): GRANTED when it is on (switched on through advanced access where
+     * it can), else DENIED, and the chat asks with its permission card.
      */
     suspend fun requestSettingsGate(
         request: SettingsGateRequest,
         check: () -> Boolean,
     ): AndroidPermissionResult {
-        // momoding: one request, one prompt. Right after the person declined the system dialog,
-        // a second "Open Settings" dialog for the same thing is asking twice; in the background
-        // nobody is there to answer. Gates that are the only way in (notification access) still show.
-        if (!appInForeground() || System.currentTimeMillis() - lastDeniedAt < JUST_DENIED_MS) return AndroidPermissionResult.DENIED
-        val decision = suspendCancellableCoroutine<SettingsGateDecision> { cont ->
-            settingsGateContinuation = cont
-            _pendingSettingsGate.value = request
-            cont.invokeOnCancellation {
-                _pendingSettingsGate.value = null
-                settingsGateContinuation = null
-            }
-        }
-        if (decision == SettingsGateDecision.CANCEL) return AndroidPermissionResult.DENIED
-
-        val granted = withTimeoutOrNull(SETTINGS_GATE_TIMEOUT_MS) {
-            while (true) {
-                if (check()) return@withTimeoutOrNull true
-                delay(500L)
-            }
-            @Suppress("UNREACHABLE_CODE") false
-        }
-        return when (granted) {
-            true -> AndroidPermissionResult.GRANTED
-            else -> AndroidPermissionResult.TIMEOUT
-        }
+        // momoding: no second kind of prompt (M61). What advanced access can switch on, it does;
+        // else the command answers that it is off and the chat asks with its one permission card.
+        if (request.id == "notification_access") appContext?.let { app.momoding.phone.PhoneNeeds.switchOn(it, "read-notifications") }
+        return if (check()) AndroidPermissionResult.GRANTED else AndroidPermissionResult.DENIED
     }
 
     /**
