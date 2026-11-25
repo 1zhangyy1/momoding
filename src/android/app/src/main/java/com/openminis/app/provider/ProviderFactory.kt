@@ -132,7 +132,7 @@ object ProviderFactory {
                 OpenAIProvider(
                     apiKey = apiKey,
                     model = model,
-                    basePath = "https://openrouter.ai/api/v1",
+                    basePath = basePath ?: "https://openrouter.ai/api/v1", // momoding: a relay where OpenRouter is not reachable directly
                     extraHeaders = mapOf(
                         "HTTP-Referer" to "https://github.com/1zhangyy1/momoding",
                         "X-Title" to "Momoding",
