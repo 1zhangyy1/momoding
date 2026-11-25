@@ -82,6 +82,7 @@ class MinisAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
+        app.momoding.hands.HandsDisplay.onEvent(this, event) // momoding: no keyboard for the hands' hidden display
         val rec = RecordedEvent(
             type = AccessibilityEvent.eventTypeToString(event.eventType),
             packageName = event.packageName?.toString(),

@@ -5,6 +5,7 @@ import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.media.ImageReader
+import com.openminis.app.accessibility.MinisAccessibilityService
 import com.openminis.app.logging.AppLogger
 
 /**
@@ -39,6 +40,27 @@ object HandsDisplay {
     }
 
     val id: Int? get() = display?.display?.displayId
+
+    /**
+     * The keyboard follows the cursor. Android shows the keyboard of a field on a display like this
+     * one on the person's screen (it cannot be set to stay off for a display an app made), where
+     * it covers what they are doing and takes what they type. So: a field on the hidden display
+     * gets the cursor → no keyboard (the hands type through accessibility anyway); a field on any
+     * other display → the keyboard as usual. Called for each focus event; [release] puts it back.
+     */
+    fun onEvent(svc: MinisAccessibilityService, event: android.view.accessibility.AccessibilityEvent) {
+        if (event.eventType != android.view.accessibility.AccessibilityEvent.TYPE_VIEW_FOCUSED) return
+        val hidden = id ?: return
+        val source = event.source ?: return
+        if (!source.isEditable || android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) return
+        val on = source.window?.displayId ?: return
+        keyboard(svc, hide = on == hidden)
+    }
+
+    private fun keyboard(svc: MinisAccessibilityService, hide: Boolean) {
+        val mode = if (hide) android.accessibilityservice.AccessibilityService.SHOW_MODE_HIDDEN else android.accessibilityservice.AccessibilityService.SHOW_MODE_AUTO
+        runCatching { if (svc.softKeyboardController.showMode != mode) svc.softKeyboardController.setShowMode(mode) }
+    }
 
     /** Whether a run can work in the background now: switched on, and advanced access ready. */
     fun available(context: Context): Boolean =
@@ -115,6 +137,7 @@ object HandsDisplay {
      */
     @Synchronized
     fun release() {
+        MinisAccessibilityService.getInstance()?.let { keyboard(it, hide = false) }
         display?.release(); display = null
         reader?.close(); reader = null
         lastFrame = null
