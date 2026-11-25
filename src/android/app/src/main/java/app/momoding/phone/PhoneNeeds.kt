@@ -8,6 +8,7 @@ import android.net.Uri
 import android.provider.Settings
 import app.momoding.files.PhoneFiles
 import app.momoding.guard.SelfGrant
+import app.momoding.hands.Hands
 import app.momoding.hands.HandsSetup
 import com.openminis.app.accessibility.AccessibilityRecoveryManager
 import com.openminis.app.offload.MinisNotificationListenerService
@@ -34,7 +35,7 @@ object PhoneNeeds {
 
     fun granted(context: Context, need: String): Boolean = when (need) {
         "system" -> PhoneShell.isReady()
-        "hands" -> HandsSetup.next(context) == HandsSetup.Step.NONE
+        "hands" -> Hands.enabled(context) && HandsSetup.next(context) == HandsSetup.Step.NONE
         "files" -> PhoneFiles.allowed()
         "read-notifications" -> MinisNotificationListenerService.isEnabled(context)
         "background" -> PowerOptimizationManager.isIgnoringBatteryOptimizations(context)
@@ -47,6 +48,7 @@ object PhoneNeeds {
      * without its security setting) just fall through to the system page.
      */
     fun switchOn(context: Context, need: String): Boolean {
+        if (need == "hands") Hands.setEnabled(context, true) // Momoding's own switch: saying yes on the card is enough
         if (granted(context, need)) return true
         if (need == "system" || !PhoneShell.ensure()) return false
         val pkg = context.packageName
@@ -70,8 +72,11 @@ object PhoneNeeds {
      */
     fun open(context: Context, need: String): Boolean {
         when (need) {
-            "system" -> PairingService.start(context)
-            "hands" -> HandsSetup.open(context, HandsSetup.next(context))
+            // Developer options still off: the system page would close at once, so the three steps instead
+            "system" -> if (Settings.Global.getInt(context.contentResolver, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0) == 0)
+                start(context, Intent(Intent.ACTION_VIEW, Uri.parse("momoding://settings/advanced")).setPackage(context.packageName))
+                else PairingService.start(context)
+            "hands" -> { Hands.setEnabled(context, true); HandsSetup.open(context, HandsSetup.next(context)) }
             "files" -> PhoneFiles.openSwitch(context)
             "read-notifications" -> start(context, Intent(MinisNotificationListenerService.SETTINGS_ACTION))
             "background" -> {

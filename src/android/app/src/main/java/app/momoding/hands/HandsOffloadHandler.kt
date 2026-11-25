@@ -167,7 +167,7 @@ class HandsOffloadHandler(private val context: Context) : NativeOffloadHandler {
     private fun refused(error: String, message: String): NativeOffloadResult = NativeOffloadResult(
         3,
         JSONObject().put("ok", false).put("error", error).put("message", message)
-            .put("tell_user", "Tell the user in one line, in their language, and give the link ${Hands.DEEP_LINK} so they can switch it on or fix the setting. Do not use android-a11y-cli instead.")
+            .put("tell_user", "Say in one line, in their language, what it is for and ask with the permission card, need \"hands\". Do not use android-a11y-cli instead.")
             .toString(2) + "\n",
     )
 

@@ -227,7 +227,6 @@ object Hands {
     fun promptParagraph(context: Context): String {
         val on = enabled(context)
         val r = readiness(context)
-        val handsName = com.openminis.app.i18n.LocaleWrap.uiContext(context).getString(com.openminis.app.R.string.mo_hands_title)
         return buildString {
             append("## Apps without an API (Momoding)\n")
             append("Most everyday apps here (12306, 微信, 支付宝, 美团, 淘宝…) have no API. Prefer a skill, a command or `momoding-web`; a page that needs the person's login goes to a helper with the browser; the phone's screen comes last, only for the step that needs an app's screen.\n")
@@ -241,9 +240,9 @@ object Hands {
                     if (!r.overlayOk) add("no permission to draw over other apps")
                     if (r.model == null) add("no model that can see pictures")
                 }.joinToString(", ")
-                append("The screen is switched on but not usable yet ($missing). If a task needs it, say so in one line with the link [$handsName]($DEEP_LINK).")
+                append("The screen is switched on but not usable yet ($missing). If a task needs it, ask for it with the permission card, need \"hands\".")
             } else {
-                append("Operating the phone's screen is switched off (the default). If a task can only be done on the screen, say so in one line with the link [$handsName]($DEEP_LINK).")
+                append("Operating the phone's screen is off (the default). If a task can only be done on the screen, ask for it with the permission card, need \"hands\".")
             }
             // the phone's own files: one switch away; once on, the whole storage is mounted for the shell
             if (app.momoding.files.PhoneFiles.allowed()) {

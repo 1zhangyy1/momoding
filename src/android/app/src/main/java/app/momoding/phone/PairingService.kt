@@ -86,7 +86,9 @@ class PairingService : Service() {
         val action = Notification.Action.Builder(null, getString(R.string.mo_phone_pair_code_action), reply).addRemoteInput(input).build()
         return Notification.Builder(this, CHANNEL).setContentTitle(getString(R.string.mo_phone_shell_title)).setContentText(text)
             .setStyle(Notification.BigTextStyle().bigText(text)).setSmallIcon(R.drawable.ic_stat_momoding)
-            .setOnlyAlertOnce(false).addAction(action).build()
+            .setOnlyAlertOnce(false).addAction(action)
+            .setGroup(CHANNEL) // its own group: not folded in with "Momoding is running", one tap from the input
+            .build()
     }
 
     /**
@@ -146,7 +148,8 @@ class PairingService : Service() {
             }
             context.startForegroundService(Intent(context, PairingService::class.java))
             val wireless = Intent(android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)
-                .putExtra(":settings:fragment_args_key", "toggle_adb_wireless")
+                .putExtra(":settings:fragment_args_key", "toggle_adb_wireless") // scrolls to the row and highlights it
+                .putExtra(":settings:show_fragment_args", android.os.Bundle().apply { putString(":settings:fragment_args_key", "toggle_adb_wireless") })
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             runCatching { context.startActivity(wireless) }
                 .onFailure { context.startActivity(Intent(android.provider.Settings.ACTION_DEVICE_INFO_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }

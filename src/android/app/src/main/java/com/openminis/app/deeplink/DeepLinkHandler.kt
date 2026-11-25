@@ -184,6 +184,7 @@ object DeepLinkHandler {
                 DeepLinkAction.OpenSettingsScreen(Routes.USAGE_STATS)
             "skills" -> DeepLinkAction.OpenSettingsScreen(Routes.SKILLS)
             "hands", "screen" -> DeepLinkAction.OpenSettingsScreen(app.momoding.ui.hands.ROUTE_HANDS) // momoding
+            "advanced" -> DeepLinkAction.OpenSettingsScreen(Routes.SHIZUKU) // momoding: the three steps of advanced access
             "first-run" -> DeepLinkAction.OpenSettingsScreen(app.momoding.onboarding.ROUTE_FIRST_RUN) // momoding: walkthroughs
             "first-run-preview" -> DeepLinkAction.OpenSettingsScreen(app.momoding.onboarding.ROUTE_FIRST_RUN_PREVIEW) // momoding: walkthroughs
             "rules" -> DeepLinkAction.OpenSettingsScreen(app.momoding.ui.guard.ROUTE_RULES) // momoding
