@@ -93,7 +93,6 @@
     <string name="overlay_completion_cancelled">Abgebrochen</string>
     <string name="overlay_completion_timeout">Zeitüberschreitung</string>
     <string name="a11y_repair_dialog_title">Bedienungshilfe deaktiviert</string>
-    <string name="a11y_repair_dialog_message_shizuku">Momoding hat seine Berechtigung für Bedienungshilfen verloren – das passiert nach einem Beenden erzwingen. Shizuku ist verfügbar und kann sie sofort wiederherstellen, ohne die Einstellungen zu öffnen.</string>
     <string name="a11y_repair_dialog_message_manual">Momoding hat seine Berechtigung für Bedienungshilfen verloren – das passiert nach einem Beenden erzwingen. Aktiviere Momoding erneut unter Einstellungen → Bedienungshilfen.</string>
     <string name="a11y_repair_action_repair">Jetzt reparieren</string>
     <string name="a11y_repair_action_open_settings">Einstellungen öffnen</string>
@@ -104,8 +103,6 @@
     <string name="a11y_repair_row_sub">Die Berechtigung wurde entzogen, wahrscheinlich durch Beenden erzwingen</string>
     <string name="a11y_repair_in_progress">Wird repariert…</string>
     <string name="a11y_repair_failed">Reparatur fehlgeschlagen – bitte in den Einstellungen aktivieren</string>
-    <string name="a11y_repair_footer_shizuku">Android entfernt die Bedienungshilfen-Berechtigung, sobald eine App zwangsweise beendet wird, und stellt sie nicht automatisch wieder her. Shizuku kann sie direkt zurückschreiben.</string>
-    <string name="a11y_repair_footer_manual">Android entfernt die Bedienungshilfen-Berechtigung, sobald eine App zwangsweise beendet wird, und stellt sie nicht automatisch wieder her. Mit Shizuku geht das künftig mit einem Tipp.</string>
     <string name="bg_service_notification_title">Momoding aktiv</string>
     <string name="bg_service_notification_text">%1$s | %2$s | %3$s</string>
     <string name="bg_service_notification_title_completed">Aufgabe abgeschlossen</string>
@@ -712,7 +709,6 @@
     <string name="perm_section_a11y">Bedienungshilfen</string>
     <string name="perm_section_shizuku">Shizuku</string>
     <string name="perm_a11y_section_footer">android-a11y-cli ermöglicht dem Agent, die UI-Struktur zu lesen, Tippen und Gesten auszuführen sowie Systemereignisse zu beobachten. Beide Zeilen unten müssen gesetzt sein: Agent-Berechtigung wählen und Bedienungshilfen-Dienst in den Systemeinstellungen aktivieren.</string>
-    <string name="perm_shizuku_section_footer">android-shizuku-cli gewährt dem Agent privilegierte Android-APIs (Paket-Installation, settings put, Force-Stop, …) über den Shizuku-Dienst, autorisiert via WLAN-ADB oder Root. Beide Zeilen unten müssen gesetzt sein.</string>
     <string name="perm_a11y_cli_description">Agent darf Bildschirm-UI lesen, tippen, eingeben, Ereignisse beobachten</string>
     <string name="perm_shizuku_cli_description">Privilegierte Android-APIs über den Shizuku-Dienst</string>
     <string name="perm_a11y_open_settings">Bedienungshilfen-Einstellungen öffnen</string>
@@ -790,8 +786,6 @@
     <string name="shizuku_recheck_subtitle">Status nach dem Start des Dienstes erneut abfragen</string>
     <string name="shizuku_grant_btn">Momoding autorisieren</string>
     <string name="shizuku_grant_subtitle">Berechtigungsdialog anzeigen</string>
-    <string name="perm_section_privileged_backend">Privilegiertes Backend</string>
-    <string name="perm_privileged_cli_description">Erlaubt dem Agenten, Systembefehle auf ADB-Ebene über ein privilegiertes Backend (Shizuku oder AXManager) auszuführen</string>
     <string name="skill_title">Fähigkeiten</string>
     <string name="skill_add">Skill hinzufügen</string>
     <string name="skill_section_installed">Installiert</string>
@@ -1570,7 +1564,6 @@
     <string name="system_permissions_a11y_restricted_footer">Android sperrt den Schalter für Bedienungshilfen bei Apps, die aus einer heruntergeladenen APK-Datei installiert wurden. Das ist eine Sicherheitsrichtlinie des Betriebssystems und kein Fehler von Momoding — mit Ihrer Installation stimmt alles. Das Zulassen eingeschränkter Einstellungen gibt lediglich den Schalter wieder frei; es erteilt für sich genommen keine Berechtigung, und Sie entscheiden weiterhin selbst, ob Sie den Dienst einschalten.</string>
     <string name="system_permissions_a11y_restricted_manual">Eingeschränkte Einstellungen zulassen</string>
     <string name="system_permissions_a11y_restricted_manual_sub">App-Info → Menü ⋮ (oben rechts) → Eingeschränkte Einstellungen zulassen</string>
-    <string name="system_permissions_a11y_restricted_shizuku">Eingeschränkte Einstellungen über Shizuku zulassen</string>
     <string name="system_permissions_a11y_restricted_shizuku_sub">Ein Tippen — hebt die Sperre auf, ohne Momoding zu verlassen</string>
     <string name="system_permissions_a11y_restricted_working">Wird zugelassen…</string>
     <string name="system_permissions_a11y_restricted_failed">Fehlgeschlagen — verwenden Sie die manuellen Schritte unten</string>

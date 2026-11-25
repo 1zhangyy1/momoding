@@ -93,7 +93,6 @@
     <string name="overlay_completion_cancelled">Cancelado</string>
     <string name="overlay_completion_timeout">Tempo esgotado</string>
     <string name="a11y_repair_dialog_title">Acessibilidade desativada</string>
-    <string name="a11y_repair_dialog_message_shizuku">O Momoding perdeu a permissão de acessibilidade — isso acontece depois que o app é encerrado à força. O Shizuku está disponível, então a permissão pode ser restaurada agora mesmo, sem abrir as Configurações.</string>
     <string name="a11y_repair_dialog_message_manual">O Momoding perdeu a permissão de acessibilidade — isso acontece depois que o app é encerrado à força. Para continuar, ative o Momoding novamente em Configurações → Acessibilidade.</string>
     <string name="a11y_repair_action_repair">Reparar agora</string>
     <string name="a11y_repair_action_open_settings">Abrir configurações</string>
@@ -104,8 +103,6 @@
     <string name="a11y_repair_row_sub">A permissão foi revogada, provavelmente por um encerramento forçado</string>
     <string name="a11y_repair_in_progress">Reparando…</string>
     <string name="a11y_repair_failed">Falha no reparo — tente ativar pelas Configurações</string>
-    <string name="a11y_repair_footer_shizuku">O Android revoga a permissão de acessibilidade sempre que um app é encerrado à força e não a restaura automaticamente. O Shizuku pode gravá-la de volta diretamente.</string>
-    <string name="a11y_repair_footer_manual">O Android revoga a permissão de acessibilidade sempre que um app é encerrado à força e não a restaura automaticamente. Instale e autorize o Shizuku para que, no futuro, o reparo seja feito com um único toque.</string>
     <string name="bg_service_notification_title">Agente Momoding ativo</string>
     <string name="bg_service_notification_text">%1$s | %2$s | %3$s</string>
     <string name="bg_service_notification_title_completed">Tarefa concluída</string>
@@ -712,7 +709,6 @@
     <string name="perm_section_a11y">Acessibilidade</string>
     <string name="perm_section_shizuku">Shizuku</string>
     <string name="perm_a11y_section_footer">O android-a11y-cli permite que o Agente leia a estrutura da interface na tela, faça toques e gestos e acompanhe eventos do sistema. As duas linhas abaixo precisam ser configuradas: escolha uma permissão do Agente e ative o serviço de Acessibilidade nas Configurações do sistema.</string>
-    <string name="perm_shizuku_section_footer">O android-shizuku-cli dá ao Agente acesso a APIs privilegiadas do Android (instalar pacotes, settings put, encerrar à força, …) pelo serviço Shizuku autorizado via ADB sem fio ou root. As duas linhas abaixo precisam ser configuradas.</string>
     <string name="perm_a11y_cli_description">Permite que o Agente leia a interface da tela, toque, digite e acompanhe eventos</string>
     <string name="perm_shizuku_cli_description">APIs privilegiadas do Android pelo serviço Shizuku</string>
     <string name="perm_a11y_open_settings">Abrir configurações de acessibilidade</string>
@@ -790,8 +786,6 @@
     <string name="shizuku_recheck_subtitle">Consulta o estado novamente depois de iniciar o serviço</string>
     <string name="shizuku_grant_btn">Autorizar o Momoding</string>
     <string name="shizuku_grant_subtitle">Mostrar a janela de permissão</string>
-    <string name="perm_section_privileged_backend">Backend privilegiado</string>
-    <string name="perm_privileged_cli_description">Permite que o Agente execute comandos de sistema no nível do ADB por um backend privilegiado (Shizuku ou AXManager)</string>
     <string name="skill_title">Habilidades</string>
     <string name="skill_add">Adicionar habilidade</string>
     <string name="skill_section_installed">Instaladas</string>
@@ -1570,7 +1564,6 @@
     <string name="system_permissions_a11y_restricted_footer">O Android bloqueia a chave de acessibilidade para apps instalados a partir de um APK baixado. É uma política de segurança do sistema, não um problema do Momoding — sua instalação está correta. Permitir configurações restritas apenas libera a chave de novo; por si só não concede nada, e a decisão de ligar o serviço continua sendo sua.</string>
     <string name="system_permissions_a11y_restricted_manual">Permitir configurações restritas</string>
     <string name="system_permissions_a11y_restricted_manual_sub">Informações do app → menu ⋮ (canto superior direito) → Permitir configurações restritas</string>
-    <string name="system_permissions_a11y_restricted_shizuku">Permitir configurações restritas pelo Shizuku</string>
     <string name="system_permissions_a11y_restricted_shizuku_sub">Um toque — remove a marcação sem sair do Momoding</string>
     <string name="system_permissions_a11y_restricted_working">Liberando…</string>
     <string name="system_permissions_a11y_restricted_failed">Falhou — siga os passos manuais abaixo</string>

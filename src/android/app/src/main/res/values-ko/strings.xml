@@ -94,7 +94,6 @@
     <string name="overlay_completion_cancelled">취소됨</string>
     <string name="overlay_completion_timeout">시간 초과</string>
     <string name="a11y_repair_dialog_title">접근성이 해제되었습니다</string>
-    <string name="a11y_repair_dialog_message_shizuku">Momoding의 접근성 권한이 사라졌습니다. 앱을 강제 중지하면 발생합니다. Shizuku를 사용할 수 있으므로 설정을 열지 않고 바로 복구할 수 있습니다.</string>
     <string name="a11y_repair_dialog_message_manual">Momoding의 접근성 권한이 사라졌습니다. 앱을 강제 중지하면 발생합니다. 계속하려면 설정 → 접근성에서 Momoding를 다시 켜세요.</string>
     <string name="a11y_repair_action_repair">지금 복구</string>
     <string name="a11y_repair_action_open_settings">설정 열기</string>
@@ -105,8 +104,6 @@
     <string name="a11y_repair_row_sub">강제 중지로 권한이 취소된 것 같습니다</string>
     <string name="a11y_repair_in_progress">복구 중…</string>
     <string name="a11y_repair_failed">복구 실패 — 설정에서 켜 주세요</string>
-    <string name="a11y_repair_footer_shizuku">Android는 앱이 강제 중지될 때마다 접근성 권한을 제거하고 자동으로 복원하지 않습니다. Shizuku는 이를 직접 다시 기록할 수 있습니다.</string>
-    <string name="a11y_repair_footer_manual">Android는 앱이 강제 중지될 때마다 접근성 권한을 제거하고 자동으로 복원하지 않습니다. Shizuku를 설치·승인하면 앞으로 한 번에 복구할 수 있습니다.</string>
     <string name="bg_service_notification_title">Momoding 실행 중</string>
     <string name="bg_service_notification_text">%1$s | %2$s | %3$s</string>
     <string name="bg_service_notification_title_completed">작업 완료</string>
@@ -713,7 +710,6 @@
     <string name="perm_section_a11y">접근성</string>
     <string name="perm_section_shizuku">Shizuku</string>
     <string name="perm_a11y_section_footer">android-a11y-cli는 Agent가 화면 UI 구조를 읽고, 탭과 제스처를 수행하며 시스템 이벤트를 감시할 수 있게 합니다. 아래 두 행을 모두 설정하세요: Agent 권한을 선택하고 시스템 설정에서 접근성 서비스를 활성화하세요.</string>
-    <string name="perm_shizuku_section_footer">android-shizuku-cli는 무선 ADB 또는 root로 시작된 Shizuku 서비스를 통해 Agent에게 권한 있는 Android API(패키지 설치, settings put, 강제 중지 등)를 부여합니다. 아래 두 행을 모두 설정하세요.</string>
     <string name="perm_a11y_cli_description">Agent가 화면 UI를 읽고, 탭/입력하며, 이벤트를 감시</string>
     <string name="perm_shizuku_cli_description">Shizuku 서비스를 통한 권한 있는 Android API</string>
     <string name="perm_a11y_open_settings">접근성 설정 열기</string>
@@ -791,8 +787,6 @@
     <string name="shizuku_recheck_subtitle">서비스를 시작한 뒤 상태를 다시 조회합니다</string>
     <string name="shizuku_grant_btn">Momoding에 권한 부여</string>
     <string name="shizuku_grant_subtitle">권한 대화상자를 표시합니다</string>
-    <string name="perm_section_privileged_backend">권한 있는 백엔드</string>
-    <string name="perm_privileged_cli_description">Agent가 권한 있는 백엔드(Shizuku 또는 AXManager)를 통해 ADB 수준의 시스템 명령을 실행하도록 허용합니다</string>
     <string name="skill_title">스킬</string>
     <string name="skill_add">Skill 추가</string>
     <string name="skill_section_installed">설치됨</string>
@@ -1568,7 +1562,6 @@
     <string name="system_permissions_a11y_restricted_footer">Android는 내려받은 APK 파일로 설치한 앱에 대해 접근성 스위치를 잠급니다. 이는 OS의 보안 정책이며 Momoding의 문제가 아닙니다. 설치 자체에는 아무 이상이 없습니다. 제한된 설정을 허용하면 스위치를 조작할 수 있게 될 뿐이며, 그 자체로 어떤 권한이 부여되지는 않고 서비스를 켤지 여부는 여전히 직접 선택합니다.</string>
     <string name="system_permissions_a11y_restricted_manual">제한된 설정 허용</string>
     <string name="system_permissions_a11y_restricted_manual_sub">앱 정보 → ⋮ 메뉴(오른쪽 위) → 제한된 설정 허용</string>
-    <string name="system_permissions_a11y_restricted_shizuku">Shizuku로 제한된 설정 허용</string>
     <string name="system_permissions_a11y_restricted_shizuku_sub">한 번만 탭하면 Momoding를 벗어나지 않고 해제됩니다</string>
     <string name="system_permissions_a11y_restricted_working">허용하는 중…</string>
     <string name="system_permissions_a11y_restricted_failed">실패했습니다 — 아래의 수동 절차를 따르세요</string>

@@ -92,7 +92,8 @@
     <string name="mo_perm_state_declined">沒打開</string>
     <string name="mo_perm_carry_on_msg">「%1$s」已經打開了，接著做吧。</string>
     <string name="mo_perm_no_msg">不用了，這次先不做。</string>
-    <string name="mo_perm_hands">螢幕操作（無障礙和懸浮窗）</string>
+    <string name="mo_perm_hands">螢幕操作</string>
+    <string name="mo_perm_hands_ask">允許 Momoding 替你操作螢幕嗎？（要用到無障礙和懸浮窗）</string>
     <string name="mo_perm_location">位置</string>
     <string name="mo_routine_wake_caption_no_time">🕗 例行 · %1$s</string>
     <string name="mo_status_idle">在你手機上 · 隨時可以交代</string>
@@ -205,7 +206,7 @@
     <string name="mo_adv_about">關於</string>
     <string name="mo_adv_version_sub">版本號和開源授權</string>
     <string name="mo_about_tagline">Momoding 住在你的手機上，替你把事情辦完。</string>
-    <string name="mo_perm_hands_a11y">下一步：在開啟的系統頁裡把 Momoding 的開關打開，再回來。</string>
+    <string name="mo_perm_hands_a11y">下一步：在開啟的系統頁裡找到「%1$s」（在「已下載的應用程式」或「已安裝的服務」裡），打開它，再回來。</string>
     <string name="mo_perm_hands_unlock">開關是灰的：在開啟的應用詳情頁，點右上角 ⋮ → 允許受限設定，再回來。</string>
     <string name="mo_perm_hands_overlay">還差一步：允許 Momoding 顯示在其他應用上層，再回來。</string>
     <string name="mo_feedback_discussions">到 GitHub 討論區聊聊</string>

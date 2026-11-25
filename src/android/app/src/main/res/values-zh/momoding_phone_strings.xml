@@ -5,7 +5,7 @@
     <string name="mo_phone_shell_not_paired">点这里，打开「无线调试」，点「使用配对码配对设备」，把 6 位配对码填进 Momoding 的通知里，其余 Momoding 自己完成</string>
     <string name="mo_phone_shell_off">无线调试关了：点这里重新打开（不用再配对）</string>
     <string name="mo_phone_shell_unsupported">需要 Android 11 或更新</string>
-    <string name="mo_phone_shell_footer">用的是安卓自带的无线调试，手机和自己配对：不用另装 App，也不用电脑。配一次就好：重启后 Momoding 会自己恢复（连着当初允许过的 Wi-Fi 时）。</string>
+    <string name="mo_phone_shell_footer">用的是安卓自带的无线调试，手机和自己配对：不用另装 App，也不用电脑。配一次就好：重启后多数手机上 Momoding 会自己恢复；没恢复时回这里点一下，不用再配对。</string>
     <string name="mo_phone_shell_state_ready">已就绪</string>
     <string name="mo_phone_shell_state_not_paired">还没设置</string>
     <string name="mo_phone_shell_state_off">无线调试关着</string>

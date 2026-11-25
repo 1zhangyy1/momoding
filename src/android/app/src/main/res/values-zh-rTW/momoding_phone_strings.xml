@@ -5,7 +5,7 @@
     <string name="mo_phone_shell_not_paired">點這裡，開啟「無線偵錯」，點「使用配對碼配對裝置」，把 6 位配對碼填進 Momoding 的通知裡，其餘 Momoding 自己完成</string>
     <string name="mo_phone_shell_off">無線偵錯關了：點這裡重新開啟（不用再配對）</string>
     <string name="mo_phone_shell_unsupported">需要 Android 11 或更新</string>
-    <string name="mo_phone_shell_footer">用的是安卓內建的無線偵錯，手機和自己配對：不用另裝 App，也不用電腦。配一次就好：重開機後 Momoding 會自己恢復（連著當初允許過的 Wi-Fi 時）。</string>
+    <string name="mo_phone_shell_footer">用的是 Android 內建的無線偵錯，手機和自己配對：不用另裝 App，也不用電腦。配一次就好：重啟後多數手機上 Momoding 會自己恢復；沒恢復時回這裡點一下，不用再配對。</string>
     <string name="mo_phone_shell_state_ready">已就緒</string>
     <string name="mo_phone_shell_state_not_paired">還沒設定</string>
     <string name="mo_phone_shell_state_off">無線偵錯關著</string>

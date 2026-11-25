@@ -116,7 +116,6 @@
     <!-- [T-android-a11y-force-stop-recovery] Accessibility grant repair. Shown
          when a force-stop has stripped the service out of Settings.Secure. -->
     <string name="a11y_repair_dialog_title">Pristupačnost isključena</string>
-    <string name="a11y_repair_dialog_message_shizuku">Momoding je izgubio dopuštenje za pristupačnost — to se događa nakon prisilnog zaustavljanja aplikacije. Shizuku je dostupan pa se dopuštenje može odmah vratiti bez otvaranja postavki.</string>
     <string name="a11y_repair_dialog_message_manual">Momoding je izgubio dopuštenje za pristupačnost — to se događa nakon prisilnog zaustavljanja aplikacije. Ponovno omogućite Momoding u Postavke → Pristupačnost za nastavak.</string>
     <string name="a11y_repair_action_repair">Popravi sada</string>
     <string name="a11y_repair_action_open_settings">Otvori postavke</string>
@@ -127,8 +126,6 @@
     <string name="a11y_repair_row_sub">Dopuštenje je opozvano, vjerojatno prisilnim zaustavljanjem</string>
     <string name="a11y_repair_in_progress">Popravljanje…</string>
     <string name="a11y_repair_failed">Popravak nije uspio — pokušajte ga omogućiti u Postavkama</string>
-    <string name="a11y_repair_footer_shizuku">Android uklanja dopuštenje za pristupačnost svaki put kad se aplikacija prisilno zaustavi i ne vraća ga automatski. Shizuku ga može izravno vratiti.</string>
-    <string name="a11y_repair_footer_manual">Android uklanja dopuštenje za pristupačnost svaki put kad se aplikacija prisilno zaustavi i ne vraća ga automatski. Instalirajte i autorizirajte Shizuku da ubuduće ovo popravite jednim dodirom.</string>
     <string name="bg_service_notification_title">Momoding aktivan</string>
     <string name="bg_service_notification_text">%1$s | %2$s | %3$s</string>
     <!-- Shown on the ongoing notification / Live Update chip once the agent
@@ -792,7 +789,6 @@
     <string name="perm_section_a11y">Pristupačnost</string>
     <string name="perm_section_shizuku">Shizuku</string>
     <string name="perm_a11y_section_footer">android-a11y-cli omogućuje Agentu čitanje strukture sučelja na zaslonu, izvođenje dodira i gesta te praćenje sustavskih događaja. Oba retka ispod moraju biti postavljena: odaberite dopuštenje Agenta i omogućite uslugu Pristupačnosti u postavkama sustava.</string>
-    <string name="perm_shizuku_section_footer">android-shizuku-cli daje Agentu povlaštene Android API-je (instalacija paketa, settings put, prisilno zaustavljanje, …) putem usluge Shizuku ovlaštene bežičnim ADB-om ili rootom. Oba retka ispod moraju biti postavljena.</string>
     <string name="perm_a11y_cli_description">Omogućuje Agentu čitanje sučelja, dodire, tipkanje i praćenje događaja</string>
     <string name="perm_shizuku_cli_description">Povlašteni Android API-ji putem usluge Shizuku</string>
     <string name="perm_a11y_open_settings">Otvori postavke pristupačnosti</string>
@@ -877,8 +873,6 @@
     <string name="shizuku_grant_subtitle">Prikaži dijalog dopuštenja</string>
 
     <!-- [T-android-privileged-backend] Privileged backend (Shizuku / AXManager) -->
-    <string name="perm_section_privileged_backend">Povlašteni pozadinski sustav</string>
-    <string name="perm_privileged_cli_description">Dopusti Agentu izvođenje sustavskih naredbi na ADB razini kroz povlašteni pozadinski sustav (Shizuku ili AXManager)</string>
 
     <string name="skill_title">Vještine</string>
     <string name="skill_add">Dodaj vještinu</string>
@@ -1718,7 +1712,6 @@
     <string name="system_permissions_a11y_restricted_footer">Android blokira prekidač pristupačnosti za aplikacije instalirane iz preuzete APK datoteke. To je sigurnosna politika sustava, a ne greška Minisa — s vašom instalacijom sve je u redu. Dopuštanje ograničenih postavki samo ponovno omogućuje prekidač; samo po sebi ne odobrava ništa, a i dalje sami odlučujete hoćete li uslugu uključiti.</string>
     <string name="system_permissions_a11y_restricted_manual">Dopusti ograničene postavke</string>
     <string name="system_permissions_a11y_restricted_manual_sub">Podaci o aplikaciji → izbornik ⋮ (gore desno) → Dopusti ograničene postavke</string>
-    <string name="system_permissions_a11y_restricted_shizuku">Dopusti ograničene postavke putem Shizukua</string>
     <string name="system_permissions_a11y_restricted_shizuku_sub">Jedan dodir — briše oznaku bez izlaska iz Minisa</string>
     <string name="system_permissions_a11y_restricted_working">Dopuštam…</string>
     <string name="system_permissions_a11y_restricted_failed">Nije uspjelo — upotrijebite ručne korake u nastavku</string>

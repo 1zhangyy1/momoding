@@ -5,7 +5,7 @@
     <string name="mo_phone_shell_not_paired">Tap here, switch on Wireless debugging, tap “Pair device with pairing code”, and type the six digits into Momoding\'s notification. Momoding does the rest</string>
     <string name="mo_phone_shell_off">Wireless debugging is off: tap to switch it back on (no need to pair again)</string>
     <string name="mo_phone_shell_unsupported">Needs Android 11 or newer</string>
-    <string name="mo_phone_shell_footer">It uses Android\'s own wireless debugging, the phone pairing with itself: nothing else to install, no computer. Set it up once: after a restart Momoding brings it back by itself, on a Wi-Fi you allowed.</string>
+    <string name="mo_phone_shell_footer">It uses Android\'s own wireless debugging, the phone pairing with itself: nothing else to install, no computer. Set it up once: after a restart Momoding brings it back by itself on most phones; if not, tap here once, no need to pair again.</string>
     <string name="mo_phone_shell_state_ready">Ready</string>
     <string name="mo_phone_shell_state_not_paired">Not set up</string>
     <string name="mo_phone_shell_state_off">Wireless debugging is off</string>

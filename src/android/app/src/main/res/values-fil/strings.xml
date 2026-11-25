@@ -93,7 +93,6 @@
     <string name="overlay_completion_cancelled">Kinansela</string>
     <string name="overlay_completion_timeout">Nag-timeout</string>
     <string name="a11y_repair_dialog_title">Naka-off ang accessibility</string>
-    <string name="a11y_repair_dialog_message_shizuku">Nawala ang pahintulot sa accessibility ng Momoding — nangyayari ito matapos puwersahang ihinto ang app. Available ang Shizuku, kaya maibabalik ito ngayon din nang hindi binubuksan ang Mga Setting.</string>
     <string name="a11y_repair_dialog_message_manual">Nawala ang pahintulot sa accessibility ng Momoding — nangyayari ito matapos puwersahang ihinto ang app. I-enable muli ang Momoding sa Mga Setting → Accessibility para magpatuloy.</string>
     <string name="a11y_repair_action_repair">Ayusin ngayon</string>
     <string name="a11y_repair_action_open_settings">Buksan ang Mga Setting</string>
@@ -104,8 +103,6 @@
     <string name="a11y_repair_row_sub">Nabawi ang pahintulot, malamang dahil sa puwersahang paghinto</string>
     <string name="a11y_repair_in_progress">Inaayos…</string>
     <string name="a11y_repair_failed">Nabigo ang pag-aayos — subukang i-enable sa Mga Setting</string>
-    <string name="a11y_repair_footer_shizuku">Inaalis ng Android ang pahintulot sa accessibility tuwing puwersahang ihinto ang isang app, at hindi ito awtomatikong naibabalik. Maisusulat itong muli ng Shizuku nang direkta.</string>
-    <string name="a11y_repair_footer_manual">Inaalis ng Android ang pahintulot sa accessibility tuwing puwersahang ihinto ang isang app, at hindi ito awtomatikong naibabalik. I-install at bigyan ng awtorisasyon ang Shizuku para sa hinaharap ay isang tap na lang ang pag-aayos.</string>
     <string name="bg_service_notification_title">Aktibo ang Momoding</string>
     <string name="bg_service_notification_text">%1$s | %2$s | %3$s</string>
     <string name="bg_service_notification_title_completed">Tapos na ang gawain</string>
@@ -712,7 +709,6 @@
     <string name="perm_section_a11y">Accessibility</string>
     <string name="perm_section_shizuku">Shizuku</string>
     <string name="perm_a11y_section_footer">Pinapayagan ng android-a11y-cli ang Agent na basahin ang istruktura ng UI sa screen, mag-tap at gumawa ng galaw, at bantayan ang mga event ng system. Kailangang maitakda ang dalawang row sa ibaba: pumili ng pahintulot ng Agent at i-enable ang Accessibility service sa Mga Setting ng system.</string>
-    <string name="perm_shizuku_section_footer">Binibigyan ng android-shizuku-cli ang Agent ng access sa mga privileged na Android API (pag-install ng package, settings put, force-stop, …) sa pamamagitan ng Shizuku service na binigyan ng awtorisasyon sa wireless ADB o root. Kailangang maitakda ang dalawang row sa ibaba.</string>
     <string name="perm_a11y_cli_description">Pinapayagan ang Agent na basahin ang UI ng screen, mag-tap, mag-type, at bantayan ang mga event</string>
     <string name="perm_shizuku_cli_description">Mga privileged na Android API sa pamamagitan ng Shizuku service</string>
     <string name="perm_a11y_open_settings">Buksan ang Mga Setting ng Accessibility</string>
@@ -790,8 +786,6 @@
     <string name="shizuku_recheck_subtitle">Suriing muli ang estado matapos simulan ang service</string>
     <string name="shizuku_grant_btn">Bigyan ng Awtorisasyon ang Momoding</string>
     <string name="shizuku_grant_subtitle">Ipakita ang dialog ng pahintulot</string>
-    <string name="perm_section_privileged_backend">Privileged na Backend</string>
-    <string name="perm_privileged_cli_description">Payagan ang Agent na magpatakbo ng mga command ng system na kasing-antas ng ADB sa pamamagitan ng privileged na backend (Shizuku o AXManager)</string>
     <string name="skill_title">Mga Skill</string>
     <string name="skill_add">Magdagdag ng Skill</string>
     <string name="skill_section_installed">Naka-install</string>
@@ -1569,7 +1563,6 @@
     <string name="system_permissions_a11y_restricted_footer">Hinaharangan ng Android ang accessibility switch para sa mga app na na-install mula sa na-download na APK file. Patakaran ito sa seguridad ng OS, hindi bug ng Momoding — walang problema sa pagka-install mo. Ang pagpayag sa mga restricted setting ay muling binubuksan lang ang switch; wala itong ibinibigay na pahintulot mag-isa, at ikaw pa rin ang pipili kung io-on ang service.</string>
     <string name="system_permissions_a11y_restricted_manual">Payagan ang mga restricted setting</string>
     <string name="system_permissions_a11y_restricted_manual_sub">Impormasyon ng app → ⋮ menu (kanang itaas) → Payagan ang mga restricted setting</string>
-    <string name="system_permissions_a11y_restricted_shizuku">Payagan ang mga restricted setting sa pamamagitan ng Shizuku</string>
     <string name="system_permissions_a11y_restricted_shizuku_sub">Isang tap — inaalis ang flag nang hindi umaalis sa Momoding</string>
     <string name="system_permissions_a11y_restricted_working">Pinapayagan…</string>
     <string name="system_permissions_a11y_restricted_failed">Nabigo — gamitin ang mga manu-manong hakbang sa ibaba</string>

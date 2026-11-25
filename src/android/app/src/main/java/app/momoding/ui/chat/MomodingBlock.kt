@@ -241,11 +241,12 @@ private fun PermissionCard(o: JSONObject, code: String) {
                 "files" -> stringResource(R.string.mo_perm_files_ask)
                 "read-notifications" -> stringResource(R.string.mo_perm_read_notifications_ask)
                 "sms" -> stringResource(R.string.mo_perm_sms_ask)
+                "hands" -> stringResource(R.string.mo_perm_hands_ask)
                 else -> stringResource(R.string.mo_perm_ask, label)
             })
             val detail = when {
                 need == "system" -> stringResource(R.string.mo_phone_shell_not_paired)
-                handsStep == app.momoding.hands.HandsSetup.Step.ACCESSIBILITY -> stringResource(R.string.mo_perm_hands_a11y)
+                handsStep == app.momoding.hands.HandsSetup.Step.ACCESSIBILITY -> stringResource(R.string.mo_perm_hands_a11y, stringResource(R.string.a11y_service_label))
                 handsStep == app.momoding.hands.HandsSetup.Step.UNLOCK -> stringResource(R.string.mo_perm_hands_unlock)
                 handsStep == app.momoding.hands.HandsSetup.Step.OVERLAY -> stringResource(R.string.mo_perm_hands_overlay)
                 else -> stringResource(R.string.mo_perm_detail)

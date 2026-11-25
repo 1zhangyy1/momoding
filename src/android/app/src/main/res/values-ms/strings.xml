@@ -93,7 +93,6 @@
     <string name="overlay_completion_cancelled">Dibatalkan</string>
     <string name="overlay_completion_timeout">Tamat masa</string>
     <string name="a11y_repair_dialog_title">Kebolehaksesan dimatikan</string>
-    <string name="a11y_repair_dialog_message_shizuku">Momoding kehilangan kebenaran kebolehaksesannya — perkara ini berlaku selepas aplikasi dihentikan paksa. Shizuku tersedia, jadi kebenaran itu boleh dipulihkan sekarang juga tanpa membuka Tetapan.</string>
     <string name="a11y_repair_dialog_message_manual">Momoding kehilangan kebenaran kebolehaksesannya — perkara ini berlaku selepas aplikasi dihentikan paksa. Dayakan semula Momoding di Tetapan → Kebolehaksesan untuk meneruskan.</string>
     <string name="a11y_repair_action_repair">Baiki sekarang</string>
     <string name="a11y_repair_action_open_settings">Buka Tetapan</string>
@@ -104,8 +103,6 @@
     <string name="a11y_repair_row_sub">Kebenaran telah ditarik balik, berkemungkinan akibat hentian paksa</string>
     <string name="a11y_repair_in_progress">Membaiki…</string>
     <string name="a11y_repair_failed">Pembaikan gagal — cuba dayakan melalui Tetapan</string>
-    <string name="a11y_repair_footer_shizuku">Android menarik balik kebenaran kebolehaksesan setiap kali sesebuah aplikasi dihentikan paksa, dan tidak memulihkannya secara automatik. Shizuku boleh menulisnya semula secara terus.</string>
-    <string name="a11y_repair_footer_manual">Android menarik balik kebenaran kebolehaksesan setiap kali sesebuah aplikasi dihentikan paksa, dan tidak memulihkannya secara automatik. Pasang dan berikan kebenaran kepada Shizuku supaya pembaikan pada masa hadapan hanya memerlukan satu ketikan.</string>
     <string name="bg_service_notification_title">Ejen Momoding Aktif</string>
     <string name="bg_service_notification_text">%1$s | %2$s | %3$s</string>
     <string name="bg_service_notification_title_completed">Tugasan selesai</string>
@@ -712,7 +709,6 @@
     <string name="perm_section_a11y">Kebolehaksesan</string>
     <string name="perm_section_shizuku">Shizuku</string>
     <string name="perm_a11y_section_footer">android-a11y-cli membolehkan Ejen membaca struktur antara muka pada skrin, melakukan ketikan dan gerak isyarat, serta memantau peristiwa sistem. Kedua-dua baris di bawah mesti ditetapkan: pilih kebenaran Ejen dan dayakan perkhidmatan Kebolehaksesan dalam Tetapan sistem.</string>
-    <string name="perm_shizuku_section_footer">android-shizuku-cli memberikan Ejen capaian kepada API Android istimewa (pemasangan pakej, settings put, hentian paksa, …) melalui perkhidmatan Shizuku yang dibenarkan menerusi ADB wayarles atau root. Kedua-dua baris di bawah mesti ditetapkan.</string>
     <string name="perm_a11y_cli_description">Membolehkan Ejen membaca antara muka skrin, mengetik, menaip, dan memantau peristiwa</string>
     <string name="perm_shizuku_cli_description">API Android istimewa melalui perkhidmatan Shizuku</string>
     <string name="perm_a11y_open_settings">Buka Tetapan Kebolehaksesan</string>
@@ -790,8 +786,6 @@
     <string name="shizuku_recheck_subtitle">Semak semula status selepas perkhidmatan dimulakan</string>
     <string name="shizuku_grant_btn">Berikan Kebenaran kepada Momoding</string>
     <string name="shizuku_grant_subtitle">Paparkan dialog kebenaran</string>
-    <string name="perm_section_privileged_backend">Backend Istimewa</string>
-    <string name="perm_privileged_cli_description">Benarkan Ejen menjalankan perintah sistem setaraf ADB melalui backend istimewa (Shizuku atau AXManager)</string>
     <string name="skill_title">Kemahiran</string>
     <string name="skill_add">Tambah Kemahiran</string>
     <string name="skill_section_installed">Dipasang</string>
@@ -1569,7 +1563,6 @@
     <string name="system_permissions_a11y_restricted_footer">Android menyekat suis kebolehaksesan bagi aplikasi yang dipasang daripada fail APK muat turun. Ini ialah dasar keselamatan sistem pengendalian, bukan pepijat Momoding — pemasangan anda tidak bermasalah. Membenarkan tetapan terhad hanya mengaktifkan semula suisnya; ia sendiri tidak memberikan sebarang kebenaran, dan anda tetap yang menentukan sama ada perkhidmatan ini dihidupkan.</string>
     <string name="system_permissions_a11y_restricted_manual">Benarkan tetapan terhad</string>
     <string name="system_permissions_a11y_restricted_manual_sub">Maklumat aplikasi → menu ⋮ (kanan atas) → Benarkan tetapan terhad</string>
-    <string name="system_permissions_a11y_restricted_shizuku">Benarkan tetapan terhad melalui Shizuku</string>
     <string name="system_permissions_a11y_restricted_shizuku_sub">Satu ketikan — membuang penanda tanpa meninggalkan Momoding</string>
     <string name="system_permissions_a11y_restricted_working">Membenarkan…</string>
     <string name="system_permissions_a11y_restricted_failed">Gagal — gunakan langkah manual di bawah</string>

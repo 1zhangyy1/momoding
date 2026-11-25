@@ -93,7 +93,6 @@
     <string name="overlay_completion_cancelled">Anulat</string>
     <string name="overlay_completion_timeout">Timp expirat</string>
     <string name="a11y_repair_dialog_title">Accesibilitatea a fost dezactivată</string>
-    <string name="a11y_repair_dialog_message_shizuku">Momoding și-a pierdut permisiunea de accesibilitate — asta se întâmplă după oprirea forțată a aplicației. Shizuku este disponibil, deci permisiunea poate fi restabilită imediat, fără a deschide Setările.</string>
     <string name="a11y_repair_dialog_message_manual">Momoding și-a pierdut permisiunea de accesibilitate — asta se întâmplă după oprirea forțată a aplicației. Pentru a continua, reactivează Momoding în Setări → Accesibilitate.</string>
     <string name="a11y_repair_action_repair">Repară acum</string>
     <string name="a11y_repair_action_open_settings">Deschide setările</string>
@@ -104,8 +103,6 @@
     <string name="a11y_repair_row_sub">Permisiunea a fost revocată, probabil în urma unei opriri forțate</string>
     <string name="a11y_repair_in_progress">Se repară…</string>
     <string name="a11y_repair_failed">Repararea a eșuat — încearcă să o activezi din Setări</string>
-    <string name="a11y_repair_footer_shizuku">Android revocă permisiunea de accesibilitate ori de câte ori o aplicație este oprită forțat și nu o restabilește automat. Shizuku o poate scrie înapoi direct.</string>
-    <string name="a11y_repair_footer_manual">Android revocă permisiunea de accesibilitate ori de câte ori o aplicație este oprită forțat și nu o restabilește automat. Instalează și autorizează Shizuku pentru ca pe viitor repararea să fie la o singură atingere.</string>
     <string name="bg_service_notification_title">Agentul Momoding este activ</string>
     <string name="bg_service_notification_text">%1$s | %2$s | %3$s</string>
     <string name="bg_service_notification_title_completed">Sarcină finalizată</string>
@@ -713,7 +710,6 @@
     <string name="perm_section_a11y">Accesibilitate</string>
     <string name="perm_section_shizuku">Shizuku</string>
     <string name="perm_a11y_section_footer">android-a11y-cli permite Agentului să citească structura interfeței de pe ecran, să atingă și să execute gesturi și să urmărească evenimentele sistemului. Ambele rânduri de mai jos trebuie configurate: alege o permisiune pentru Agent și activează serviciul de Accesibilitate din Setările sistemului.</string>
-    <string name="perm_shizuku_section_footer">android-shizuku-cli oferă Agentului acces la API-uri Android privilegiate (instalare de pachete, settings put, oprire forțată, …) prin serviciul Shizuku autorizat prin ADB wireless sau root. Ambele rânduri de mai jos trebuie configurate.</string>
     <string name="perm_a11y_cli_description">Permite Agentului să citească interfața ecranului, să atingă, să scrie și să urmărească evenimente</string>
     <string name="perm_shizuku_cli_description">API-uri Android privilegiate prin serviciul Shizuku</string>
     <string name="perm_a11y_open_settings">Deschide setările de accesibilitate</string>
@@ -791,8 +787,6 @@
     <string name="shizuku_recheck_subtitle">Interoghează din nou starea după pornirea serviciului</string>
     <string name="shizuku_grant_btn">Autorizează Momoding</string>
     <string name="shizuku_grant_subtitle">Afișează fereastra de permisiuni</string>
-    <string name="perm_section_privileged_backend">Backend privilegiat</string>
-    <string name="perm_privileged_cli_description">Permite Agentului să execute comenzi de sistem la nivel ADB printr-un backend privilegiat (Shizuku sau AXManager)</string>
     <string name="skill_title">Abilități</string>
     <string name="skill_add">Adaugă o abilitate</string>
     <string name="skill_section_installed">Instalate</string>
@@ -1573,7 +1567,6 @@
     <string name="system_permissions_a11y_restricted_footer">Android blochează comutatorul de accesibilitate pentru aplicațiile instalate dintr-un fișier APK descărcat. Este o politică de securitate a sistemului de operare, nu o eroare a aplicației Momoding — instalarea ta nu are nicio problemă. Permiterea setărilor restricționate doar redeschide comutatorul; în sine nu acordă nimic, iar decizia de a porni serviciul rămâne a ta.</string>
     <string name="system_permissions_a11y_restricted_manual">Permite setările restricționate</string>
     <string name="system_permissions_a11y_restricted_manual_sub">Informații despre aplicație → meniul ⋮ (dreapta sus) → Permite setările restricționate</string>
-    <string name="system_permissions_a11y_restricted_shizuku">Permite setările restricționate prin Shizuku</string>
     <string name="system_permissions_a11y_restricted_shizuku_sub">O singură atingere — elimină marcajul fără a ieși din Momoding</string>
     <string name="system_permissions_a11y_restricted_working">Se acordă permisiunea…</string>
     <string name="system_permissions_a11y_restricted_failed">Eșuat — urmează pașii manuali de mai jos</string>

@@ -93,7 +93,6 @@
     <string name="overlay_completion_cancelled">Отменено</string>
     <string name="overlay_completion_timeout">Время истекло</string>
     <string name="a11y_repair_dialog_title">Специальные возможности отключены</string>
-    <string name="a11y_repair_dialog_message_shizuku">Momoding потерял разрешение специальных возможностей — это происходит после принудительной остановки приложения. Shizuku доступен и может восстановить его сразу, не открывая настройки.</string>
     <string name="a11y_repair_dialog_message_manual">Momoding потерял разрешение специальных возможностей — это происходит после принудительной остановки приложения. Включите Momoding снова в «Настройки → Специальные возможности».</string>
     <string name="a11y_repair_action_repair">Восстановить</string>
     <string name="a11y_repair_action_open_settings">Открыть настройки</string>
@@ -104,8 +103,6 @@
     <string name="a11y_repair_row_sub">Разрешение было отозвано, вероятно принудительной остановкой</string>
     <string name="a11y_repair_in_progress">Восстановление…</string>
     <string name="a11y_repair_failed">Не удалось восстановить — включите в настройках</string>
-    <string name="a11y_repair_footer_shizuku">Android удаляет разрешение специальных возможностей при каждой принудительной остановке приложения и не восстанавливает его автоматически. Shizuku может записать его напрямую.</string>
-    <string name="a11y_repair_footer_manual">Android удаляет разрешение специальных возможностей при каждой принудительной остановке приложения и не восстанавливает его автоматически. Установите и авторизуйте Shizuku, чтобы восстанавливать одним касанием.</string>
     <string name="bg_service_notification_title">Agent Momoding активен</string>
     <string name="bg_service_notification_text">%1$s | %2$s | %3$s</string>
     <string name="bg_service_notification_title_completed">Задача выполнена</string>
@@ -714,7 +711,6 @@
     <string name="perm_section_a11y">Специальные возможности</string>
     <string name="perm_section_shizuku">Shizuku</string>
     <string name="perm_a11y_section_footer">android-a11y-cli позволяет Momoding считывать структуру UI на экране, выполнять нажатия и жесты, а также отслеживать системные события. Должны быть заданы обе строки ниже: выберите разрешение Агента и включите службу Специальных возможностей в системных Настройках.</string>
-    <string name="perm_shizuku_section_footer">android-shizuku-cli предоставляет Momoding привилегированные API Android (установка пакетов, settings put, принудительная остановка и др.) через службу Shizuku, авторизованную по беспроводному ADB или root. Должны быть заданы обе строки ниже.</string>
     <string name="perm_a11y_cli_description">Позволяет Momoding считывать UI экрана, нажимать, вводить текст и отслеживать события</string>
     <string name="perm_shizuku_cli_description">Привилегированные API Android через службу Shizuku</string>
     <string name="perm_a11y_open_settings">Открыть настройки Специальных возможностей</string>
@@ -792,8 +788,6 @@
     <string name="shizuku_recheck_subtitle">Повторно опросить состояние после запуска службы</string>
     <string name="shizuku_grant_btn">Авторизовать Momoding</string>
     <string name="shizuku_grant_subtitle">Показать диалог разрешений</string>
-    <string name="perm_section_privileged_backend">Привилегированный бэкенд</string>
-    <string name="perm_privileged_cli_description">Разрешить Агенту выполнять системные команды уровня ADB через привилегированный бэкенд (Shizuku или AXManager)</string>
     <string name="skill_title">Навыки</string>
     <string name="skill_add">Добавить навык</string>
     <string name="skill_section_installed">Установлено</string>
@@ -1578,7 +1572,6 @@
     <string name="system_permissions_a11y_restricted_footer">Android блокирует переключатель специальных возможностей для приложений, установленных из загруженного APK-файла. Это политика безопасности системы, а не ошибка Momoding — с вашей установкой всё в порядке. Разрешение ограниченных настроек лишь возвращает переключатель в рабочее состояние; само по себе оно ничего не предоставляет, и вы по-прежнему решаете, включать службу или нет.</string>
     <string name="system_permissions_a11y_restricted_manual">Разрешить ограниченные настройки</string>
     <string name="system_permissions_a11y_restricted_manual_sub">О приложении → меню ⋮ (вверху справа) → Разрешить ограниченные настройки</string>
-    <string name="system_permissions_a11y_restricted_shizuku">Разрешить ограниченные настройки через Shizuku</string>
     <string name="system_permissions_a11y_restricted_shizuku_sub">Одно нажатие — снимает флаг, не выходя из Momoding</string>
     <string name="system_permissions_a11y_restricted_working">Разрешение…</string>
     <string name="system_permissions_a11y_restricted_failed">Не удалось — выполните шаги вручную ниже</string>

@@ -98,7 +98,6 @@
     <string name="overlay_completion_cancelled">Dibatalkan</string>
     <string name="overlay_completion_timeout">Waktu habis</string>
     <string name="a11y_repair_dialog_title">Aksesibilitas dinonaktifkan</string>
-    <string name="a11y_repair_dialog_message_shizuku">Momoding kehilangan izin aksesibilitasnya — hal ini terjadi setelah aplikasi dihentikan paksa. Shizuku tersedia, sehingga izin dapat dipulihkan sekarang juga tanpa membuka Pengaturan.</string>
     <string name="a11y_repair_dialog_message_manual">Momoding kehilangan izin aksesibilitasnya — hal ini terjadi setelah aplikasi dihentikan paksa. Aktifkan kembali Momoding di Pengaturan → Aksesibilitas untuk melanjutkan.</string>
     <string name="a11y_repair_action_repair">Perbaiki sekarang</string>
     <string name="a11y_repair_action_open_settings">Buka Pengaturan</string>
@@ -109,8 +108,6 @@
     <string name="a11y_repair_row_sub">Izin telah dicabut, kemungkinan akibat penghentian paksa</string>
     <string name="a11y_repair_in_progress">Memperbaiki…</string>
     <string name="a11y_repair_failed">Perbaikan gagal — coba aktifkan melalui Pengaturan</string>
-    <string name="a11y_repair_footer_shizuku">Android mencabut izin aksesibilitas setiap kali sebuah aplikasi dihentikan paksa, dan tidak memulihkannya secara otomatis. Shizuku dapat menuliskannya kembali secara langsung.</string>
-    <string name="a11y_repair_footer_manual">Android mencabut izin aksesibilitas setiap kali sebuah aplikasi dihentikan paksa, dan tidak memulihkannya secara otomatis. Pasang dan otorisasi Shizuku agar ke depannya perbaikan cukup dilakukan dengan satu ketukan.</string>
     <string name="bg_service_notification_title">Agen Momoding Aktif</string>
     <string name="bg_service_notification_text">%1$s | %2$s | %3$s</string>
     <string name="bg_service_notification_title_completed">Tugas selesai</string>
@@ -717,7 +714,6 @@
     <string name="perm_section_a11y">Aksesibilitas</string>
     <string name="perm_section_shizuku">Shizuku</string>
     <string name="perm_a11y_section_footer">android-a11y-cli memungkinkan Agen membaca struktur antarmuka di layar, melakukan ketukan dan gestur, serta memantau peristiwa sistem. Kedua baris di bawah harus diatur: pilih izin Agen dan aktifkan layanan Aksesibilitas di Pengaturan sistem.</string>
-    <string name="perm_shizuku_section_footer">android-shizuku-cli memberikan Agen akses ke API Android istimewa (pemasangan paket, settings put, penghentian paksa, …) melalui layanan Shizuku yang diotorisasi lewat ADB nirkabel atau root. Kedua baris di bawah harus diatur.</string>
     <string name="perm_a11y_cli_description">Memungkinkan Agen membaca antarmuka layar, mengetuk, mengetik, dan memantau peristiwa</string>
     <string name="perm_shizuku_cli_description">API Android istimewa melalui layanan Shizuku</string>
     <string name="perm_a11y_open_settings">Buka Pengaturan Aksesibilitas</string>
@@ -795,8 +791,6 @@
     <string name="shizuku_recheck_subtitle">Periksa ulang status setelah layanan dijalankan</string>
     <string name="shizuku_grant_btn">Otorisasi Momoding</string>
     <string name="shizuku_grant_subtitle">Tampilkan dialog izin</string>
-    <string name="perm_section_privileged_backend">Backend Istimewa</string>
-    <string name="perm_privileged_cli_description">Izinkan Agen menjalankan perintah sistem setingkat ADB melalui backend istimewa (Shizuku atau AXManager)</string>
     <string name="skill_title">Keterampilan</string>
     <string name="skill_add">Tambah Keterampilan</string>
     <string name="skill_section_installed">Terpasang</string>
@@ -1574,7 +1568,6 @@
     <string name="system_permissions_a11y_restricted_footer">Android memblokir sakelar aksesibilitas untuk aplikasi yang dipasang dari berkas APK unduhan. Ini adalah kebijakan keamanan sistem operasi, bukan bug Momoding — pemasangan Anda tidak bermasalah. Mengizinkan setelan yang dibatasi hanya mengaktifkan kembali sakelarnya; hal itu sendiri tidak memberikan izin apa pun, dan Anda tetap yang memutuskan apakah layanan ini dinyalakan.</string>
     <string name="system_permissions_a11y_restricted_manual">Izinkan setelan yang dibatasi</string>
     <string name="system_permissions_a11y_restricted_manual_sub">Info aplikasi → menu ⋮ (kanan atas) → Izinkan setelan yang dibatasi</string>
-    <string name="system_permissions_a11y_restricted_shizuku">Izinkan setelan yang dibatasi melalui Shizuku</string>
     <string name="system_permissions_a11y_restricted_shizuku_sub">Satu ketukan — menghapus penanda tanpa meninggalkan Momoding</string>
     <string name="system_permissions_a11y_restricted_working">Mengizinkan…</string>
     <string name="system_permissions_a11y_restricted_failed">Gagal — gunakan langkah manual di bawah ini</string>

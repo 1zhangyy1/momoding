@@ -93,7 +93,6 @@
     <string name="overlay_completion_cancelled">Anulowano</string>
     <string name="overlay_completion_timeout">Przekroczono limit czasu</string>
     <string name="a11y_repair_dialog_title">Ułatwienia dostępu wyłączone</string>
-    <string name="a11y_repair_dialog_message_shizuku">Momoding utracił uprawnienie do ułatwień dostępu — dzieje się tak po wymuszonym zatrzymaniu aplikacji. Shizuku jest dostępne, więc uprawnienie można przywrócić od razu, bez otwierania Ustawień.</string>
     <string name="a11y_repair_dialog_message_manual">Momoding utracił uprawnienie do ułatwień dostępu — dzieje się tak po wymuszonym zatrzymaniu aplikacji. Aby kontynuować, włącz Momoding ponownie w Ustawienia → Ułatwienia dostępu.</string>
     <string name="a11y_repair_action_repair">Napraw teraz</string>
     <string name="a11y_repair_action_open_settings">Otwórz ustawienia</string>
@@ -104,8 +103,6 @@
     <string name="a11y_repair_row_sub">Uprawnienie zostało cofnięte, prawdopodobnie przez wymuszone zatrzymanie</string>
     <string name="a11y_repair_in_progress">Naprawianie…</string>
     <string name="a11y_repair_failed">Naprawa nie powiodła się — spróbuj włączyć w Ustawieniach</string>
-    <string name="a11y_repair_footer_shizuku">Android cofa uprawnienie do ułatwień dostępu przy każdym wymuszonym zatrzymaniu aplikacji i nie przywraca go automatycznie. Shizuku może zapisać je z powrotem bezpośrednio.</string>
-    <string name="a11y_repair_footer_manual">Android cofa uprawnienie do ułatwień dostępu przy każdym wymuszonym zatrzymaniu aplikacji i nie przywraca go automatycznie. Zainstaluj i autoryzuj Shizuku, aby w przyszłości naprawiać to jednym dotknięciem.</string>
     <string name="bg_service_notification_title">Agent Momoding działa</string>
     <string name="bg_service_notification_text">%1$s | %2$s | %3$s</string>
     <string name="bg_service_notification_title_completed">Zadanie ukończone</string>
@@ -714,7 +711,6 @@
     <string name="perm_section_a11y">Ułatwienia dostępu</string>
     <string name="perm_section_shizuku">Shizuku</string>
     <string name="perm_a11y_section_footer">android-a11y-cli pozwala Agentowi odczytywać strukturę interfejsu na ekranie, wykonywać dotknięcia i gesty oraz obserwować zdarzenia systemowe. Trzeba ustawić oba wiersze poniżej: wybrać uprawnienie Agenta i włączyć usługę Ułatwień dostępu w Ustawieniach systemu.</string>
-    <string name="perm_shizuku_section_footer">android-shizuku-cli daje Agentowi dostęp do uprzywilejowanych interfejsów API systemu Android (instalacja pakietów, settings put, wymuszone zatrzymanie, …) przez usługę Shizuku autoryzowaną bezprzewodowym ADB lub rootem. Trzeba ustawić oba wiersze poniżej.</string>
     <string name="perm_a11y_cli_description">Pozwala Agentowi odczytywać interfejs ekranu, dotykać, pisać i obserwować zdarzenia</string>
     <string name="perm_shizuku_cli_description">Uprzywilejowane interfejsy API systemu Android przez usługę Shizuku</string>
     <string name="perm_a11y_open_settings">Otwórz ustawienia ułatwień dostępu</string>
@@ -792,8 +788,6 @@
     <string name="shizuku_recheck_subtitle">Ponownie odpytaj stan po uruchomieniu usługi</string>
     <string name="shizuku_grant_btn">Autoryzuj Momoding</string>
     <string name="shizuku_grant_subtitle">Pokaż okno uprawnień</string>
-    <string name="perm_section_privileged_backend">Uprzywilejowany backend</string>
-    <string name="perm_privileged_cli_description">Zezwól Agentowi na wykonywanie poleceń systemowych na poziomie ADB przez uprzywilejowany backend (Shizuku lub AXManager)</string>
     <string name="skill_title">Umiejętności</string>
     <string name="skill_add">Dodaj umiejętność</string>
     <string name="skill_section_installed">Zainstalowane</string>
@@ -1577,7 +1571,6 @@
     <string name="system_permissions_a11y_restricted_footer">Android blokuje przełącznik ułatwień dostępu dla aplikacji zainstalowanych z pobranego pliku APK. To zasada bezpieczeństwa systemu, a nie błąd aplikacji Momoding — z Twoją instalacją wszystko jest w porządku. Zezwolenie na ustawienia ograniczone jedynie odblokowuje przełącznik; samo w sobie niczego nie przyznaje, a decyzja o włączeniu usługi nadal należy do Ciebie.</string>
     <string name="system_permissions_a11y_restricted_manual">Zezwól na ustawienia ograniczone</string>
     <string name="system_permissions_a11y_restricted_manual_sub">Informacje o aplikacji → menu ⋮ (prawy górny róg) → Zezwól na ustawienia ograniczone</string>
-    <string name="system_permissions_a11y_restricted_shizuku">Zezwól na ustawienia ograniczone przez Shizuku</string>
     <string name="system_permissions_a11y_restricted_shizuku_sub">Jedno dotknięcie — usuwa flagę bez opuszczania Momoding</string>
     <string name="system_permissions_a11y_restricted_working">Zezwalanie…</string>
     <string name="system_permissions_a11y_restricted_failed">Niepowodzenie — wykonaj ręczne kroki poniżej</string>

@@ -93,7 +93,6 @@
     <string name="overlay_completion_cancelled">Annulé</string>
     <string name="overlay_completion_timeout">Délai dépassé</string>
     <string name="a11y_repair_dialog_title">Accessibilité désactivée</string>
-    <string name="a11y_repair_dialog_message_shizuku">Momoding a perdu son autorisation d’accessibilité — cela arrive après un arrêt forcé. Shizuku est disponible et peut la restaurer immédiatement, sans ouvrir les Réglages.</string>
     <string name="a11y_repair_dialog_message_manual">Momoding a perdu son autorisation d’accessibilité — cela arrive après un arrêt forcé. Réactivez Momoding dans Réglages → Accessibilité pour continuer.</string>
     <string name="a11y_repair_action_repair">Réparer maintenant</string>
     <string name="a11y_repair_action_open_settings">Ouvrir les Réglages</string>
@@ -104,8 +103,6 @@
     <string name="a11y_repair_row_sub">L’autorisation a été révoquée, probablement par un arrêt forcé</string>
     <string name="a11y_repair_in_progress">Réparation…</string>
     <string name="a11y_repair_failed">Échec de la réparation — activez-la dans les Réglages</string>
-    <string name="a11y_repair_footer_shizuku">Android supprime l’autorisation d’accessibilité chaque fois qu’une application est arrêtée de force, et ne la rétablit pas automatiquement. Shizuku peut la réécrire directement.</string>
-    <string name="a11y_repair_footer_manual">Android supprime l’autorisation d’accessibilité chaque fois qu’une application est arrêtée de force, et ne la rétablit pas automatiquement. Installez et autorisez Shizuku pour réparer en un geste à l’avenir.</string>
     <string name="bg_service_notification_title">Momoding actif</string>
     <string name="bg_service_notification_text">%1$s | %2$s | %3$s</string>
     <string name="bg_service_notification_title_completed">Tâche terminée</string>
@@ -712,7 +709,6 @@
     <string name="perm_section_a11y">Accessibilité</string>
     <string name="perm_section_shizuku">Shizuku</string>
     <string name="perm_a11y_section_footer">android-a11y-cli permet à Momoding de lire la structure de l\'UI à l\'écran, d\'effectuer des appuis et gestes, et d\'observer les événements système. Les deux lignes ci-dessous doivent être configurées : choisissez une permission d\'Agent et activez le service d\'accessibilité dans les paramètres système.</string>
-    <string name="perm_shizuku_section_footer">android-shizuku-cli accorde à Momoding des API Android privilégiées (installation de packages, settings put, force-stop, …) via le service Shizuku, autorisé via ADB sans fil ou root. Les deux lignes ci-dessous doivent être configurées.</string>
     <string name="perm_a11y_cli_description">L\'Agent lit l\'UI à l\'écran, tape, écrit, observe les événements</string>
     <string name="perm_shizuku_cli_description">API Android privilégiées via le service Shizuku</string>
     <string name="perm_a11y_open_settings">Ouvrir les paramètres d\'accessibilité</string>
@@ -790,8 +786,6 @@
     <string name="shizuku_recheck_subtitle">Réinterroger l\'état après le démarrage du service</string>
     <string name="shizuku_grant_btn">Autoriser Momoding</string>
     <string name="shizuku_grant_subtitle">Afficher la boîte de dialogue d\'autorisation</string>
-    <string name="perm_section_privileged_backend">Backend privilégié</string>
-    <string name="perm_privileged_cli_description">Permettre à l\'Agent d\'exécuter des commandes système de niveau ADB via un backend privilégié (Shizuku ou AXManager)</string>
     <string name="skill_title">Compétences</string>
     <string name="skill_add">Ajouter un Skill</string>
     <string name="skill_section_installed">Installé</string>
@@ -1570,7 +1564,6 @@
     <string name="system_permissions_a11y_restricted_footer">Android bloque l\'interrupteur d\'accessibilité pour les applis installées depuis un fichier APK téléchargé. C\'est une politique de sécurité du système, pas un bug de Momoding — votre installation n\'a rien d\'anormal. Autoriser les réglages restreints ne fait que réactiver l\'interrupteur ; cela n\'accorde rien en soi, et vous décidez toujours d\'activer ou non le service.</string>
     <string name="system_permissions_a11y_restricted_manual">Autoriser les réglages restreints</string>
     <string name="system_permissions_a11y_restricted_manual_sub">Infos sur l\'appli → menu ⋮ (en haut à droite) → Autoriser les réglages restreints</string>
-    <string name="system_permissions_a11y_restricted_shizuku">Autoriser les réglages restreints via Shizuku</string>
     <string name="system_permissions_a11y_restricted_shizuku_sub">Un seul appui — lève l\'indicateur sans quitter Momoding</string>
     <string name="system_permissions_a11y_restricted_working">Autorisation en cours…</string>
     <string name="system_permissions_a11y_restricted_failed">Échec — suivez les étapes manuelles ci-dessous</string>

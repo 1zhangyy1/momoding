@@ -94,7 +94,6 @@
     <string name="overlay_completion_cancelled">ยกเลิกแล้ว</string>
     <string name="overlay_completion_timeout">หมดเวลา</string>
     <string name="a11y_repair_dialog_title">การช่วยเหลือพิเศษถูกปิด</string>
-    <string name="a11y_repair_dialog_message_shizuku">Momoding สูญเสียสิทธิ์การช่วยเหลือพิเศษ ซึ่งเกิดขึ้นหลังจากแอปถูกบังคับหยุด เนื่องจากมี Shizuku อยู่ จึงกู้คืนได้ทันทีโดยไม่ต้องเปิดการตั้งค่า</string>
     <string name="a11y_repair_dialog_message_manual">Momoding สูญเสียสิทธิ์การช่วยเหลือพิเศษ ซึ่งเกิดขึ้นหลังจากแอปถูกบังคับหยุด เปิดใช้ Momoding อีกครั้งที่ การตั้งค่า → การช่วยเหลือพิเศษ เพื่อดำเนินการต่อ</string>
     <string name="a11y_repair_action_repair">ซ่อมแซมตอนนี้</string>
     <string name="a11y_repair_action_open_settings">เปิดการตั้งค่า</string>
@@ -105,8 +104,6 @@
     <string name="a11y_repair_row_sub">สิทธิ์ถูกเพิกถอน น่าจะเกิดจากการบังคับหยุดแอป</string>
     <string name="a11y_repair_in_progress">กำลังซ่อมแซม…</string>
     <string name="a11y_repair_failed">ซ่อมแซมไม่สำเร็จ — ลองเปิดใช้ผ่านการตั้งค่า</string>
-    <string name="a11y_repair_footer_shizuku">Android จะเพิกถอนสิทธิ์การช่วยเหลือพิเศษทุกครั้งที่แอปถูกบังคับหยุด และไม่คืนค่าให้อัตโนมัติ Shizuku สามารถเขียนสิทธิ์นี้กลับได้โดยตรง</string>
-    <string name="a11y_repair_footer_manual">Android จะเพิกถอนสิทธิ์การช่วยเหลือพิเศษทุกครั้งที่แอปถูกบังคับหยุด และไม่คืนค่าให้อัตโนมัติ ติดตั้งและอนุญาต Shizuku เพื่อให้การซ่อมแซมในอนาคตทำได้ด้วยการแตะเพียงครั้งเดียว</string>
     <string name="bg_service_notification_title">Momoding กำลังทำงาน</string>
     <string name="bg_service_notification_text">%1$s | %2$s | %3$s</string>
     <string name="bg_service_notification_title_completed">งานเสร็จสิ้น</string>
@@ -713,7 +710,6 @@
     <string name="perm_section_a11y">การช่วยเหลือพิเศษ</string>
     <string name="perm_section_shizuku">Shizuku</string>
     <string name="perm_a11y_section_footer">android-a11y-cli ช่วยให้ Agent อ่านโครงสร้างหน้าจอ แตะและทำท่าทาง รวมถึงเฝ้าดูเหตุการณ์ของระบบได้ ต้องตั้งค่าทั้งสองแถวด้านล่าง: เลือกสิทธิ์ของ Agent และเปิดบริการการช่วยเหลือพิเศษในการตั้งค่าของระบบ</string>
-    <string name="perm_shizuku_section_footer">android-shizuku-cli ให้ Agent เข้าถึง API ระดับสูงของ Android (ติดตั้งแพ็กเกจ, settings put, บังคับหยุด, …) ผ่านบริการ Shizuku ที่ได้รับอนุญาตผ่าน ADB ไร้สายหรือ root ต้องตั้งค่าทั้งสองแถวด้านล่าง</string>
     <string name="perm_a11y_cli_description">ให้ Agent อ่านหน้าจอ แตะ พิมพ์ และเฝ้าดูเหตุการณ์ได้</string>
     <string name="perm_shizuku_cli_description">API ระดับสูงของ Android ผ่านบริการ Shizuku</string>
     <string name="perm_a11y_open_settings">เปิดการตั้งค่าการช่วยเหลือพิเศษ</string>
@@ -791,8 +787,6 @@
     <string name="shizuku_recheck_subtitle">ตรวจสถานะอีกครั้งหลังเริ่มบริการ</string>
     <string name="shizuku_grant_btn">ให้สิทธิ์แก่ Momoding</string>
     <string name="shizuku_grant_subtitle">แสดงกล่องโต้ตอบขอสิทธิ์</string>
-    <string name="perm_section_privileged_backend">แบ็กเอนด์ระดับสูง</string>
-    <string name="perm_privileged_cli_description">อนุญาตให้ Agent รันคำสั่งระบบระดับ ADB ผ่านแบ็กเอนด์ระดับสูง (Shizuku หรือ AXManager)</string>
     <string name="skill_title">ทักษะ</string>
     <string name="skill_add">เพิ่มทักษะ</string>
     <string name="skill_section_installed">ติดตั้งแล้ว</string>
@@ -1570,7 +1564,6 @@
     <string name="system_permissions_a11y_restricted_footer">Android จะบล็อกสวิตช์การช่วยเหลือพิเศษสำหรับแอปที่ติดตั้งจากไฟล์ APK ที่ดาวน์โหลดมา นี่คือนโยบายความปลอดภัยของระบบปฏิบัติการ ไม่ใช่ข้อผิดพลาดของ Momoding — การติดตั้งของคุณไม่มีปัญหา การอนุญาตการตั้งค่าที่ถูกจำกัดเป็นเพียงการเปิดสวิตช์ให้กดได้อีกครั้ง ตัวมันเองไม่ได้ให้สิทธิ์ใดๆ และคุณยังเป็นผู้ตัดสินใจว่าจะเปิดบริการนี้หรือไม่</string>
     <string name="system_permissions_a11y_restricted_manual">อนุญาตการตั้งค่าที่ถูกจำกัด</string>
     <string name="system_permissions_a11y_restricted_manual_sub">ข้อมูลแอป → เมนู ⋮ (มุมขวาบน) → อนุญาตการตั้งค่าที่ถูกจำกัด</string>
-    <string name="system_permissions_a11y_restricted_shizuku">อนุญาตการตั้งค่าที่ถูกจำกัดผ่าน Shizuku</string>
     <string name="system_permissions_a11y_restricted_shizuku_sub">แตะครั้งเดียว — ล้างค่าสถานะโดยไม่ต้องออกจาก Momoding</string>
     <string name="system_permissions_a11y_restricted_working">กำลังอนุญาต…</string>
     <string name="system_permissions_a11y_restricted_failed">ไม่สำเร็จ — ใช้ขั้นตอนด้วยตนเองด้านล่าง</string>

@@ -737,7 +737,7 @@
     <string name="perm_section_a11y">无障碍</string>
     <string name="perm_section_shizuku">Shizuku</string>
     <string name="perm_a11y_section_footer">android-a11y-cli 让 Agent 读取屏幕 UI、模拟点击与输入、监听系统事件。下方两项都需配置:选择 Agent 权限,并在系统设置启用无障碍服务。</string>
-    <string name="perm_shizuku_section_footer">android-system 通过手机自己配对的无线调试，让 Agent 拥有 shell 级权限（改设置、管 App、授权、输入、后台屏）。会丢你数据的操作仍会先问你。</string>
+    <string name="perm_shizuku_section_footer">高级权限用的是手机自己配对的无线调试，让 Momoding 能改设置、管 App、在看不见的屏上操作。会丢你数据的操作仍会先问你。</string>
     <string name="perm_a11y_cli_description">让 Agent 读取屏幕、点击、输入、监听事件</string>
     <string name="perm_shizuku_cli_description">通过 Shizuku 调用 Android 高权限 API</string>
     <string name="perm_a11y_open_settings">前往无障碍设置</string>
@@ -816,7 +816,7 @@
     <string name="shizuku_grant_btn">授权 Momoding</string>
     <string name="shizuku_grant_subtitle">弹出授权对话框</string>
     <string name="perm_section_privileged_backend">高级权限</string>
-    <string name="perm_privileged_cli_description">允许 Agent 改设置、管理 App、在看不见的屏上操作</string>
+    <string name="perm_privileged_cli_description">允许 Momoding 改设置、管理 App、在看不见的屏上操作</string>
     <string name="skill_title">技能</string>
     <string name="skill_add">添加 Skill</string>
     <string name="skill_section_installed">已安装</string>
