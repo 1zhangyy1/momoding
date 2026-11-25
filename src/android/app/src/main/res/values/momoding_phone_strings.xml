@@ -28,5 +28,5 @@
     <string name="mo_phone_step_pair_hint">Tap “Pair device with pairing code” and type the six digits into Momoding\'s notification</string>
     <string name="mo_phone_step_on">On</string>
     <string name="mo_phone_step_said_on">I\'ve turned it on</string>
-    <string name="mo_phone_xiaomi_note">Xiaomi / Redmi: without “USB debugging (Security settings)” on, advanced access cannot grant permissions to apps or tap on the hidden screen; everything else works. Turning that on needs a SIM card and a Xiaomi account.</string>
+    <string name="mo_phone_xiaomi_note">Xiaomi / Redmi: without “USB debugging (Security settings)” on, advanced access cannot grant permissions to apps (the permission card takes you to the system dialog instead); everything else works. Turning that on needs a SIM card and a Xiaomi account.</string>
 </resources>

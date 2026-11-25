@@ -28,5 +28,5 @@
     <string name="mo_phone_step_pair_hint">点「使用配对码配对设备」，把 6 位配对码填进 Momoding 的通知</string>
     <string name="mo_phone_step_on">已打开</string>
     <string name="mo_phone_step_said_on">我已经打开了</string>
-    <string name="mo_phone_xiaomi_note">小米 / 红米：没开「USB 调试（安全设置）」时，高级权限不能替 App 授权、不能在后台屏上点，其余照常。打开它要插 SIM 卡并登录小米账号。</string>
+    <string name="mo_phone_xiaomi_note">小米 / 红米：没开「USB 调试（安全设置）」时，高级权限不能替 App 授权（权限卡会带你去系统窗点一下），其余照常。打开它要插 SIM 卡并登录小米账号。</string>
 </resources>

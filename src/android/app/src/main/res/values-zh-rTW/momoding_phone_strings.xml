@@ -28,5 +28,5 @@
     <string name="mo_phone_step_pair_hint">點「使用配對碼配對裝置」，把 6 位配對碼填進 Momoding 的通知</string>
     <string name="mo_phone_step_on">已開啟</string>
     <string name="mo_phone_step_said_on">我已經打開了</string>
-    <string name="mo_phone_xiaomi_note">小米 / 紅米：沒開「USB 偵錯（安全設定）」時，進階權限不能替 App 授權、不能在後台屏上點，其餘照常。打開它要插 SIM 卡並登入小米帳號。</string>
+    <string name="mo_phone_xiaomi_note">小米 / 紅米：沒開「USB 偵錯（安全設定）」時，進階權限不能替 App 授權（權限卡會帶你去系統窗點一下），其餘照常。打開它要插 SIM 卡並登入小米帳號。</string>
 </resources>
