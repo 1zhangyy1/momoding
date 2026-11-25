@@ -258,7 +258,7 @@ class PhotosOffloadHandler(private val context: Context) : NativeOffloadHandler 
                 77,
                 OffloadOutput.formatBody(
                     JSONObject().put("error", "permission_denied")
-                        .put("message", "The user declined the photos/media permission.")
+                        .put("message", "photos/media access is off.")
                         .toString(),
                     args,
                 ) + "\n",
@@ -321,7 +321,7 @@ class PhotosOffloadHandler(private val context: Context) : NativeOffloadHandler 
                 77,
                 OffloadOutput.formatBody(
                     JSONObject().put("error", "permission_denied")
-                        .put("message", "The user declined the photo-location permission. Without it, GPS EXIF is redacted and `near` cannot match any photos.")
+                        .put("message", "photo-location access is off. Without it, GPS EXIF is redacted and `near` cannot match any photos.")
                         .toString(),
                     args,
                 ) + "\n",

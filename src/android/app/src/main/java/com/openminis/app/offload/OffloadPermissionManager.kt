@@ -132,6 +132,9 @@ object OffloadPermissionManager {
     /** Timeout for a single system permission dialog round-trip. */
     const val SYSTEM_DIALOG_TIMEOUT_MS: Long = 120_000L
 
+    /** momoding: whether the last [requestAndroidPermission] showed the system dialog. */
+    @Volatile private var asked = false
+
     // momoding: see requestAndroidPermission
     private fun appInForeground(): Boolean =
         androidx.lifecycle.ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)
@@ -160,13 +163,15 @@ object OffloadPermissionManager {
      * The call is suspended until the UI responds or [SYSTEM_DIALOG_TIMEOUT_MS]
      * elapses.
      */
-    suspend fun requestAndroidPermission(permissions: List<String>): AndroidPermissionResult {
+    suspend fun requestAndroidPermission(permissions: List<String>, ask: Boolean = false): AndroidPermissionResult {
         // momoding: what it can turn on itself it does, before asking anyone (app/momoding/guard/SelfGrant.kt)
         appContext?.let { if (app.momoding.guard.SelfGrant.grant(it, permissions)) return AndroidPermissionResult.GRANTED }
-        // momoding: nobody can answer a system dialog while the app is in the background (a
-        // routine at 8:00); it would only pop up later out of context. Report it as not granted
-        // now, and the model says in one line where to switch it on.
-        if (!appInForeground()) return AndroidPermissionResult.DENIED
+        // momoding (M61): a command never pops the system dialog itself. It answers that access
+        // is off and the chat asks with its one permission card, which shows the dialog and
+        // carries on. Only a button the person tapped ([ask], the mic) asks right there, and
+        // only while the app is in front.
+        asked = ask && appInForeground()
+        if (!asked) return AndroidPermissionResult.DENIED
         val timed = withTimeoutOrNull(SYSTEM_DIALOG_TIMEOUT_MS) {
             suspendCancellableCoroutine<AndroidPermissionResult> { cont ->
                 androidPermissionContinuation = cont
@@ -262,6 +267,7 @@ object OffloadPermissionManager {
         timeoutMs: Long = 5_000L,
         intervalMs: Long = 500L,
     ): Boolean {
+        if (!asked) return check() // no dialog was shown: nothing to wait for
         val granted = withTimeoutOrNull(timeoutMs) {
             while (true) {
                 if (check()) return@withTimeoutOrNull true

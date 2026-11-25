@@ -281,7 +281,7 @@ class SpeechOffloadHandler(private val context: Context) : NativeOffloadHandler 
                 77,
                 OffloadOutput.formatBody(
                     JSONObject().put("error", "permission_denied")
-                        .put("message", "The user declined the microphone permission.")
+                        .put("message", "microphone access is off.")
                         .toString(),
                     args,
                 ) + "\n",

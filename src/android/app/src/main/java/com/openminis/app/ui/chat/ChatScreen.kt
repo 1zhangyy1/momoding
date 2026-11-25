@@ -667,7 +667,7 @@ fun ChatScreen(
         }
         if (hasPerm()) return@ensure true
         var result = com.openminis.app.offload.OffloadPermissionManager
-            .requestAndroidPermission(listOf(perm))
+            .requestAndroidPermission(listOf(perm), ask = true) // momoding: the person tapped the mic
         if (result == com.openminis.app.offload.OffloadPermissionManager
                 .AndroidPermissionResult.DENIED &&
             com.openminis.app.offload.OffloadPermissionManager.pollForPermissionGrant(hasPerm)

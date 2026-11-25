@@ -122,7 +122,7 @@ class CalendarOffloadHandler(private val context: Context) : NativeOffloadHandle
                 OffloadOutput.formatBody(
                     JSONObject()
                         .put("error", "permission_denied")
-                        .put("message", "The user declined the $humanLabel permission.")
+                        .put("message", "Calendar access ($humanLabel) is off.")
                         .toString(),
                     args,
                 ) + "\n",

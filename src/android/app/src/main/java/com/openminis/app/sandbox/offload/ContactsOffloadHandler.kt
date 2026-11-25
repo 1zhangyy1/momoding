@@ -128,7 +128,7 @@ class ContactsOffloadHandler(private val context: Context) : NativeOffloadHandle
                 77,
                 OffloadOutput.formatBody(
                     JSONObject().put("error", "permission_denied")
-                        .put("message", "The user declined the contacts permission.")
+                        .put("message", "contacts access is off.")
                         .toString(),
                     args,
                 ) + "\n",

@@ -157,7 +157,7 @@ class NotificationOffloadHandler(private val context: Context) : NativeOffloadHa
                         77,
                         OffloadOutput.formatBody(
                             JSONObject().put("error", "permission_denied")
-                                .put("message", "The user declined the notification permission.")
+                                .put("message", "notification access is off.")
                                 .toString(),
                             args,
                         ) + "\n",

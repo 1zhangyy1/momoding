@@ -146,7 +146,7 @@ class LocationOffloadHandler(private val context: Context) : NativeOffloadHandle
                 OffloadPermissionManager.AndroidPermissionResult.DENIED -> {
                     val body = JSONObject()
                         .put("error", "permission_denied")
-                        .put("message", "The user declined the location permission.")
+                        .put("message", "location access is off.")
                         .toString()
                     return NativeOffloadResult(77, OffloadOutput.formatBody(body, args) + "\n")
                 }
