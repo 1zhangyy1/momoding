@@ -27,51 +27,19 @@ Add a home-screen shortcut, use it, and ask its own Bot for changes as you go.</
 
 <p align="center"><sub>Screenshots from an Android emulator with the English interface (DeepSeek V4.1 Flash); the train app and photo album screens are illustrations.</sub></p>
 
-> **Current version: 1.0.12, still moving fast.** Small apps from a chat, several Bots, trackable tasks and memory, and now the whole phone: scripts against Android's API, adb-level system access and a hidden screen. Most polishing so far happened on an emulator and a few real phones; background reliability on heavily customised Android builds is still being tested. Please [open an issue](https://github.com/1zhangyy1/momoding/issues/new/choose) when something goes wrong.
+> **Current version: 1.0.12, still moving fast.** Small apps from a chat, several Bots, trackable tasks and memory, and now the whole phone: scripts against Android's API, system access and a hidden screen. Most polishing so far happened on an emulator and a few real phones; background reliability on heavily customised Android builds is still being tested. Please [open an issue](https://github.com/1zhangyy1/momoding/issues/new/choose) when something goes wrong.
 
 ---
 
 ## Recent update 1.0.12: The whole phone
 
-### 1. Scripts against Android's API, written on the spot (`momoding-android`)
+- **Scripts against Android's API, written on the spot.** Momoding embeds Rhino. When there's no ready-made command, it writes a few lines of JavaScript and runs them inside Momoding, calling Android's API directly: the torch, volume, media, Bluetooth, sensors, notifications, links into other apps. Scripts that worked are kept and reused. A script that would send a text, place a call or delete or change your data stops and asks first.
+- **System access without Shizuku or a computer.** The phone pairs with itself over wireless debugging and Momoding gets the same shell rights as adb: change settings, manage apps, grant permissions. It then stays running even with wireless debugging off, and on most phones comes back by itself after a restart. Android 11 or later.
+- **A hidden screen.** Apps it works on open on an invisible virtual display, so your own screen stays yours. Watch it live, tap **Take over** to do a step yourself, then **Hand back**.
+- **Permissions when needed.** When a job needs the calendar, location and so on, a card appears in the chat. It switches the permission on in place where it can, otherwise opens the right system page, then carries on when you're back.
+- **Another route when blocked.** If Android or the phone maker refuses one way, it tries a script, a command or the screen before asking you.
 
-Momoding embeds the **Rhino** JavaScript interpreter. When there's no ready-made command for a job, it writes a short script and runs it inside Momoding, calling Android's Java API directly through Rhino (`context` in the script is Momoding's own): the torch, volume, media playback, Bluetooth, Wi-Fi, battery, the call log, usage stats, links into other apps, anything Momoding is allowed to do.
-
-- **Grows with use.** Scripts that worked are kept and reused next time, so what it can do keeps growing.
-- **Runs with Momoding's own permissions.** No advanced access needed; a missing permission is asked for with the permission card below.
-- **Complements the system commands.** When one route is blocked by Android or the phone maker, it takes the other.
-- Texts, calls, and deleting or changing your data still go through an approval card.
-
-### 2. System access: what adb can do (`android-system`)
-
-Once the phone pairs with itself over wireless debugging, Momoding runs as the same identity as `adb shell` (uid 2000), with `settings`, `cmd`, `pm`, `am`, `appops`, `dumpsys` and `input`:
-
-- change system, global and secure settings (brightness, volume, screen timeout, Wi-Fi, Bluetooth, Do Not Disturb, default keyboard, accessibility and more);
-- stop, disable, uninstall and install apps; list installed apps and their storage;
-- grant or revoke other apps' runtime permissions; set AppOps and battery-optimisation exemptions;
-- read battery, storage, network and process state.
-
-No root needed, and no access to other apps' private data or the system partition. Uninstalling, clearing data, deleting files and placing calls ask first; everything else just runs.
-
-### 3. The hidden screen
-
-Momoding creates a `VirtualDisplay` in-process, starts apps on it with `am start --display` and sends input with `input -d`. It works there while you keep using your own screen, and the keyboard for a field on the hidden screen stays there too. Watch it live at any time, tap **Take over** to do a step yourself, then **Hand back** and it carries on from where you stopped.
-
-### Setting it up: advanced access
-
-No Shizuku and no computer. Pairing, crypto and the adb connection are ported from PhoneGo. Requires Android 11 or later.
-
-1. Turn on Developer options: Settings → About phone → tap "Build number" repeatedly.
-2. Developer options → turn on **Wireless debugging** → tap **Pair device with pairing code**.
-3. Momoding spots the pairing dialog over mDNS and shows a notification; type the 6-digit code into it and it does the rest.
-
-Once paired, Momoding starts a resident shell process with `app_process`, reached over loopback with a per-start secret. It keeps working after wireless debugging is switched off; after a restart or update it switches wireless debugging on, starts the process again and switches it back off. If you used Shizuku before, pair once under Settings → Phone capabilities → Advanced access.
-
-> Xiaomi / Redmi: without "USB debugging (Security settings)", advanced access can't grant permissions to apps, so you tap once in the system dialog; the hidden screen and everything else work as usual.
-
-### Permissions: asked when needed
-
-No list of permissions up front. When a job needs the calendar, location or screen control, a card appears in the chat: with advanced access it's switched on in place; otherwise the system dialog or the right settings page opens. When you come back it checks and carries on without being asked again.
+**Turning on advanced access:** Settings → Phone capabilities → Advanced access, then in Developer options turn on **Wireless debugging**, tap **Pair device with pairing code** and type the 6-digit code into Momoding's notification. If you used Shizuku before, pair once here. On Xiaomi / Redmi, also turn on "USB debugging (Security settings)" to let it grant permissions to apps; the hidden screen and everything else work without it.
 
 [Full release notes](docs/releases/1.0.12.md) · [Download 1.0.12](https://github.com/1zhangyy1/momoding/releases/tag/v1.0.12)
 
