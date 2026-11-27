@@ -82,7 +82,6 @@ import com.openminis.app.ui.components.SectionCard
 import com.openminis.app.ui.components.SectionDesign
 import com.openminis.app.ui.components.SectionDivider
 import com.openminis.app.ui.components.SectionFooter
-import com.openminis.app.ui.components.SectionHeader
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -486,7 +485,7 @@ private fun GroupDropdown(
     onSelect: (String?) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val selectedName = groups.find { it.id == selectedId }?.name ?: stringResource(R.string.model_groups_none)
+    val selectedName = groups.find { it.id == selectedId }?.name?.let { groupName(it) } ?: stringResource(R.string.model_groups_none)
 
     ExposedDropdownMenuBox(
         expanded = expanded,
@@ -513,7 +512,7 @@ private fun GroupDropdown(
             )
             groups.forEach { group ->
                 DropdownMenuItem(
-                    text = { Text(group.name) },
+                    text = { Text(groupName(group.name)) },
                     onClick = {
                         onSelect(group.id)
                         expanded = false
@@ -612,7 +611,7 @@ private fun LazyListScope.agentLoopModelsSectionItems(
                         ),
                     ) {
                         AgentLoopRow(
-                            title = group.name,
+                            title = groupName(group.name),
                             subtitle = subtitle,
                             badge = stringResource(R.string.agent_loop_section_group_badge),
                             onRemove = { providerRepository.removeAgentLoopGroup(group.id) },
@@ -979,7 +978,7 @@ private fun GroupRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
-                    text = group.name,
+                    text = groupName(group.name),
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -1034,3 +1033,18 @@ private fun GroupRow(
         )
     }
 }
+
+/** momoding: the two voice groups the app seeds, in the person's language; any other name as it was given. */
+@Composable
+internal fun groupName(name: String): String = when (name) {
+    "Voice Input" -> stringResource(R.string.mo_group_voice_input)
+    "Voice Output" -> stringResource(R.string.mo_group_voice_output)
+    else -> name
+}
+
+/** momoding: a section's name as on every other settings page — small, quiet, over its card. */
+@Composable
+private fun SectionHeader(text: String) = Text(
+    text, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+    modifier = Modifier.padding(start = 32.dp, end = 32.dp, bottom = 8.dp),
+)

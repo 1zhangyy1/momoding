@@ -24,9 +24,9 @@
     <string name="mo_hands_fx_tap_target">點按「%1$s」</string>
     <string name="mo_hands_fx_type">輸入「%1$s」</string>
     <string name="mo_hands_fx_wait">等 %1$d 秒</string>
-    <string name="mo_hands_intro">有些 App 沒法直接辦，它就像你一樣用手機：看一眼螢幕，然後點、輸、滑。手機能力和它自己的電腦能辦的先辦，借你的螢幕放在最後。預設關閉。</string>
+    <string name="mo_hands_intro">App 沒法直接辦的事，它像你一樣點螢幕去辦。</string>
     <string name="mo_hands_looking">正在看螢幕…</string>
-    <string name="mo_hands_model_footer">每一步把螢幕上的內容列表（按鈕、輸入框、文字）發給這個模型，列表不夠時再加一張截圖。它和對話模型是兩個獨立的設定。</string>
+    <string name="mo_hands_model_footer">看螢幕用的模型，和對話用的分開設。</string>
     <string name="mo_hands_need_a11y">無障礙服務</string>
     <string name="mo_hands_need_a11y_fix">到無障礙設定裡「已安裝的應用程式」中打開 Momoding</string>
     <string name="mo_hands_need_android">Android 11 或更新</string>
@@ -39,7 +39,7 @@
     <string name="mo_hands_need_overlay">顯示在其他應用程式上層</string>
     <string name="mo_hands_need_overlay_fix">允許後才能顯示帶「停止」按鈕的膠囊</string>
     <string name="mo_hands_need_set_up">去設定</string>
-    <string name="mo_hands_needs_footer">做事時，無障礙服務會讀取螢幕上的按鈕、輸入框和文字，並替你點按；只在你交代的任務進行時。懸浮視窗權限用來顯示膠囊。</string>
+    <string name="mo_hands_needs_footer">缺哪項，點一下去打開。</string>
     <string name="mo_hands_open">打開</string>
     <string name="mo_hands_protected_screen">這個頁面受保護，讀不到內容。請你自己完成這一步，然後點「繼續」。</string>
     <string name="mo_hands_rule_approvals">付款、傳送、發布、刪除之前先問你。</string>
@@ -59,7 +59,7 @@
     <string name="mo_hands_stop">停止</string>
     <string name="mo_hands_stop_run">停止目前操作</string>
     <string name="mo_hands_switch">允許操作螢幕</string>
-    <string name="mo_hands_switch_footer">操作時螢幕頂部會有一個膠囊，顯示每一步和「停止」按鈕。登入、密碼、驗證碼永遠留給你自己輸。</string>
+    <string name="mo_hands_switch_footer">操作時螢幕頂上有個膠囊，隨時能停。密碼和驗證碼永遠交給你。</string>
     <string name="mo_hands_title">動手操作螢幕</string>
     <string name="mo_hands_why_any">唯一能看圖的模型</string>
     <string name="mo_hands_why_chat">你選的對話模型</string>
@@ -80,7 +80,7 @@
     <string name="mo_hands_background">在背景操作</string>
     <string name="mo_hands_background_on">開：它在自己看不見的螢幕上做事，你照常用手機</string>
     <string name="mo_hands_background_off">關：在你的螢幕上操作，和以前一樣</string>
-    <string name="mo_hands_background_footer">進階權限開著時，Momoding 把 App 開在一塊你看不見的螢幕上操作，不佔你的螢幕；要登入、或不該它自己決定的事，仍會交給你。沒開就在你的螢幕上操作。</string>
+    <string name="mo_hands_background_footer">開著時，它在看不見的螢幕上操作，不佔你的螢幕。</string>
     <string name="mo_hands_take_over">接管</string>
     <string name="mo_hands_hand_back">交還</string>
     <string name="mo_hands_close">收起</string>

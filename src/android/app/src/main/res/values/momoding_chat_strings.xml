@@ -147,7 +147,7 @@
     <string name="mo_card_expired_line">Expired: %1$s</string>
     <string name="mo_computer_title">Virtual machine</string>
     <string name="mo_computer_row_sub">Linux and a browser inside your phone</string>
-    <string name="mo_computer_intro">Momoding has a small computer of its own inside your phone: it goes online and handles files without using your screen. Only work inside apps borrows your screen, where you can see it and stop it.</string>
+    <string name="mo_computer_intro">Its own small computer inside your phone: browsing and files happen here, not on your screen.</string>
     <string name="mo_computer_files">What it made</string>
     <string name="mo_computer_files_none">Nothing yet. Ask it for a table or a page and it shows up here.</string>
     <string name="mo_computer_browser">Its browser</string>
@@ -173,10 +173,10 @@
     <string name="mo_notif_done_in">Took %1$s</string>
     <string name="mo_models_title">Models</string>
     <string name="mo_models_thinking">Thinks with</string>
-    <string name="mo_models_thinking_footer">Models known to work well for Momoding. The one you leave stays as the fallback. Takes effect from the next message.</string>
+    <string name="mo_models_thinking_footer">The one it replaces stays as the backup, from the next message.</string>
     <string name="mo_models_fallback">fallback</string>
     <string name="mo_models_seeing">Looks at the screen with</string>
-    <string name="mo_models_seeing_footer">Used when it borrows your screen. Change it on the Hands page.</string>
+    <string name="mo_models_seeing_footer">Change it in Screen control.</string>
     <string name="mo_models_seeing_none">No model that can see pictures yet</string>
     <string name="mo_models_provider">Provider</string>
     <string name="mo_models_provider_sub">Keys and every model</string>

@@ -285,7 +285,7 @@ fun SkillsManagementScreen(
                     val (badgeIcon, badgeColor) = sourceIconAndColor(skill.importSource)
                     SettingsRow(
                         title = skill.name,
-                        subtitle = skill.description.takeIf { it.isNotEmpty() }?.let { stripMarkdown(it) },
+                        subtitle = momodingSkillSummary(skill.name) ?: skill.description.takeIf { it.isNotEmpty() }?.let { stripMarkdown(it) },
                         showChevron = true,
                         showDivider = index < filteredSkills.size - 1,
                         onClick = { onSkillClick(skill.id) },
@@ -1213,4 +1213,15 @@ fun SkillFileViewerScreen(
             }
         }
     }
+}
+
+/**
+ * momoding: Momoding's own built-in skills, summed up in the person's language. Their SKILL.md
+ * descriptions are written for the model (in English, long); any other skill shows its own.
+ */
+@Composable
+private fun momodingSkillSummary(name: String): String? {
+    val context = LocalContext.current
+    val id = context.resources.getIdentifier("mo_skill_" + name.replace('-', '_'), "string", context.packageName)
+    return if (id == 0) null else stringResource(id)
 }

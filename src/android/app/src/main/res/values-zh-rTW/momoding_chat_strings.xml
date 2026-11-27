@@ -147,7 +147,7 @@
     <string name="mo_card_expired_line">已過期：%1$s</string>
     <string name="mo_computer_title">虛擬機</string>
     <string name="mo_computer_row_sub">手機裡的 Linux 和瀏覽器</string>
-    <string name="mo_computer_intro">Momoding 在你手機裡有一台自己的小電腦：能上網、處理檔案，不佔你的螢幕。只有 App 裡的事才借你的螢幕，你看得見，隨時能停。</string>
+    <string name="mo_computer_intro">它在手機裡有一台自己的小電腦，上網、處理檔案都在這裡，不佔你的螢幕。</string>
     <string name="mo_computer_files">它做出來的東西</string>
     <string name="mo_computer_files_none">還沒有。讓它做個表格或網頁，會出現在這裡。</string>
     <string name="mo_computer_browser">它的瀏覽器</string>
@@ -173,10 +173,10 @@
     <string name="mo_notif_done_in">用時 %1$s</string>
     <string name="mo_models_title">模型</string>
     <string name="mo_models_thinking">用它想事情</string>
-    <string name="mo_models_thinking_footer">這些是在 Momoding 上用著順手的模型。換下來的那個留作備用。下一句話起生效。</string>
+    <string name="mo_models_thinking_footer">換下來的那個留作備用，下一句話起生效。</string>
     <string name="mo_models_fallback">備用</string>
     <string name="mo_models_seeing">用它看螢幕</string>
-    <string name="mo_models_seeing_footer">借你螢幕幹活時用。在「動手操作螢幕」裡換。</string>
+    <string name="mo_models_seeing_footer">在「動手操作螢幕」裡換。</string>
     <string name="mo_models_seeing_none">還沒有能看圖的模型</string>
     <string name="mo_models_provider">服務商</string>
     <string name="mo_models_provider_sub">Key 和全部模型</string>

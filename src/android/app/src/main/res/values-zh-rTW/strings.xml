@@ -155,13 +155,13 @@
     <string name="settings_memory_subtitle">跨工作階段的持續性知識</string>
     <string name="settings_mcp">MCP 整合</string>
     <string name="settings_mcp_subtitle">連接 Model Context Protocol 伺服器</string>
-    <string name="mcp_title">MCP 整合</string>
+    <string name="mcp_title">MCP 服務</string>
     <string name="mcp_add">新增 MCP 伺服器</string>
     <string name="mcp_edit">編輯 MCP 伺服器</string>
     <string name="mcp_section_servers">伺服器</string>
-    <string name="mcp_section_footer">MCP 伺服器讓 AI 透過 minis-mcp-cli 呼叫外部工具。設定儲存在 /var/minis/mcp-servers/servers.json（與 Claude Desktop 相容）。</string>
-    <string name="mcp_empty_title">尚無 MCP 伺服器</string>
-    <string name="mcp_empty_action">點擊 + 按鈕新增伺服器。</string>
+    <string name="mcp_section_footer">接上外部服務後，它就能直接呼叫它們的功能。</string>
+    <string name="mcp_empty_title">還沒有 MCP 服務</string>
+    <string name="mcp_empty_action">點右上角 + 新增。</string>
     <string name="mcp_transport_http">HTTP</string>
     <string name="mcp_transport_sse">SSE</string>
     <string name="mcp_transport_stdio">STDIO</string>
@@ -616,7 +616,7 @@
     <string name="common_copy">複製</string>
     <string name="appearance_title">外觀</string>
     <string name="appearance_section_theme">主題</string>
-    <string name="appearance_theme_footer">為本應用程式覆寫系統的外觀設定。</string>
+    <string name="appearance_theme_footer">跟隨系統時，隨手機深淺色切換。</string>
     <string name="appearance_theme_system">跟隨系統</string>
     <string name="appearance_theme_light">淺色</string>
     <string name="appearance_theme_dark">深色</string>
@@ -627,7 +627,7 @@
     <string name="appearance_launch_new">新增對話</string>
     <string name="appearance_launch_home">首頁</string>
     <string name="appearance_section_return_key">Return 鍵</string>
-    <string name="appearance_return_key_footer">選擇對話輸入框中的 Return 鍵要插入換行還是傳送訊息。實體鍵盤的 Shift+Return 一律插入換行。</string>
+    <string name="appearance_return_key_footer">外接鍵盤按 Shift+Return 總是換行。</string>
     <string name="appearance_return_key_newline">換行</string>
     <string name="appearance_return_key_send">傳送</string>
     <string name="appearance_section_keep_awake">保持螢幕開啟</string>
@@ -670,9 +670,9 @@
     <string name="env_var_add">新增</string>
     <string name="env_var_privacy_header">隱私</string>
     <string name="env_var_privacy_toggle">隱私模式</string>
-    <string name="env_var_privacy_footer">開啟後，shell-execute 輸出中偵測到的環境變數值會在送達模型前被打碼（例如 `sk-1********ajhks`）。少於 8 個字元的值會被全部替換為 `*`。聊天中使用者可見的輸出維持不變。</string>
+    <string name="env_var_privacy_footer">開啟後，命令輸出裡的金鑰會先遮住再發給模型。</string>
     <string name="env_var_section_header">變數</string>
-    <string name="env_var_section_footer">環境變數會在工作階段開始時注入沙箱 shell。名稱會轉為大寫，且必須符合 POSIX shell 變數的命名規則。</string>
+    <string name="env_var_section_footer">每次對話開始時帶上這些變數。</string>
     <string name="env_var_empty_title">沒有環境變數</string>
     <string name="env_var_empty_action">點擊 + 即可新增。</string>
     <string name="env_var_toggle_visibility">切換顯示狀態</string>
@@ -689,14 +689,14 @@
     <string name="log_title">記錄</string>
     <string name="log_share_all">全部分享</string>
     <string name="log_section_logging">記錄功能</string>
-    <string name="log_section_logging_footer">啟用後，所有主控台輸出都會擷取到應用程式私有儲存空間中的每日記錄檔。</string>
+    <string name="log_section_logging_footer">開啟後每天記錄執行日誌，只存在手機上。</string>
     <string name="log_section_detail_level">詳細程度</string>
     <string name="log_detail_level_info">Info</string>
     <string name="log_detail_level_verbose">Verbose</string>
     <string name="log_detail_level_footer">Info 級別日誌體積較小。Verbose 會額外記錄除錯資訊和系統日誌，體積可能大很多倍，建議只在重現問題時開啟。</string>
     <string name="log_enable_switch">啟用記錄</string>
     <string name="log_section_files">記錄檔</string>
-    <string name="log_section_files_footer">點擊檔案即可檢視內容。記錄每日輪替。</string>
+    <string name="log_section_files_footer">每天一個檔案，點開查看。</string>
     <string name="log_no_files">沒有記錄檔</string>
     <string name="log_section_storage">儲存空間</string>
     <string name="log_section_storage_footer">記錄總共佔用：%1$s</string>
@@ -881,7 +881,7 @@
     <string name="skills_browser_error_format">SKILL.md 內容無效</string>
     <string name="storage_title">儲存空間</string>
     <string name="storage_section_overview">總覽</string>
-    <string name="storage_overview_shell">Shell 容器</string>
+    <string name="storage_overview_shell">Linux 環境</string>
     <string name="storage_overview_database">對話資料庫</string>
     <string name="storage_overview_sessions">工作階段檔案</string>
     <string name="storage_section_sessions">工作階段</string>
@@ -897,7 +897,7 @@
     <string name="storage_clear_confirm_title">要清除工作階段檔案嗎？</string>
     <string name="storage_overview_logs_caches">日誌與快取</string>
     <string name="storage_clear_logs_caches_button">清除日誌與快取</string>
-    <string name="storage_clear_logs_caches_footer">刪除所有日誌（包括當機報告）以及模型列表、舊的分享檔案等快取資料。超過 15 天的日誌也會自動刪除。對話、檔案和設定不受影響。</string>
+    <string name="storage_clear_logs_caches_footer">對話、檔案和設定不受影響。</string>
     <string name="storage_clear_logs_caches_confirm_title">清除日誌與快取？</string>
     <string name="storage_clear_logs_caches_confirm_message">當機報告也會一併刪除，如有需要請先傳送。對話、檔案和設定不受影響。</string>
     <string name="storage_clear_logs_caches_confirm">清除</string>
@@ -919,8 +919,8 @@
     </plurals>
     <string name="usage_title">用量</string>
     <string name="usage_section_total">總用量</string>
-    <string name="usage_label_total_input">輸入總計（含快取）</string>
-    <string name="usage_label_output">輸出 Token</string>
+    <string name="usage_label_total_input">輸入</string>
+    <string name="usage_label_output">輸出</string>
     <string name="usage_label_cache_read">快取讀取</string>
     <string name="usage_label_cache_creation">快取建立</string>
     <string name="usage_label_cache_hit_rate">快取命中率</string>
@@ -1141,7 +1141,7 @@
     <string name="model_groups_new_group">新建分組</string>
     <string name="model_groups_no_model_groups">暫無模型分組</string>
     <string name="model_groups_groups_let_you_combine_models_for_fallba">模型分組可實現回退或負載均衡。</string>
-    <string name="model_groups_primary_is_used_for_main_agent_tasks_sub">主模型用於主要任務，輔助模型用於標題生成等輕量任務。未設定輔助模型時將繼承主模型。</string>
+    <string name="model_groups_primary_is_used_for_main_agent_tasks_sub">主模型做主要的事，輔助模型做起標題這類小事；不設就用主模型。</string>
     <string name="model_groups_group_name">分組名稱</string>
     <string name="model_groups_create">創建</string>
     <string name="model_groups_none">無</string>
@@ -1275,7 +1275,7 @@
     <string name="settings_shared_folders">共享資料夾</string>
     <string name="settings_shared_folders_subtitle">瀏覽 /var/minis 下的共享、技能、記憶目錄</string>
     <string name="shared_folders_title">共享資料夾</string>
-    <string name="shared_folders_info_banner">這些目錄在 Linux 沙箱內可見，技能與記憶由 Momoding 工具自動維護，請勿手動修改。</string>
+    <string name="shared_folders_info_banner">它和你共用的資料夾。</string>
     <string name="shared_folder_name_shared">共享</string>
     <string name="shared_folder_name_skills">技能</string>
     <string name="shared_folder_name_memory">記憶</string>
@@ -1508,7 +1508,7 @@
     <string name="backup_dest_backend_label">%1$s — %2$s</string>
     <string name="backup_dest_row_subtitle">%1$s · /%2$s</string>
     <string name="mount_folders_title">已掛載資料夾</string>
-    <string name="mount_folders_info_banner">選取的資料夾會被繫結到 /var/minis/mounts/&lt;name&gt;。最多可同時掛載 10 個資料夾。</string>
+    <string name="mount_folders_info_banner">把手機裡的資料夾交給它讀寫，最多 10 個。</string>
     <string name="mount_picker_intro_title">選擇要掛載的資料夾</string>
     <string name="mount_picker_intro_message">Android 不允許掛載整個內部儲存空間，請選擇其中一個具體的資料夾，例如「文件」或「下載」。\n\n接下來開啟的是系統檔案選擇器。若某個資料夾顯示「無法使用此資料夾」，請進入它的子資料夾，或用系統返回手勢回到這裡。</string>
     <string name="mount_picker_intro_continue">去選擇</string>
@@ -1878,7 +1878,7 @@
     <string name="settings_agent_tools">可用工具</string>
     <string name="settings_agent_tools_subtitle">允許助理使用哪些選填工具</string>
     <string name="agent_tools_browser">瀏覽器</string>
-    <string name="agent_tools_browser_footer">在應用程式內建瀏覽器中瀏覽網頁：開啟頁面、閱讀內容、點擊與輸入。功能已穩定，預設開啟。關閉後該工具會從所有對話中移除，模型完全看不到它。</string>
+    <string name="agent_tools_browser_footer">它自己的瀏覽器，用來打開網頁、點擊和填寫。關掉後它就不能上網。</string>
     <string name="scheduled_task_target_agent">代理任務</string>
     <string name="scheduled_card_label">定時任務</string>
     <string name="scheduled_card_next_fire">下次：%1$s</string>
@@ -1994,4 +1994,14 @@
     <string name="rootfs_dns_saved">已儲存並生效</string>
     <string name="rootfs_dns_effective_system">目前生效：系統 DNS</string>
     <string name="rootfs_dns_effective_custom">目前生效：%1$s</string>
+    <string name="chat_error_reply_incomplete">回覆尚未完成。</string>
+    <string name="mount_picker_unavailable">此裝置不支援系統檔案選擇器，無法掛載外部資料夾。</string>
+    <string name="voice_asr_failed_title">辨識失敗</string>
+    <string name="voice_asr_failed_message">%1$d 秒的語音未能轉寫（%2$s）。要重試嗎？</string>
+    <string name="voice_asr_retry">重試</string>
+    <string name="voice_asr_discard">捨棄</string>
+    <string name="voice_send_still_transcribing">仍在轉寫，文字出現後再點傳送。</string>
+    <string name="voice_asr_timed_out">語音辨識逾時</string>
+    <string name="chat_edit_correction">改成：%1$s</string>
+    <string name="chat_delete_from_here_stops_work">這些訊息引出的未完成任務也會停止。</string>
 </resources>
