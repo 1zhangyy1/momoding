@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -45,7 +44,8 @@ import com.openminis.app.ui.theme.ChatColors
 import app.momoding.ui.Design
 
 /**
- * A Momoding's header: its face and its name; then the faces of the person's other Momodings ([BotFaces]). A tap on the name opens them all ([BotList]).
+ * A Momoding's header: its face and name (the main one opens its own page; a Bot's opens the list), then the faces of the
+ * person's other Momodings ([BotFaces]), which open them all ([BotList]). One way to each.
  * The same header is on the main chat, a Bot's chat, and an app's chat panel.
  * What it is doing right now is not up here: it opens the running turn in the chat
  * ([LiveStatusLine]) and folds into that turn's "做了 3 步" when it is done.
@@ -61,7 +61,7 @@ fun MomodingHeader(sessionId: String? = null) {
         (ownApp?.let { app.momoding.apps.AppIcon.bitmap(context, it, 96, adaptive = false) } ?: Identity.face(context))?.asImageBitmap()
     }
     var listOpen by remember { androidx.compose.runtime.mutableStateOf(false) }
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().padding(end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.weight(1f)) {
             // the main Momoding's face and name open its own page; a Bot's (and the arrow) open the list
             val openHome = if (ownApp == null) ({
@@ -83,11 +83,6 @@ fun MomodingHeader(sessionId: String? = null) {
                         ownApp?.title ?: soul.name.ifBlank { stringResource(R.string.app_name) },
                         fontSize = Design.Size.Title, lineHeight = Design.Line.Caption, fontWeight = FontWeight.SemiBold, color = ChatColors.primaryText, maxLines = 1,
                         overflow = TextOverflow.Ellipsis, style = NO_FONT_PAD, modifier = Modifier.weight(1f, fill = false),
-                    )
-                    androidx.compose.material3.Icon(
-                        androidx.compose.material.icons.Icons.Outlined.ExpandMore, stringResource(R.string.mo_bots_switch), tint = ChatColors.secondaryText,
-                        modifier = Modifier.size(28.dp).clip(CircleShape).clickable { listOpen = !listOpen }.padding(4.dp)
-                            .graphicsLayer { rotationZ = if (listOpen) 180f else 0f },
                     )
                 }
             }

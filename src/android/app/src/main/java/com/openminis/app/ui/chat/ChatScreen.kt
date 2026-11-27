@@ -3258,20 +3258,7 @@ fun ChatScreen(
                     }
                 },
                 actions = {
-                    // momoding: settings, as in the prototype's header; routines are in it (a dot when one is new)
-                    if (!momodingShowSteps) {
-                        val bot = remember(viewModel.activeSessionId) { app.momoding.apps.MoApps.ofSession(context, viewModel.activeSessionId) }
-                        val routineDot = remember(messages) { bot == null && app.momoding.chat.RoutinesSeen.hasNew(context) }
-                        // another Momoding's gear is about that Momoding: its row in Bots and apps
-                        IconButton(onClick = { runCatching { context.startActivity(bot
-                            ?.let { android.content.Intent(context, app.momoding.apps.AppsListActivity::class.java).putExtra(app.momoding.apps.AppsListActivity.EXTRA_NAME, it.name) }
-                            ?: app.momoding.deeplink.OwnScheme.intent(context, android.net.Uri.parse("minis://settings"), 0)) } }) {
-                            Box {
-                                Icon(Icons.Outlined.Settings, contentDescription = stringResource(R.string.settings_title))
-                                if (routineDot) Box(Modifier.align(Alignment.TopEnd).size(8.dp).background(app.momoding.ui.Tones.action, CircleShape))
-                            }
-                        }
-                    }
+                    // momoding: no gear here — settings are about the app, reached from Momoding's own page (its face)
                     // momoding: the overflow menu (terminal, browser, MCP, debug…) is part of "how the work is done"
                     if (momodingShowSteps) {
                     // iOS: "..." circle button → dropdown menu
