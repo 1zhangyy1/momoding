@@ -273,7 +273,7 @@ private fun LastChange(tick: Int, links: HomeLinks) {
     SettingsSection(header = stringResource(R.string.mo_files_memory)) {
         val c = last
         if (c != null) SettingsRow(
-            title(c), subtitle = c.files.take(2).joinToString(" · ") { it.path }, onClick = links.history, showChevron = false,
+            title(c), subtitle = app.momoding.ui.files.whenFull(c.at), onClick = links.history, showChevron = false,
         )
         SettingsRow(stringResource(R.string.mo_home_memory_files), icon = Icons.Outlined.Folder, iconColor = Grey, onClick = links.memory, showDivider = false)
     }
@@ -307,7 +307,7 @@ fun OtherPermissionsScreen(onRules: () -> Unit, onAll: () -> Unit, onBack: () ->
             )
         }
         SettingsSection {
-            SettingsRow(stringResource(R.string.permissions_title), subtitle = stringResource(R.string.mo_adv_permissions_sub), onClick = onAll, showDivider = false)
+            SettingsRow(stringResource(R.string.mo_home_all_permissions), subtitle = stringResource(R.string.mo_adv_permissions_sub), onClick = onAll, showDivider = false)
         }
     }
 }

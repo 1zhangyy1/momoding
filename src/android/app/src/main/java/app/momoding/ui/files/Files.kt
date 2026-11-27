@@ -121,6 +121,14 @@ internal fun frontMatter(text: String): Pair<List<Pair<String, String>>, String>
     return pairs to lines.drop(end + 1).joinToString("\n")
 }
 
+/** A moment with its time: "19:58", "昨天 19:58", "11月20日 19:58". */
+@Composable
+internal fun whenFull(at: Long): String {
+    val day = whenText(at)
+    val time = DateFormat.format("HH:mm", at).toString()
+    return if (day == time) time else "$day $time"
+}
+
 /** Bumps each time the screen comes back, so a list shows what changed on the page above it. */
 @Composable
 internal fun resumes(): Int {
@@ -251,7 +259,7 @@ fun DocScreen(path: String, onHistory: (repo: String, path: String?) -> Unit, on
         },
     ) {
         val body = text ?: return@SettingsScaffold
-        Note("$name · ${whenText(at)}")
+        Note(whenFull(at))
         val card = Modifier.padding(16.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerLow).padding(16.dp)
         val mono = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 20.sp, color = MaterialTheme.colorScheme.onSurface)

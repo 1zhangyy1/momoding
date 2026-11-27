@@ -62,7 +62,8 @@ fun SkillsHomeScreen(links: SkillLinks, onBack: () -> Unit) {
         }
     }
     val (notes, scripts, sites) = learned
-    fun peek(list: List<String>) = list.take(3).joinToString("、").ifEmpty { null }
+    val none = stringResource(R.string.mo_computer_sites_none)
+    fun peek(list: List<String>) = list.take(3).joinToString("、").ifEmpty { none }
     @Composable fun count(n: Int) = Text(n.toString(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     SettingsScaffold(title = stringResource(R.string.mo_home_skills), onBack = onBack) {
         SettingsSection(header = stringResource(R.string.mo_skills_learned), footer = stringResource(R.string.mo_skills_learned_footer)) {

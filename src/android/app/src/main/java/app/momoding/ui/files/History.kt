@@ -1,6 +1,7 @@
 package app.momoding.ui.files
 
 import android.net.Uri
+import android.text.format.DateFormat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -62,7 +63,7 @@ internal fun title(c: RepoGit.Commit): String {
 }
 
 @Composable
-private fun files(c: RepoGit.Commit): String {
+internal fun files(c: RepoGit.Commit): String {
     val names = c.files.take(2).joinToString(" · ") { it.path }
     return if (c.files.size <= 2) names else stringResource(R.string.mo_files_and_more, names, c.files.size)
 }
@@ -94,7 +95,7 @@ fun HistoryScreen(repo: String, path: String?, onCommit: (String) -> Unit, onBac
             SettingsSection(header = dayText(day.first().at)) {
                 day.forEachIndexed { i, c ->
                     SettingsRow(
-                        title = title(c), subtitle = files(c),
+                        title = title(c), subtitle = DateFormat.format("HH:mm", c.at).toString() + " · " + files(c),
                         onClick = { onCommit(c.sha) }, showChevron = false, showDivider = i < day.lastIndex,
                         trailing = { Counts(c) },
                     )
@@ -134,7 +135,7 @@ fun CommitScreen(repo: String, sha: String, onBack: () -> Unit) {
     SettingsScaffold(title = stringResource(R.string.mo_files_change), onBack = onBack) {
         if (c == null) return@SettingsScaffold
         Text(title(c), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 32.dp, end = 32.dp, top = 4.dp))
-        Note("${whenText(c.at)} · " + stringResource(R.string.mo_files_n_files, c.files.size))
+        Note("${whenFull(c.at)} · " + stringResource(R.string.mo_files_n_files, c.files.size))
         diffs.forEach { d ->
             FileHeader(d.path)
             Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceContainerLow)) {

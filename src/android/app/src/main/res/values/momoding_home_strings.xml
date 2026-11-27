@@ -40,4 +40,5 @@
     <string name="mo_settings_data">Data</string>
     <string name="mo_skills_packs">Skill packs</string>
     <string name="mo_skills_mcp">MCP services</string>
+    <string name="mo_home_all_permissions">All system permissions</string>
 </resources>

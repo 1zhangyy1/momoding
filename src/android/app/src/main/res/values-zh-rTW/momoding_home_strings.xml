@@ -40,4 +40,5 @@
     <string name="mo_settings_data">資料</string>
     <string name="mo_skills_packs">技能包</string>
     <string name="mo_skills_mcp">MCP 服務</string>
+    <string name="mo_home_all_permissions">全部系統權限</string>
 </resources>
