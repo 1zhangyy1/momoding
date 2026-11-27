@@ -61,12 +61,4 @@
     </string-array>
     <string name="mo_group_voice_input">语音输入</string>
     <string name="mo_group_voice_output">语音输出</string>
-    <string name="mo_skill_about_momoding">它自己的源码，和各项功能怎么工作</string>
-    <string name="mo_skill_files_and_scripts">在它的电脑里处理文件、文件夹和脚本</string>
-    <string name="mo_skill_momoding_apps">怎么做和改它给你做的应用</string>
-    <string name="mo_skill_memory">怎么记和整理关于你的笔记</string>
-    <string name="mo_skill_skill_creator">怎么写一个新技能</string>
-    <string name="mo_skill_know_how_procedures">查各种手续怎么办</string>
-    <string name="mo_skill_know_how_shopping">比较商品和价格</string>
-    <string name="mo_skill_know_how_travel">查火车、机票和酒店</string>
 </resources>

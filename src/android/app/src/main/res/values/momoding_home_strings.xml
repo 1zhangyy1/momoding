@@ -61,12 +61,4 @@
     </string-array>
     <string name="mo_group_voice_input">Voice input</string>
     <string name="mo_group_voice_output">Voice output</string>
-    <string name="mo_skill_about_momoding">Its own source code and how its features work</string>
-    <string name="mo_skill_files_and_scripts">Working with files, folders and scripts in its computer</string>
-    <string name="mo_skill_momoding_apps">How to build and update the apps it makes for you</string>
-    <string name="mo_skill_memory">How it keeps its notes about you</string>
-    <string name="mo_skill_skill_creator">How to write a new skill</string>
-    <string name="mo_skill_know_how_procedures">Finding how to get official things done</string>
-    <string name="mo_skill_know_how_shopping">Comparing products and prices</string>
-    <string name="mo_skill_know_how_travel">Where to look for trains, flights and hotels</string>
 </resources>
