@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mo_home_persona">人设</string>
+    <string name="mo_home_models">模型</string>
+    <string name="mo_home_model_chat">对话</string>
+    <string name="mo_home_model_seeing">视觉</string>
+    <string name="mo_home_permissions">权限</string>
+    <string name="mo_home_advanced_sub">改系统设置、管理应用</string>
+    <string name="mo_home_hands_sub">替你点击和输入</string>
+    <string name="mo_home_background_sub">锁屏后继续执行</string>
+    <string name="mo_home_other_permissions">其他权限与确认</string>
+    <string name="mo_home_on">已开启</string>
+    <string name="mo_home_off">未开启</string>
+    <string name="mo_home_turn_on">开启</string>
+    <string name="mo_home_apps_new">新建</string>
+    <string name="mo_home_apps_all">全部 %1$d</string>
+    <string name="mo_home_all">全部 %1$d</string>
+    <string name="mo_home_routine_daily">每天 %1$s</string>
+    <string name="mo_home_routine_weekdays">工作日 %1$s</string>
+    <string name="mo_home_routine_some_days">每周几天 %1$s</string>
+    <string name="mo_home_routine_once">一次 %1$s</string>
+    <string name="mo_home_routine_notification">收到通知时</string>
+    <string name="mo_home_routine_other">按它定的时间</string>
+    <string name="mo_home_memory_files">它写的文件</string>
+    <string name="mo_home_skills">技能</string>
+    <string name="mo_home_computer">虚拟机</string>
+    <string name="mo_home_open">查看 Momoding</string>
+    <string name="mo_home_apps">应用</string>
+    <string name="mo_home_routines_none">还没有，在对话里说一句就能加</string>
+    <string name="mo_home_routines">定时任务</string>
+</resources>

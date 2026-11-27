@@ -1383,6 +1383,28 @@ fun AppNavigation(
             navController.safeNavigate(if (host.isDirectory) app.momoding.ui.files.folderRoute(p) else app.momoding.ui.files.docRoute(p))
         }
         val openHistory: (String, String?) -> Unit = { repo, p -> navController.safeNavigate(app.momoding.ui.files.historyRoute(repo, p)) }
+        composable(app.momoding.ui.home.ROUTE_ASSISTANT) {
+            val go: (String) -> () -> Unit = { r -> { navController.safeNavigate(r) } }
+            app.momoding.ui.home.AssistantScreen(
+                app.momoding.ui.home.HomeLinks(
+                    settings = go(Routes.SETTINGS),
+                    persona = go(app.momoding.ui.files.docRoute(app.momoding.memory.Memory.SANDBOX_DIR + "/SOUL.md")),
+                    models = go(app.momoding.ui.settings.ROUTE_MODELS),
+                    screenModel = go(app.momoding.ui.hands.ROUTE_HANDS),
+                    advanced = go(Routes.SHIZUKU),
+                    hands = go(app.momoding.ui.hands.ROUTE_HANDS),
+                    otherPermissions = go(app.momoding.ui.home.ROUTE_OTHER_PERMISSIONS),
+                    routines = go(Routes.SCHEDULED_TASKS),
+                    memory = go(Routes.MEMORY),
+                    history = go(app.momoding.ui.files.historyRoute(app.momoding.memory.Memory.SANDBOX_DIR, null)),
+                    skills = go(Routes.SKILLS),
+                    computer = go(app.momoding.ui.computer.ROUTE_COMPUTER),
+                ),
+            ) { navController.safePopBackStack() }
+        }
+        composable(app.momoding.ui.home.ROUTE_OTHER_PERMISSIONS) {
+            app.momoding.ui.home.OtherPermissionsScreen(onRules = { navController.safeNavigate(app.momoding.ui.guard.ROUTE_RULES) }) { navController.safePopBackStack() }
+        }
         composable(Routes.MEMORY) {
             app.momoding.ui.files.FolderScreen(app.momoding.memory.Memory.SANDBOX_DIR, openFile, openHistory) { navController.safePopBackStack() }
         }

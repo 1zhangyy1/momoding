@@ -189,6 +189,7 @@ object DeepLinkHandler {
             "first-run-preview" -> DeepLinkAction.OpenSettingsScreen(app.momoding.onboarding.ROUTE_FIRST_RUN_PREVIEW) // momoding: walkthroughs
             "rules" -> DeepLinkAction.OpenSettingsScreen(app.momoding.ui.guard.ROUTE_RULES) // momoding
             "memory" -> DeepLinkAction.OpenSettingsScreen(Routes.MEMORY)
+            "home" -> DeepLinkAction.OpenSettingsScreen(app.momoding.ui.home.ROUTE_ASSISTANT) // momoding: its own page, from its face
             // [T-p2-agent-settings] Settings › Agents; scheduled tasks list.
             "agents" -> DeepLinkAction.OpenSettingsScreen(Routes.AGENTS)
             "scheduled", "scheduled-tasks", "scheduled_tasks" -> DeepLinkAction.OpenSettingsScreen(Routes.SCHEDULED_TASKS)

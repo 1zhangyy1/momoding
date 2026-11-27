@@ -28,6 +28,15 @@ object ProviderLogos {
         else -> null
     }
 
+    /** A model's maker's logo, read from its name ("DeepSeek V4.1 Flash", "qwen/qwen3.8-27b"). */
+    fun forModel(name: String): Int? = name.lowercase().let { n ->
+        listOf(
+            "deepseek" to R.drawable.mo_logo_deepseek, "qwen" to R.drawable.mo_logo_qwen, "kimi" to R.drawable.mo_logo_kimi,
+            "glm" to R.drawable.mo_logo_zhipu, "doubao" to R.drawable.mo_logo_doubao, "claude" to R.drawable.mo_logo_claude,
+            "gemini" to R.drawable.mo_logo_gemini, "gpt" to R.drawable.mo_logo_openai, "grok" to R.drawable.mo_logo_grok,
+        ).firstOrNull { n.contains(it.first) }?.second
+    }
+
     fun forType(type: ProviderType): Int? = when (type) {
         ProviderType.openAI, ProviderType.openAIResponses -> R.drawable.mo_logo_openai
         ProviderType.anthropic -> R.drawable.mo_logo_claude

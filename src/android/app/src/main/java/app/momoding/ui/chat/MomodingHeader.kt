@@ -63,8 +63,15 @@ fun MomodingHeader(sessionId: String? = null) {
     var listOpen by remember { androidx.compose.runtime.mutableStateOf(false) }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.weight(1f)) {
+            // the main Momoding's face and name open its own page; a Bot's (and the arrow) open the list
+            val openHome = if (ownApp == null) ({
+                runCatching { context.startActivity(app.momoding.deeplink.OwnScheme.intent(context, android.net.Uri.parse("minis://settings/home"), 0)) }
+                Unit
+            }) else null
             Row(
-                Modifier.clip(RoundedCornerShape(Design.Radius.Press)).clickable(onClickLabel = stringResource(R.string.mo_bots_switch)) { listOpen = !listOpen },
+                Modifier.clip(RoundedCornerShape(Design.Radius.Press)).clickable(onClickLabel = stringResource(if (openHome != null) R.string.mo_home_open else R.string.mo_bots_switch)) {
+                    openHome?.invoke() ?: run { listOpen = !listOpen }
+                },
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 // A fixed slot, so the name never shifts while the face loads
@@ -78,8 +85,9 @@ fun MomodingHeader(sessionId: String? = null) {
                         overflow = TextOverflow.Ellipsis, style = NO_FONT_PAD, modifier = Modifier.weight(1f, fill = false),
                     )
                     androidx.compose.material3.Icon(
-                        androidx.compose.material.icons.Icons.Outlined.ExpandMore, null, tint = ChatColors.secondaryText,
-                        modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = if (listOpen) 180f else 0f },
+                        androidx.compose.material.icons.Icons.Outlined.ExpandMore, stringResource(R.string.mo_bots_switch), tint = ChatColors.secondaryText,
+                        modifier = Modifier.size(28.dp).clip(CircleShape).clickable { listOpen = !listOpen }.padding(4.dp)
+                            .graphicsLayer { rotationZ = if (listOpen) 180f else 0f },
                     )
                 }
             }

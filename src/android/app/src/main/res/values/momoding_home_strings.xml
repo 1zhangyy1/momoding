@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mo_home_persona">Persona</string>
+    <string name="mo_home_models">Models</string>
+    <string name="mo_home_model_chat">Chat</string>
+    <string name="mo_home_model_seeing">Seeing the screen</string>
+    <string name="mo_home_permissions">Permissions</string>
+    <string name="mo_home_advanced_sub">Change system settings, manage apps</string>
+    <string name="mo_home_hands_sub">Tap and type for you</string>
+    <string name="mo_home_background_sub">Keeps working with the screen off</string>
+    <string name="mo_home_other_permissions">Other permissions and asking first</string>
+    <string name="mo_home_on">On</string>
+    <string name="mo_home_off">Off</string>
+    <string name="mo_home_turn_on">Turn on</string>
+    <string name="mo_home_apps_new">New</string>
+    <string name="mo_home_apps_all">All %1$d</string>
+    <string name="mo_home_all">All %1$d</string>
+    <string name="mo_home_routine_daily">Daily %1$s</string>
+    <string name="mo_home_routine_weekdays">Weekdays %1$s</string>
+    <string name="mo_home_routine_some_days">Some days %1$s</string>
+    <string name="mo_home_routine_once">Once %1$s</string>
+    <string name="mo_home_routine_notification">When a notification comes</string>
+    <string name="mo_home_routine_other">On its own schedule</string>
+    <string name="mo_home_memory_files">Its files</string>
+    <string name="mo_home_skills">Skills</string>
+    <string name="mo_home_computer">Virtual machine</string>
+    <string name="mo_home_open">Open Momoding</string>
+    <string name="mo_home_apps">Apps</string>
+    <string name="mo_home_routines_none">None yet. Just tell it in a chat.</string>
+    <string name="mo_home_routines">Routines</string>
+</resources>
