@@ -71,8 +71,6 @@ import com.openminis.app.data.repository.MemoryRepository
 import com.openminis.app.data.repository.SkillRepository
 import com.openminis.app.ui.settings.LogDetailScreen
 import com.openminis.app.ui.settings.LogManagementScreen
-import com.openminis.app.ui.settings.MemoryFileEditScreen
-import com.openminis.app.ui.settings.MemoryManagementScreen
 import com.openminis.app.ui.settings.OffloadPermissionScreen
 import com.openminis.app.sandbox.RootfsManager
 import com.openminis.app.sandbox.TerminalSession
@@ -172,7 +170,6 @@ object Routes {
     const val MCP = "mcp"
     /** [T-soul-md] SOUL.md editor. */
     const val SOUL = "soul"
-    const val MEMORY_FILE_EDIT = "memory_file/{fileName}/{isGlobal}"
     const val PERMISSIONS = "permissions"
     /**
      * T322 / [T-android-privileged-backend]: Shizuku-protocol manager
@@ -208,7 +205,6 @@ object Routes {
 
     fun logDetail(fileName: String) = "log_detail/$fileName"
     fun sessionStorageDetail(sessionId: String) = "session_storage/$sessionId"
-    fun memoryFileEdit(fileName: String, isGlobal: Boolean) = "memory_file/$fileName/$isGlobal"
     fun chat(sessionId: String) = "chat/$sessionId"
     fun providerDetail(instanceId: String) = "provider/$instanceId"
     fun shadowVoiceDetail(instanceId: String) = "voice_service/$instanceId"
@@ -1381,16 +1377,34 @@ fun AppNavigation(
             )
         }
 
+        // momoding: Momoding's own files as they are — a folder, a file, their git history
+        val openFile: (String) -> Unit = { p ->
+            val host = app.momoding.ui.files.Sandbox.host(context, p)
+            navController.safeNavigate(if (host.isDirectory) app.momoding.ui.files.folderRoute(p) else app.momoding.ui.files.docRoute(p))
+        }
+        val openHistory: (String, String?) -> Unit = { repo, p -> navController.safeNavigate(app.momoding.ui.files.historyRoute(repo, p)) }
         composable(Routes.MEMORY) {
-            if (memoryRepository != null) {
-                MemoryManagementScreen(
-                    memoryRepository = memoryRepository,
-                    onBack = { navController.safePopBackStack() },
-                    onFileClick = { fileName, isGlobal ->
-                        navController.safeNavigate(Routes.memoryFileEdit(fileName, isGlobal))
-                    },
-                )
-            }
+            app.momoding.ui.files.FolderScreen(app.momoding.memory.Memory.SANDBOX_DIR, openFile, openHistory) { navController.safePopBackStack() }
+        }
+        composable(app.momoding.ui.files.ROUTE_FOLDER, arguments = listOf(navArgument("path") { type = NavType.StringType })) { e ->
+            app.momoding.ui.files.FolderScreen(e.arguments?.getString("path").orEmpty(), openFile, openHistory) { navController.safePopBackStack() }
+        }
+        composable(app.momoding.ui.files.ROUTE_DOC, arguments = listOf(navArgument("path") { type = NavType.StringType })) { e ->
+            app.momoding.ui.files.DocScreen(e.arguments?.getString("path").orEmpty(), openHistory) { navController.safePopBackStack() }
+        }
+        composable(
+            app.momoding.ui.files.ROUTE_HISTORY,
+            arguments = listOf(navArgument("repo") { type = NavType.StringType }, navArgument("path") { type = NavType.StringType; defaultValue = "" }),
+        ) { e ->
+            val repo = e.arguments?.getString("repo").orEmpty()
+            app.momoding.ui.files.HistoryScreen(repo, e.arguments?.getString("path")?.ifEmpty { null },
+                onCommit = { sha -> navController.safeNavigate(app.momoding.ui.files.commitRoute(repo, sha)) }) { navController.safePopBackStack() }
+        }
+        composable(
+            app.momoding.ui.files.ROUTE_COMMIT,
+            arguments = listOf(navArgument("repo") { type = NavType.StringType }, navArgument("sha") { type = NavType.StringType }),
+        ) { e ->
+            app.momoding.ui.files.CommitScreen(e.arguments?.getString("repo").orEmpty(), e.arguments?.getString("sha").orEmpty()) { navController.safePopBackStack() }
         }
 
         // [T-mcp-integration-android] MCP Integrations management screen.
@@ -1409,25 +1423,6 @@ fun AppNavigation(
             com.openminis.app.ui.settings.SoulSettingsScreen(
                 onBack = { navController.safePopBackStack() },
             )
-        }
-
-        composable(
-            route = Routes.MEMORY_FILE_EDIT,
-            arguments = listOf(
-                navArgument("fileName") { type = NavType.StringType },
-                navArgument("isGlobal") { type = NavType.BoolType },
-            ),
-        ) { backStackEntry ->
-            val fileName = backStackEntry.arguments?.getString("fileName") ?: return@composable
-            val isGlobal = backStackEntry.arguments?.getBoolean("isGlobal") ?: false
-            if (memoryRepository != null) {
-                MemoryFileEditScreen(
-                    fileName = fileName,
-                    isGlobal = isGlobal,
-                    memoryRepository = memoryRepository,
-                    onBack = { navController.safePopBackStack() },
-                )
-            }
         }
 
         composable(Routes.PERMISSIONS) {

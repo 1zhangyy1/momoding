@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mo_files_memory">Memory</string>
+    <string name="mo_files_memory_sub">Notes Momoding keeps for itself, saved after every chat.</string>
+    <string name="mo_files_empty">Nothing here yet.</string>
+    <string name="mo_files_yesterday">Yesterday</string>
+    <string name="mo_files_today">Today</string>
+    <string name="mo_files_history">History</string>
+    <string name="mo_files_history_sub">A version is saved each time it changes. Any one can be undone.</string>
+    <string name="mo_files_history_empty">No versions yet.</string>
+    <string name="mo_files_versions">%1$d versions</string>
+    <string name="mo_files_save">Save</string>
+    <string name="mo_files_edit">Edit</string>
+    <string name="mo_files_by_self">Tidied up by itself</string>
+    <string name="mo_files_by_you">Edited by you</string>
+    <string name="mo_files_undid">Undone: %1$s</string>
+    <string name="mo_files_n_files">%1$d files</string>
+    <string name="mo_files_undo">Undo this change</string>
+    <string name="mo_files_undo_text">This saves a new version without this change. Momoding will see that you undid it.</string>
+    <string name="mo_files_undo_confirm">Undo</string>
+    <string name="mo_files_undo_failed">Couldn\'t undo it: a later change touched the same lines.</string>
+    <string name="mo_files_change">Change</string>
+    <string name="mo_files_and_more">%1$s and %2$d in all</string>
+</resources>

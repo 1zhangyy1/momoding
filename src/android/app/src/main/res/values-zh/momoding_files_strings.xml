@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mo_files_memory">记忆</string>
+    <string name="mo_files_memory_sub">Momoding 写给自己的笔记，每次对话后自动存档。</string>
+    <string name="mo_files_empty">还没有内容。</string>
+    <string name="mo_files_yesterday">昨天</string>
+    <string name="mo_files_today">今天</string>
+    <string name="mo_files_history">历史</string>
+    <string name="mo_files_history_sub">每次改动都存一版，任意一次都能撤回。</string>
+    <string name="mo_files_history_empty">还没有存档。</string>
+    <string name="mo_files_versions">%1$d 版</string>
+    <string name="mo_files_save">保存</string>
+    <string name="mo_files_edit">编辑</string>
+    <string name="mo_files_by_self">自己整理</string>
+    <string name="mo_files_by_you">你改的</string>
+    <string name="mo_files_undid">撤回：%1$s</string>
+    <string name="mo_files_n_files">%1$d 个文件</string>
+    <string name="mo_files_undo">撤回这次改动</string>
+    <string name="mo_files_undo_text">会存一个去掉这次改动的新版本，Momoding 也会知道你撤回了它。</string>
+    <string name="mo_files_undo_confirm">撤回</string>
+    <string name="mo_files_undo_failed">没能撤回：后来的改动动过同几行。</string>
+    <string name="mo_files_change">改动</string>
+    <string name="mo_files_and_more">%1$s 等 %2$d 个</string>
+</resources>
