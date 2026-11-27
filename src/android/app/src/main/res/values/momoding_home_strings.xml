@@ -41,4 +41,8 @@
     <string name="mo_skills_packs">Skill packs</string>
     <string name="mo_skills_mcp">MCP services</string>
     <string name="mo_home_all_permissions">All system permissions</string>
+    <string name="mo_caps_title">What it may use</string>
+    <string name="mo_caps_footer">Allow: it uses it when needed. Ask: it asks you the first time after each start.</string>
+    <string name="mo_caps_sms">Text messages</string>
+    <string name="mo_caps_sub">Use directly, ask first, or not at all</string>
 </resources>

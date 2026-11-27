@@ -307,7 +307,7 @@ fun OtherPermissionsScreen(onRules: () -> Unit, onAll: () -> Unit, onBack: () ->
             )
         }
         SettingsSection {
-            SettingsRow(stringResource(R.string.mo_home_all_permissions), subtitle = stringResource(R.string.mo_adv_permissions_sub), onClick = onAll, showDivider = false)
+            SettingsRow(stringResource(R.string.mo_caps_title), subtitle = stringResource(R.string.mo_caps_sub), onClick = onAll, showDivider = false)
         }
     }
 }

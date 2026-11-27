@@ -83,7 +83,7 @@ fun OffloadPermissionScreen(
     val shizukuSnap by PhoneShell.snapshot.collectAsState()
 
     SettingsScaffold(
-        title = stringResource(R.string.perm_title),
+        title = stringResource(R.string.mo_caps_title),
         onBack = onBack,
         actions = {
             MinisTextButton(onClick = { showResetConfirm = true }) {
@@ -91,55 +91,13 @@ fun OffloadPermissionScreen(
             }
         },
     ) {
-        // T-config: master switch for the minis-config CLI surface.
-        SettingsSection(
-            header = stringResource(R.string.perm_section_config_tool),
-            footer = stringResource(R.string.perm_minis_config_desc),
-        ) {
-            SettingsSwitchRow(
-                title = stringResource(R.string.perm_allow_minis_config),
-                checked = configEnabled,
-                onCheckedChange = {
-                    com.openminis.app.config.MinisConfigPermissionStore.setEnabled(it)
-                },
-                showDivider = false,
-            )
+        // momoding: one list in plain words — each thing Momoding can use, and whether it uses it
+        // directly, asks first, or may not. The system switches for screen control and advanced
+        // access are on Momoding's own page; remembered approvals are on the rules page.
+        com.openminis.app.ui.settings.SettingsSection(footer = stringResource(R.string.mo_caps_footer)) {
+            val all = autoCategories.flatMap { it.value }.map { it.toolName } + listOf("a11y_cli", "shizuku_cli")
+            all.forEachIndexed { i, name -> AgentPolicyRow(toolName = name, showDivider = i < all.lastIndex) }
         }
-
-        // momoding: the approvals the user chose to remember ("Always allow"), revocable here
-        app.momoding.ui.guard.GrantsSection()
-
-        autoCategories.forEach { (category, tools) ->
-            SettingsSection(header = stringResource(categoryHeaderRes(category))) {
-                tools.forEachIndexed { idx, tool ->
-                    PermissionRow(
-                        tool = tool,
-                        showDivider = idx < tools.size - 1,
-                    )
-                }
-            }
-        }
-
-        // T336 / T345-2: dedicated SectionCard per integration CLI, rendered
-        // after the Privacy/Media/System auto-categories so the information
-        // hierarchy reads: configuration → privacy → system integrations.
-        // Each card shows the CLI description, the tri-state agent gate, the
-        // system-layer status, and (when system-layer is not satisfied) a
-        // deeplink back to the OS settings page that fixes it.
-        IntegrationSection(
-            iconVector = Icons.Outlined.Accessibility,
-            iconTint = Color(0xFF34C759),
-            sectionHeaderRes = R.string.perm_section_a11y,
-            sectionFooterRes = R.string.perm_a11y_section_footer,
-            toolName = "a11y_cli",
-            descriptionRes = R.string.perm_a11y_cli_description,
-            systemReady = a11yEnabled,
-            systemStatusTitleRes =
-                if (a11yEnabled) R.string.perm_a11y_system_ready
-                else R.string.perm_a11y_system_disabled,
-            systemActionTitleRes = R.string.perm_a11y_open_settings,
-            onSystemAction = { openAccessibilitySettings(context) },
-        )
 
         // [T-android-restricted-settings] Shown ONLY when the OS has actually
         // flagged this install (appop ACCESS_RESTRICTED_SETTINGS ==
@@ -198,25 +156,6 @@ fun OffloadPermissionScreen(
                 )
             }
         }
-
-        IntegrationSection(
-            iconVector = Icons.Outlined.Shield,
-            iconTint = Color(0xFFAF52DE),
-            // momoding: advanced access (the phone shell); toolName stays "shizuku_cli" so a
-            // person's earlier choice is kept
-            sectionHeaderRes = R.string.perm_section_privileged_backend,
-            sectionFooterRes = R.string.perm_shizuku_section_footer,
-            toolName = "shizuku_cli",
-            descriptionRes = R.string.perm_privileged_cli_description,
-            systemReady = PhoneShell.isReady(),
-            systemStatusTitleRes = shizukuSubtitleRes(shizukuSnap.state),
-            systemActionTitleRes = shizukuActionTitleRes(shizukuSnap.state),
-            // Open the advanced access screen for setup.
-            onSystemAction = onOpenPrivilegedBackend,
-            // The status row itself opens the same page so users can revisit
-            // the setup walkthrough even after the manager is already ready.
-            onStatusRowClick = onOpenPrivilegedBackend,
-        )
 
         Spacer(Modifier.height(16.dp))
     }
@@ -341,7 +280,7 @@ private fun AgentPolicyRow(
 
     Box {
         SettingsRow(
-            title = stringResource(R.string.perm_agent_policy),
+            title = toolTitleRes(toolName).takeIf { it != 0 }?.let { stringResource(it) } ?: toolName,
             onClick = { expanded = true },
             // [T-android-perm-row-affordance] This row OPENS A DROPDOWN, but with
             // showChevron=false it looked like a read-only status line — nothing
@@ -458,6 +397,7 @@ private fun toolTitleRes(toolName: String): Int = when (toolName) {
     "clipboard" -> R.string.perm_tool_clipboard
     "contacts" -> R.string.perm_tool_contacts
     "photos" -> R.string.perm_tool_photos
+    "sms" -> R.string.mo_caps_sms
     "a11y_cli" -> R.string.perm_tool_a11y_cli
     "shizuku_cli" -> R.string.perm_tool_shizuku_cli
     else -> 0

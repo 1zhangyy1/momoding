@@ -41,4 +41,8 @@
     <string name="mo_skills_packs">技能包</string>
     <string name="mo_skills_mcp">MCP 服务</string>
     <string name="mo_home_all_permissions">全部系统权限</string>
+    <string name="mo_caps_title">能力授权</string>
+    <string name="mo_caps_footer">自动允许：需要时直接用。先问你：每次启动后第一次用前问你。</string>
+    <string name="mo_caps_sms">短信</string>
+    <string name="mo_caps_sub">每项能力是直接用、先问你，还是不让用</string>
 </resources>
