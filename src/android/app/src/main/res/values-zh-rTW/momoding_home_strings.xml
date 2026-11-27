@@ -38,4 +38,6 @@
     <string name="mo_skills_installed">安裝的</string>
     <string name="mo_skills_sites_footer">登入狀態在 虛擬機 › 瀏覽器 中管理。</string>
     <string name="mo_settings_data">資料</string>
+    <string name="mo_skills_packs">技能包</string>
+    <string name="mo_skills_mcp">MCP 服務</string>
 </resources>

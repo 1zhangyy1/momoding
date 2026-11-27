@@ -74,8 +74,8 @@ fun SkillsHomeScreen(links: SkillLinks, onBack: () -> Unit) {
                 onClick = links.sites, showDivider = false, trailing = { count(sites.size) })
         }
         SettingsSection(header = stringResource(R.string.mo_skills_installed)) {
-            SettingsRow(stringResource(R.string.skill_title), icon = Icons.Outlined.Extension, iconColor = Grey, onClick = links.packs)
-            SettingsRow(stringResource(R.string.mcp_title), icon = Icons.Outlined.Dashboard, iconColor = Grey, onClick = links.mcp)
+            SettingsRow(stringResource(R.string.mo_skills_packs), icon = Icons.Outlined.Extension, iconColor = Grey, onClick = links.packs)
+            SettingsRow(stringResource(R.string.mo_skills_mcp), icon = Icons.Outlined.Dashboard, iconColor = Grey, onClick = links.mcp)
             SettingsRow(stringResource(R.string.settings_agent_tools), icon = Icons.Outlined.Handyman, iconColor = Grey, onClick = links.tools, showDivider = false)
         }
         SettingsSection {

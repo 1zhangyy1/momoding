@@ -271,7 +271,7 @@ private fun SettingsSection(
         // Section header
         if (title != null) Text(
             text = title.uppercaseForDisplay(),
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontWeight = FontWeight.Medium,
             letterSpacing = 0.5.sp,
@@ -323,25 +323,12 @@ private fun SettingsItem(
                 .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Colored circle icon (matching iOS settings style)
-            Box(
-                modifier = Modifier
-                    .size(30.dp)
-                    .background(
-                        color = iconColor,
-                        shape = CircleShape,
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(16.dp),
-                )
+            // momoding: a plain line icon, as on every other page
+            Box(modifier = Modifier.size(30.dp), contentAlignment = Alignment.Center) {
+                Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
             }
 
-            Spacer(Modifier.width(14.dp))
+            Spacer(Modifier.width(12.dp))
 
             // Title + subtitle
             Column(

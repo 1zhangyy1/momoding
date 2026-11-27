@@ -64,7 +64,7 @@ fun ModelsScreen(onBack: () -> Unit, onOpenHands: () -> Unit, onOpenProviders: (
                 val current = currentId == e.id
                 val fallback = members.getOrNull(1)?.id == e.id
                 SettingsRow(
-                    title = Models.label(e),
+                    title = Models.label(e), logo = app.momoding.providers.ProviderLogos.forModel(Models.label(e)),
                     subtitle = listOfNotNull(Models.provider(cfg.instances.firstOrNull { it.id == e.providerInstanceId }?.label),
                         if (fallback) stringResource(R.string.mo_models_fallback) else null).joinToString(" · "),
                     onClick = if (current) null else ({ Models.choose(context, repo, group?.id, e.id); picked = e.id }),
@@ -76,8 +76,9 @@ fun ModelsScreen(onBack: () -> Unit, onOpenHands: () -> Unit, onOpenProviders: (
 
         SettingsSection(header = stringResource(R.string.mo_models_seeing), footer = stringResource(R.string.mo_models_seeing_footer)) {
             SettingsRow(
-                title = app.momoding.hands.Hands.screenModel(context)?.label?.substringAfter(": ") ?: stringResource(R.string.mo_models_seeing_none),
-                icon = Icons.Outlined.RemoveRedEye, iconColor = Color(0xFF5856D6), onClick = onOpenHands, showDivider = false,
+                title = app.momoding.hands.Hands.screenModel(context)?.label?.substringAfter(": ")?.substringBefore(" · ") ?: stringResource(R.string.mo_models_seeing_none),
+                icon = Icons.Outlined.RemoveRedEye, logo = app.momoding.hands.Hands.screenModel(context)?.label?.let { app.momoding.providers.ProviderLogos.forModel(it) },
+                onClick = onOpenHands, showDivider = false,
             )
         }
 

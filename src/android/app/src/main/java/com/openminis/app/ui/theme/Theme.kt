@@ -72,9 +72,9 @@ private val TealDarkOutline = Color(0xFF899390)
 // teal primary tint.
 // Light: page = #F2F2F7 gray, card = white
 // Dark:  page = #000, card = #1C1C1E
-private val NeutralGroupedBg = Color(0xFFF2F2F7)
+private val NeutralGroupedBg = Color(0xFFF6F5F1) // momoding: the prototype's warm paper, not iOS grey
 private val NeutralGroupedCard = Color(0xFFFFFFFF)
-private val NeutralGroupedCardElevated = Color(0xFFF7F7FA)
+private val NeutralGroupedCardElevated = Color(0xFFF2F1EC)
 private val NeutralOutline = Color(0xFFD1D1D6)
 
 private val NeutralDarkGroupedBg = Color(0xFF000000)

@@ -226,7 +226,7 @@ fun SettingsSection(
         if (header != null) {
             Text(
                 text = header.uppercaseForDisplay(),
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelMedium, // momoding: readable section names (12sp, the prototype's 12.5)
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontWeight = FontWeight.Medium,
                 letterSpacing = 0.5.sp,
@@ -321,20 +321,17 @@ fun SettingsRow(
                 }
                 Spacer(Modifier.width(14.dp))
             } else if (icon != null) {
-                Box(
-                    modifier = Modifier
-                        .size(30.dp)
-                        .background(iconColor, RoundedCornerShape(8.dp)),
-                    contentAlignment = Alignment.Center,
-                ) {
+                // momoding: a plain line icon in the text's quiet colour (the prototype), not a coloured tile;
+                // a destructive row keeps its colour
+                Box(modifier = Modifier.size(30.dp), contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(18.dp),
+                        tint = if (titleColor != MaterialTheme.colorScheme.onSurface) titleColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(22.dp),
                     )
                 }
-                Spacer(Modifier.width(14.dp))
+                Spacer(Modifier.width(12.dp))
             }
 
             Column(

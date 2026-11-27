@@ -38,4 +38,6 @@
     <string name="mo_skills_installed">Installed</string>
     <string name="mo_skills_sites_footer">Sign-ins are in Virtual machine › Browser.</string>
     <string name="mo_settings_data">Data</string>
+    <string name="mo_skills_packs">Skill packs</string>
+    <string name="mo_skills_mcp">MCP services</string>
 </resources>

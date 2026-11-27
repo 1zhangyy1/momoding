@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="mo_routine_wake_caption">🕗 例行 · %1$s · %2$s</string>
+    <string name="mo_routine_wake_caption">🕗 定时 · %1$s · %2$s</string>
     <string name="mo_routine_paused_title">已暂停：%1$s</string>
     <string name="mo_routine_paused_body">最近 %2$d 次结果都没人看，先停下来省点用量。想继续，跟我说一声。</string>
     <string name="mo_appearance_section_conversation">对话</string>
@@ -25,7 +25,7 @@
     <string name="mo_settings_rules_sub">记住的批准、手机数据的访问</string>
     <string name="mo_settings_background">后台运行与通知</string>
     <string name="mo_settings_background_sub">在后台保持运行；什么时候通知你</string>
-    <string name="mo_settings_routines">例行任务</string>
+    <string name="mo_settings_routines">定时任务</string>
     <string name="mo_settings_routines_sub">到点自动做的事</string>
     <string name="mo_settings_about_bot">关于 Momoding</string>
     <string name="mo_settings_about_bot_sub">名字和语言</string>
@@ -33,7 +33,7 @@
     <string name="mo_settings_advanced">高级</string>
     <string name="mo_settings_advanced_sub">工具、技能、存储、日志等</string>
     <string name="mo_settings_advanced_hide">收起高级</string>
-    <string name="mo_routines_empty">还没有例行任务。在对话里跟我说就行，比如“每天早上 8 点告诉我今天要注意的事”。</string>
+    <string name="mo_routines_empty">还没有定时任务。在对话里跟我说就行，比如“每天早上 8 点告诉我今天要注意的事”。</string>
     <string name="mo_routine_every">每 %1$s</string>
     <string name="mo_routine_on_notification">收到通知时：%1$s</string>
     <string name="mo_routine_skipped">条件不满足，跳过了</string>
@@ -95,7 +95,7 @@
     <string name="mo_perm_hands">屏幕操作</string>
     <string name="mo_perm_hands_ask">允许 Momoding 替你操作屏幕吗？（要用到无障碍和悬浮窗）</string>
     <string name="mo_perm_location">位置</string>
-    <string name="mo_routine_wake_caption_no_time">🕗 例行 · %1$s</string>
+    <string name="mo_routine_wake_caption_no_time">🕗 定时 · %1$s</string>
     <string name="mo_status_idle">在你手机上 · 随时可以交代</string>
     <string name="mo_ob_model_preparing">正在准备模型…</string>
     <string name="mo_settings_phone">手机能力</string>
@@ -236,7 +236,7 @@
     <string name="mo_perm_sms">短信</string>
     <string name="mo_perm_sms_ask">允许 Momoding 接收短信？快递取件码这类短信一来，它就能替你处理。</string>
     <string name="mo_perm_row_sms">短信</string>
-    <string name="mo_perm_purpose_sms">读你收到的短信，比如取件码、扣款通知；例行任务也靠它等短信</string>
+    <string name="mo_perm_purpose_sms">读你收到的短信，比如取件码、扣款通知；定时任务也靠它等短信</string>
     <string name="mo_sms_app_name">短信</string>
     <string name="mo_perm_files">手机里的文件</string>
     <string name="mo_perm_files_ask">允许 Momoding 查看和整理你手机里的文件？</string>

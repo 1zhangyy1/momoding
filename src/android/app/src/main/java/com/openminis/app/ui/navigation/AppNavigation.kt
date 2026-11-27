@@ -29,6 +29,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.dialog
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material.icons.outlined.Terminal
+import androidx.compose.material.icons.outlined.FolderShared
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.Code
 import com.openminis.app.data.repository.ChatRepository
 import com.openminis.app.data.repository.ProviderRepository
 import com.openminis.app.ui.chat.ChatScreen
@@ -1279,11 +1285,11 @@ fun AppNavigation(
         composable(app.momoding.ui.computer.ROUTE_COMPUTER) { // momoding: its own computer (M14)
             app.momoding.ui.computer.ComputerScreen(
                 advanced = listOf(
-                    com.openminis.app.R.string.storage_title to { navController.safeNavigate(Routes.STORAGE) },
-                    com.openminis.app.R.string.mo_adv_terminal to { navController.safeNavigate(Routes.terminal()) },
-                    com.openminis.app.R.string.shared_folders_title to { navController.safeNavigate(Routes.SHARED_FOLDERS) },
-                    com.openminis.app.R.string.settings_mount_external_folders to { navController.safeNavigate(Routes.MOUNTED_FOLDERS) },
-                    com.openminis.app.R.string.env_var_title to { navController.safeNavigate(Routes.ENV_VARS) },
+                    Triple(com.openminis.app.R.string.storage_title, Icons.Outlined.Storage) { navController.safeNavigate(Routes.STORAGE) },
+                    Triple(com.openminis.app.R.string.mo_adv_terminal, Icons.Outlined.Terminal) { navController.safeNavigate(Routes.terminal()) },
+                    Triple(com.openminis.app.R.string.shared_folders_title, Icons.Outlined.FolderShared) { navController.safeNavigate(Routes.SHARED_FOLDERS) },
+                    Triple(com.openminis.app.R.string.settings_mount_external_folders, Icons.Outlined.Folder) { navController.safeNavigate(Routes.MOUNTED_FOLDERS) },
+                    Triple(com.openminis.app.R.string.env_var_title, Icons.Outlined.Code) { navController.safeNavigate(Routes.ENV_VARS) },
                 ),
                 onBack = { navController.safePopBackStack() },
                 onPreview = { f ->

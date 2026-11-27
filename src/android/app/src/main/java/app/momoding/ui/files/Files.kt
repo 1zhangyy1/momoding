@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -107,6 +108,17 @@ internal fun whenText(at: Long): String {
         1 -> stringResource(R.string.mo_files_yesterday)
         else -> DateFormat.format(DateFormat.getBestDateTimePattern(locale, "MMMd"), at).toString()
     }
+}
+
+/** A note's `---` block at the top (name: …), as pairs, and the rest; most notes have none. */
+internal fun frontMatter(text: String): Pair<List<Pair<String, String>>, String> {
+    val lines = text.lines()
+    if (lines.firstOrNull()?.trim() != "---") return emptyList<Pair<String, String>>() to text
+    val end = lines.drop(1).indexOfFirst { it.trim() == "---" }.takeIf { it >= 0 }?.plus(1) ?: return emptyList<Pair<String, String>>() to text
+    val pairs = lines.subList(1, end).mapNotNull { l ->
+        l.indexOf(':').takeIf { it > 0 }?.let { i -> l.take(i).trim() to l.drop(i + 1).trim().trim('"', '\'') }
+    }
+    return pairs to lines.drop(end + 1).joinToString("\n")
 }
 
 /** Bumps each time the screen comes back, so a list shows what changed on the page above it. */
@@ -239,10 +251,7 @@ fun DocScreen(path: String, onHistory: (repo: String, path: String?) -> Unit, on
         },
     ) {
         val body = text ?: return@SettingsScaffold
-        Text(
-            "$name · ${whenText(at)}", style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 32.dp, end = 32.dp, top = 4.dp),
-        )
+        Note("$name · ${whenText(at)}")
         val card = Modifier.padding(16.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerLow).padding(16.dp)
         val mono = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 20.sp, color = MaterialTheme.colorScheme.onSurface)
@@ -252,7 +261,19 @@ fun DocScreen(path: String, onHistory: (repo: String, path: String?) -> Unit, on
                 value = editing, onValueChange = { draft = it }, textStyle = mono,
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), modifier = card.heightIn(min = 240.dp),
             )
-            name.endsWith(".md") -> MarkdownText(remember(body) { body.lines().joinToString("\n") { it.replace(TAG, "") } }, modifier = card)
+            name.endsWith(".md") -> {
+                val (head, rest) = remember(body) { frontMatter(body) }
+                Column(card) {
+                    head.forEach { (k, v) ->
+                        androidx.compose.foundation.layout.Row(Modifier.padding(bottom = 6.dp)) {
+                            Text(k, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(72.dp))
+                            Text(v.ifEmpty { "—" }, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                    if (head.isNotEmpty() && rest.isNotBlank()) androidx.compose.material3.HorizontalDivider(Modifier.padding(vertical = 10.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f))
+                    MarkdownText(remember(rest) { rest.lines().joinToString("\n") { it.replace(TAG, "") }.trim() })
+                }
+            }
             else -> Column(card.horizontalScroll(rememberScrollState())) { Text(body, style = mono) }
         }
         if (editing == null && path.startsWith(KnowTools.SANDBOX_DIR + "/")) TryRun(context, name)

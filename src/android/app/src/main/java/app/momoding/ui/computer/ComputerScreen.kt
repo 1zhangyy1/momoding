@@ -40,7 +40,7 @@ const val ROUTE_COMPUTER = "momoding/computer"
  * Grok Bot's "Bot's computer" settings, without what a phone does not need (images, updates, egress).
  */
 @Composable
-fun ComputerScreen(onBack: () -> Unit, onPreview: (File) -> Unit, advanced: List<Pair<Int, () -> Unit>> = emptyList()) {
+fun ComputerScreen(onBack: () -> Unit, onPreview: (File) -> Unit, advanced: List<Triple<Int, androidx.compose.ui.graphics.vector.ImageVector, () -> Unit>> = emptyList()) {
     val context = LocalContext.current
     var refresh by remember { mutableIntStateOf(0) }
     var state by remember { mutableStateOf<Computer.State?>(null) }
@@ -96,8 +96,8 @@ fun ComputerScreen(onBack: () -> Unit, onPreview: (File) -> Unit, advanced: List
 
         // the machine itself, for who wants to look inside: storage, terminal, shared and mounted folders, variables
         if (advanced.isNotEmpty()) SettingsSection(header = stringResource(R.string.mo_settings_advanced)) {
-            advanced.forEachIndexed { i, (title, open) ->
-                SettingsRow(title = stringResource(title), onClick = open, showDivider = i < advanced.lastIndex)
+            advanced.forEachIndexed { i, (title, icon, open) ->
+                SettingsRow(title = stringResource(title), icon = icon, onClick = open, showDivider = i < advanced.lastIndex)
             }
         }
     }

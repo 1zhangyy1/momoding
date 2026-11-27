@@ -3,6 +3,8 @@ package app.momoding.apps
 import app.momoding.deeplink.OwnScheme
 import app.momoding.ui.files.Sandbox
 import android.app.AlertDialog
+import androidx.compose.foundation.layout.offset
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import android.os.Bundle
 import android.widget.EditText
 import androidx.activity.ComponentActivity
@@ -95,7 +97,13 @@ class AppsListActivity : ComponentActivity() {
         var unfolded by remember { mutableStateOf(first) }
         Scaffold(snackbarHost = { SnackbarHost(snack) }) { pad ->
             Column(Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp)) {
-                Text(stringResource(R.string.mo_apps_title), fontSize = 22.sp, modifier = Modifier.padding(top = 16.dp))
+                // the same top as every other page: back arrow, then the title
+                Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.material3.IconButton(onClick = { finish() }, modifier = Modifier.padding(start = 0.dp).offset(x = (-12).dp)) {
+                        Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                    }
+                    Text(stringResource(R.string.mo_apps_title), fontSize = 22.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, modifier = Modifier.offset(x = (-8).dp))
+                }
                 Text(stringResource(R.string.mo_apps_sub), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 12.dp))
                 val shown = bots.filter { it.app != null && it.app.name !in going }
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
