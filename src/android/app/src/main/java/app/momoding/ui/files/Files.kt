@@ -47,6 +47,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.momoding.files.RepoGit
+import app.momoding.know.KnowTools
 import app.momoding.memory.Memory
 import com.openminis.app.R
 import com.openminis.app.ui.markdown.MarkdownText
@@ -125,12 +126,14 @@ private data class Entry(val name: String, val dir: Boolean, val at: Long, val s
 
 private fun list(context: Context, path: String): List<Entry> {
     val files = Sandbox.host(context, path).listFiles().orEmpty().filter { !Sandbox.hidden(path, it.name) }
+    // a folder of scripts says what each does in its tools.json
+    val said = if (path == KnowTools.SANDBOX_DIR) KnowTools.all(context).associate { it.file to it.what } else emptyMap()
     return files.map { f ->
         if (f.isDirectory) {
             val kids = f.listFiles().orEmpty().filter { !it.name.startsWith(".") }.sortedByDescending { it.lastModified() }
             Entry(f.name, true, f.lastModified(), kids.take(3).joinToString(" · ") { it.name }, kids.size)
         } else {
-            val sub = if (f.name.endsWith(".md")) runCatching { summary(f.readText()) }.getOrDefault("") else ""
+            val sub = said[f.name] ?: if (f.name.endsWith(".md")) runCatching { summary(f.readText()) }.getOrDefault("") else ""
             Entry(f.name, false, f.lastModified(), sub, 0)
         }
     }.sortedWith(compareByDescending<Entry> { it.name == "MEMORY.md" }.thenBy { it.dir }.thenByDescending { it.at })
@@ -252,5 +255,36 @@ fun DocScreen(path: String, onHistory: (repo: String, path: String?) -> Unit, on
             name.endsWith(".md") -> MarkdownText(remember(body) { body.lines().joinToString("\n") { it.replace(TAG, "") } }, modifier = card)
             else -> Column(card.horizontalScroll(rememberScrollState())) { Text(body, style = mono) }
         }
+        if (editing == null && path.startsWith(KnowTools.SANDBOX_DIR + "/")) TryRun(context, name)
     }
+}
+
+/**
+ * A kept script, run once by hand: the command from tools.json, which the person fills in and
+ * starts, and what it printed. Nothing runs until they tap.
+ */
+@Composable
+private fun TryRun(context: Context, file: String) {
+    val tool = remember(file) { KnowTools.all(context).firstOrNull { it.file == file } }
+    var command by remember(file) { mutableStateOf(tool?.usage ?: "./$file") }
+    var output by remember { mutableStateOf<String?>(null) }
+    var running by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    tool?.what?.let { Note(it) }
+    val field = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp))
+        .background(MaterialTheme.colorScheme.surfaceContainerLow).padding(14.dp)
+    val mono = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 20.sp, color = MaterialTheme.colorScheme.onSurface)
+    BasicTextField(command, { command = it }, textStyle = mono, cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), modifier = field)
+    SettingsSection {
+        SettingsRow(stringResource(if (running) R.string.mo_files_running else R.string.mo_files_try_run), showChevron = false, showDivider = false,
+            onClick = if (running) null else ({
+                running = true
+                scope.launch {
+                    if (!com.openminis.app.sandbox.PRootKernel.isBooted) com.openminis.app.sandbox.PRootKernel.boot(context)
+                    val r = com.openminis.app.sandbox.ShellExecutor.execute(context, "cd ${KnowTools.SANDBOX_DIR} && $command", timeout = 60_000)
+                    output = r.output.trim().ifEmpty { "exit ${r.exitCode}" }.take(4000); running = false
+                }
+            }))
+    }
+    output?.let { Column(field.horizontalScroll(rememberScrollState())) { Text(it, style = mono) } }
 }

@@ -21,4 +21,6 @@
     <string name="mo_files_undo_failed">Couldn\'t undo it: a later change touched the same lines.</string>
     <string name="mo_files_change">Change</string>
     <string name="mo_files_and_more">%1$s and %2$d in all</string>
+    <string name="mo_files_try_run">Try it</string>
+    <string name="mo_files_running">Running…</string>
 </resources>

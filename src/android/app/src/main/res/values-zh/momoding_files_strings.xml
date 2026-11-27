@@ -21,4 +21,6 @@
     <string name="mo_files_undo_failed">没能撤回：后来的改动动过同几行。</string>
     <string name="mo_files_change">改动</string>
     <string name="mo_files_and_more">%1$s 等 %2$d 个</string>
+    <string name="mo_files_try_run">试运行</string>
+    <string name="mo_files_running">运行中…</string>
 </resources>
