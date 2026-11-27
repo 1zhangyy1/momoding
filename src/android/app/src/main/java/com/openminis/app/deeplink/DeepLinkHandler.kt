@@ -190,6 +190,10 @@ object DeepLinkHandler {
             "rules" -> DeepLinkAction.OpenSettingsScreen(app.momoding.ui.guard.ROUTE_RULES) // momoding
             "memory" -> DeepLinkAction.OpenSettingsScreen(Routes.MEMORY)
             "home" -> DeepLinkAction.OpenSettingsScreen(app.momoding.ui.home.ROUTE_ASSISTANT) // momoding: its own page, from its face
+            // momoding: the versions of one of its git folders (memory, an app); only those, by their sandbox path
+            "history" -> uri.getQueryParameter("repo")?.takeIf { app.momoding.ui.files.Sandbox.repoOf(it) == it }
+                ?.let { DeepLinkAction.OpenSettingsScreen(app.momoding.ui.files.historyRoute(it, null)) }
+                ?: DeepLinkAction.OpenSettingsScreen(Routes.SETTINGS)
             // [T-p2-agent-settings] Settings › Agents; scheduled tasks list.
             "agents" -> DeepLinkAction.OpenSettingsScreen(Routes.AGENTS)
             "scheduled", "scheduled-tasks", "scheduled_tasks" -> DeepLinkAction.OpenSettingsScreen(Routes.SCHEDULED_TASKS)

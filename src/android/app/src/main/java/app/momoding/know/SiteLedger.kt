@@ -33,6 +33,9 @@ object SiteLedger {
     private val shown = HashSet<String>()
     private val steps = HashMap<String, MutableList<Step>>()
 
+    /** Every site with its records, most recent first, for the person to read. */
+    fun all(context: Context): List<Entry> = synchronized(lock) { load(context).values.sortedByDescending { it.lastAt } }
+
     fun file(context: Context): File = File(File(context.filesDir, "minis-global/memory"), "sites.json")
 
     /**

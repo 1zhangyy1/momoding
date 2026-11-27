@@ -81,6 +81,7 @@ const val ROUTE_OTHER_PERMISSIONS = "momoding/other-permissions"
 class HomeLinks(
     val settings: () -> Unit,
     val persona: () -> Unit,
+    val identity: () -> Unit,
     val models: () -> Unit,
     val screenModel: () -> Unit,
     val advanced: () -> Unit,
@@ -105,7 +106,7 @@ fun AssistantScreen(links: HomeLinks, onBack: () -> Unit) {
     SettingsScaffold(title = "", onBack = onBack, actions = {
         IconButton(onClick = links.settings) { Icon(Icons.Outlined.Settings, contentDescription = stringResource(R.string.settings_title)) }
     }) {
-        Who(links.persona)
+        Who(links.persona, links.identity)
         Models(links)
         Permissions(links)
         Apps(tick)
@@ -120,11 +121,11 @@ fun AssistantScreen(links: HomeLinks, onBack: () -> Unit) {
 }
 
 @Composable
-private fun Who(onPersona: () -> Unit) {
+private fun Who(onPersona: () -> Unit, onIdentity: () -> Unit) {
     val context = LocalContext.current
     val face = remember { Identity.face(context)?.asImageBitmap() }
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(Modifier.size(80.dp).clip(CircleShape)) { if (face != null) Image(face, null, Modifier.size(80.dp)) }
+        Box(Modifier.size(80.dp).clip(CircleShape).clickable(onClick = onIdentity)) { if (face != null) Image(face, null, Modifier.size(80.dp)) }
         Text(Identity.name(context), fontSize = 22.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 12.dp))
         Row(
             Modifier.padding(top = 4.dp).clip(RoundedCornerShape(8.dp)).clickable(onClick = onPersona).padding(horizontal = 8.dp, vertical = 2.dp),
@@ -283,7 +284,7 @@ private fun LastChange(tick: Int, links: HomeLinks) {
  * asks first: the rows Settings had, moved here.
  */
 @Composable
-fun OtherPermissionsScreen(onRules: () -> Unit, onBack: () -> Unit) {
+fun OtherPermissionsScreen(onRules: () -> Unit, onAll: () -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
     val perms = rememberPhonePermissions().filter { it.key != "background" }
     val rules = app.momoding.guard.Grants.always.collectAsState().value.size
@@ -304,6 +305,9 @@ fun OtherPermissionsScreen(onRules: () -> Unit, onBack: () -> Unit) {
                 subtitle = if (rules == 0) stringResource(R.string.mo_settings_rules_none) else stringResource(R.string.mo_settings_rules_count, rules),
                 onClick = onRules, showDivider = false,
             )
+        }
+        SettingsSection {
+            SettingsRow(stringResource(R.string.permissions_title), subtitle = stringResource(R.string.mo_adv_permissions_sub), onClick = onAll, showDivider = false)
         }
     }
 }

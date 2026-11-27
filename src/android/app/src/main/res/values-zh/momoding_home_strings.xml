@@ -28,4 +28,14 @@
     <string name="mo_home_apps">应用</string>
     <string name="mo_home_routines_none">还没有，在对话里说一句就能加</string>
     <string name="mo_home_routines">定时任务</string>
+    <string name="mo_settings_display">显示</string>
+    <string name="mo_settings_appearance_language">外观与语言</string>
+    <string name="mo_skills_learned">学会的</string>
+    <string name="mo_skills_learned_footer">它做事时自己总结的，存在记忆里，下次直接用。</string>
+    <string name="mo_skills_notes">经验</string>
+    <string name="mo_skills_scripts">脚本</string>
+    <string name="mo_skills_sites">网站</string>
+    <string name="mo_skills_installed">安装的</string>
+    <string name="mo_skills_sites_footer">登录状态在 虚拟机 › 浏览器 中管理。</string>
+    <string name="mo_settings_data">数据</string>
 </resources>

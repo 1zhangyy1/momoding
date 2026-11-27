@@ -1,5 +1,7 @@
 package app.momoding.apps
 
+import app.momoding.deeplink.OwnScheme
+import app.momoding.ui.files.Sandbox
 import android.app.AlertDialog
 import android.os.Bundle
 import android.widget.EditText
@@ -127,6 +129,11 @@ class AppsListActivity : ComponentActivity() {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = { AppChat.home(this@AppsListActivity, b.session, app, raise = true) }) { Text(stringResource(if (app.hasApp && "app:${app.name}" !in going) R.string.mo_bot_open_app else R.string.mo_bot_open_chat)) }
                     TextButton(onClick = { rename(app, b.session) }) { Text(stringResource(R.string.mo_bot_rename)) }
+                    // its versions: an app is a git folder, so the same history page as memory
+                    if (app.hasApp) TextButton(onClick = {
+                        runCatching { startActivity(OwnScheme.intent(this@AppsListActivity,
+                            android.net.Uri.parse("minis://settings/history?repo=" + android.net.Uri.encode(Sandbox.APPS + "/" + app.name)), 0)) }
+                    }) { Text(stringResource(R.string.mo_files_history)) }
                 }
                 var notify by remember { mutableStateOf(!BotStatus.quiet(this@AppsListActivity, b.session)) }
                 Row(Modifier.fillMaxWidth().padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {

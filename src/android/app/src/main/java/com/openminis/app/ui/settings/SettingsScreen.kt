@@ -148,110 +148,19 @@ fun SettingsScreen(
                 .padding(padding)
                 .verticalScroll(rememberScrollState()),
         ) {
-            // momoding: the first level is what a person needs; the rest is under Advanced
-            var showAdvanced by rememberSaveable { mutableStateOf(false) }
-            // prototype pSettings: 模型 · 手机权限 · 先问你, then the rest
-            val momodingPerms = app.momoding.ui.settings.rememberPhonePermissions()
-            SettingsSection(title = stringResource(R.string.mo_settings_models)) {
-                SettingsItem(icon = Icons.Outlined.Lock, iconColor = Color(0xFF34C759),
-                    title = app.momoding.ui.settings.currentModelLabel(context) ?: stringResource(R.string.mo_settings_models_none),
-                    subtitle = stringResource(R.string.mo_settings_models_change), onClick = onModelsClick, showDivider = false)
-            }
-            SettingsSection(title = stringResource(R.string.mo_settings_phone)) {
-                // momoding: the deepest layer first — set up once, it switches most of the rest on by itself
-                val shell by app.momoding.phone.PhoneShell.snapshot.collectAsState()
-                val shellOn = shell.state == app.momoding.phone.PhoneShell.State.READY
-                SettingsItem(icon = Icons.Outlined.AdminPanelSettings, iconColor = if (shellOn) Color(0xFF34C759) else Color(0xFF8E8E93),
-                    title = stringResource(R.string.mo_phone_shell_title),
-                    subtitle = stringResource(when (shell.state) {
-                        app.momoding.phone.PhoneShell.State.READY -> R.string.mo_phone_shell_state_ready
-                        app.momoding.phone.PhoneShell.State.OFF -> R.string.mo_phone_shell_state_off
-                        else -> R.string.mo_phone_shell_state_not_paired
-                    }), onClick = onAdvancedAccessClick)
-                SettingsItem(icon = Icons.Outlined.TouchApp, iconColor = Color(0xFF2E7A12), title = stringResource(R.string.mo_hands_title),
-                    subtitle = stringResource(if (app.momoding.hands.Hands.enabled(context)) R.string.mo_hands_on else R.string.mo_hands_off), onClick = onHandsClick)
-                momodingPerms.forEachIndexed { i, p ->
-                    SettingsItem(icon = p.icon, iconColor = if (p.granted) Color(0xFF34C759) else Color(0xFF8E8E93),
-                        title = stringResource(p.title),
-                        subtitle = stringResource(p.purpose) + " · " + stringResource(if (p.granted) R.string.mo_perm_state_on else R.string.mo_perm_state_off),
-                        onClick = { app.momoding.ui.settings.onPermissionRow(context, p) }, showDivider = i < momodingPerms.lastIndex)
-                }
-            }
-            SettingsSection(title = stringResource(R.string.mo_settings_ask_first)) {
-                val ruleCount = app.momoding.guard.Grants.always.collectAsState().value.size
-                SettingsItem(icon = Icons.Outlined.Shield, iconColor = Color(0xFF007AFF), title = stringResource(R.string.mo_settings_rules_page),
-                    subtitle = if (ruleCount == 0) stringResource(R.string.mo_settings_rules_none) else stringResource(R.string.mo_settings_rules_count, ruleCount),
-                    onClick = onRulesClick, showDivider = false)
-            }
-            SettingsSection(title = stringResource(R.string.app_name)) {
-                SettingsItem(icon = Icons.Outlined.Computer, iconColor = Color(0xFF34C759), title = stringResource(R.string.mo_computer_title),
-                    subtitle = stringResource(R.string.mo_computer_row_sub), onClick = onComputerClick)
-                SettingsItem(icon = Icons.Outlined.Schedule, iconColor = Color(0xFF5856D6), title = stringResource(R.string.mo_settings_routines),
-                    subtitle = stringResource(R.string.mo_settings_routines_sub), onClick = onRoutinesClick)
-                // momoding: Momoding Apps (app/momoding/apps)
-                SettingsItem(icon = Icons.Outlined.Widgets, iconColor = Color(0xFFFF6A3D), title = stringResource(R.string.mo_apps_title),
-                    subtitle = stringResource(R.string.mo_apps_sub),
-                    onClick = { context.startActivity(android.content.Intent(context, app.momoding.apps.AppsListActivity::class.java)) })
-                SettingsItem(icon = Icons.Outlined.BatteryFull, iconColor = Color(0xFFFF9500), title = stringResource(R.string.mo_settings_background),
-                    subtitle = stringResource(R.string.mo_settings_background_sub), onClick = onBackgroundClick)
-                SettingsItem(icon = Icons.Outlined.AutoAwesome, iconColor = Color(0xFFAF52DE), title = stringResource(R.string.mo_settings_about_bot),
-                    subtitle = stringResource(R.string.mo_settings_about_bot_sub), onClick = onSoulClick)
-                // momoding: proven routes go to the community skills (调研/M21), on unless turned off
-                var shareOn by remember { mutableStateOf(app.momoding.know.CommunitySkills.autoShare(context)) }
-                SettingsSwitchRow(title = stringResource(R.string.mo_settings_share_knowhow), subtitle = stringResource(R.string.mo_settings_share_knowhow_sub),
-                    checked = shareOn, onCheckedChange = { shareOn = it; app.momoding.know.CommunitySkills.setAutoShare(context, it) })
-                SettingsItem(icon = Icons.Outlined.Palette, iconColor = Color(0xFFFF2D55), title = stringResource(R.string.settings_section_appearance),
+            // momoding: Settings are about the app only; everything about Momoding itself is on its own page
+            // (ui/home/AssistantScreen: models, permissions, apps, routines, memory, skills, its computer)
+            SettingsSection(title = stringResource(R.string.mo_settings_display)) {
+                SettingsItem(icon = Icons.Outlined.Palette, iconColor = Color(0xFF8E8E93), title = stringResource(R.string.mo_settings_appearance_language),
                     subtitle = stringResource(R.string.mo_settings_appearance_sub), onClick = onAppearanceClick, showDivider = false)
             }
-            SettingsSection(title = stringResource(R.string.mo_settings_more)) {
-                SettingsItem(icon = Icons.Outlined.Handyman, iconColor = Color(0xFF8E8E93), title = stringResource(R.string.mo_settings_advanced),
-                    subtitle = stringResource(if (showAdvanced) R.string.mo_settings_advanced_hide else R.string.mo_settings_advanced_sub),
-                    onClick = { showAdvanced = !showAdvanced }, showDivider = false)
-            }
-            if (showAdvanced) {
-            // momoding: Advanced in Momoding's words — the same pages as upstream (each row named as its
-            // page is titled, explained in the subtitle), grouped by what a
-            // person is after; what the first level already has (appearance, background, its
-            // manner) is not repeated here
-            SettingsSection(title = stringResource(R.string.mo_adv_models)) {
-                SettingsItem(icon = Icons.Outlined.Lock, iconColor = Color(0xFF007AFF), title = stringResource(R.string.provider_list_providers),
-                    subtitle = stringResource(R.string.mo_adv_providers_sub), onClick = onProvidersClick)
-                SettingsItem(icon = Icons.Outlined.Settings, iconColor = Color(0xFF5856D6), title = stringResource(R.string.model_groups_model_groups),
-                    subtitle = stringResource(R.string.mo_adv_groups_sub), onClick = onModelGroupsClick)
-                SettingsItem(icon = Icons.Outlined.BarChart, iconColor = Color(0xFF34C759), title = stringResource(R.string.usage_title),
-                    subtitle = stringResource(R.string.mo_adv_usage_sub), onClick = onUsageClick, showDivider = false)
-            }
-            SettingsSection(title = stringResource(R.string.mo_adv_abilities)) {
-                SettingsItem(icon = Icons.Outlined.Extension, iconColor = Color(0xFFFF9500), title = stringResource(R.string.skill_title),
-                    subtitle = stringResource(R.string.mo_adv_skills_sub), onClick = onSkillsClick)
-                SettingsItem(icon = Icons.Outlined.Handyman, iconColor = Color(0xFF8E8E93), title = stringResource(R.string.settings_agent_tools),
-                    subtitle = stringResource(R.string.mo_adv_tools_sub), onClick = onAgentToolsClick)
-                SettingsItem(icon = Icons.Outlined.Dashboard, iconColor = Color(0xFF5AC8FA), title = stringResource(R.string.mcp_title),
-                    subtitle = stringResource(R.string.mo_adv_services_sub), onClick = onMcpClick)
-                SettingsItem(icon = Icons.Outlined.Psychology, iconColor = Color(0xFFFF2D55), title = stringResource(R.string.memory_title),
-                    subtitle = stringResource(R.string.mo_adv_memory_sub), onClick = onMemoryClick, showDivider = false)
-            }
-            SettingsSection(title = stringResource(R.string.mo_computer_title)) {
-                SettingsItem(icon = Icons.Outlined.Storage, iconColor = Color(0xFF34C759), title = stringResource(R.string.storage_title),
-                    subtitle = stringResource(R.string.mo_adv_linux_sub), onClick = onRootfsClick)
-                SettingsItem(icon = Icons.Outlined.Terminal, iconColor = Color(0xFF1C1C1E), title = stringResource(R.string.mo_adv_terminal),
-                    subtitle = stringResource(R.string.mo_adv_terminal_sub), onClick = onTerminalClick)
-                SettingsItem(icon = Icons.Outlined.FolderShared, iconColor = Color(0xFF007AFF), title = stringResource(R.string.shared_folders_title),
-                    subtitle = stringResource(R.string.mo_adv_shared_sub), onClick = onSharedFoldersClick)
-                SettingsItem(icon = Icons.Outlined.Folder, iconColor = Color(0xFFFF9500), title = stringResource(R.string.settings_mount_external_folders),
-                    subtitle = stringResource(R.string.mo_adv_mounts_sub), onClick = onMountedFoldersClick)
-                SettingsItem(icon = Icons.Outlined.AutoAwesome, iconColor = Color(0xFF5856D6), title = stringResource(R.string.env_var_title),
-                    subtitle = stringResource(R.string.mo_adv_env_sub), onClick = onEnvVarsClick, showDivider = false)
-            }
-            SettingsSection(title = stringResource(R.string.mo_adv_data)) {
-                SettingsItem(icon = Icons.Outlined.Backup, iconColor = Color(0xFF34C759), title = stringResource(R.string.backup_title),
+            SettingsSection(title = stringResource(R.string.mo_settings_data)) {
+                SettingsItem(icon = Icons.Outlined.Backup, iconColor = Color(0xFF8E8E93), title = stringResource(R.string.backup_title),
                     subtitle = stringResource(R.string.mo_adv_backup_sub), onClick = onBackupClick)
                 SettingsItem(icon = Icons.Outlined.Description, iconColor = Color(0xFF8E8E93), title = stringResource(R.string.log_title),
-                    subtitle = stringResource(R.string.mo_adv_logs_sub), onClick = onLogsClick)
-                SettingsItem(icon = Icons.Outlined.Shield, iconColor = Color(0xFF007AFF), title = stringResource(R.string.permissions_title),
-                    subtitle = stringResource(R.string.mo_adv_permissions_sub), onClick = onPermissionsClick, showDivider = false)
+                    subtitle = stringResource(R.string.mo_adv_logs_sub), onClick = onLogsClick, showDivider = false)
             }
-            SettingsSection(title = stringResource(R.string.mo_adv_about)) {
+            SettingsSection(title = null) {
                 SettingsItem(icon = Icons.Outlined.Info, iconColor = Color(0xFF8E8E93), title = stringResource(R.string.about_title),
                     subtitle = stringResource(R.string.mo_adv_version_sub), onClick = onAboutClick)
                 SettingsItem(icon = Icons.Outlined.Shield, iconColor = Color(0xFF8E8E93), title = stringResource(R.string.settings_privacy_policy),
@@ -259,7 +168,6 @@ fun SettingsScreen(
                 SettingsItem(icon = Icons.Outlined.Feedback, iconColor = Color(0xFF8E8E93), title = stringResource(R.string.settings_feedback),
                     subtitle = null, onClick = { showFeedbackSheet = true }, showDivider = false)
             }
-            } // momoding: end of Advanced
 
             Spacer(Modifier.height(24.dp))
         }
@@ -351,7 +259,7 @@ private fun buildBugReportUrl(): String {
  */
 @Composable
 private fun SettingsSection(
-    title: String,
+    title: String?,
     footer: String? = null,
     content: @Composable () -> Unit,
 ) {
@@ -361,7 +269,7 @@ private fun SettingsSection(
             .padding(top = 20.dp),
     ) {
         // Section header
-        Text(
+        if (title != null) Text(
             text = title.uppercaseForDisplay(),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

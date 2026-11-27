@@ -1272,10 +1272,19 @@ fun AppNavigation(
                 onBack = { navController.safePopBackStack() },
                 onOpenHands = { navController.safeNavigate(app.momoding.ui.hands.ROUTE_HANDS) },
                 onOpenProviders = { navController.safeNavigate(Routes.PROVIDER_LIST) },
+                onOpenUsage = { navController.safeNavigate(Routes.USAGE_STATS) },
+                onOpenGroups = { navController.safeNavigate(Routes.MODEL_GROUPS) },
             )
         }
         composable(app.momoding.ui.computer.ROUTE_COMPUTER) { // momoding: its own computer (M14)
             app.momoding.ui.computer.ComputerScreen(
+                advanced = listOf(
+                    com.openminis.app.R.string.storage_title to { navController.safeNavigate(Routes.STORAGE) },
+                    com.openminis.app.R.string.mo_adv_terminal to { navController.safeNavigate(Routes.terminal()) },
+                    com.openminis.app.R.string.shared_folders_title to { navController.safeNavigate(Routes.SHARED_FOLDERS) },
+                    com.openminis.app.R.string.settings_mount_external_folders to { navController.safeNavigate(Routes.MOUNTED_FOLDERS) },
+                    com.openminis.app.R.string.env_var_title to { navController.safeNavigate(Routes.ENV_VARS) },
+                ),
                 onBack = { navController.safePopBackStack() },
                 onPreview = { f ->
                     FilePreviewHolder.currentItem = com.openminis.app.ui.sandbox.FileItem(f, f.name, false, false, f.length(), f.lastModified())
@@ -1389,6 +1398,7 @@ fun AppNavigation(
                 app.momoding.ui.home.HomeLinks(
                     settings = go(Routes.SETTINGS),
                     persona = go(app.momoding.ui.files.docRoute(app.momoding.memory.Memory.SANDBOX_DIR + "/SOUL.md")),
+                    identity = go(Routes.SOUL),
                     models = go(app.momoding.ui.settings.ROUTE_MODELS),
                     screenModel = go(app.momoding.ui.hands.ROUTE_HANDS),
                     advanced = go(Routes.SHIZUKU),
@@ -1397,13 +1407,30 @@ fun AppNavigation(
                     routines = go(Routes.SCHEDULED_TASKS),
                     memory = go(Routes.MEMORY),
                     history = go(app.momoding.ui.files.historyRoute(app.momoding.memory.Memory.SANDBOX_DIR, null)),
-                    skills = go(Routes.SKILLS),
+                    skills = go(app.momoding.ui.home.ROUTE_SKILLS_HOME),
                     computer = go(app.momoding.ui.computer.ROUTE_COMPUTER),
                 ),
             ) { navController.safePopBackStack() }
         }
+        composable(app.momoding.ui.home.ROUTE_SKILLS_HOME) {
+            app.momoding.ui.home.SkillsHomeScreen(
+                app.momoding.ui.home.SkillLinks(
+                    folder = { p -> navController.safeNavigate(app.momoding.ui.files.folderRoute(p)) },
+                    sites = { navController.safeNavigate(app.momoding.ui.home.ROUTE_SITES) },
+                    packs = { navController.safeNavigate(Routes.SKILLS) },
+                    mcp = { navController.safeNavigate(Routes.MCP) },
+                    tools = { navController.safeNavigate(Routes.AGENT_TOOLS) },
+                ),
+            ) { navController.safePopBackStack() }
+        }
+        composable(app.momoding.ui.home.ROUTE_SITES) {
+            app.momoding.ui.home.SitesScreen(onSite = { d -> navController.safeNavigate(app.momoding.ui.home.siteRoute(d)) }) { navController.safePopBackStack() }
+        }
+        composable(app.momoding.ui.home.ROUTE_SITE, arguments = listOf(navArgument("domain") { type = NavType.StringType })) { e ->
+            app.momoding.ui.home.SiteScreen(e.arguments?.getString("domain").orEmpty()) { navController.safePopBackStack() }
+        }
         composable(app.momoding.ui.home.ROUTE_OTHER_PERMISSIONS) {
-            app.momoding.ui.home.OtherPermissionsScreen(onRules = { navController.safeNavigate(app.momoding.ui.guard.ROUTE_RULES) }) { navController.safePopBackStack() }
+            app.momoding.ui.home.OtherPermissionsScreen(onRules = { navController.safeNavigate(app.momoding.ui.guard.ROUTE_RULES) }, onAll = { navController.safeNavigate(Routes.PERMISSIONS) }) { navController.safePopBackStack() }
         }
         composable(Routes.MEMORY) {
             app.momoding.ui.files.FolderScreen(app.momoding.memory.Memory.SANDBOX_DIR, openFile, openHistory) { navController.safePopBackStack() }

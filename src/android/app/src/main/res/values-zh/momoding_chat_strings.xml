@@ -145,7 +145,7 @@
     <string name="mo_handoff_settled_plain">已交回：%1$s</string>
     <string name="mo_card_expired">已过期</string>
     <string name="mo_card_expired_line">已过期：%1$s</string>
-    <string name="mo_computer_title">它的电脑</string>
+    <string name="mo_computer_title">虚拟机</string>
     <string name="mo_computer_row_sub">手机里的 Linux 和浏览器</string>
     <string name="mo_computer_intro">Momoding 在你手机里有一台自己的小电脑：能上网、处理文件，不占你的屏幕。只有 App 里的事才借你的屏幕，你看得见，随时能停。</string>
     <string name="mo_computer_files">它做出来的东西</string>

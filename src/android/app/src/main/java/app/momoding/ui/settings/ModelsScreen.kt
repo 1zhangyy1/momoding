@@ -31,7 +31,7 @@ const val ROUTE_MODELS = "momoding/models"
  * keeps the old one as the fallback. Groups, routing and the rest stay under Advanced.
  */
 @Composable
-fun ModelsScreen(onBack: () -> Unit, onOpenHands: () -> Unit, onOpenProviders: () -> Unit) {
+fun ModelsScreen(onBack: () -> Unit, onOpenHands: () -> Unit, onOpenProviders: () -> Unit, onOpenUsage: () -> Unit = {}, onOpenGroups: () -> Unit = {}) {
     val context = LocalContext.current
     val repo = (context.applicationContext as? MinisApp)?.providerRepositoryOrNull
     SettingsScaffold(title = stringResource(R.string.mo_models_title), onBack = onBack) {
@@ -85,8 +85,10 @@ fun ModelsScreen(onBack: () -> Unit, onOpenHands: () -> Unit, onOpenProviders: (
             SettingsRow(
                 title = cfg.instances.joinToString("、") { it.label.ifBlank { it.id.take(8) } },
                 subtitle = stringResource(R.string.mo_models_provider_sub),
-                icon = Icons.Outlined.Key, iconColor = Color(0xFFFF9500), onClick = onOpenProviders, showDivider = false,
+                icon = Icons.Outlined.Key, iconColor = Color(0xFFFF9500), onClick = onOpenProviders,
             )
+            SettingsRow(title = stringResource(R.string.usage_title), subtitle = stringResource(R.string.mo_adv_usage_sub), onClick = onOpenUsage)
+            SettingsRow(title = stringResource(R.string.model_groups_model_groups), subtitle = stringResource(R.string.mo_adv_groups_sub), onClick = onOpenGroups, showDivider = false)
         }
     }
 }

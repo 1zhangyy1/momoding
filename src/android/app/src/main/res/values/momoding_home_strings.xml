@@ -28,4 +28,14 @@
     <string name="mo_home_apps">Apps</string>
     <string name="mo_home_routines_none">None yet. Just tell it in a chat.</string>
     <string name="mo_home_routines">Routines</string>
+    <string name="mo_settings_display">Display</string>
+    <string name="mo_settings_appearance_language">Appearance and language</string>
+    <string name="mo_skills_learned">Learned</string>
+    <string name="mo_skills_learned_footer">What it worked out by doing, kept in its memory and used again next time.</string>
+    <string name="mo_skills_notes">Know-how</string>
+    <string name="mo_skills_scripts">Scripts</string>
+    <string name="mo_skills_sites">Websites</string>
+    <string name="mo_skills_installed">Installed</string>
+    <string name="mo_skills_sites_footer">Sign-ins are in Virtual machine › Browser.</string>
+    <string name="mo_settings_data">Data</string>
 </resources>
