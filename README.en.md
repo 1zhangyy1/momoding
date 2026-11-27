@@ -27,26 +27,28 @@ Add a home-screen shortcut, use it, and ask its own Bot for changes as you go.</
 
 <p align="center"><sub>Screenshots from an Android emulator with the English interface (DeepSeek V4.1 Flash); the train app and photo album screens are illustrations.</sub></p>
 
-> **Current version: 1.0.11, still moving fast.** You can create small apps in a chat, let several Bots work on them, follow each job you hand off as its own task, and have it remember what you mention in passing. Most polishing so far happened on an emulator and a few real phones; background reliability on heavily customised Android builds is still being tested. Please [open an issue](https://github.com/1zhangyy1/momoding/issues/new/choose) when something goes wrong.
+> **Current version: 1.0.12, still moving fast.** Small apps from a chat, several Bots, trackable tasks and memory, and now the whole phone: scripts against Android's API, system access and a hidden screen. Most polishing so far happened on an emulator and a few real phones; background reliability on heavily customised Android builds is still being tested. Please [open an issue](https://github.com/1zhangyy1/momoding/issues/new/choose) when something goes wrong.
 
 ---
 
-## Recent update 1.0.11: Memory system
+## Recent update 1.0.12: The whole phone
 
-**Memory is a git repository on your phone.**
+- **Scripts against Android's API, written on the spot.** Momoding embeds Rhino. When there's no ready-made command, it writes a few lines of JavaScript and runs them inside Momoding, calling Android's API directly: the torch, volume, media, Bluetooth, sensors, notifications, links into other apps. Scripts that worked are kept and reused. A script that would send a text, place a call or delete or change your data stops and asks first.
+- **System access without Shizuku or a computer.** The phone pairs with itself over wireless debugging and Momoding gets the same shell rights as adb: change settings, manage apps, grant permissions. It then stays running even with wireless debugging off, and on most phones comes back by itself after a restart. Android 11 or later.
+- **A hidden screen.** Apps it works on open on an invisible virtual display, so your own screen stays yours. Watch it live, tap **Take over** to do a step yourself, then **Hand back**.
+- **Permissions when needed.** When a job needs the calendar, location and so on, a card appears in the chat. It switches the permission on in place where it can, otherwise opens the right system page, then carries on when you're back.
+- **Another route when blocked.** If Android or the phone maker refuses one way, it tries a script, a command or the screen before asking you.
 
-- **How it's stored.** A set of Markdown notes. The entry file, `MEMORY.md`, goes into every conversation and indexes the topic files; one fact per line, with its date.
-- **How it's written.** Say "remember this" and it is saved right away. Things you mention in passing (where you live, how you travel, your family) are sorted in by a background pass once you have been quiet for half an hour. When something changes, the old line is edited rather than kept alongside the new one.
-- **Traceable.** After each turn that changed memory, the app makes a commit whose message names the conversation and the words you said. `git log` shows when and why any note was written.
+**Turning on advanced access:** Settings → Phone capabilities → Advanced access, then in Developer options turn on **Wireless debugging**, tap **Pair device with pairing code** and type the 6-digit code into Momoding's notification. If you used Shizuku before, pair once here. On Xiaomi / Redmi, also turn on "USB debugging (Security settings)" to let it grant permissions to apps; the hidden screen and everything else work without it.
 
-**Other improvements**
+[Full release notes](docs/releases/1.0.12.md) · [Download 1.0.12](https://github.com/1zhangyy1/momoding/releases/tag/v1.0.12)
 
-- **Long chats stay fast.** Each chat works within 200K tokens; the summary is written ahead of time in the background, so compaction doesn't make you wait. The full history is kept word for word, and later questions about details are looked up there.
-- **Tells you as it goes.** Helpers share useful findings as soon as they have them, and you can keep chatting while they work.
-- **Faster the second time.** Jobs it has done before go quicker next time.
-- **Fewer interruptions.** Work in its own space needs no approval; it asks only before touching files on your phone, messaging other people or spending money.
+### 1.0.11: Memory system
 
-A few fixes too; see the [full release notes](docs/releases/1.0.11.md) · [Download 1.0.11](https://github.com/1zhangyy1/momoding/releases/tag/v1.0.11)
+- Memory is a git repository on the phone: `MEMORY.md` plus topic files, one dated fact per line, a commit for every change naming the chat and the words behind it.
+- Long chats work within 200K tokens, with summaries written ahead in the background and the full history kept word for word.
+
+[Full release notes](docs/releases/1.0.11.md)
 
 ### 1.0.10: Every job you hand off is a task
 
@@ -153,9 +155,9 @@ Here, improving an app means a Bot changing its own small app. The Momoding host
 1. You need **Android 8.0 or newer**. Download the latest `.apk` from [Releases](https://github.com/1zhangyy1/momoding/releases/latest) and allow your browser to install apps.
 2. Open Momoding, pick a model provider and paste your API key. The first-run presets are DeepSeek, Kimi, Qwen, Zhipu GLM, Doubao and SiliconFlow. OpenRouter, OpenAI, Claude, Gemini and others also work. Picking a provider sets up both a chat model and a vision model.
 3. Type your first request, or tap one of the examples on the empty chat.
-4. To let it operate other apps, go to Settings → Phone permissions → **Hands** and follow the prompts to turn on Accessibility and the overlay permission. Everything else works without it.
+4. To let it change settings, manage apps and work on the hidden screen: Settings → Phone capabilities → **Advanced access**, then pair in three steps (Android 11+). Everything else works without it.
 
-> **Updating to 1.0.11:** Official versions 1.0.1–1.0.10 can be updated in place, keeping your data. Version 0.1.0-alpha and early test builds signed with a different key cannot be updated in place; back up the data you need before removing an incompatible build.
+> **Updating to 1.0.12:** Official versions 1.0.1–1.0.11 can be updated in place, keeping your data. Version 0.1.0-alpha and early test builds signed with a different key cannot be updated in place; back up the data you need before removing an incompatible build.
 
 ## Build from source
 
