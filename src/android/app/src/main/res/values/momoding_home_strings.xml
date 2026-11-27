@@ -59,6 +59,4 @@
         <item>Large</item>
         <item>XL</item>
     </string-array>
-    <string name="mo_group_voice_input">Voice input</string>
-    <string name="mo_group_voice_output">Voice output</string>
 </resources>

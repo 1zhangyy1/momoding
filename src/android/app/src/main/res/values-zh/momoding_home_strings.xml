@@ -59,6 +59,4 @@
         <item>大</item>
         <item>很大</item>
     </string-array>
-    <string name="mo_group_voice_input">语音输入</string>
-    <string name="mo_group_voice_output">语音输出</string>
 </resources>
