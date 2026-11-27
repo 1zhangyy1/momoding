@@ -156,13 +156,13 @@
     <string name="settings_memory_subtitle">跨会话保留的持久化知识</string>
     <string name="settings_mcp">MCP 集成</string>
     <string name="settings_mcp_subtitle">连接 Model Context Protocol 服务器</string>
-    <string name="mcp_title">MCP 集成</string>
+    <string name="mcp_title">MCP 服务</string>
     <string name="mcp_add">添加 MCP 服务器</string>
     <string name="mcp_edit">编辑 MCP 服务器</string>
     <string name="mcp_section_servers">服务器</string>
-    <string name="mcp_section_footer">MCP 服务器让 AI 通过 minis-mcp-cli 调用外部工具。配置保存在 /var/minis/mcp-servers/servers.json（与 Claude Desktop 兼容）。</string>
-    <string name="mcp_empty_title">暂无 MCP 服务器</string>
-    <string name="mcp_empty_action">点击 + 按钮添加服务器。</string>
+    <string name="mcp_section_footer">接上外部服务后，它就能直接调用它们的功能。</string>
+    <string name="mcp_empty_title">还没有 MCP 服务</string>
+    <string name="mcp_empty_action">点右上角 + 添加。</string>
     <string name="mcp_transport_http">HTTP</string>
     <string name="mcp_transport_sse">SSE</string>
     <string name="mcp_transport_stdio">STDIO</string>
@@ -618,7 +618,7 @@
     <string name="common_copy">复制</string>
     <string name="appearance_title">外观</string>
     <string name="appearance_section_theme">主题</string>
-    <string name="appearance_theme_footer">覆盖此应用的系统外观设置。</string>
+    <string name="appearance_theme_footer">跟随系统时，随手机深浅色切换。</string>
     <string name="appearance_theme_system">跟随系统</string>
     <string name="appearance_theme_light">浅色</string>
     <string name="appearance_theme_dark">深色</string>
@@ -629,7 +629,7 @@
     <string name="appearance_launch_new">新对话</string>
     <string name="appearance_launch_home">主页</string>
     <string name="appearance_section_return_key">回车键</string>
-    <string name="appearance_return_key_footer">选择聊天输入框中回车键的行为：插入换行或发送消息。硬件键盘 Shift+Return 始终插入换行。</string>
+    <string name="appearance_return_key_footer">外接键盘按 Shift+回车 总是换行。</string>
     <string name="appearance_return_key_newline">换行</string>
     <string name="appearance_return_key_send">发送</string>
     <string name="appearance_section_keep_awake">屏幕常亮</string>
@@ -672,9 +672,9 @@
     <string name="env_var_add">添加</string>
     <string name="env_var_privacy_header">隐私</string>
     <string name="env_var_privacy_toggle">隐私模式</string>
-    <string name="env_var_privacy_footer">开启后，shell-execute 输出中检测到的环境变量值在送达模型前会被打码（例如 `sk-1********ajhks`）。少于 8 个字符的值会被全部替换为 `*`。聊天中用户可见的输出保持不变。</string>
+    <string name="env_var_privacy_footer">开启后，命令输出里的密钥会先遮住再发给模型。</string>
     <string name="env_var_section_header">变量</string>
-    <string name="env_var_section_footer">环境变量在会话开始时被注入到沙箱 shell。名称将被转为大写，并且必须符合 POSIX shell 变量规则。</string>
+    <string name="env_var_section_footer">每次对话开始时带上这些变量。</string>
     <string name="env_var_empty_title">无环境变量</string>
     <string name="env_var_empty_action">点击 + 添加。</string>
     <string name="env_var_toggle_visibility">切换可见性</string>
@@ -691,14 +691,14 @@
     <string name="log_title">日志</string>
     <string name="log_share_all">全部分享</string>
     <string name="log_section_logging">日志</string>
-    <string name="log_section_logging_footer">启用后，所有控制台输出将每天捕获到应用私有存储中的日志文件。</string>
+    <string name="log_section_logging_footer">开启后每天记录运行日志，只存在手机上。</string>
     <string name="log_section_detail_level">详细程度</string>
     <string name="log_detail_level_info">Info</string>
     <string name="log_detail_level_verbose">Verbose</string>
     <string name="log_detail_level_footer">Info 级别日志体积较小。Verbose 会额外记录调试信息和系统日志，体积可能大很多倍，建议只在复现问题时开启。</string>
     <string name="log_enable_switch">启用日志</string>
     <string name="log_section_files">日志文件</string>
-    <string name="log_section_files_footer">点击文件查看内容。日志每天轮转。</string>
+    <string name="log_section_files_footer">每天一个文件，点开查看。</string>
     <string name="log_no_files">无日志文件</string>
     <string name="log_section_storage">存储</string>
     <string name="log_section_storage_footer">日志存储总量: %1$s</string>
@@ -883,7 +883,7 @@
     <string name="skills_browser_error_format">SKILL.md 内容无效</string>
     <string name="storage_title">存储</string>
     <string name="storage_section_overview">概览</string>
-    <string name="storage_overview_shell">Shell 容器</string>
+    <string name="storage_overview_shell">Linux 环境</string>
     <string name="storage_overview_database">对话数据库</string>
     <string name="storage_overview_sessions">会话文件</string>
     <string name="storage_section_sessions">会话</string>
@@ -899,7 +899,7 @@
     <string name="storage_clear_confirm_title">清除会话文件？</string>
     <string name="storage_overview_logs_caches">日志与缓存</string>
     <string name="storage_clear_logs_caches_button">清除日志与缓存</string>
-    <string name="storage_clear_logs_caches_footer">删除所有日志（包括崩溃报告）以及模型列表、旧的分享文件等缓存数据。超过 15 天的日志也会自动删除。对话、文件和设置不受影响。</string>
+    <string name="storage_clear_logs_caches_footer">对话、文件和设置不受影响。</string>
     <string name="storage_clear_logs_caches_confirm_title">清除日志与缓存？</string>
     <string name="storage_clear_logs_caches_confirm_message">崩溃报告也会一并删除，如有需要请先发送。对话、文件和设置不受影响。</string>
     <string name="storage_clear_logs_caches_confirm">清除</string>
@@ -921,8 +921,8 @@
     </plurals>
     <string name="usage_title">用量</string>
     <string name="usage_section_total">总用量</string>
-    <string name="usage_label_total_input">总输入（含缓存）</string>
-    <string name="usage_label_output">输出 Token</string>
+    <string name="usage_label_total_input">输入</string>
+    <string name="usage_label_output">输出</string>
     <string name="usage_label_cache_read">缓存读取</string>
     <string name="usage_label_cache_creation">缓存创建</string>
     <string name="usage_label_cache_hit_rate">缓存命中率</string>
@@ -1143,7 +1143,7 @@
     <string name="model_groups_new_group">新建分组</string>
     <string name="model_groups_no_model_groups">暂无模型分组</string>
     <string name="model_groups_groups_let_you_combine_models_for_fallba">模型分组可实现回退或负载均衡。</string>
-    <string name="model_groups_primary_is_used_for_main_agent_tasks_sub">主模型用于主要任务，辅助模型用于标题生成等轻量任务。未设置辅助模型时将继承主模型。</string>
+    <string name="model_groups_primary_is_used_for_main_agent_tasks_sub">主模型做主要的事，辅助模型做起标题这类小事；不设就用主模型。</string>
     <string name="model_groups_group_name">分组名称</string>
     <string name="model_groups_create">创建</string>
     <string name="model_groups_none">无</string>
@@ -1277,7 +1277,7 @@
     <string name="settings_shared_folders">共享文件夹</string>
     <string name="settings_shared_folders_subtitle">浏览 /var/minis 下的共享、技能、记忆目录</string>
     <string name="shared_folders_title">共享文件夹</string>
-    <string name="shared_folders_info_banner">这些目录在 Linux 沙箱内可见，技能与记忆由 Momoding 工具自动维护，请勿手动修改。</string>
+    <string name="shared_folders_info_banner">它和你共用的文件夹。</string>
     <string name="shared_folder_name_shared">共享</string>
     <string name="shared_folder_name_skills">技能</string>
     <string name="shared_folder_name_memory">记忆</string>
@@ -1510,7 +1510,7 @@
     <string name="backup_dest_backend_label">%1$s — %2$s</string>
     <string name="backup_dest_row_subtitle">%1$s · /%2$s</string>
     <string name="mount_folders_title">已挂载文件夹</string>
-    <string name="mount_folders_info_banner">所选文件夹会被绑定到 /var/minis/mounts/&lt;name&gt;。最多可同时挂载 10 个文件夹。</string>
+    <string name="mount_folders_info_banner">把手机里的文件夹交给它读写，最多 10 个。</string>
     <string name="mount_picker_intro_title">选择要挂载的文件夹</string>
     <string name="mount_picker_intro_message">Android 不允许挂载整个内部存储，请选择其中一个具体的文件夹，例如「文档」或「下载」。\n\n接下来打开的是系统文件选择器。如果某个文件夹提示「无法使用此文件夹」，请进入它的子文件夹，或用系统返回手势回到这里。</string>
     <string name="mount_picker_intro_continue">去选择</string>
@@ -1897,7 +1897,7 @@
     <string name="settings_agent_tools">可用工具</string>
     <string name="settings_agent_tools_subtitle">允许助手使用哪些可选工具</string>
     <string name="agent_tools_browser">浏览器</string>
-    <string name="agent_tools_browser_footer">在应用内浏览器中访问网页：打开页面、阅读内容、点击和输入。功能已稳定，默认开启。关闭后该工具会从所有对话中移除，模型完全看不到它。</string>
+    <string name="agent_tools_browser_footer">它自己的浏览器，用来打开网页、点击和填写。关掉后它就不能上网。</string>
     <string name="scheduled_card_label">定时任务</string>
     <string name="scheduled_card_next_fire">下次：%1$s</string>
     <string name="scheduled_card_last_run">这是最后一次运行</string>

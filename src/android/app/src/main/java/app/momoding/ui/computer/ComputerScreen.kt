@@ -66,11 +66,6 @@ fun ComputerScreen(onBack: () -> Unit, onPreview: (File) -> Unit, advanced: List
 
         SettingsSection(header = stringResource(R.string.mo_computer_browser), footer = stringResource(R.string.mo_computer_browser_footer)) {
             SettingsRow(
-                title = stringResource(R.string.mo_computer_sites),
-                subtitle = s.sites.takeIf { it.isNotEmpty() }?.joinToString("、") ?: stringResource(R.string.mo_computer_sites_none),
-                icon = Icons.Outlined.Language, iconColor = Color(0xFF007AFF),
-            )
-            SettingsRow(
                 title = stringResource(R.string.mo_computer_sign_out), icon = Icons.AutoMirrored.Outlined.Logout, iconColor = Color(0xFFFF9500),
                 onClick = { confirm = Confirm.SIGN_OUT }, showChevron = false, showDivider = false,
             )

@@ -245,9 +245,7 @@ fun UsageStatsScreen(
             val stats = listOfNotNull(
                 stringResource(R.string.usage_label_total_input) to formatCount(grandTotal.totalInput),
                 stringResource(R.string.usage_label_output) to formatCount(grandTotal.outputTokens),
-                if (grandTotal.cacheReadTokens > 0) stringResource(R.string.usage_label_cache_read) to formatCount(grandTotal.cacheReadTokens) else null,
-                if (grandTotal.cacheCreationTokens > 0) stringResource(R.string.usage_label_cache_creation) to formatCount(grandTotal.cacheCreationTokens) else null,
-                grandTotal.cacheHitRate?.let { rate -> stringResource(R.string.usage_label_cache_hit_rate) to String.format("%.1f%%", rate) },
+                // momoding: caching is the provider's business; the totals are what a person reads
             )
             stats.forEachIndexed { idx, (label, value) ->
                 SettingsValueRow(
@@ -300,7 +298,7 @@ private fun ExpandableModelRow(model: ModelStats, showDivider: Boolean) {
             // numbers remain honest even though the label is gone.
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    model.displayName,
+                    model.displayName.substringAfter(": "), // momoding: "DeepSeek: DeepSeek V4.1" → the model's own name
                     style = MaterialTheme.typography.bodyLarge,
                 )
                 val caveat = when (model.attribution) {

@@ -147,7 +147,7 @@
     <string name="mo_card_expired_line">已过期：%1$s</string>
     <string name="mo_computer_title">虚拟机</string>
     <string name="mo_computer_row_sub">手机里的 Linux 和浏览器</string>
-    <string name="mo_computer_intro">Momoding 在你手机里有一台自己的小电脑：能上网、处理文件，不占你的屏幕。只有 App 里的事才借你的屏幕，你看得见，随时能停。</string>
+    <string name="mo_computer_intro">它在手机里有一台自己的小电脑，上网、处理文件都在这里，不占你的屏幕。</string>
     <string name="mo_computer_files">它做出来的东西</string>
     <string name="mo_computer_files_none">还没有。让它做个表格或网页，会出现在这里。</string>
     <string name="mo_computer_browser">它的浏览器</string>
@@ -173,10 +173,10 @@
     <string name="mo_notif_done_in">用时 %1$s</string>
     <string name="mo_models_title">模型</string>
     <string name="mo_models_thinking">用它想事情</string>
-    <string name="mo_models_thinking_footer">这些是在 Momoding 上用着顺手的模型。换下来的那个留作备用。下一句话起生效。</string>
+    <string name="mo_models_thinking_footer">换下来的那个留作备用，下一句话起生效。</string>
     <string name="mo_models_fallback">备用</string>
     <string name="mo_models_seeing">用它看屏幕</string>
-    <string name="mo_models_seeing_footer">借你屏幕干活时用。在“动手操作屏幕”里换。</string>
+    <string name="mo_models_seeing_footer">在「动手操作屏幕」里换。</string>
     <string name="mo_models_seeing_none">还没有能看图的模型</string>
     <string name="mo_models_provider">服务商</string>
     <string name="mo_models_provider_sub">Key 和全部模型</string>

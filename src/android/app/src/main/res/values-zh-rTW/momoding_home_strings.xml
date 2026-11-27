@@ -45,4 +45,18 @@
     <string name="mo_caps_footer">自動允許：需要時直接用。先問你：每次啟動後第一次用前問你。</string>
     <string name="mo_caps_sms">簡訊</string>
     <string name="mo_caps_sub">每項能力是直接用、先問你，還是不讓用</string>
+    <string name="mo_groups_defaults">預設</string>
+    <string name="mo_groups_default_primary">主模型</string>
+    <string name="mo_groups_default_sub">輔助模型</string>
+    <string name="mo_groups_badge_primary">主</string>
+    <string name="mo_groups_members">%1$s · %2$d 個模型</string>
+    <string name="mo_groups_members_disabled">%1$s · %2$d 個模型（%3$d 個停用）</string>
+    <string-array name="mo_font_scale_labels">
+        <item>很小</item>
+        <item>小</item>
+        <item>預設</item>
+        <item>中</item>
+        <item>大</item>
+        <item>很大</item>
+    </string-array>
 </resources>

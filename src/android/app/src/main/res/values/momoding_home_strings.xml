@@ -45,4 +45,18 @@
     <string name="mo_caps_footer">Allow: it uses it when needed. Ask: it asks you the first time after each start.</string>
     <string name="mo_caps_sms">Text messages</string>
     <string name="mo_caps_sub">Use directly, ask first, or not at all</string>
+    <string name="mo_groups_defaults">Defaults</string>
+    <string name="mo_groups_default_primary">Main model</string>
+    <string name="mo_groups_default_sub">Helper model</string>
+    <string name="mo_groups_badge_primary">Main</string>
+    <string name="mo_groups_members">%1$s · %2$d models</string>
+    <string name="mo_groups_members_disabled">%1$s · %2$d models (%3$d off)</string>
+    <string-array name="mo_font_scale_labels">
+        <item>XS</item>
+        <item>Small</item>
+        <item>Default</item>
+        <item>Medium</item>
+        <item>Large</item>
+        <item>XL</item>
+    </string-array>
 </resources>

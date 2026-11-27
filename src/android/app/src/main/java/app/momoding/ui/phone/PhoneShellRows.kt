@@ -1,5 +1,8 @@
 package app.momoding.ui.phone
 
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.clickable
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings
@@ -94,7 +97,13 @@ fun PhoneShellScreen(onBack: () -> Unit) {
                     showDivider = i < 2,
                 )
                 if (i == current && i < 2) {
-                    SettingsRow(title = stringResource(R.string.mo_phone_step_said_on), onClick = { saidOn = i + 1 }, showChevron = false, showDivider = i < 2)
+                    // a quiet link under the step, for when the phone does not tell us it is on
+                    androidx.compose.material3.Text(
+                        stringResource(R.string.mo_phone_step_said_on), color = app.momoding.ui.Tones.actionText,
+                        style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                        modifier = androidx.compose.ui.Modifier.padding(start = 56.dp, bottom = 12.dp)
+                            .clickable { saidOn = i + 1 },
+                    )
                 }
             }
         }

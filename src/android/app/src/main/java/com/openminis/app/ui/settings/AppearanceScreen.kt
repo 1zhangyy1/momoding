@@ -155,7 +155,6 @@ fun autoExpandThinkingEnabled(context: Context): Boolean =
  */
 private val APP_ICON_TILE_MAX_WIDTH = 192.dp
 
-private val fontScaleLabels = listOf("XS", "Small", "Default", "Medium", "Large", "XL")
 private val fontScaleValues = listOf(-2, -1, 0, 1, 2, 3)
 private val fontScaleMultipliers = listOf(0.88f, 0.94f, 1.0f, 1.06f, 1.12f, 1.21f)
 
@@ -794,7 +793,7 @@ private fun FontScaleSliderRow(
 ) {
     val idx = fontScaleValues.indexOf(level).coerceIn(0, fontScaleValues.lastIndex)
     var sliderPos by remember(level) { mutableFloatStateOf(idx.toFloat()) }
-    val currentLabel = fontScaleLabels.getOrElse(sliderPos.roundToInt()) { "Default" }
+    val currentLabel = androidx.compose.ui.res.stringArrayResource(R.array.mo_font_scale_labels).getOrElse(sliderPos.roundToInt()) { "" }
 
     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(

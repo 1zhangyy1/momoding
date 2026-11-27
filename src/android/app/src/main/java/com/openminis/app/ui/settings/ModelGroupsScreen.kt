@@ -293,19 +293,19 @@ fun ModelGroupsScreen(
                     Spacer(modifier = Modifier.height(SectionDesign.SectionTopGap))
                 }
                 item("defaults_section_header") {
-                    SectionHeader(text = "Defaults")
+                    SectionHeader(text = stringResource(R.string.mo_groups_defaults))
                 }
                 item("defaults_section_card") {
                     SectionCard {
                         GroupDropdown(
-                            label = "Default Primary",
+                            label = stringResource(R.string.mo_groups_default_primary),
                             groups = groups,
                             selectedId = config.defaultPrimaryGroupId,
                             onSelect = { providerRepository.defaultPrimaryGroupId = it },
                         )
                         SectionDivider()
                         GroupDropdown(
-                            label = "Default Sub",
+                            label = stringResource(R.string.mo_groups_default_sub),
                             groups = groups,
                             selectedId = config.defaultSubGroupId,
                             onSelect = { providerRepository.defaultSubGroupId = it },
@@ -991,7 +991,7 @@ private fun GroupRow(
                 groupTopModalities(group, config).forEach { marker ->
                     GroupModalityIcon(marker)
                 }
-                if (isPrimary) BadgeLabel("Primary", MaterialTheme.colorScheme.primary)
+                if (isPrimary) BadgeLabel(stringResource(R.string.mo_groups_badge_primary), MaterialTheme.colorScheme.primary)
                 if (isSub) BadgeLabel("Sub", MaterialTheme.colorScheme.tertiary)
                 if (allDisabled) {
                     BadgeLabel(
@@ -1008,9 +1008,9 @@ private fun GroupRow(
             // group; the parenthetical reports disabled count.
             val disabledCount = totalMembers - enabledMembers
             val subtitleText = if (disabledCount > 0) {
-                "$strategyLabel · $totalMembers models ($disabledCount disabled)"
+                stringResource(R.string.mo_groups_members_disabled, strategyLabel, totalMembers, disabledCount)
             } else {
-                "$strategyLabel · $totalMembers models"
+                stringResource(R.string.mo_groups_members, strategyLabel, totalMembers)
             }
             Text(
                 text = subtitleText,

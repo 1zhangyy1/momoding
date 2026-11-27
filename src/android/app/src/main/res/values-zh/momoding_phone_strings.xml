@@ -2,10 +2,10 @@
 <resources>
     <string name="mo_phone_shell_title">高级权限</string>
     <string name="mo_phone_shell_ready">已开：它能改设置、管 App、在看不见的屏上操作</string>
-    <string name="mo_phone_shell_not_paired">点这里，打开「无线调试」，点「使用配对码配对设备」，把 6 位配对码填进 Momoding 的通知里，其余 Momoding 自己完成</string>
+    <string name="mo_phone_shell_not_paired">还没设置，点这里按 3 步配好</string>
     <string name="mo_phone_shell_off">无线调试关了：点这里重新打开（不用再配对）</string>
     <string name="mo_phone_shell_unsupported">需要 Android 11 或更新</string>
-    <string name="mo_phone_shell_footer">用的是安卓自带的无线调试，手机和自己配对：不用另装 App，也不用电脑。配一次就好：重启后多数手机上 Momoding 会自己恢复；没恢复时回这里点一下，不用再配对。</string>
+    <string name="mo_phone_shell_footer">用手机自带的无线调试，配一次就好。改设置、管 App 前仍会先问你。</string>
     <string name="mo_phone_shell_state_ready">已就绪</string>
     <string name="mo_phone_shell_state_not_paired">还没设置</string>
     <string name="mo_phone_shell_state_off">无线调试关着</string>
@@ -27,6 +27,6 @@
     <string name="mo_phone_step_pair">配对</string>
     <string name="mo_phone_step_pair_hint">点「使用配对码配对设备」，把 6 位配对码填进 Momoding 的通知</string>
     <string name="mo_phone_step_on">已打开</string>
-    <string name="mo_phone_step_said_on">我已经打开了</string>
+    <string name="mo_phone_step_said_on">已经打开了？点这里</string>
     <string name="mo_phone_xiaomi_note">小米 / 红米：没开「USB 调试（安全设置）」时，高级权限不能替 App 授权（权限卡会带你去系统窗点一下），其余照常。打开它要插 SIM 卡并登录小米账号。</string>
 </resources>
